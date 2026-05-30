@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PersonalityDNA",
+  "type": "object",
+  "required": ["schemaVersion", "archetype", "sceneName", "quote", "shortNarrative", "traitScores", "energySignature", "planets", "visualHints"]
+}

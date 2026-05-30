@@ -1,0 +1,10 @@
+openapi: 3.1.0
+info:
+  title: Myunivokai API
+  version: 0.1.0
+paths:
+  /api/v1/healthz:
+    get:
+      responses:
+        "200":
+          description: API health

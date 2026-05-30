@@ -26,6 +26,17 @@ go.work.sum
 
 # env file
 .env
+.env.*
+!.env.example
+!.env.local
+
+# Node / Next.js
+node_modules/
+.next/
+dist/
+
+# Go build artifacts
+bin/
 
 # Editor/IDE
 # .idea/
