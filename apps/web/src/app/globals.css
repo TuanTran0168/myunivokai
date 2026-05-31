@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #050816;
+  color: #dee1f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(160, 120, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 86% 78%, rgba(76, 215, 246, 0.14), transparent 30%),
+    #050816;
+  color: #dee1f9;
+  font-family: var(--font-inter), sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.focus-ring:focus-visible {
+  outline-color: #4cd7f6;
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.16);
+}
+
+.btn-gradient {
+  background: linear-gradient(45deg, #a078ff, #4cd7f6);
+  box-shadow: 0 4px 15px rgba(160, 120, 255, 0.4);
+  color: #23005c;
+}
+
+.btn-gradient:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+}
+
+.input-dark {
+  background: rgba(8, 13, 29, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.22);
+}
+
+.input-dark:focus {
+  border-color: #4cd7f6;
+  box-shadow: 0 0 0 1px rgba(76, 215, 246, 0.25), inset 0 0 18px rgba(0, 0, 0, 0.22);
+}
