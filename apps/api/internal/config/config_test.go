@@ -57,6 +57,23 @@ func TestLoadExplicitEnvFile(t *testing.T) {
 	}
 }
 
+func TestLoadEnvAlias(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.prod"), "APP_NAME=FromProdAlias\n")
+	chdir(t, dir)
+	unsetenv(t, "APP_ENV")
+	t.Setenv("ENV", "prod")
+	unsetenv(t, "APP_NAME")
+
+	cfg := Load()
+	if cfg.AppEnv != "prod" {
+		t.Fatalf("expected ENV alias to set app env, got %q", cfg.AppEnv)
+	}
+	if cfg.AppName != "FromProdAlias" {
+		t.Fatalf("expected app name from .env.prod, got %q", cfg.AppName)
+	}
+}
+
 func TestLoadEnvFileLayeringKeepsProcessEnv(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, ".env"), "APP_NAME=FromBase\nAPI_PORT=8000\n")

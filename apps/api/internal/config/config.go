@@ -37,7 +37,7 @@ type Config struct {
 func Load() Config {
 	LoadEnv()
 	return Config{
-		AppEnv:             get("APP_ENV", "development"),
+		AppEnv:             getAny([]string{"APP_ENV", "ENV"}, "development"),
 		AppName:            get("APP_NAME", "Myunivokai"),
 		PublicWebURL:       get("PUBLIC_WEB_URL", "http://localhost:3000"),
 		PublicAPIURL:       get("PUBLIC_API_URL", "http://localhost:8080"),
@@ -72,6 +72,9 @@ func LoadEnv() {
 
 	files := []string{".env", ".env.local"}
 	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
+	if appEnv == "" {
+		appEnv = strings.TrimSpace(os.Getenv("ENV"))
+	}
 	for _, name := range envAliases(appEnv) {
 		files = append(files, ".env."+name, ".env."+name+".local")
 	}
@@ -118,6 +121,15 @@ func loadEnvFiles(original map[string]string, files ...string) {
 func get(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
+	}
+	return fallback
+}
+
+func getAny(keys []string, fallback string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
 	}
 	return fallback
 }
