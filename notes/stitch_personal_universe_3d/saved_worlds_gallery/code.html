@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Saved Worlds Gallery - Personal Universe</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#574500",
+                        "on-secondary-container": "#00424e",
+                        "outline-variant": "#494454",
+                        "secondary-fixed": "#acedff",
+                        "surface-container-high": "#25293a",
+                        "on-primary-fixed-variant": "#5516be",
+                        "on-background": "#dee1f9",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#e9ddff",
+                        "surface-container-highest": "#2f3446",
+                        "primary-container": "#a078ff",
+                        "tertiary": "#eec200",
+                        "tertiary-fixed-dim": "#eec200",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "surface-container-lowest": "#080d1d",
+                        "outline": "#958ea0",
+                        "on-primary-container": "#340080",
+                        "primary": "#d0bcff",
+                        "on-error-container": "#ffdad6",
+                        "surface-dim": "#0e1323",
+                        "surface-bright": "#34394a",
+                        "primary-fixed-dim": "#d0bcff",
+                        "surface-container": "#1a1f30",
+                        "on-surface": "#dee1f9",
+                        "on-tertiary": "#3c2f00",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#ffe083",
+                        "on-secondary-fixed": "#001f26",
+                        "on-secondary": "#003640",
+                        "on-primary-fixed": "#23005c",
+                        "secondary": "#4cd7f6",
+                        "inverse-surface": "#dee1f9",
+                        "background": "#0e1323",
+                        "surface": "#0e1323",
+                        "inverse-on-surface": "#2b3041",
+                        "on-tertiary-fixed": "#231b00",
+                        "inverse-primary": "#6d3bd7",
+                        "surface-tint": "#d0bcff",
+                        "on-primary": "#3c0091",
+                        "surface-container-low": "#161b2b",
+                        "tertiary-container": "#cea700",
+                        "surface-variant": "#2f3446",
+                        "secondary-container": "#03b5d3",
+                        "on-tertiary-container": "#4e3e00",
+                        "on-surface-variant": "#cbc3d7",
+                        "error": "#ffb4ab"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "unit": "4px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Space Grotesk"],
+                        "body-md": ["Inter"],
+                        "stat-lg": ["JetBrains Mono"],
+                        "body-lg": ["Inter"],
+                        "display-lg-mobile": ["Space Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "stat-lg": ["28px", { "lineHeight": "1", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #050816;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid transparent;
+            background-image: linear-gradient(rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.72)), linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 100%);
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+            transition: all 0.3s ease;
+        }
+        .glass-card:hover {
+            border-color: rgba(139, 92, 246, 0.35);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+            transform: translateY(-2px);
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #d0bcff, #4cd7f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .primary-btn {
+            background: linear-gradient(45deg, #a078ff, #03b5d3);
+            box-shadow: 0 4px 15px rgba(160, 120, 255, 0.4);
+            transition: all 0.3s ease;
+        }
+        .primary-btn:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+        }
+        .card-action-btn {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+        }
+        .glass-card:hover .card-action-btn {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* Shimmer effect for AI tags */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .ai-shimmer {
+            background: linear-gradient(90deg, rgba(139, 92, 246, 0.1) 25%, rgba(139, 92, 246, 0.3) 50%, rgba(139, 92, 246, 0.1) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 3s infinite linear;
+        }
+    </style>
+</head>
+<body class="text-on-surface min-h-screen flex flex-col pt-24 pb-12 overflow-x-hidden">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+<div class="flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
+<div class="font-display-lg text-headline-md font-bold text-primary tracking-wider">
+                Personal Universe
+            </div>
+<div class="hidden md:flex gap-8 items-center font-body-md text-body-md">
+<a class="text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">How it works</a>
+<a class="text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors duration-300 scale-95 transition-transform" href="#">Gallery</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">Pricing</a>
+</div>
+<div>
+<button class="primary-btn px-6 py-2 rounded-full font-body-md text-body-md text-surface-lowest font-medium">
+                    Create Universe
+                </button>
+</div>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-grow px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full">
+<!-- Header & Filters -->
+<div class="mb-12">
+<h1 class="font-display-lg text-display-lg-mobile md:text-display-lg mb-4">Saved <span class="gradient-text">Worlds</span></h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-8 max-w-2xl">Explore your curated collection of generated universes. View, modify, or instantiate new realities from your saved templates.</p>
+<div class="flex flex-wrap gap-3 font-label-caps text-label-caps">
+<button class="px-4 py-2 rounded-full border border-secondary text-secondary bg-secondary/10 hover:bg-secondary/20 transition-colors">ALL WORLDS</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors glass-panel">COSMIC</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors glass-panel">CYBERPUNK</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors glass-panel">FLOATING ISLANDS</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors glass-panel">NEON DYSTOPIA</button>
+</div>
+</div>
+<!-- Gallery Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
+<!-- Card 1 -->
+<div class="glass-card rounded-xl overflow-hidden flex flex-col group relative">
+<div class="h-48 relative overflow-hidden bg-surface-container-high">
+<img alt="Nebula preview" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700 mix-blend-screen" data-alt="A mesmerizing view of a distant cosmic nebula with deep purple and cyan dust clouds. Bright stars scatter across the expansive dark space. The aesthetic is heavily sci-fi and majestic, aligning with a glassmorphic, premium UI dark mode theme." src="https://lh3.googleusercontent.com/aida/ADBb0ujbcBwCIWcAuGdqympvpYGrGBDGN3mvmAR8PlhVahhtDcYpXMCm0YB0VVekL6YVEEHf-T-cJ_Jc4U-7Ffea9FaFynjLg2Npjk7pbZRqvQi9gFkUgN9LFiaNSuouzPHvpJkLQeRlkMP9HyXOMisWk6uTTqWVF8uQ9xSPcfC6iePY4PkoTzwnEAxbTPBW19nyOHAxyQYtOqAlE8eOEp7NyMzgODPV7ai3loUs6_2i-T2srS1EEZpjxhwQPA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#0e1323] via-transparent to-transparent"></div>
+<div class="absolute top-3 right-3 ai-shimmer px-2 py-1 rounded text-primary text-[10px] font-stat-lg tracking-widest border border-primary/30 backdrop-blur-md">
+                        AI GENERATED
+                    </div>
+</div>
+<div class="p-6 flex-grow flex flex-col">
+<h3 class="font-headline-md text-headline-md mb-2 text-inverse-surface">Aetherius Prime</h3>
+<div class="flex gap-2 mb-4">
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">COSMIC</span>
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">EXPLORATION</span>
+</div>
+<div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-end">
+<div class="font-stat-lg text-label-caps text-outline">
+<div class="mb-1">SEED: <span class="text-secondary/80">#99A4-B2</span></div>
+<div>CREATED: <span class="text-on-surface">OCT 24</span></div>
+</div>
+</div>
+</div>
+<!-- Hover Actions Overlay -->
+<div class="absolute inset-0 bg-surface/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
+<button class="card-action-btn bg-primary-container text-on-primary-container p-3 rounded-full hover:bg-primary transition-colors" style="transition-delay: 0.05s" title="Open World">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">public</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.1s" title="Duplicate">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.15s" title="Share">
+<span class="material-symbols-outlined">share</span>
+</button>
+<button class="card-action-btn glass-panel text-error p-3 rounded-full hover:bg-error/10 hover:border-error/50 transition-colors" style="transition-delay: 0.2s" title="Delete">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-card rounded-xl overflow-hidden flex flex-col group relative">
+<div class="h-48 relative overflow-hidden bg-surface-container-high">
+<img alt="Cyberpunk preview" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700 mix-blend-screen" data-alt="A futuristic cyberpunk cityscape viewed from above at night. Neon blues and purples illuminate the dark, sprawling architecture. The scene feels dense and high-tech, fitting perfectly within a premium, dark-mode sci-fi interface." src="https://lh3.googleusercontent.com/aida/ADBb0uhtJNQXWCfBRPR6Cjb9mb-WD7z_JMReaL5fBREgjNVTLsXLgbP90OW0A2BLQeN1fWnruJeISBCpmaEarTtouQHI1mkOKEgtapqqw880r3S8Lftq7iHXKDB-HUCufESP595NQP4KGRnRreyFv8xT-MrW7HGD5E0hjzs9GlZROZ_KEad1pqDakFW3z0bgRbJBEURvHogPJfpy3bCqE-umW5ijBKd7Af2R7g0FWaxWQjOutJTibS274jnQXg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#0e1323] via-transparent to-transparent"></div>
+</div>
+<div class="p-6 flex-grow flex flex-col">
+<h3 class="font-headline-md text-headline-md mb-2 text-inverse-surface">Neon Sector 7</h3>
+<div class="flex gap-2 mb-4">
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">CYBERPUNK</span>
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">DYSTOPIA</span>
+</div>
+<div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-end">
+<div class="font-stat-lg text-label-caps text-outline">
+<div class="mb-1">SEED: <span class="text-secondary/80">#22F1-C9</span></div>
+<div>CREATED: <span class="text-on-surface">OCT 22</span></div>
+</div>
+</div>
+</div>
+<!-- Hover Actions Overlay -->
+<div class="absolute inset-0 bg-surface/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
+<button class="card-action-btn bg-primary-container text-on-primary-container p-3 rounded-full hover:bg-primary transition-colors" style="transition-delay: 0.05s" title="Open World">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">public</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.1s" title="Duplicate">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.15s" title="Share">
+<span class="material-symbols-outlined">share</span>
+</button>
+<button class="card-action-btn glass-panel text-error p-3 rounded-full hover:bg-error/10 hover:border-error/50 transition-colors" style="transition-delay: 0.2s" title="Delete">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-card rounded-xl overflow-hidden flex flex-col group relative">
+<div class="h-48 relative overflow-hidden bg-surface-container-high">
+<img alt="Floating islands preview" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700 mix-blend-screen" data-alt="Abstract floating geometric shapes and islands suspended in a dark, ethereal void. Soft glowing lights emanate from the structures in cyan and magenta hues. The atmosphere is dreamlike and advanced, matching a high-end AI generative platform theme." src="https://lh3.googleusercontent.com/aida/ADBb0ug0Xd6S0sSJfVkNnT9pZ8w21t1OMmDDNfNt40aNdgrCg5YLzKWH5mMomDfPOyGz6bMLKa5_U-LQ1CZNeC2FXBBjMSeLhGmxedfCvqMGsVejl69B3SCr-Ov9jTq4Wxj9mmqovdQuUxqg63f2WOF3QZmP7B83BmzaPJcgw2CIGy37T584bCYcnC858JoIk6DiXoykOKVtfqIOtGYfVMNhx8TRZNJr-1MUvcj2_Fn1PPmxwmPOt30D_bu3Jg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#0e1323] via-transparent to-transparent"></div>
+<div class="absolute top-3 right-3 ai-shimmer px-2 py-1 rounded text-primary text-[10px] font-stat-lg tracking-widest border border-primary/30 backdrop-blur-md">
+                        AI GENERATED
+                    </div>
+</div>
+<div class="p-6 flex-grow flex flex-col">
+<h3 class="font-headline-md text-headline-md mb-2 text-inverse-surface">Zephyr Archipelago</h3>
+<div class="flex gap-2 mb-4">
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">FLOATING ISLANDS</span>
+<span class="px-2 py-1 rounded-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps border border-outline-variant/30">FANTASY</span>
+</div>
+<div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-end">
+<div class="font-stat-lg text-label-caps text-outline">
+<div class="mb-1">SEED: <span class="text-secondary/80">#77B3-X1</span></div>
+<div>CREATED: <span class="text-on-surface">OCT 18</span></div>
+</div>
+</div>
+</div>
+<!-- Hover Actions Overlay -->
+<div class="absolute inset-0 bg-surface/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
+<button class="card-action-btn bg-primary-container text-on-primary-container p-3 rounded-full hover:bg-primary transition-colors" style="transition-delay: 0.05s" title="Open World">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">public</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.1s" title="Duplicate">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+<button class="card-action-btn glass-panel text-on-surface p-3 rounded-full hover:text-secondary hover:border-secondary/50 transition-colors" style="transition-delay: 0.15s" title="Share">
+<span class="material-symbols-outlined">share</span>
+</button>
+<button class="card-action-btn glass-panel text-error p-3 rounded-full hover:bg-error/10 hover:border-error/50 transition-colors" style="transition-delay: 0.2s" title="Delete">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="mt-24 w-full py-12 bg-surface-container-lowest border-t border-white/5">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin-desktop max-w-container-max mx-auto gap-gutter">
+<div class="font-display-lg text-body-lg font-bold text-primary">
+                Personal Universe
+            </div>
+<div class="flex gap-6 font-body-md text-body-md">
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Terms</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Privacy</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Contact</a>
+</div>
+<div class="text-on-surface-variant font-body-md text-sm opacity-60">
+                © 2024 Personal Universe 3D. All rights reserved.
+            </div>
+</div>
+</footer>
+</body></html>
