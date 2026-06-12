@@ -60,7 +60,13 @@ export default function ShareWorldPage({ params }: PageProps) {
             Myunivokai
           </Link>
           <div className="max-w-2xl pb-6 text-on-surface">
+            {world.archetype ? (
+              <p className="mb-2 font-mono text-xs uppercase tracking-widest text-secondary">{world.archetype}</p>
+            ) : null}
             <h1 className="text-4xl font-semibold tracking-normal sm:text-5xl">{world.title || "Shared universe"}</h1>
+            {world.quote ? (
+              <p className="mt-3 max-w-xl text-lg italic leading-7 text-on-surface">&ldquo;{world.quote}&rdquo;</p>
+            ) : null}
             {world.summary ? <p className="mt-4 max-w-xl text-base leading-7 text-on-surface-variant">{world.summary}</p> : null}
           </div>
         </div>

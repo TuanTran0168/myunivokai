@@ -1,85 +1,97 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
-import type { Group } from "three";
-import type { SceneConfig } from "@/lib/types";
-import { paletteFromScene, randomFromSeed } from "@/lib/scene";
+import { Canvas } from "@react-three/fiber";
+import { Suspense, useRef, useState } from "react";
+import type { Vector3 } from "three";
+import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
+import { backgroundColorFromScene, planetsFromScene } from "@/lib/scene";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { resolveSceneRenderer } from "@/features/scene-renderers/registry";
+import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
+import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
+import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
+import { PlanetPositionTrackerContext } from "@/features/scene-renderers/shared/PlanetPositionTracker";
+
+export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+
+const DEFAULT_CAMERA_DISTANCE = 9;
+const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
+const CAMERA_HEIGHT_RATIO = 0.42;
+const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 1.8];
+const FALLBACK_SEED = "myunivokai";
 
 type UniverseCanvasProps = {
   scene?: SceneConfig;
   className?: string;
+  selectedPlanetKey?: string | null;
+  onSelectPlanet?: (planet: PlanetSceneConfig | null) => void;
 };
 
-type Body = {
-  color: string;
-  position: [number, number, number];
-  scale: number;
-  speed: number;
-};
+/**
+ * Thin canvas shell shared by every scene renderer. Resolves the renderer from
+ * the scene theme via the registry, hosts camera, post-processing and the
+ * hover overlay. Scene-specific visuals live in features/scene-renderers/.
+ */
+export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPlanet }: UniverseCanvasProps) {
+  const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
+  const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
 
-function Universe({ scene }: { scene?: SceneConfig }) {
-  const group = useRef<Group>(null);
-  const seed = String(scene?.seed ?? "myunivokai");
-  const palette = paletteFromScene(scene);
+  const seed = String(scene?.seed ?? FALLBACK_SEED);
+  const backgroundColor = backgroundColorFromScene(scene);
+  const cameraDistance = scene?.camera?.distance ?? DEFAULT_CAMERA_DISTANCE;
+  const cameraFieldOfView = scene?.camera?.fov ?? DEFAULT_CAMERA_FIELD_OF_VIEW;
+  const planets = planetsFromScene(scene);
+  const hasConfiguredPlanets = planets.length > 0;
 
-  const bodies = useMemo<Body[]>(() => {
-    const random = randomFromSeed(seed);
-    return Array.from({ length: 18 }, (_, index) => {
-      const radius = 1.4 + random() * 3.8;
-      const angle = random() * Math.PI * 2;
-      const height = -0.55 + random() * 1.7;
-      return {
-        color: palette[index % palette.length],
-        position: [Math.cos(angle) * radius, height, Math.sin(angle) * radius],
-        scale: 0.12 + random() * 0.42,
-        speed: 0.15 + random() * 0.38
-      };
-    });
-  }, [palette, seed]);
+  const SceneRenderer = hasConfiguredPlanets ? resolveSceneRenderer(scene?.theme) : FallbackUniverseRenderer;
 
-  useFrame(({ clock }) => {
-    if (!group.current) {
-      return;
-    }
-    group.current.rotation.y = clock.elapsedTime * 0.08;
-  });
+  const hoveredPlanetKey = hoveredPlanet
+    ? planetIdentityKey(
+        hoveredPlanet,
+        planets.findIndex((planet) => planet === hoveredPlanet)
+      )
+    : null;
 
   return (
-    <>
-      <ambientLight intensity={0.72} />
-      <directionalLight position={[4, 7, 3]} intensity={1.35} />
-      <pointLight position={[-4, -2, -3]} intensity={2.2} color={palette[1]} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.1, 0]}>
-        <ringGeometry args={[1.25, 5.8, 96]} />
-        <meshStandardMaterial color={palette[3]} roughness={0.86} metalness={0.08} transparent opacity={0.18} />
-      </mesh>
-      <group ref={group}>
-        <mesh>
-          <icosahedronGeometry args={[0.92, 2]} />
-          <meshStandardMaterial color={palette[0]} roughness={0.44} metalness={0.18} />
-        </mesh>
-        {bodies.map((body, index) => (
-          <group key={`${seed}-${index}`} rotation={[0, index * body.speed, 0]}>
-            <mesh position={body.position}>
-              {index % 3 === 0 ? <octahedronGeometry args={[body.scale, 1]} /> : <sphereGeometry args={[body.scale, 24, 16]} />}
-              <meshStandardMaterial color={body.color} roughness={0.52} metalness={0.24} />
-            </mesh>
-          </group>
-        ))}
-      </group>
-    </>
-  );
-}
-
-export function UniverseCanvas({ scene, className }: UniverseCanvasProps) {
-  return (
-    <div className={`relative h-full min-h-[320px] overflow-hidden bg-surface-lowest ${className ?? ""}`}>
-      <Canvas camera={{ position: [0, 2.4, 7.2], fov: 47 }} dpr={[1, 1.8]}>
-        <color attach="background" args={["#101418"]} />
-        <fog attach="fog" args={["#101418", 7, 13]} />
-        <Universe scene={scene} />
+    <div
+      className={`relative h-full min-h-[320px] overflow-hidden ${className ?? ""}`}
+      style={{ backgroundColor, cursor: hoveredPlanet ? "pointer" : "grab" }}
+    >
+      <Canvas
+        key={`${seed}-${cameraDistance}-${cameraFieldOfView}`}
+        camera={{
+          position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
+          fov: cameraFieldOfView
+        }}
+        dpr={CANVAS_DEVICE_PIXEL_RATIO_RANGE}
+        onPointerMissed={() => onSelectPlanet?.(null)}
+      >
+        <color attach="background" args={[backgroundColor]} />
+        <PlanetPositionTrackerContext.Provider value={planetPositionTrackerReference.current}>
+          <Suspense fallback={null}>
+            <SceneRenderer
+              scene={scene ?? {}}
+              seed={seed}
+              selectedPlanetKey={selectedPlanetKey ?? null}
+              hoveredPlanetKey={hoveredPlanetKey}
+              onHoverPlanet={setHoveredPlanet}
+              onSelectPlanet={onSelectPlanet}
+            />
+            <PostEffects postFX={scene?.postFX} />
+          </Suspense>
+          <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
+        </PlanetPositionTrackerContext.Provider>
       </Canvas>
+      {hoveredPlanet ? (
+        <div className="pointer-events-none absolute bottom-4 left-4 z-10 max-w-xs rounded-lg border border-white/15 bg-surface-low/85 px-3 py-2 backdrop-blur">
+          <p className="text-sm font-semibold text-on-surface">{hoveredPlanet.name ?? "Unknown planet"}</p>
+          {typeof hoveredPlanet.energy === "number" ? (
+            <p className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">
+              Energy {hoveredPlanet.energy}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-lowest/65 to-transparent" />
     </div>
   );
