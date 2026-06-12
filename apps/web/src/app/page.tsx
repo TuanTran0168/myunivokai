@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
+import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { StatusMessage } from "@/components/StatusMessage";
 import { sceneFromVariant, selectedVariant } from "@/lib/scene";
@@ -77,6 +78,7 @@ export default function HomePage() {
     setLoading(true);
     try {
       const world = await api.createWorld(payload);
+      addWorldIdentifierToGallery(world.id);
       router.push(`/worlds/${world.id}`);
     } catch (err) {
       setError(apiErrorMessage(err));
