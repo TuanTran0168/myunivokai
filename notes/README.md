@@ -9,6 +9,9 @@ Quy tắc: tài liệu chung để ở folder chung, tài liệu riêng FE/BE đ
 |---|---|---|
 | [coding/git-convention.md](coding/git-convention.md) | Quy ước branch, commit message, PR | Bắt buộc trước khi commit |
 | [coding/coding-style.md](coding/coding-style.md) | Style code: không hardcode, không viết tắt tên biến/hàm | Bắt buộc trước khi viết code |
+| [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | Kế hoạch CI GitHub Actions gác cổng PR | Trước khi bắt đầu refactor production |
+| [fe/refactor-plan.md](fe/refactor-plan.md) | Plan nâng cấp FE lên production (8 branch, làm theo thứ tự) | Khi làm refactor FE |
+| [be/refactor-plan.md](be/refactor-plan.md) | Plan nâng cấp BE lên production (8 branch, làm theo thứ tự) | Khi làm refactor BE |
 | [fe/source-overview.md](fe/source-overview.md) | Cơ chế hoạt động của source FE (Next.js): routes, data flow, state | Khi làm việc trong `apps/web` |
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | Nguyên lý three.js, kiến trúc scene renderer, cách custom và mở rộng | Khi đụng vào phần 3D |
 | [be/source-overview.md](be/source-overview.md) | Cơ chế hoạt động của source BE (Go API): layers, AI provider, determinism | Khi làm việc trong `apps/api` |
