@@ -37,12 +37,12 @@ Before writing code or committing, read the docs in `notes/`:
 
 ```bash
 # Backend
-cd apps/api
+cd services/universe-service
 go test ./...
 go vet ./...
 
 # Frontend
-cd apps/web
+cd clients/web-client
 npm run typecheck
 npm run lint
 npm run build

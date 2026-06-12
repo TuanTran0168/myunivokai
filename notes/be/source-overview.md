@@ -1,4 +1,4 @@
-# BE Source Overview — apps/api
+# BE Source Overview — services/universe-service
 
 Go + chi router + pgxpool. Một binary `cmd/api`, một tool migrate `cmd/migrate`.
 
@@ -45,7 +45,7 @@ GET  /worlds/{id}       → { world, selectedVariant, variants, personalityDNA }
 GET  /share/worlds/{s}  → { world, variant, publicDNA }                          ← world không có id/input
 ```
 
-Đổi shape ở đây thì phải sửa `apps/web/src/lib/api.ts` (normalize) cùng PR.
+Đổi shape ở đây thì phải sửa `clients/web-client/src/lib/api.ts` (normalize) cùng PR.
 
 ## Quy tắc bảo mật
 
@@ -55,7 +55,7 @@ GET  /share/worlds/{s}  → { world, variant, publicDNA }                       
 ## Chạy local & checks
 
 ```bash
-cd apps/api
+cd services/universe-service
 go run ./cmd/api        # DATABASE_URL rỗng → memory store, AI_PROVIDER=mock mặc định
 go test ./...
 go vet ./...

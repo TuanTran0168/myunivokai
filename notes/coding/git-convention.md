@@ -9,7 +9,7 @@ feat/<scope>/<kebab-case-topic>
 fix/<scope>/<kebab-case-topic>
 ```
 
-- `<scope>`: `fe` (frontend, apps/web) hoặc `be` (backend, apps/api).
+- `<scope>`: `fe` (frontend, clients/web-client) hoặc `be` (backend, services/universe-service).
 - Branch tách từ `staging`, merge ngược về `staging` qua Pull Request.
 - `main` là nhánh release, chỉ merge từ `staging`.
 

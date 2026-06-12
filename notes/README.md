@@ -12,9 +12,9 @@ Quy tắc: tài liệu chung để ở folder chung, tài liệu riêng FE/BE đ
 | [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | Kế hoạch CI GitHub Actions gác cổng PR | Trước khi bắt đầu refactor production |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Plan nâng cấp FE lên production (8 branch, làm theo thứ tự) | Khi làm refactor FE |
 | [be/refactor-plan.md](be/refactor-plan.md) | Plan nâng cấp BE lên production (8 branch, làm theo thứ tự) | Khi làm refactor BE |
-| [fe/source-overview.md](fe/source-overview.md) | Cơ chế hoạt động của source FE (Next.js): routes, data flow, state | Khi làm việc trong `apps/web` |
+| [fe/source-overview.md](fe/source-overview.md) | Cơ chế hoạt động của source FE (Next.js): routes, data flow, state | Khi làm việc trong `clients/web-client` |
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | Nguyên lý three.js, kiến trúc scene renderer, cách custom và mở rộng | Khi đụng vào phần 3D |
-| [be/source-overview.md](be/source-overview.md) | Cơ chế hoạt động của source BE (Go API): layers, AI provider, determinism | Khi làm việc trong `apps/api` |
+| [be/source-overview.md](be/source-overview.md) | Cơ chế hoạt động của source BE (Go API): layers, AI provider, determinism | Khi làm việc trong `services/universe-service` |
 | [Myunivokai_Implementation_Plan.md](Myunivokai_Implementation_Plan.md) | Plan tổng thể ban đầu của dự án | Tham khảo định hướng |
 | [stitch_personal_universe_3d/](stitch_personal_universe_3d/) | Mockup UI từ Stitch (7 màn hình) | Khi polish UI |
 
