@@ -76,7 +76,7 @@ renderer đầu tiên; sau này muốn vẽ núi hay thành phố thì viết re
 không sửa cái cũ.
 
 ```txt
-apps/web/src/
+clients/web-client/src/
 ├── components/UniverseCanvas.tsx          ← shell: Canvas + camera + bloom + overlay hover
 └── features/scene-renderers/
     ├── types.ts                           ← SceneRendererProps: hợp đồng mọi renderer phải theo
@@ -139,7 +139,7 @@ Mọi giá trị tinh chỉnh là hằng số đặt tên ở đầu file (theo 
 
 ### Thay/thêm texture planet
 
-Thêm file vào `apps/web/public/textures/solar-system/` rồi thêm entry vào
+Thêm file vào `clients/web-client/public/textures/solar-system/` rồi thêm entry vào
 `planetTextureCatalog.ts` (kèm `axialTiltRadians`, `ringTextureUrl` nếu có vành đai).
 Texture lấy từ Solar System Scope (CC BY 4.0) — giữ ghi nguồn trong `ATTRIBUTION.md`.
 

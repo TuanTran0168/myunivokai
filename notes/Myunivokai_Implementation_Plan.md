@@ -151,8 +151,8 @@ myunivokai/
 
 ### Why this structure
 
-- `apps/web`: all Next.js UI and 3D rendering logic.
-- `apps/api`: all Go API, AI orchestration, persistence, and business rules.
+- `clients/web-client`: all Next.js UI and 3D rendering logic.
+- `services/universe-service`: all Go API, AI orchestration, persistence, and business rules.
 - `contracts`: shared truth for API and JSON schemas.
 - `docs`: implementation notes for humans and agents.
 
@@ -332,9 +332,9 @@ Business logic should never know whether the app is using Gemini or OpenAI.
 Only this layer should know provider-specific payloads:
 
 ```txt
-apps/api/internal/ai/providers/gemini.go
-apps/api/internal/ai/providers/openai.go
-apps/api/internal/ai/providers/mock.go
+services/universe-service/internal/ai/providers/gemini.go
+services/universe-service/internal/ai/providers/openai.go
+services/universe-service/internal/ai/providers/mock.go
 ```
 
 ### Interface
@@ -342,7 +342,7 @@ apps/api/internal/ai/providers/mock.go
 Create:
 
 ```txt
-apps/api/internal/ai/provider.go
+services/universe-service/internal/ai/provider.go
 ```
 
 Recommended Go interface:
@@ -399,7 +399,7 @@ type Provider interface {
 Create:
 
 ```txt
-apps/api/internal/ai/factory.go
+services/universe-service/internal/ai/factory.go
 ```
 
 Behavior:
@@ -414,7 +414,7 @@ Read AI_PROVIDER
 Also create an orchestrator that supports fallback:
 
 ```txt
-apps/api/internal/ai/orchestrator.go
+services/universe-service/internal/ai/orchestrator.go
 ```
 
 Behavior:
@@ -434,7 +434,7 @@ Try primary provider
 File:
 
 ```txt
-apps/api/internal/ai/providers/gemini.go
+services/universe-service/internal/ai/providers/gemini.go
 ```
 
 Use Gemini structured output mode with JSON schema. Keep the exact request format in this adapter only.
@@ -464,7 +464,7 @@ type geminiGenerateContentRequest struct {
 File:
 
 ```txt
-apps/api/internal/ai/providers/openai.go
+services/universe-service/internal/ai/providers/openai.go
 ```
 
 Use OpenAI structured outputs with JSON schema. Keep the exact request format in this adapter only.
@@ -667,7 +667,7 @@ Personality DNA + World Seed + Config Builder Rules -> World Scene Config
 Create:
 
 ```txt
-apps/api/internal/seed/seed.go
+services/universe-service/internal/seed/seed.go
 ```
 
 Use cryptographically random seed for new worlds:
@@ -693,7 +693,7 @@ VAR-[world short id]-[variant index]-[random suffix]
 Create:
 
 ```txt
-apps/api/internal/services/world_config_builder.go
+services/universe-service/internal/services/world_config_builder.go
 ```
 
 Inputs:
@@ -753,7 +753,7 @@ Do not rely on global random for layout.
 Create migration:
 
 ```txt
-apps/api/migrations/000001_init.sql
+services/universe-service/migrations/000001_init.sql
 ```
 
 ### SQL migration
@@ -1108,7 +1108,7 @@ Use Next.js App Router.
 ### Frontend feature structure
 
 ```txt
-apps/web/src/
+clients/web-client/src/
   app/
     page.tsx
     create/page.tsx
@@ -1248,7 +1248,7 @@ Gallery loads IDs from localStorage and calls `GET /api/v1/worlds/{id}`.
 ### Go package structure
 
 ```txt
-apps/api/internal/
+services/universe-service/internal/
   config/
     config.go
   db/
@@ -1336,7 +1336,7 @@ If any step fails, rollback.
 Create:
 
 ```txt
-apps/api/internal/ai/prompts/world_dna_v1.go
+services/universe-service/internal/ai/prompts/world_dna_v1.go
 ```
 
 ### System prompt
@@ -1499,7 +1499,7 @@ repository integration test optional
 Commands:
 
 ```bash
-cd apps/api
+cd services/universe-service
 go test ./...
 go vet ./...
 gofmt -w .
@@ -1520,7 +1520,7 @@ manual WebGL check on desktop/mobile
 Commands:
 
 ```bash
-cd apps/web
+cd clients/web-client
 npm run lint
 npm run typecheck
 npm run build
@@ -1774,10 +1774,10 @@ Build Myunivokai: an AI-powered personal 3D universe generator.
 
 ## Commands
 Backend:
-cd apps/api && go test ./... && go vet ./...
+cd services/universe-service && go test ./... && go vet ./...
 
 Frontend:
-cd apps/web && npm run lint && npm run typecheck && npm run build
+cd clients/web-client && npm run lint && npm run typecheck && npm run build
 ```
 
 ---
@@ -1808,7 +1808,7 @@ Implement only Phase 0 and Phase 1 first:
 - README.md
 - AGENTS.md
 - .env.example
-- apps/api Go server with chi
+- services/universe-service Go server with chi
 - config loader
 - health endpoint
 - pgxpool database connection
@@ -1818,7 +1818,7 @@ Implement only Phase 0 and Phase 1 first:
 
 Do not implement real Gemini/OpenAI calls yet.
 Do not implement frontend 3D yet.
-Make sure `cd apps/api && go test ./...` passes.
+Make sure `cd services/universe-service && go test ./...` passes.
 ```
 
 Then continue with Phase 2 in a separate Codex task.

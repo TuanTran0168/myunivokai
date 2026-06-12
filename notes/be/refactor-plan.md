@@ -1,4 +1,4 @@
-# BE Production Refactor Plan — apps/api
+# BE Production Refactor Plan — services/universe-service
 
 Mục tiêu: kết thúc giai đoạn MVP. Mỗi hạng mục là **một branch + một PR riêng**,
 làm theo đúng thứ tự dưới đây (mục trước là nền của mục sau). Branch nào xong

@@ -1,4 +1,4 @@
-# FE Source Overview — apps/web
+# FE Source Overview — clients/web-client
 
 Next.js 14 App Router + TypeScript + Tailwind + React Three Fiber.
 Toàn bộ trang là client component vì cần WebGL và localStorage.
@@ -19,7 +19,7 @@ Toàn bộ trang là client component vì cần WebGL và localStorage.
   normalize ép về type `World`/`WorldVariant` thống nhất cho UI. **Bug dễ gặp nhất
   của FE từng nằm ở đây** (đọc sai chỗ → canvas rơi về fallback). Sửa response shape
   của BE thì phải sửa normalize trước tiên.
-- `lib/types.ts` — mirror đúng contract JSON của BE (`apps/api/internal/models/scene.go`).
+- `lib/types.ts` — mirror đúng contract JSON của BE (`services/universe-service/internal/models/scene.go`).
   Đổi schema BE thì đổi file này cùng lúc.
 - `lib/scene.ts` — helper đọc scene config an toàn (`planetsFromScene`, `paletteFromScene`,
   `backgroundColorFromScene`) + `randomFromSeed` (PRNG tất định, cấm `Math.random()` trong scene).
@@ -40,7 +40,7 @@ selection planet đồng bộ giữa canvas và panel qua props (`selectedPlanet
 ## Checks bắt buộc trước khi commit
 
 ```bash
-cd apps/web
+cd clients/web-client
 npm run typecheck
 npm run lint
 npm run build

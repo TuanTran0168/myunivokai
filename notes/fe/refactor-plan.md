@@ -1,4 +1,4 @@
-# FE Production Refactor Plan — apps/web
+# FE Production Refactor Plan — clients/web-client
 
 Mục tiêu: kết thúc giai đoạn MVP. Mỗi hạng mục là **một branch + một PR riêng**,
 theo thứ tự. Branch nào xong phải pass `npm run typecheck && npm run lint && npm run build`,

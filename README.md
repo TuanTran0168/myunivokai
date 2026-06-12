@@ -26,8 +26,8 @@ Hai quyết định kiến trúc đáng chú ý:
 ## Cấu trúc repo
 
 ```txt
-apps/web        Next.js 14 + TypeScript + Tailwind + React Three Fiber
-apps/api        Go + chi + pgxpool, migrations bằng goose
+clients/web-client        Next.js 14 + TypeScript + Tailwind + React Three Fiber
+services/universe-service        Go + chi + pgxpool, migrations bằng goose
 contracts       JSON schemas + OpenAPI dùng chung hai phía
 docs            Ghi chú kiến trúc ban đầu
 notes           Tài liệu nội bộ cho người và AI agent (bắt đầu từ notes/README.md)
@@ -36,12 +36,12 @@ notes           Tài liệu nội bộ cho người và AI agent (bắt đầu t
 ## Chạy backend
 
 ```bash
-cd apps/api
+cd services/universe-service
 go run ./cmd/api
 ```
 
 Mặc định `AI_PROVIDER=mock`. Nếu `DATABASE_URL` rỗng thì API tự dùng in-memory store,
-nên không cần dựng database để dev. Env mẫu ở `apps/api/.env.example`.
+nên không cần dựng database để dev. Env mẫu ở `services/universe-service/.env.example`.
 
 Config loader đọc `.env`, `.env.local`, và file theo môi trường (`.env.dev`, `.env.prod`...).
 Ép file cụ thể bằng `APP_ENV=prod` hoặc `MYUNIVOKAI_ENV_FILE=.env.prod`.
@@ -62,13 +62,13 @@ swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
 ## Chạy frontend
 
 ```bash
-cd apps/web
+cd clients/web-client
 npm install
 npm run dev
 ```
 
 Mở http://localhost:3000. FE gọi API qua `NEXT_PUBLIC_API_BASE_URL`
-(mặc định `http://localhost:8080/api/v1`, env mẫu ở `apps/web/.env.example`).
+(mặc định `http://localhost:8080/api/v1`, env mẫu ở `clients/web-client/.env.example`).
 
 Tạo một world từ form rồi vào trang world để xem cảnh 3D. Lưu ý: landing page
 hiển thị cảnh preview trừu tượng; hệ mặt trời đầy đủ chỉ render khi có world thật.
@@ -76,21 +76,21 @@ hiển thị cảnh preview trừu tượng; hệ mặt trời đầy đủ ch�
 ## Chạy bằng Docker Compose
 
 ```bash
-cd apps/api
+cd services/universe-service
 docker compose -f docker-compose-local.yml up --build
 ```
 
 Stack này dựng PostgreSQL, chạy migrations rồi start API ở cổng 8080.
-File `apps/api/.env.local` được mount vào container API và migration.
+File `services/universe-service/.env.local` được mount vào container API và migration.
 
 ## Test và checks
 
 ```bash
 # Backend
-cd apps/api && go test ./... && go vet ./...
+cd services/universe-service && go test ./... && go vet ./...
 
 # Frontend
-cd apps/web && npm run typecheck && npm run lint && npm run build
+cd clients/web-client && npm run typecheck && npm run lint && npm run build
 ```
 
 Test backend luôn chạy với mock provider, không gọi AI thật.
@@ -102,7 +102,7 @@ Test backend luôn chạy với mock provider, không gọi AI thật.
 - `AGENTS.md` — quy tắc cho AI agent làm việc trong repo
 
 Texture hành tinh lấy từ Solar System Scope (CC BY 4.0),
-ghi nguồn tại `apps/web/public/textures/solar-system/ATTRIBUTION.md`.
+ghi nguồn tại `clients/web-client/public/textures/solar-system/ATTRIBUTION.md`.
 
 ## Triển khai
 
