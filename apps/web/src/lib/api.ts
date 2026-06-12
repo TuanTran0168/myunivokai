@@ -55,17 +55,27 @@ function normalizeVariant(raw: any): WorldVariant {
 
 function normalizeWorld(raw: any): World {
   const world = raw.world ?? raw.data ?? raw;
-  const variantsRaw = world.variants ?? world.worldVariants ?? world.world_variants ?? [];
-  const responseVariant = raw.variant ? [raw.variant] : [];
-  const variants = Array.isArray(variantsRaw) && variantsRaw.length ? variantsRaw : responseVariant;
+  // GET /worlds/{id} returns { world, selectedVariant, variants } with the
+  // variant list at the response root; POST /worlds returns { world, variant }.
+  const variantListRaw =
+    raw.variants ?? world.variants ?? world.worldVariants ?? world.world_variants ?? [];
+  const singleVariantRaw = raw.variant ?? raw.selectedVariant ?? raw.selected_variant;
+  const variantsRaw =
+    Array.isArray(variantListRaw) && variantListRaw.length
+      ? variantListRaw
+      : singleVariantRaw
+        ? [singleVariantRaw]
+        : [];
+  const selectedVariantIdRaw =
+    world.selectedVariantId ?? world.selected_variant_id ?? raw.selectedVariant?.id ?? raw.selected_variant?.id;
   return {
     id: String(world.id ?? world.worldId ?? world.world_id ?? ""),
     title: world.title ?? world.name ?? world.sceneName ?? world.scene_name ?? world.nickname,
     summary: world.summary ?? world.description ?? world.shortNarrative ?? world.short_narrative ?? world.quote,
     status: world.status ?? world.visibility,
     shareSlug: world.shareSlug ?? world.share_slug,
-    selectedVariantId: world.selectedVariantId ?? world.selected_variant_id,
-    variants: Array.isArray(variants) ? variants.map(normalizeVariant).filter((variant) => variant.id) : [],
+    selectedVariantId: selectedVariantIdRaw,
+    variants: variantsRaw.map(normalizeVariant).filter((variant) => variant.id),
     createdAt: world.createdAt ?? world.created_at,
     publishedAt: world.publishedAt ?? world.published_at
   };
