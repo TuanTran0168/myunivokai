@@ -42,3 +42,6 @@ bin/
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
