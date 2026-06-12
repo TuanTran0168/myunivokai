@@ -63,6 +63,11 @@ func (s *MemoryStore) AddVariant(ctx context.Context, worldID string, variant mo
 	if _, ok := s.worlds[worldID]; !ok {
 		return models.WorldVariant{}, ErrNotFound
 	}
+	for _, existingVariant := range s.variants[worldID] {
+		if existingVariant.VariantNo == variant.VariantNo || existingVariant.Seed == variant.Seed {
+			return models.WorldVariant{}, ErrConflict
+		}
+	}
 	if variant.ID == "" {
 		variant.ID = uuid.NewString()
 	}
@@ -105,6 +110,9 @@ func (s *MemoryStore) PublishWorld(ctx context.Context, worldID, slug string) (m
 		return models.World{}, ErrNotFound
 	}
 	if world.ShareSlug == nil {
+		if existingWorldID, slugTaken := s.slugs[slug]; slugTaken && existingWorldID != worldID {
+			return models.World{}, ErrConflict
+		}
 		world.ShareSlug = &slug
 	}
 	world.Visibility = "public"

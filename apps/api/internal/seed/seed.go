@@ -27,6 +27,22 @@ func NewVariantSeed(worldID string, variantNo int) (string, error) {
 	return fmt.Sprintf("VAR-%s-%d-%s", short, variantNo, suffix), nil
 }
 
+const defaultShareSlugSuffixLength = 10
+
+// NewShareSlugSuffix returns a lowercase random suffix for public share slugs.
+// A fresh suffix is generated on every publish retry, so collisions resolve
+// instead of failing the request.
+func NewShareSlugSuffix(length int) (string, error) {
+	if length <= 0 {
+		length = defaultShareSlugSuffixLength
+	}
+	suffix, err := randomBase32(length)
+	if err != nil {
+		return "", err
+	}
+	return strings.ToLower(suffix), nil
+}
+
 func randomBase32(length int) (string, error) {
 	buf := make([]byte, length)
 	if _, err := rand.Read(buf); err != nil {

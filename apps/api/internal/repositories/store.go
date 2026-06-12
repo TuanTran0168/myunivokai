@@ -9,6 +9,10 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrConflict signals a uniqueness collision (duplicate variant number or
+// share slug). Callers retry with fresh values instead of surfacing a 500.
+var ErrConflict = errors.New("conflict")
+
 type WorldBundle struct {
 	World    models.World
 	Variants []models.WorldVariant

@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -75,7 +76,7 @@ func (s *PostgresStore) AddVariant(ctx context.Context, worldID string, variant 
 		VALUES ($1,$2,$3,$4)
 		RETURNING id::text, world_id::text, created_at`, worldID, variant.VariantNo, variant.Seed, configJSON)
 	if err := row.Scan(&variant.ID, &variant.WorldID, &variant.CreatedAt); err != nil {
-		return models.WorldVariant{}, mapNoRows(err)
+		return models.WorldVariant{}, mapConstraintViolation(err)
 	}
 	return variant, nil
 }
@@ -121,7 +122,7 @@ func (s *PostgresStore) PublishWorld(ctx context.Context, worldID, slug string) 
 	row := s.pool.QueryRow(ctx, `UPDATE worlds SET visibility='public', share_slug=COALESCE(share_slug, $1), updated_at=NOW()
 		WHERE id=$2 RETURNING share_slug, updated_at`, slug, worldID)
 	if err := row.Scan(&world.ShareSlug, &world.UpdatedAt); err != nil {
-		return models.World{}, mapNoRows(err)
+		return models.World{}, mapConstraintViolation(err)
 	}
 	world.Visibility = "public"
 	return world, nil
@@ -206,4 +207,24 @@ func mapNoRows(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+const (
+	postgresUniqueViolationCode     = "23505"
+	postgresForeignKeyViolationCode = "23503"
+)
+
+// mapConstraintViolation translates Postgres constraint errors into sentinel
+// errors the service layer can react to (retry on conflict, 404 on missing FK).
+func mapConstraintViolation(err error) error {
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) {
+		switch postgresError.Code {
+		case postgresUniqueViolationCode:
+			return ErrConflict
+		case postgresForeignKeyViolationCode:
+			return ErrNotFound
+		}
+	}
+	return mapNoRows(err)
 }
