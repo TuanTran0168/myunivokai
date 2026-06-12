@@ -22,6 +22,13 @@ import (
 
 var ErrInvalidAIOutput = errors.New("ai output invalid")
 
+// Concurrent requests can race on unique columns (variant_no, share_slug).
+// The store reports ErrConflict and the service retries with fresh values.
+const (
+	maximumVariantCreateAttempts = 3
+	maximumPublishAttempts       = 3
+)
+
 type WorldService struct {
 	cfg          config.Config
 	store        repositories.Store
@@ -43,6 +50,7 @@ func (s *WorldService) CreateWorld(ctx context.Context, input models.WorldInput)
 		PromptVersion: s.cfg.AIPromptVersion,
 		SystemPrompt:  prompts.WorldDNASystemPrompt,
 		UserPrompt:    prompts.WorldDNAUserPrompt(input),
+		RepairPrompt:  prompts.RepairPrompt,
 		SchemaName:    "personality_dna",
 		Schema:        validation.PersonalityDNASchema(),
 		Temperature:   0.7,
@@ -98,21 +106,39 @@ func (s *WorldService) GetWorld(ctx context.Context, worldID string) (models.Wor
 }
 
 func (s *WorldService) RegenerateVariant(ctx context.Context, worldID string) (models.VariantResponse, error) {
-	bundle, err := s.store.GetWorld(ctx, worldID)
-	if err != nil {
-		return models.VariantResponse{}, err
+	var lastConflictErr error
+	for attempt := 1; attempt <= maximumVariantCreateAttempts; attempt++ {
+		bundle, err := s.store.GetWorld(ctx, worldID)
+		if err != nil {
+			return models.VariantResponse{}, err
+		}
+		nextVariantNo := highestVariantNumber(bundle.Variants) + 1
+		variantSeed, err := seed.NewVariantSeed(worldID, nextVariantNo)
+		if err != nil {
+			return models.VariantResponse{}, err
+		}
+		config := s.builder.Build(BuildWorldConfigInput{DNA: bundle.World.PersonalityDNA, Seed: variantSeed, VariantNo: nextVariantNo, Input: bundle.World.Input})
+		variant, err := s.store.AddVariant(ctx, worldID, models.WorldVariant{VariantNo: nextVariantNo, Seed: variantSeed, Config: config})
+		if err == nil {
+			return models.VariantResponse{Variant: variant}, nil
+		}
+		if !errors.Is(err, repositories.ErrConflict) {
+			return models.VariantResponse{}, err
+		}
+		// Another request claimed this variant number; reload and retry.
+		lastConflictErr = err
 	}
-	nextNo := len(bundle.Variants) + 1
-	variantSeed, err := seed.NewVariantSeed(worldID, nextNo)
-	if err != nil {
-		return models.VariantResponse{}, err
+	return models.VariantResponse{}, lastConflictErr
+}
+
+func highestVariantNumber(variants []models.WorldVariant) int {
+	highest := 0
+	for _, variant := range variants {
+		if variant.VariantNo > highest {
+			highest = variant.VariantNo
+		}
 	}
-	config := s.builder.Build(BuildWorldConfigInput{DNA: bundle.World.PersonalityDNA, Seed: variantSeed, VariantNo: nextNo, Input: bundle.World.Input})
-	variant, err := s.store.AddVariant(ctx, worldID, models.WorldVariant{VariantNo: nextNo, Seed: variantSeed, Config: config})
-	if err != nil {
-		return models.VariantResponse{}, err
-	}
-	return models.VariantResponse{Variant: variant}, nil
+	return highest
 }
 
 func (s *WorldService) SelectVariant(ctx context.Context, worldID, variantID string) (models.VariantResponse, error) {
@@ -124,30 +150,36 @@ func (s *WorldService) SelectVariant(ctx context.Context, worldID, variantID str
 }
 
 func (s *WorldService) PublishWorld(ctx context.Context, worldID string) (models.PublishResponse, error) {
-	slugSuffix := strings.ReplaceAll(worldID, "-", "")
-	if len(slugSuffix) > 6 {
-		slugSuffix = slugSuffix[:6]
-	}
-	base := "orbit"
 	bundle, err := s.store.GetWorld(ctx, worldID)
 	if err != nil {
 		return models.PublishResponse{}, err
 	}
-	if bundle.World.Nickname != "" {
-		base = slugify(bundle.World.Nickname)
+	slugBase := slugify(bundle.World.Nickname)
+	if slugBase == "" {
+		slugBase = "orbit"
 	}
-	if base == "" {
-		base = "orbit"
+
+	var lastConflictErr error
+	for attempt := 1; attempt <= maximumPublishAttempts; attempt++ {
+		slugSuffix, err := seed.NewShareSlugSuffix(s.cfg.ShareSlugLength)
+		if err != nil {
+			return models.PublishResponse{}, err
+		}
+		slug := slugBase + "-" + slugSuffix
+		world, err := s.store.PublishWorld(ctx, worldID, slug)
+		if err == nil {
+			if world.ShareSlug == nil {
+				return models.PublishResponse{}, errors.New("share slug was not created")
+			}
+			return models.PublishResponse{ShareSlug: *world.ShareSlug, ShareURL: strings.TrimRight(s.cfg.PublicWebURL, "/") + "/share/" + *world.ShareSlug}, nil
+		}
+		if !errors.Is(err, repositories.ErrConflict) {
+			return models.PublishResponse{}, err
+		}
+		// Another world owns this slug; retry with a fresh random suffix.
+		lastConflictErr = err
 	}
-	slug := base + "-" + slugSuffix
-	world, err := s.store.PublishWorld(ctx, worldID, slug)
-	if err != nil {
-		return models.PublishResponse{}, err
-	}
-	if world.ShareSlug == nil {
-		return models.PublishResponse{}, errors.New("share slug was not created")
-	}
-	return models.PublishResponse{ShareSlug: *world.ShareSlug, ShareURL: strings.TrimRight(s.cfg.PublicWebURL, "/") + "/share/" + *world.ShareSlug}, nil
+	return models.PublishResponse{}, lastConflictErr
 }
 
 func (s *WorldService) GetPublicWorld(ctx context.Context, slug string) (models.PublicWorldResponse, error) {

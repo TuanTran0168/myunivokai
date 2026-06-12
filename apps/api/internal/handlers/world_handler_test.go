@@ -147,6 +147,16 @@ func testRouter() http.Handler {
 		RateLimitBurst:  1000,
 	}
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
-	service := services.NewWorldService(cfg, repositories.NewMemoryStore(), orch, services.NewWorldConfigBuilder())
-	return NewRouter(cfg, NewHealthHandler(cfg), NewWorldHandler(service), NewShareHandler(service))
+	store := repositories.NewMemoryStore()
+	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
+	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
+}
+
+func TestReadinessEndpoint(t *testing.T) {
+	router := testRouter()
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected readyz 200 with memory store, got %d", res.Code)
+	}
 }

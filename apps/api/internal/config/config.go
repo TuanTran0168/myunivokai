@@ -19,6 +19,12 @@ type Config struct {
 	AllowedOrigins     []string
 	DatabaseURL        string
 	DatabaseDirectURL  string
+	// Pool sizing. Neon's pooler prefers short-lived connections, so the
+	// lifetime defaults stay conservative.
+	DatabaseMaxConns        int
+	DatabaseMinConns        int
+	DatabaseMaxConnLifetime time.Duration
+	DatabaseMaxConnIdleTime time.Duration
 	AIProvider         string
 	AIFallbackProvider string
 	AIEnableFallback   bool
@@ -46,6 +52,10 @@ func Load() Config {
 		AllowedOrigins:     split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
 		DatabaseURL:        get("DATABASE_URL", ""),
 		DatabaseDirectURL:  get("DATABASE_DIRECT_URL", ""),
+		DatabaseMaxConns:        getInt("DATABASE_MAX_CONNS", 10),
+		DatabaseMinConns:        getInt("DATABASE_MIN_CONNS", 0),
+		DatabaseMaxConnLifetime: getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
+		DatabaseMaxConnIdleTime: getDuration("DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
 		AIProvider:         get("AI_PROVIDER", "mock"),
 		AIFallbackProvider: get("AI_FALLBACK_PROVIDER", "mock"),
 		AIEnableFallback:   getBool("AI_ENABLE_FALLBACK", true),
@@ -136,6 +146,15 @@ func getAny(keys []string, fallback string) string {
 
 func getInt(key string, fallback int) int {
 	value, err := strconv.Atoi(get(key, ""))
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+// getDuration parses Go duration strings such as "30m" or "90s".
+func getDuration(key string, fallback time.Duration) time.Duration {
+	value, err := time.ParseDuration(get(key, ""))
 	if err != nil {
 		return fallback
 	}

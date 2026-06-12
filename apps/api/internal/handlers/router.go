@@ -27,6 +27,7 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", health.Handle)
+		r.Get("/readyz", health.HandleReadiness)
 		r.Post("/worlds", worlds.Create)
 		r.Get("/worlds/{worldId}", worlds.Get)
 		r.Post("/worlds/{worldId}/variants", worlds.RegenerateVariant)

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,66 @@ func TestCreateWorldPersistsFailedAttemptLogs(t *testing.T) {
 	}
 	if savedLogs[0].Error == "" {
 		t.Fatal("expected the provider error message to be recorded")
+	}
+}
+
+// conflictOnFirstCallStore wraps a real store and simulates the race where a
+// concurrent request claims the same variant number or share slug first.
+type conflictOnFirstCallStore struct {
+	repositories.Store
+	variantConflictsRemaining int
+	publishConflictsRemaining int
+}
+
+func (s *conflictOnFirstCallStore) AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error) {
+	if s.variantConflictsRemaining > 0 {
+		s.variantConflictsRemaining--
+		return models.WorldVariant{}, repositories.ErrConflict
+	}
+	return s.Store.AddVariant(ctx, worldID, variant)
+}
+
+func (s *conflictOnFirstCallStore) PublishWorld(ctx context.Context, worldID, slug string) (models.World, error) {
+	if s.publishConflictsRemaining > 0 {
+		s.publishConflictsRemaining--
+		return models.World{}, repositories.ErrConflict
+	}
+	return s.Store.PublishWorld(ctx, worldID, slug)
+}
+
+func TestRegenerateVariantRetriesOnConflict(t *testing.T) {
+	conflictingStore := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), variantConflictsRemaining: 1}
+	service := newTestWorldService(conflictingStore, providers.NewMock())
+
+	created, err := service.CreateWorld(context.Background(), validWorldInput())
+	if err != nil {
+		t.Fatalf("CreateWorld failed: %v", err)
+	}
+
+	response, err := service.RegenerateVariant(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("expected variant creation to retry past the conflict: %v", err)
+	}
+	if response.Variant.VariantNo != 2 {
+		t.Fatalf("expected variant number 2, got %d", response.Variant.VariantNo)
+	}
+}
+
+func TestPublishWorldRetriesOnSlugConflict(t *testing.T) {
+	conflictingStore := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), publishConflictsRemaining: 1}
+	service := newTestWorldService(conflictingStore, providers.NewMock())
+
+	created, err := service.CreateWorld(context.Background(), validWorldInput())
+	if err != nil {
+		t.Fatalf("CreateWorld failed: %v", err)
+	}
+
+	response, err := service.PublishWorld(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("expected publish to retry with a fresh slug: %v", err)
+	}
+	if !strings.HasPrefix(response.ShareSlug, "tuan-") {
+		t.Fatalf("expected slug built from nickname, got %q", response.ShareSlug)
 	}
 }
 
