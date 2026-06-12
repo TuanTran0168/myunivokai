@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myunivokai/myunivokai/apps/api/internal/models"
 )
@@ -172,8 +173,23 @@ func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]mode
 	return variants, rows.Err()
 }
 
-func insertAIGeneration(ctx context.Context, tx pgx.Tx, log models.AIGenerationLog) (any, error) {
-	return tx.Exec(ctx, `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
+func (s *PostgresStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
+	for _, log := range logs {
+		if _, err := insertAIGeneration(ctx, s.pool, log); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// commandExecutor is satisfied by both pgx.Tx and *pgxpool.Pool, so AI logs can
+// be written inside the world-creation transaction or standalone on failure.
+type commandExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func insertAIGeneration(ctx context.Context, executor commandExecutor, log models.AIGenerationLog) (any, error) {
+	return executor.Exec(ctx, `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		log.Provider, log.Model, log.Task, log.PromptVersion, log.InputHash, nullableJSON(log.RequestJSON), nullableJSON(log.ResponseJSON), nullableJSON(log.UsageJSON), log.LatencyMS, log.Status, log.Error)
 }

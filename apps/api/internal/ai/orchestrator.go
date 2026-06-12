@@ -17,6 +17,7 @@ type AttemptLog struct {
 	Status   string
 	Error    string
 	Response json.RawMessage
+	Usage    Usage
 	Latency  time.Duration
 }
 
@@ -68,9 +69,9 @@ func (o *Orchestrator) tryProvider(ctx context.Context, provider Provider, req S
 	}
 	dna, err := o.validate(resp.JSON)
 	if err != nil {
-		*attempts = append(*attempts, AttemptLog{Provider: string(provider.Name()), Model: resp.Model, Status: "failed", Error: err.Error(), Response: resp.JSON, Latency: latency})
+		*attempts = append(*attempts, AttemptLog{Provider: string(provider.Name()), Model: resp.Model, Status: "failed", Error: err.Error(), Response: resp.JSON, Usage: resp.Usage, Latency: latency})
 		return nil, err
 	}
-	*attempts = append(*attempts, AttemptLog{Provider: string(provider.Name()), Model: resp.Model, Status: "success", Response: resp.JSON, Latency: latency})
+	*attempts = append(*attempts, AttemptLog{Provider: string(provider.Name()), Model: resp.Model, Status: "success", Response: resp.JSON, Usage: resp.Usage, Latency: latency})
 	return &DNAResult{DNA: dna, Response: resp, Attempts: *attempts}, nil
 }

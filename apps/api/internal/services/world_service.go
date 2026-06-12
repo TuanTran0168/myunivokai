@@ -17,6 +17,7 @@ import (
 	"github.com/myunivokai/myunivokai/apps/api/internal/repositories"
 	"github.com/myunivokai/myunivokai/apps/api/internal/seed"
 	"github.com/myunivokai/myunivokai/apps/api/internal/validation"
+	"github.com/rs/zerolog/log"
 )
 
 var ErrInvalidAIOutput = errors.New("ai output invalid")
@@ -49,6 +50,13 @@ func (s *WorldService) CreateWorld(ctx context.Context, input models.WorldInput)
 	}
 	result, err := s.orchestrator.GeneratePersonalityDNA(ctx, request)
 	if err != nil {
+		// Failed attempts must still be recorded so the team can debug
+		// provider/schema problems from the ai_generations table.
+		if result != nil && len(result.Attempts) > 0 {
+			if saveErr := s.store.SaveAIGenerationLogs(ctx, buildLogs(input, request, result.Attempts)); saveErr != nil {
+				log.Error().Err(saveErr).Msg("save failed ai generation logs")
+			}
+		}
 		return models.CreateWorldResponse{}, fmt.Errorf("%w: %v", ErrInvalidAIOutput, err)
 	}
 	worldSeed, err := seed.NewWorldSeed()
@@ -167,6 +175,10 @@ func buildLogs(input models.WorldInput, req ai.StructuredRequest, attempts []ai.
 	requestJSON, _ := json.Marshal(map[string]any{"task": req.Task, "promptVersion": req.PromptVersion})
 	logs := make([]models.AIGenerationLog, 0, len(attempts))
 	for _, attempt := range attempts {
+		var usageJSON []byte
+		if attempt.Usage != (ai.Usage{}) {
+			usageJSON, _ = json.Marshal(attempt.Usage)
+		}
 		logs = append(logs, models.AIGenerationLog{
 			Provider:      attempt.Provider,
 			Model:         attempt.Model,
@@ -175,6 +187,7 @@ func buildLogs(input models.WorldInput, req ai.StructuredRequest, attempts []ai.
 			InputHash:     hex.EncodeToString(hash[:]),
 			RequestJSON:   requestJSON,
 			ResponseJSON:  attempt.Response,
+			UsageJSON:     usageJSON,
 			LatencyMS:     int(attempt.Latency.Milliseconds()),
 			Status:        attempt.Status,
 			Error:         attempt.Error,
