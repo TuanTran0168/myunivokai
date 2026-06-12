@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/myunivokai/myunivokai/apps/api/internal/ai"
 	"github.com/myunivokai/myunivokai/apps/api/internal/ai/prompts"
 	"github.com/myunivokai/myunivokai/apps/api/internal/config"
@@ -242,20 +241,16 @@ func selectedVariant(variants []models.WorldVariant) models.WorldVariant {
 
 func slugify(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
-	var b strings.Builder
-	for _, r := range value {
+	var slugBuilder strings.Builder
+	for _, character := range value {
 		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == ' ' || r == '-' || r == '_':
-			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
-				b.WriteRune('-')
+		case character >= 'a' && character <= 'z', character >= '0' && character <= '9':
+			slugBuilder.WriteRune(character)
+		case character == ' ' || character == '-' || character == '_':
+			if slugBuilder.Len() > 0 && !strings.HasSuffix(slugBuilder.String(), "-") {
+				slugBuilder.WriteRune('-')
 			}
 		}
 	}
-	return strings.Trim(b.String(), "-")
-}
-
-func NewID() string {
-	return uuid.NewString()
+	return strings.Trim(slugBuilder.String(), "-")
 }

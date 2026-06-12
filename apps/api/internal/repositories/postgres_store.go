@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -90,8 +91,15 @@ func (s *PostgresStore) SelectVariant(ctx context.Context, worldID, variantID st
 	if _, err := tx.Exec(ctx, `UPDATE world_variants SET is_selected=false WHERE world_id=$1`, worldID); err != nil {
 		return models.WorldVariant{}, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE world_variants SET is_selected=true WHERE world_id=$1 AND id=$2`, worldID, variantID); err != nil {
-		return models.WorldVariant{}, err
+	var variant models.WorldVariant
+	var configJSON []byte
+	row := tx.QueryRow(ctx, `UPDATE world_variants SET is_selected=true WHERE world_id=$1 AND id=$2
+		RETURNING id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at`, worldID, variantID)
+	if err := row.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
+		return models.WorldVariant{}, mapNoRows(err)
+	}
+	if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
+		return models.WorldVariant{}, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE worlds SET selected_variant_id=$1, updated_at=NOW() WHERE id=$2`, variantID, worldID); err != nil {
 		return models.WorldVariant{}, err
@@ -99,16 +107,7 @@ func (s *PostgresStore) SelectVariant(ctx context.Context, worldID, variantID st
 	if err := tx.Commit(ctx); err != nil {
 		return models.WorldVariant{}, err
 	}
-	bundle, err := s.GetWorld(ctx, worldID)
-	if err != nil {
-		return models.WorldVariant{}, err
-	}
-	for _, variant := range bundle.Variants {
-		if variant.ID == variantID {
-			return variant, nil
-		}
-	}
-	return models.WorldVariant{}, ErrNotFound
+	return variant, nil
 }
 
 func (s *PostgresStore) PublishWorld(ctx context.Context, worldID, slug string) (models.World, error) {
@@ -148,8 +147,12 @@ func (s *PostgresStore) getWorldByQuery(ctx context.Context, where, arg string) 
 	if err := row.Scan(&world.ID, &world.Nickname, &world.Role, &inputJSON, &dnaJSON, &world.Archetype, &world.SceneName, &world.Quote, &world.Visibility, &world.ShareSlug, &world.SelectedVariantID, &world.CreatedAt, &world.UpdatedAt); err != nil {
 		return models.World{}, mapNoRows(err)
 	}
-	_ = json.Unmarshal(inputJSON, &world.Input)
-	_ = json.Unmarshal(dnaJSON, &world.PersonalityDNA)
+	if err := json.Unmarshal(inputJSON, &world.Input); err != nil {
+		return models.World{}, fmt.Errorf("decode world input for %s: %w", world.ID, err)
+	}
+	if err := json.Unmarshal(dnaJSON, &world.PersonalityDNA); err != nil {
+		return models.World{}, fmt.Errorf("decode personality dna for %s: %w", world.ID, err)
+	}
 	world.ShortNarrative = world.PersonalityDNA.ShortNarrative
 	return world, nil
 }
@@ -168,7 +171,9 @@ func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]mode
 		if err := rows.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(configJSON, &variant.Config)
+		if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
+			return nil, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
+		}
 		variants = append(variants, variant)
 	}
 	return variants, rows.Err()

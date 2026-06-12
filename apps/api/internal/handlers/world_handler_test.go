@@ -152,6 +152,27 @@ func testRouter() http.Handler {
 	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
 }
 
+func TestSwaggerIsDisabledInProduction(t *testing.T) {
+	cfg := config.Config{AppEnv: "production", RateLimitRPS: 1000, RateLimitBurst: 1000, AllowedOrigins: []string{"http://localhost:3000"}}
+	store := repositories.NewMemoryStore()
+	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
+	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("expected swagger to be hidden in production, got %d", res.Code)
+	}
+
+	developmentRouter := testRouter()
+	res = httptest.NewRecorder()
+	developmentRouter.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if res.Code == http.StatusNotFound {
+		t.Fatalf("expected swagger to be available outside production, got %d", res.Code)
+	}
+}
+
 func TestReadinessEndpoint(t *testing.T) {
 	router := testRouter()
 	res := httptest.NewRecorder()
