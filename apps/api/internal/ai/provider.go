@@ -18,10 +18,13 @@ type StructuredRequest struct {
 	PromptVersion string
 	SystemPrompt  string
 	UserPrompt    string
-	SchemaName    string
-	Schema        map[string]any
-	Temperature   float32
-	MaxTokens     int
+	// RepairPrompt is appended to UserPrompt when the provider returns JSON
+	// that fails schema validation and the orchestrator retries the call.
+	RepairPrompt string
+	SchemaName   string
+	Schema       map[string]any
+	Temperature  float32
+	MaxTokens    int
 }
 
 type Usage struct {

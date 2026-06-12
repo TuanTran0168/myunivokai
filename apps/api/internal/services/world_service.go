@@ -43,6 +43,7 @@ func (s *WorldService) CreateWorld(ctx context.Context, input models.WorldInput)
 		PromptVersion: s.cfg.AIPromptVersion,
 		SystemPrompt:  prompts.WorldDNASystemPrompt,
 		UserPrompt:    prompts.WorldDNAUserPrompt(input),
+		RepairPrompt:  prompts.RepairPrompt,
 		SchemaName:    "personality_dna",
 		Schema:        validation.PersonalityDNASchema(),
 		Temperature:   0.7,

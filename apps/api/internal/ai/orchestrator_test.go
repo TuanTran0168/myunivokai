@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,65 @@ func (p successProvider) GenerateStructured(ctx context.Context, req StructuredR
 	}
 	raw, _ := json.Marshal(dna)
 	return &StructuredResponse{Provider: ProviderMock, Model: "success", JSON: raw}, nil
+}
+
+// invalidThenValidProvider returns broken JSON on the first call and valid DNA
+// once it receives a repair prompt, mimicking a model that fixes its output.
+type invalidThenValidProvider struct {
+	callCount          int
+	sawRepairPrompt    bool
+	repairPromptMarker string
+}
+
+func (p *invalidThenValidProvider) Name() ProviderName { return ProviderName("flaky") }
+
+func (p *invalidThenValidProvider) GenerateStructured(ctx context.Context, req StructuredRequest) (*StructuredResponse, error) {
+	p.callCount++
+	if p.callCount == 1 {
+		return &StructuredResponse{Provider: p.Name(), Model: "flaky", JSON: json.RawMessage(`{"archetype": 123}`)}, nil
+	}
+	if p.repairPromptMarker != "" && strings.Contains(req.UserPrompt, p.repairPromptMarker) {
+		p.sawRepairPrompt = true
+	}
+	return successProvider{}.GenerateStructured(ctx, req)
+}
+
+func TestOrchestratorRepairsInvalidJSONWithSameProvider(t *testing.T) {
+	repairMarker := "did not match the required schema"
+	provider := &invalidThenValidProvider{repairPromptMarker: repairMarker}
+	orch := NewOrchestrator(provider, failingProvider{}, validation.ValidatePersonalityDNA, time.Second).WithRepairAttempts(1)
+
+	result, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{
+		UserPrompt:   "Generate DNA",
+		RepairPrompt: "Your previous output did not match the required schema. Return a corrected JSON object only.",
+	})
+	if err != nil {
+		t.Fatalf("expected repair retry to succeed: %v", err)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("expected 2 calls to the same provider, got %d", provider.callCount)
+	}
+	if !provider.sawRepairPrompt {
+		t.Fatal("expected the second call to include the repair prompt")
+	}
+	if len(result.Attempts) != 2 {
+		t.Fatalf("expected 2 logged attempts, got %d", len(result.Attempts))
+	}
+	if result.Attempts[0].Status != "failed" || result.Attempts[1].Status != "success" {
+		t.Fatalf("unexpected attempt statuses: %+v", result.Attempts)
+	}
+}
+
+func TestOrchestratorDoesNotRepairTransportErrors(t *testing.T) {
+	orch := NewOrchestrator(failingProvider{}, successProvider{}, validation.ValidatePersonalityDNA, time.Second).WithRepairAttempts(2)
+	result, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{UserPrompt: "Generate DNA"})
+	if err != nil {
+		t.Fatalf("expected fallback to succeed: %v", err)
+	}
+	// Transport failure must go straight to fallback: 1 failed + 1 success.
+	if len(result.Attempts) != 2 {
+		t.Fatalf("expected 2 attempts (no repair on transport error), got %d", len(result.Attempts))
+	}
 }
 
 func TestOrchestratorFallback(t *testing.T) {
