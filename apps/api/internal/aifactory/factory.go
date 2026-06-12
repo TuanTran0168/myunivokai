@@ -40,5 +40,5 @@ func NewOrchestratorFromConfig(cfg config.Config, validator ai.ResponseValidator
 	if timeout <= 0 {
 		timeout = 35 * time.Second
 	}
-	return ai.NewOrchestrator(primary, fallback, validator, timeout), nil
+	return ai.NewOrchestrator(primary, fallback, validator, timeout).WithRepairAttempts(cfg.AIMaxRetries), nil
 }

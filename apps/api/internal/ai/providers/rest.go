@@ -36,7 +36,7 @@ func (p *GeminiProvider) GenerateStructured(ctx context.Context, req ai.Structur
 			"temperature":      req.Temperature,
 			"maxOutputTokens":  req.MaxTokens,
 			"responseMimeType": "application/json",
-			"responseSchema":   req.Schema,
+			"responseSchema":   sanitizeSchemaForGemini(req.Schema),
 		},
 	}
 	raw, err := postJSON(ctx, p.client, url, body, nil)
@@ -121,6 +121,50 @@ func (p *OpenAIProvider) GenerateStructured(ctx context.Context, req ai.Structur
 		}
 	}
 	return nil, errors.New("openai returned no JSON content")
+}
+
+// geminiSupportedSchemaKeys is the OpenAPI-style subset Gemini accepts in
+// generationConfig.responseSchema. JSON-Schema keys outside this set (notably
+// additionalProperties, which OpenAI strict mode REQUIRES) make Gemini return
+// HTTP 400, so they are stripped before sending.
+var geminiSupportedSchemaKeys = map[string]bool{
+	"type":        true,
+	"format":      true,
+	"description": true,
+	"nullable":    true,
+	"enum":        true,
+	"required":    true,
+	"minimum":     true,
+	"maximum":     true,
+	"minItems":    true,
+	"maxItems":    true,
+}
+
+func sanitizeSchemaForGemini(schema map[string]any) map[string]any {
+	sanitized := make(map[string]any, len(schema))
+	for schemaKey, schemaValue := range schema {
+		switch schemaKey {
+		case "properties":
+			if propertyMap, ok := schemaValue.(map[string]any); ok {
+				sanitizedProperties := make(map[string]any, len(propertyMap))
+				for propertyName, propertySchema := range propertyMap {
+					if propertySchemaMap, ok := propertySchema.(map[string]any); ok {
+						sanitizedProperties[propertyName] = sanitizeSchemaForGemini(propertySchemaMap)
+					}
+				}
+				sanitized["properties"] = sanitizedProperties
+			}
+		case "items":
+			if itemsSchemaMap, ok := schemaValue.(map[string]any); ok {
+				sanitized["items"] = sanitizeSchemaForGemini(itemsSchemaMap)
+			}
+		default:
+			if geminiSupportedSchemaKeys[schemaKey] {
+				sanitized[schemaKey] = schemaValue
+			}
+		}
+	}
+	return sanitized
 }
 
 func postJSON(ctx context.Context, client *http.Client, url string, body any, headers map[string]string) ([]byte, error) {

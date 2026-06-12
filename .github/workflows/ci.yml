@@ -6,36 +6,16 @@ on:
   push:
     branches: [staging, main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  detect-changes:
-    name: Detect changed areas
-    runs-on: ubuntu-latest
-    outputs:
-      backend-changed: ${{ steps.path-filter.outputs.backend }}
-      frontend-changed: ${{ steps.path-filter.outputs.frontend }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: path-filter
-        with:
-          filters: |
-            backend:
-              - 'apps/api/**'
-              - 'contracts/**'
-              - '.github/workflows/**'
-            frontend:
-              - 'apps/web/**'
-              - 'contracts/**'
-              - '.github/workflows/**'
-
   backend-checks:
     name: Backend (go vet + test)
-    needs: detect-changes
-    if: needs.detect-changes.outputs.backend-changed == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,7 +26,7 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
-      - name: Verify go.mod is tidy
+      - name: Verify modules
         run: go mod verify
       - name: Vet
         run: go vet ./...
@@ -55,8 +35,6 @@ jobs:
 
   frontend-checks:
     name: Frontend (typecheck + lint + build)
-    needs: detect-changes
-    if: needs.detect-changes.outputs.frontend-changed == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

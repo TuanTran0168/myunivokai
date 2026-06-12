@@ -3,8 +3,10 @@ package repositories
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myunivokai/myunivokai/apps/api/internal/models"
 )
@@ -74,7 +76,7 @@ func (s *PostgresStore) AddVariant(ctx context.Context, worldID string, variant 
 		VALUES ($1,$2,$3,$4)
 		RETURNING id::text, world_id::text, created_at`, worldID, variant.VariantNo, variant.Seed, configJSON)
 	if err := row.Scan(&variant.ID, &variant.WorldID, &variant.CreatedAt); err != nil {
-		return models.WorldVariant{}, mapNoRows(err)
+		return models.WorldVariant{}, mapConstraintViolation(err)
 	}
 	return variant, nil
 }
@@ -120,7 +122,7 @@ func (s *PostgresStore) PublishWorld(ctx context.Context, worldID, slug string) 
 	row := s.pool.QueryRow(ctx, `UPDATE worlds SET visibility='public', share_slug=COALESCE(share_slug, $1), updated_at=NOW()
 		WHERE id=$2 RETURNING share_slug, updated_at`, slug, worldID)
 	if err := row.Scan(&world.ShareSlug, &world.UpdatedAt); err != nil {
-		return models.World{}, mapNoRows(err)
+		return models.World{}, mapConstraintViolation(err)
 	}
 	world.Visibility = "public"
 	return world, nil
@@ -172,8 +174,27 @@ func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]mode
 	return variants, rows.Err()
 }
 
-func insertAIGeneration(ctx context.Context, tx pgx.Tx, log models.AIGenerationLog) (any, error) {
-	return tx.Exec(ctx, `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
+func (s *PostgresStore) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
+func (s *PostgresStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
+	for _, log := range logs {
+		if _, err := insertAIGeneration(ctx, s.pool, log); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// commandExecutor is satisfied by both pgx.Tx and *pgxpool.Pool, so AI logs can
+// be written inside the world-creation transaction or standalone on failure.
+type commandExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func insertAIGeneration(ctx context.Context, executor commandExecutor, log models.AIGenerationLog) (any, error) {
+	return executor.Exec(ctx, `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		log.Provider, log.Model, log.Task, log.PromptVersion, log.InputHash, nullableJSON(log.RequestJSON), nullableJSON(log.ResponseJSON), nullableJSON(log.UsageJSON), log.LatencyMS, log.Status, log.Error)
 }
@@ -190,4 +211,24 @@ func mapNoRows(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+const (
+	postgresUniqueViolationCode     = "23505"
+	postgresForeignKeyViolationCode = "23503"
+)
+
+// mapConstraintViolation translates Postgres constraint errors into sentinel
+// errors the service layer can react to (retry on conflict, 404 on missing FK).
+func mapConstraintViolation(err error) error {
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) {
+		switch postgresError.Code {
+		case postgresUniqueViolationCode:
+			return ErrConflict
+		case postgresForeignKeyViolationCode:
+			return ErrNotFound
+		}
+	}
+	return mapNoRows(err)
 }

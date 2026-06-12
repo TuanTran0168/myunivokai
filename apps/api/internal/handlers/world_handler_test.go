@@ -91,6 +91,49 @@ func TestWorldHandlerValidationError(t *testing.T) {
 	}
 }
 
+func TestWorldHandlerMalformedUUIDReturnsNotFound(t *testing.T) {
+	router := testRouter()
+	malformedWorldID := "not-a-valid-uuid"
+	requests := []*http.Request{
+		httptest.NewRequest(http.MethodGet, "/api/v1/worlds/"+malformedWorldID, nil),
+		httptest.NewRequest(http.MethodPost, "/api/v1/worlds/"+malformedWorldID+"/variants", nil),
+		httptest.NewRequest(http.MethodPost, "/api/v1/worlds/"+malformedWorldID+"/variants/also-bad/select", nil),
+		httptest.NewRequest(http.MethodPost, "/api/v1/worlds/"+malformedWorldID+"/publish", nil),
+	}
+	for _, request := range requests {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, request)
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: expected 404 for malformed UUID, got %d body=%s", request.Method, request.URL.Path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestWorldHandlerRejectsOversizedBody(t *testing.T) {
+	router := testRouter()
+	oversizedPayload := `{"nickname":"` + strings.Repeat("a", 80*1024) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worlds", strings.NewReader(oversizedPayload))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for oversized body, got %d", res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "too large") {
+		t.Fatalf("expected body-too-large message, got %s", res.Body.String())
+	}
+}
+
+func TestWorldHandlerRejectsUnknownFields(t *testing.T) {
+	router := testRouter()
+	payloadWithUnknownField := `{"nickname":"Tuan","unexpectedField":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worlds", strings.NewReader(payloadWithUnknownField))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown field, got %d", res.Code)
+	}
+}
+
 func testRouter() http.Handler {
 	cfg := config.Config{
 		AppName:         "Myunivokai",
@@ -104,6 +147,16 @@ func testRouter() http.Handler {
 		RateLimitBurst:  1000,
 	}
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
-	service := services.NewWorldService(cfg, repositories.NewMemoryStore(), orch, services.NewWorldConfigBuilder())
-	return NewRouter(cfg, NewHealthHandler(cfg), NewWorldHandler(service), NewShareHandler(service))
+	store := repositories.NewMemoryStore()
+	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
+	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
+}
+
+func TestReadinessEndpoint(t *testing.T) {
+	router := testRouter()
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected readyz 200 with memory store, got %d", res.Code)
+	}
 }

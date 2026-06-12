@@ -35,5 +35,6 @@ func (p *MockProvider) GenerateStructured(ctx context.Context, req ai.Structured
 		VisualHints: models.VisualHints{Theme: "cosmic-galaxy", CoreSymbol: "crystal", PaletteIntent: "purple cyan premium nebula", MotionIntent: "calm orbiting energy"},
 	}
 	payload, _ := json.Marshal(dna)
-	return &ai.StructuredResponse{Provider: ai.ProviderMock, Model: "mock-world-dna-v1", JSON: payload}, nil
+	simulatedUsage := ai.Usage{InputTokens: 320, OutputTokens: 410, TotalTokens: 730}
+	return &ai.StructuredResponse{Provider: ai.ProviderMock, Model: "mock-world-dna-v1", JSON: payload, Usage: simulatedUsage}, nil
 }

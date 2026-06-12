@@ -63,6 +63,11 @@ func (s *MemoryStore) AddVariant(ctx context.Context, worldID string, variant mo
 	if _, ok := s.worlds[worldID]; !ok {
 		return models.WorldVariant{}, ErrNotFound
 	}
+	for _, existingVariant := range s.variants[worldID] {
+		if existingVariant.VariantNo == variant.VariantNo || existingVariant.Seed == variant.Seed {
+			return models.WorldVariant{}, ErrConflict
+		}
+	}
 	if variant.ID == "" {
 		variant.ID = uuid.NewString()
 	}
@@ -105,6 +110,9 @@ func (s *MemoryStore) PublishWorld(ctx context.Context, worldID, slug string) (m
 		return models.World{}, ErrNotFound
 	}
 	if world.ShareSlug == nil {
+		if existingWorldID, slugTaken := s.slugs[slug]; slugTaken && existingWorldID != worldID {
+			return models.World{}, ErrConflict
+		}
 		world.ShareSlug = &slug
 	}
 	world.Visibility = "public"
@@ -126,6 +134,27 @@ func (s *MemoryStore) GetPublicWorld(ctx context.Context, slug string) (WorldBun
 		return WorldBundle{}, ErrNotFound
 	}
 	return WorldBundle{World: world, Variants: cloneVariants(s.variants[worldID])}, nil
+}
+
+func (s *MemoryStore) Ping(ctx context.Context) error {
+	return nil
+}
+
+func (s *MemoryStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logs = append(s.logs, logs...)
+	return nil
+}
+
+// AIGenerationLogs returns a copy of all stored AI logs; used by tests to
+// assert that failed generations are recorded.
+func (s *MemoryStore) AIGenerationLogs() []models.AIGenerationLog {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	logsCopy := make([]models.AIGenerationLog, len(s.logs))
+	copy(logsCopy, s.logs)
+	return logsCopy
 }
 
 func cloneVariants(in []models.WorldVariant) []models.WorldVariant {

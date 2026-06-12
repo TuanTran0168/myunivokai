@@ -143,21 +143,73 @@ func ValidatePersonalityDNA(raw json.RawMessage) (models.PersonalityDNA, error) 
 	return dna, nil
 }
 
+// PersonalityDNASchema fully specifies every nested object, because OpenAI
+// structured outputs in strict mode reject free-form objects: each object must
+// list its properties, mark them all required, and set additionalProperties to
+// false. The Gemini adapter strips the keys Gemini does not support before
+// sending (see providers.sanitizeSchemaForGemini).
 func PersonalityDNASchema() map[string]any {
+	traitScoreSchema := map[string]any{"type": "integer", "minimum": 0, "maximum": 100}
 	return map[string]any{
 		"type":                 "object",
 		"required":             []string{"schemaVersion", "archetype", "sceneName", "quote", "shortNarrative", "traitScores", "energySignature", "planets", "visualHints"},
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"schemaVersion":   map[string]any{"type": "string"},
-			"archetype":       map[string]any{"type": "string"},
-			"sceneName":       map[string]any{"type": "string"},
-			"quote":           map[string]any{"type": "string"},
-			"shortNarrative":  map[string]any{"type": "string"},
-			"traitScores":     map[string]any{"type": "object"},
-			"energySignature": map[string]any{"type": "object"},
-			"planets":         map[string]any{"type": "array"},
-			"visualHints":     map[string]any{"type": "object"},
+			"schemaVersion":  map[string]any{"type": "string"},
+			"archetype":      map[string]any{"type": "string"},
+			"sceneName":      map[string]any{"type": "string"},
+			"quote":          map[string]any{"type": "string"},
+			"shortNarrative": map[string]any{"type": "string"},
+			"traitScores": map[string]any{
+				"type":                 "object",
+				"required":             []string{"creativity", "discipline", "curiosity", "energy", "focus"},
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"creativity": traitScoreSchema,
+					"discipline": traitScoreSchema,
+					"curiosity":  traitScoreSchema,
+					"energy":     traitScoreSchema,
+					"focus":      traitScoreSchema,
+				},
+			},
+			"energySignature": map[string]any{
+				"type":                 "object",
+				"required":             []string{"primary", "secondary", "intensity"},
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"primary":   map[string]any{"type": "string"},
+					"secondary": map[string]any{"type": "string"},
+					"intensity": traitScoreSchema,
+				},
+			},
+			"planets": map[string]any{
+				"type":     "array",
+				"minItems": 3,
+				"maxItems": 7,
+				"items": map[string]any{
+					"type":                 "object",
+					"required":             []string{"key", "name", "type", "meaning", "energy"},
+					"additionalProperties": false,
+					"properties": map[string]any{
+						"key":     map[string]any{"type": "string"},
+						"name":    map[string]any{"type": "string"},
+						"type":    map[string]any{"type": "string"},
+						"meaning": map[string]any{"type": "string"},
+						"energy":  traitScoreSchema,
+					},
+				},
+			},
+			"visualHints": map[string]any{
+				"type":                 "object",
+				"required":             []string{"theme", "coreSymbol", "paletteIntent", "motionIntent"},
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"theme":         map[string]any{"type": "string"},
+					"coreSymbol":    map[string]any{"type": "string"},
+					"paletteIntent": map[string]any{"type": "string"},
+					"motionIntent":  map[string]any{"type": "string"},
+				},
+			},
 		},
 	}
 }

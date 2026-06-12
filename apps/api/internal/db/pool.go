@@ -4,13 +4,25 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/myunivokai/myunivokai/apps/api/internal/config"
 )
 
-func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	if databaseURL == "" {
+// Connect builds an explicitly-configured pgx pool. Returns (nil, nil) when no
+// DATABASE_URL is set, which callers treat as "use the in-memory store".
+func Connect(ctx context.Context, cfg config.Config) (*pgxpool.Pool, error) {
+	if cfg.DatabaseURL == "" {
 		return nil, nil
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
+	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+	poolConfig.MaxConns = int32(cfg.DatabaseMaxConns)
+	poolConfig.MinConns = int32(cfg.DatabaseMinConns)
+	poolConfig.MaxConnLifetime = cfg.DatabaseMaxConnLifetime
+	poolConfig.MaxConnIdleTime = cfg.DatabaseMaxConnIdleTime
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, err
 	}
