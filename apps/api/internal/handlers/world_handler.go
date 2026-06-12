@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/myunivokai/myunivokai/apps/api/internal/httpx"
 	"github.com/myunivokai/myunivokai/apps/api/internal/models"
 	"github.com/myunivokai/myunivokai/apps/api/internal/repositories"
@@ -13,12 +14,29 @@ import (
 	"github.com/myunivokai/myunivokai/apps/api/internal/validation"
 )
 
+// maximumRequestBodyBytes bounds JSON request bodies; the world input payload
+// is at most a few kilobytes, so 64 KiB leaves generous headroom.
+const maximumRequestBodyBytes = 64 * 1024
+
 type WorldHandler struct {
 	service *services.WorldService
 }
 
 func NewWorldHandler(service *services.WorldService) *WorldHandler {
 	return &WorldHandler{service: service}
+}
+
+// requireUUIDPathParameter validates a path parameter as a UUID before it
+// reaches the database layer. Postgres rejects malformed UUIDs with a query
+// error that would otherwise surface as a 500; a malformed ID is simply a
+// resource that cannot exist, so respond 404.
+func requireUUIDPathParameter(w http.ResponseWriter, r *http.Request, parameterName string) (string, bool) {
+	parameterValue := chi.URLParam(r, parameterName)
+	if _, err := uuid.Parse(parameterValue); err != nil {
+		httpx.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found.", nil)
+		return "", false
+	}
+	return parameterValue, true
 }
 
 // Create creates a personal universe.
@@ -33,8 +51,16 @@ func NewWorldHandler(service *services.WorldService) *WorldHandler {
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds [post]
 func (h *WorldHandler) Create(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maximumRequestBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
 	var input models.WorldInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if err := decoder.Decode(&input); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			httpx.WriteError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Request body is too large.", nil)
+			return
+		}
 		httpx.WriteError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid JSON body.", nil)
 		return
 	}
@@ -61,7 +87,11 @@ func (h *WorldHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds/{worldId} [get]
 func (h *WorldHandler) Get(w http.ResponseWriter, r *http.Request) {
-	response, err := h.service.GetWorld(r.Context(), chi.URLParam(r, "worldId"))
+	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
+	if !ok {
+		return
+	}
+	response, err := h.service.GetWorld(r.Context(), worldID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -79,7 +109,11 @@ func (h *WorldHandler) Get(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds/{worldId}/variants [post]
 func (h *WorldHandler) RegenerateVariant(w http.ResponseWriter, r *http.Request) {
-	response, err := h.service.RegenerateVariant(r.Context(), chi.URLParam(r, "worldId"))
+	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
+	if !ok {
+		return
+	}
+	response, err := h.service.RegenerateVariant(r.Context(), worldID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -98,7 +132,15 @@ func (h *WorldHandler) RegenerateVariant(w http.ResponseWriter, r *http.Request)
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds/{worldId}/variants/{variantId}/select [post]
 func (h *WorldHandler) SelectVariant(w http.ResponseWriter, r *http.Request) {
-	response, err := h.service.SelectVariant(r.Context(), chi.URLParam(r, "worldId"), chi.URLParam(r, "variantId"))
+	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
+	if !ok {
+		return
+	}
+	variantID, ok := requireUUIDPathParameter(w, r, "variantId")
+	if !ok {
+		return
+	}
+	response, err := h.service.SelectVariant(r.Context(), worldID, variantID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -116,7 +158,11 @@ func (h *WorldHandler) SelectVariant(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds/{worldId}/publish [post]
 func (h *WorldHandler) Publish(w http.ResponseWriter, r *http.Request) {
-	response, err := h.service.PublishWorld(r.Context(), chi.URLParam(r, "worldId"))
+	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
+	if !ok {
+		return
+	}
+	response, err := h.service.PublishWorld(r.Context(), worldID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
