@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.path-filter.outputs.backend }}
+      frontend-changed: ${{ steps.path-filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            backend:
+              - 'apps/api/**'
+              - 'contracts/**'
+              - '.github/workflows/**'
+            frontend:
+              - 'apps/web/**'
+              - 'contracts/**'
+              - '.github/workflows/**'
+
+  backend-checks:
+    name: Backend (go vet + test)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend-changed == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - name: Verify go.mod is tidy
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
+  frontend-checks:
+    name: Frontend (typecheck + lint + build)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-changed == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      # TODO(feat/fe/unit-testing-setup): add "npm run test" once vitest lands
+      - name: Build
+        run: npm run build
