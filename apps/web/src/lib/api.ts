@@ -72,18 +72,38 @@ function normalizeWorld(raw: any): World {
 }
 
 function normalizeShare(raw: any): ShareWorld {
-  const item = raw.world ?? raw.data ?? raw;
-  const variantRaw = item.variant ?? item.selectedVariant ?? item.selected_variant;
+  const publicWorld = raw.world ?? raw.data ?? raw;
+  const variantRaw =
+    raw.variant ?? publicWorld.variant ?? publicWorld.selectedVariant ?? publicWorld.selected_variant;
   const variant = variantRaw ? normalizeVariant(variantRaw) : undefined;
   return {
-    id: String(item.id ?? item.worldId ?? item.world_id ?? ""),
-    title: item.title ?? item.name,
-    summary: item.summary ?? item.description,
-    shareSlug: item.shareSlug ?? item.share_slug,
+    id: String(publicWorld.id ?? publicWorld.worldId ?? publicWorld.world_id ?? ""),
+    title:
+      publicWorld.title ??
+      publicWorld.name ??
+      publicWorld.sceneName ??
+      publicWorld.scene_name ??
+      publicWorld.nickname,
+    summary:
+      publicWorld.summary ??
+      publicWorld.description ??
+      publicWorld.shortNarrative ??
+      publicWorld.short_narrative,
+    quote: publicWorld.quote,
+    archetype: publicWorld.archetype,
+    shareSlug: publicWorld.shareSlug ?? publicWorld.share_slug,
     variant,
-    sceneConfig: item.sceneConfig ?? item.scene_config ?? variant?.sceneConfig,
-    publishedAt: item.publishedAt ?? item.published_at
+    sceneConfig: buildShareSceneConfig(publicWorld, variant),
+    publishedAt: publicWorld.publishedAt ?? publicWorld.published_at
   };
+}
+
+function buildShareSceneConfig(publicWorld: any, variant?: WorldVariant) {
+  const sceneConfig = publicWorld.sceneConfig ?? publicWorld.scene_config ?? variant?.sceneConfig;
+  if (!sceneConfig) {
+    return undefined;
+  }
+  return { seed: variant?.seed, ...sceneConfig };
 }
 
 export const api = {
