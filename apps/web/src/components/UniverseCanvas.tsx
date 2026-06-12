@@ -64,6 +64,7 @@ export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPl
           fov: cameraFieldOfView
         }}
         dpr={CANVAS_DEVICE_PIXEL_RATIO_RANGE}
+        gl={{ preserveDrawingBuffer: true }}
         onPointerMissed={() => onSelectPlanet?.(null)}
       >
         <color attach="background" args={[backgroundColor]} />

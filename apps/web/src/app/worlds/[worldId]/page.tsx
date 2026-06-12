@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Copy, ExternalLink, Loader2, Plus, Rocket } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Download, ExternalLink, Loader2, Plus, Rocket } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
+import { exportSceneCanvasAsPng } from "@/lib/exportImage";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
 import type { PlanetSceneConfig, World, WorldVariant } from "@/lib/types";
@@ -26,6 +27,7 @@ export default function WorldPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"variant" | "publish" | "select" | "copy" | null>(null);
   const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
+  const sceneContainerReference = useRef<HTMLDivElement>(null);
 
   async function loadWorld() {
     setError("");
@@ -126,6 +128,12 @@ export default function WorldPage({ params }: PageProps) {
     }
   }
 
+  function exportSceneImage() {
+    const exportFileName = `myunivokai-${activeScene.sceneName ?? world?.id ?? "universe"}`;
+    const exportSucceeded = exportSceneCanvasAsPng(sceneContainerReference.current, exportFileName);
+    setNotice(exportSucceeded ? "Image exported." : "Could not export image.");
+  }
+
   async function copyShareLink() {
     if (!world?.shareSlug) {
       return;
@@ -160,7 +168,15 @@ export default function WorldPage({ params }: PageProps) {
   return (
     <main className="relative mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px]">
       <section className="grid gap-4">
-        <div className="min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-cyan">
+        <div ref={sceneContainerReference} className="relative min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-cyan">
+          <button
+            type="button"
+            title="Export PNG"
+            onClick={exportSceneImage}
+            className="focus-ring absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/15 bg-surface-low/80 text-on-surface backdrop-blur hover:border-white/30"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+          </button>
           <UniverseCanvas
             scene={activeScene}
             className="h-full"
