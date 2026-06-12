@@ -1,111 +1,124 @@
 # Myunivokai
 
-My universe, okay? Nhập vài thông tin về bản thân, AI phân tích thành "Personality DNA",
-backend sinh cấu hình thế giới từ seed, frontend vẽ thành một hệ mặt trời 3D của riêng bạn
-bằng three.js. Có thể tạo lại variant, lưu gallery, publish link chia sẻ công khai.
+My universe, okay? You describe yourself in a short form, AI distills it into a
+"Personality DNA", the backend turns that into a deterministic world config,
+and the frontend renders your own solar system in 3D with three.js. You can
+regenerate variants, keep a gallery, and publish a public share link.
 
-## Cách nó hoạt động
+## How it works
 
 ```txt
 Form (Next.js)
-  → POST /api/v1/worlds (Go)
-  → AI provider (Gemini/OpenAI/mock) sinh Personality DNA dạng JSON có schema
-  → backend validate DNA, sinh World Seed + World Scene Config (deterministic, không phụ thuộc AI)
-  → lưu PostgreSQL (hoặc in-memory khi dev)
-  → frontend đọc config, render hệ mặt trời bằng React Three Fiber
+  -> POST /api/v1/worlds (Go)
+  -> AI provider (Gemini/OpenAI/mock) generates schema-constrained Personality DNA JSON
+  -> backend validates the DNA, creates a World Seed + World Scene Config (deterministic, AI-free)
+  -> stored in PostgreSQL (or in-memory during development)
+  -> frontend reads the config and renders the solar system with React Three Fiber
 ```
 
-Hai quyết định kiến trúc đáng chú ý:
+Two architecture decisions worth knowing:
 
-1. AI chỉ sinh phần ngữ nghĩa (archetype, tên cảnh, ý nghĩa các hành tinh). Mọi con số 3D
-   do backend sinh từ seed trong biên an toàn, nên "tạo variant mới" không tốn một call AI nào,
-   và cùng một seed luôn vẽ ra đúng một cảnh.
-2. Provider AI nằm sau một interface duy nhất. Đổi Gemini sang OpenAI là đổi env
-   `AI_PROVIDER`, không đổi code. `mock` dùng cho test và dev không cần API key.
+1. AI only generates the semantic part (archetype, scene name, planet
+   meanings). Every 3D number is derived by the backend from a seed within safe
+   bounds — so "regenerate variant" costs zero AI calls, and the same seed
+   always renders the same scene.
+2. AI providers sit behind a single interface. Switching Gemini to OpenAI is an
+   `AI_PROVIDER` env change, not a code change. `mock` powers tests and
+   key-less development.
 
-## Cấu trúc repo
+## Repository layout
 
 ```txt
-apps/web        Next.js 14 + TypeScript + Tailwind + React Three Fiber
-apps/api        Go + chi + pgxpool, migrations bằng goose
-contracts       JSON schemas + OpenAPI dùng chung hai phía
-docs            Ghi chú kiến trúc ban đầu
-notes           Tài liệu nội bộ cho người và AI agent (bắt đầu từ notes/README.md)
+services/universe-service   Go + chi + pgxpool; the universe domain (worlds, DNA, variants, share)
+clients/web-client          Next.js 14 + TypeScript + Tailwind + React Three Fiber
+contracts                   JSON schemas + OpenAPI shared by both sides
+docs                        Early architecture notes
+notes                       Internal docs for humans and AI agents (start at notes/README.md)
 ```
 
-## Chạy backend
+The layout is microservices-ready: future services (`services/match-service`,
+`services/auth-service`) and clients (`clients/mobile-client`) slot in
+alongside the existing ones.
+
+## Run the backend
 
 ```bash
-cd apps/api
+cd services/universe-service
 go run ./cmd/api
 ```
 
-Mặc định `AI_PROVIDER=mock`. Nếu `DATABASE_URL` rỗng thì API tự dùng in-memory store,
-nên không cần dựng database để dev. Env mẫu ở `apps/api/.env.example`.
+Defaults to `AI_PROVIDER=mock`. With an empty `DATABASE_URL` the API uses an
+in-memory store, so local development needs no database. Example env lives in
+`services/universe-service/.env.example`.
 
-Config loader đọc `.env`, `.env.local`, và file theo môi trường (`.env.dev`, `.env.prod`...).
-Ép file cụ thể bằng `APP_ENV=prod` hoặc `MYUNIVOKAI_ENV_FILE=.env.prod`.
+The config loader reads `.env`, `.env.local`, and environment-specific files
+(`.env.dev`, `.env.prod`, ...). Force a specific file with `APP_ENV=prod` or
+`MYUNIVOKAI_ENV_FILE=.env.prod`.
 
-Health check và Swagger:
+Health checks and Swagger:
 
 ```bash
-curl http://localhost:8080/api/v1/healthz
-# http://localhost:8080/swagger/index.html
+curl http://localhost:8080/api/v1/healthz   # liveness
+curl http://localhost:8080/api/v1/readyz    # readiness (pings the store)
+# http://localhost:8080/swagger/index.html  (disabled in production)
 ```
 
-Regenerate Swagger sau khi đổi handler/model:
+Regenerate Swagger after changing handlers/models:
 
 ```bash
 swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
 ```
 
-## Chạy frontend
+## Run the frontend
 
 ```bash
-cd apps/web
+cd clients/web-client
 npm install
 npm run dev
 ```
 
-Mở http://localhost:3000. FE gọi API qua `NEXT_PUBLIC_API_BASE_URL`
-(mặc định `http://localhost:8080/api/v1`, env mẫu ở `apps/web/.env.example`).
+Open http://localhost:3000. The FE calls the API through
+`NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080/api/v1`, example env
+in `clients/web-client/.env.example`).
 
-Tạo một world từ form rồi vào trang world để xem cảnh 3D. Lưu ý: landing page
-hiển thị cảnh preview trừu tượng; hệ mặt trời đầy đủ chỉ render khi có world thật.
+Create a world from the form, then open its page to see the 3D scene. Note:
+the landing page shows an abstract preview; the full solar system renders only
+for a real world.
 
-## Chạy bằng Docker Compose
+## Run with Docker Compose
 
 ```bash
-cd apps/api
+cd services/universe-service
 docker compose -f docker-compose-local.yml up --build
 ```
 
-Stack này dựng PostgreSQL, chạy migrations rồi start API ở cổng 8080.
-File `apps/api/.env.local` được mount vào container API và migration.
+This starts PostgreSQL, runs goose migrations, then serves the API on port
+8080. The local stack mounts `.env.local` into the API and migration containers.
 
-## Test và checks
+## Tests and checks
 
 ```bash
 # Backend
-cd apps/api && go test ./... && go vet ./...
+cd services/universe-service && go test ./... && go vet ./...
 
 # Frontend
-cd apps/web && npm run typecheck && npm run lint && npm run build
+cd clients/web-client && npm run typecheck && npm run lint && npm run build
 ```
 
-Test backend luôn chạy với mock provider, không gọi AI thật.
+Backend tests always use the mock provider — no real AI calls.
+CI (GitHub Actions) runs both suites on every PR into `staging`/`main`.
 
-## Tài liệu
+## Documentation
 
-- `notes/README.md` — mục lục tài liệu nội bộ (quy ước git, coding style, kiến trúc FE/BE)
-- `notes/fe/threejs-scene-architecture.md` — three.js được dùng thế nào, cách thêm loại cảnh mới
-- `AGENTS.md` — quy tắc cho AI agent làm việc trong repo
+- `notes/README.md` — index of internal docs (git convention, coding style, FE/BE architecture)
+- `notes/fe/threejs-scene-architecture.md` — how three.js is used and how to add new scene types
+- `AGENTS.md` — rules for AI agents working in this repo
 
-Texture hành tinh lấy từ Solar System Scope (CC BY 4.0),
-ghi nguồn tại `apps/web/public/textures/solar-system/ATTRIBUTION.md`.
+Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
+`clients/web-client/public/textures/solar-system/ATTRIBUTION.md`.
 
-## Triển khai
+## Deployment
 
-Web lên Vercel, API lên Railway/Fly/Render, database dùng Neon PostgreSQL
-(pooled URL cho runtime, direct URL cho migrations). CORS production chỉ cho phép
-domain web thật, không dùng wildcard.
+Web on Vercel, API on Railway/Fly/Render, database on Neon PostgreSQL (pooled
+URL for runtime, direct URL for migrations). Production CORS only allows the
+real web domain — never a wildcard.

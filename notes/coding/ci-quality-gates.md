@@ -1,24 +1,24 @@
-# CI & Quality Gates (chung FE + BE)
+# CI & Quality Gates (shared FE + BE)
 
-Hạng mục độc lập, branch riêng: `feat/ci/github-actions`.
-Nên merge **trước** khi bắt đầu chuỗi refactor BE/FE — để mọi PR refactor
-đều bị gác cổng tự động, không phụ thuộc ai nhớ chạy check bằng tay.
+Status: DONE — merged as `feat/ci/github-actions` (simplified after the initial
+paths-filter version kept failing on repo action policy).
 
-## Việc làm
+## What runs
 
-`.github/workflows/ci.yml` chạy trên mọi PR vào `staging` và `main`:
+`.github/workflows/ci.yml` runs on every PR into `staging` and `main`:
 
 ```txt
-job backend:   cd apps/api  → go vet ./... → go test ./...
-job frontend:  cd apps/web  → npm ci → typecheck → lint → test → build
+job backend:   cd services/universe-service -> go mod verify -> go vet -> go test
+job frontend:  cd clients/web-client -> npm ci -> typecheck -> lint -> build
 ```
 
-- Hai job chạy song song, dùng cache (actions/setup-go, actions/setup-node).
-- Path filter: PR chỉ đổi apps/web thì khỏi chạy job backend và ngược lại;
-  đổi contracts/ hoặc notes/coding/ thì chạy cả hai.
-- Bật branch protection cho `staging` + `main`: bắt buộc CI xanh mới merge được.
+- Both jobs always run (no third-party path filter; reliability beats saving
+  ~2 minutes in a small repo).
+- Go/Node dependency caching; superseded runs are cancelled (concurrency group).
+- A frontend `npm run test` step is reserved for `feat/fe/unit-testing-setup`.
 
-## Acceptance
+## Recommended repo settings
 
-- PR cố tình chứa lỗi typecheck bị CI chặn.
-- PR chỉ sửa docs không tốn thời gian chạy test app.
+Enable branch protection for `staging` and `main`: require both status checks
+("Backend (go vet + test)", "Frontend (typecheck + lint + build)") to pass
+before merging.

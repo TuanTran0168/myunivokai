@@ -1,154 +1,161 @@
-# FE Production Refactor Plan — apps/web
+# FE Production Refactor Plan — clients/web-client
 
-Mục tiêu: kết thúc giai đoạn MVP. Mỗi hạng mục là **một branch + một PR riêng**,
-theo thứ tự. Branch nào xong phải pass `npm run typecheck && npm run lint && npm run build`,
-và từ mục 2 trở đi phải kèm unit test (vitest).
+Goal: end the MVP phase. Each item is **one branch + one separate PR**, in
+order. Every branch must pass `npm run typecheck && npm run lint && npm run build`,
+and from item 2 onward must ship with unit tests (vitest).
 
-Trạng thái: đánh dấu ✅ khi PR đã merge vào `staging`.
+Status: mark ✅ when the PR is merged into `staging`.
 
-| # | Branch | Mức độ | Trạng thái |
+| # | Branch | Priority | Status |
 |---|---|---|---|
-| 1 | `feat/fe/unit-testing-setup` | 🔴 nền tảng | ⬜ |
-| 2 | `refactor/fe/typed-api-client` | 🔴 bắt buộc trước deploy | ⬜ |
-| 3 | `refactor/fe/form-validation` | 🔴 bắt buộc trước deploy | ⬜ |
-| 4 | `refactor/fe/page-decomposition` | 🟡 cấu trúc | ⬜ |
+| 1 | `feat/fe/unit-testing-setup` | 🔴 foundation | ⬜ |
+| 2 | `refactor/fe/typed-api-client` | 🔴 required before deploy | ⬜ |
+| 3 | `refactor/fe/form-validation` | 🔴 required before deploy | ⬜ |
+| 4 | `refactor/fe/page-decomposition` | 🟡 structure | ⬜ |
 | 5 | `feat/fe/toast-and-loading-states` | 🟡 UX | ⬜ |
-| 6 | `feat/fe/share-page-ssr-metadata` | 🟡 chia sẻ mạng xã hội | ⬜ |
-| 7 | `feat/fe/mobile-performance` | 🟡 thiết bị yếu | ⬜ |
-| 8 | `refactor/fe/cleanup-a11y` | 🟢 dọn dẹp | ⬜ |
+| 6 | `feat/fe/share-page-ssr-metadata` | 🟡 social sharing | ⬜ |
+| 7 | `feat/fe/mobile-performance` | 🟡 weak devices | ⬜ |
+| 8 | `refactor/fe/cleanup-a11y` | 🟢 cleanup | ⬜ |
 
 ## 1. feat/fe/unit-testing-setup
 
-Vấn đề: FE không có một test nào. Bug "variants ở root response" từng sống sót
-qua mọi check vì chỉ có typecheck/lint — unit test cho normalize đã bắt được nó.
+Problem: the FE has zero tests. The "variants at response root" bug survived
+every check because only typecheck/lint run — a unit test on normalize would
+have caught it.
 
-Việc làm:
+Work:
 
-- Cài `vitest` + `@testing-library/react` + script `npm run test`.
-- Viết test đầu tiên cho 2 vùng rủi ro nhất:
-  - `lib/api.ts`: normalizeWorld/normalizeVariant/normalizeShare với fixture
-    JSON đúng shape thật của BE (chép từ `models/responses.go`).
-  - `lib/scene.ts`: `randomFromSeed` tất định, `planetsFromScene`, `paletteFromScene`.
-- Cập nhật `notes/fe/source-overview.md` mục checks: thêm `npm run test`.
+- Install `vitest` + `@testing-library/react`, add an `npm run test` script.
+- First tests for the two riskiest areas:
+  - `lib/api.ts`: normalizeWorld/normalizeVariant/normalizeShare against JSON
+    fixtures copied from the real BE shapes (`models/responses.go`).
+  - `lib/scene.ts`: `randomFromSeed` determinism, `planetsFromScene`, `paletteFromScene`.
+- Add the test step to CI (`.github/workflows/ci.yml` has a reserved TODO) and
+  update `notes/fe/source-overview.md`.
 
-Acceptance: `npm run test` chạy trong CI local; coverage cho 2 file lib trên.
+Acceptance: `npm run test` runs in CI; both lib files covered.
 
 ## 2. refactor/fe/typed-api-client
 
-Vấn đề: `lib/api.ts` đầy `any` và chuỗi fallback `??` phòng thủ cho các shape
-không tồn tại (`world_id`, `scene_config`...). Code phòng thủ kiểu này che giấu
-bug thay vì làm lộ nó (bài học từ bug variants).
+Problem: `lib/api.ts` is full of `any` and defensive `??` fallback chains for
+shapes that do not exist (`world_id`, `scene_config`, ...). Defensive code like
+this hides bugs instead of exposing them (lesson from the variants bug).
 
-Việc làm:
+Work:
 
-- Định nghĩa schema zod cho từng response thật của BE
-  (`CreateWorldResponse`, `WorldResponse`, `VariantResponse`, `PublicWorldResponse`)
-  — đúng MỘT shape mỗi endpoint, không đoán mò snake_case.
-- `request<T>()` parse qua zod: response sai shape → lỗi rõ ràng kèm field nào sai,
-  thay vì âm thầm render fallback.
-- Xóa toàn bộ `any` trong `lib/api.ts`; types trong `lib/types.ts` suy ra từ zod
-  (`z.infer`) để không bao giờ lệch.
+- Define zod schemas for each real BE response (`CreateWorldResponse`,
+  `WorldResponse`, `VariantResponse`, `PublicWorldResponse`) — exactly ONE
+  shape per endpoint, no snake_case guessing.
+- `request<T>()` parses through zod: a wrong-shaped response throws a clear
+  error naming the bad field instead of silently rendering fallback visuals.
+- Remove every `any` from `lib/api.ts`; derive `lib/types.ts` types via
+  `z.infer` so they can never drift.
 
-Acceptance: không còn `any` trong lib/; test fixture cũ pass; response thiếu field
-chính → throw lỗi có tên field.
+Acceptance: no `any` left under lib/; fixture tests pass; a response missing a
+key field throws an error that names the field.
 
 ## 3. refactor/fe/form-validation
 
-Vấn đề: form tạo universe đang **âm thầm tự điền default** khi user bỏ trống
-(nickname rỗng → "Neo", goal rỗng → câu tự sinh). Không hợp triết lý tường minh,
-và user không biết dữ liệu nào thật sự được gửi đi.
+Problem: the create form silently fills defaults when fields are empty
+(empty nickname becomes "Neo", empty goal becomes a generated sentence). That
+violates the explicitness principle and users never learn what was sent.
 
-Việc làm:
+Work:
 
-- Cài `react-hook-form` + `zod` resolver (2 thư viện này nằm trong plan gốc).
-- Schema zod mirror đúng rule validation của BE (`validation/world.go`):
-  nickname 2-32, interests 3-8, traits 3-6, goal 10-220...
-- Hiện lỗi từng field dưới input (đỏ + message), disable submit khi invalid.
-- Xóa `ensureRange`/default ngầm; thêm input "Custom interest" hoạt động thật
-  (nút Custom hiện tại chỉ là trang trí).
-- Map `VALIDATION_ERROR.details` từ BE về đúng field trên form.
+- Install `react-hook-form` + zod resolver (both in the original plan's stack).
+- Zod schema mirroring the BE validation rules (`validation/world.go`):
+  nickname 2-32, interests 3-8, traits 3-6, goal 10-220, ...
+- Show per-field errors under each input; disable submit while invalid.
+- Delete `ensureRange`/silent defaults; make the "Custom" interest button real
+  (today it is decoration only).
+- Map BE `VALIDATION_ERROR.details` back onto the matching form fields.
 
-Acceptance: submit form trống → thấy lỗi từng field, không có request nào bắn đi;
-BE trả 400 details → field tương ứng highlight.
+Acceptance: submitting an empty form shows per-field errors and sends no
+request; a BE 400 with details highlights the right fields.
 
 ## 4. refactor/fe/page-decomposition
 
-Vấn đề: `app/page.tsx` 335 dòng trộn landing + form + options; trang world cũng
-ôm nhiều logic. Cấu trúc feature folder trong plan gốc chưa được theo.
+Problem: `app/page.tsx` is 335 lines mixing landing + form + options; the world
+page also owns too much logic. The original plan's feature-folder structure is
+not followed.
 
-Việc làm:
+Work:
 
-- Tách theo plan gốc:
-  - `features/create-universe/`: `CreateUniverseForm.tsx`, `formSchema.ts`, `constants.ts`
-    (interestOptions, moodOptions... rời khỏi page).
-  - `features/dashboard/`: `WorldHeaderPanel.tsx`, `PublishPanel.tsx`, `VariantsPanel.tsx`
-    (trang world chỉ còn compose + state).
-- Mỗi page.tsx ≤ ~80 dòng, chỉ làm điều phối.
-- Không đổi hành vi — đây là refactor thuần, test mục 1-3 phải pass nguyên.
+- Split per the original plan:
+  - `features/create-universe/`: `CreateUniverseForm.tsx`, `formSchema.ts`,
+    `constants.ts` (interestOptions, moodOptions, ... leave the page).
+  - `features/dashboard/`: `WorldHeaderPanel.tsx`, `PublishPanel.tsx`,
+    `VariantsPanel.tsx` (the world page only composes + holds state).
+- Each page.tsx is roughly 80 lines or less, orchestration only.
+- No behavior change — pure refactor; tests from items 1-3 must pass untouched.
 
-Acceptance: build + test pass, diff page.tsx chủ yếu là xóa.
+Acceptance: build + tests pass; the page.tsx diff is mostly deletions.
 
 ## 5. feat/fe/toast-and-loading-states
 
-Vấn đề: notice hiện tại là StatusMessage tĩnh không tự tắt; lỗi API hiện
-trần trụi; canvas Suspense fallback={null} → màn đen khi đang tải texture.
+Problem: notices are static StatusMessages that never dismiss; API errors show
+raw; the canvas Suspense fallback is null, so texture loading shows a black box.
 
-Việc làm:
+Work:
 
-- Toast component (tự dismiss sau `TOAST_AUTO_DISMISS_MILLISECONDS`, xếp chồng,
-  variant success/error) thay cho notice tĩnh ở world page.
-- Suspense fallback trong canvas: spinner/skeleton thay vì null.
-- Nút hành động (publish, variant, export) thống nhất trạng thái disabled + spinner.
+- Toast component (auto-dismiss after `TOAST_AUTO_DISMISS_MILLISECONDS`,
+  stacking, success/error variants) replacing static notices on the world page.
+- A real Suspense fallback in the canvas: spinner/skeleton instead of null.
+- Action buttons (publish, variant, export) share a consistent disabled+spinner
+  treatment.
 
-Acceptance: tạo variant → toast tự biến mất; tải trang world chậm → thấy
-skeleton chứ không phải khối đen.
+Acceptance: creating a variant pops a toast that disappears by itself; a slow
+world page shows a skeleton instead of a black block.
 
 ## 6. feat/fe/share-page-ssr-metadata
 
-Vấn đề: trang share là client component — share link lên Facebook/Zalo/Twitter
-không có title/ảnh preview (bot không chạy JS). Đây là trang duy nhất cần SEO.
+Problem: the share page is a client component — links shared to
+Facebook/Zalo/Twitter get no title/preview (bots do not run JS). This is the
+one page that needs SEO.
 
-Việc làm:
+Work:
 
-- Chuyển `share/worlds/[shareSlug]/page.tsx` thành server component fetch từ API
-  (canvas 3D vẫn là client component con).
+- Convert `share/worlds/[shareSlug]/page.tsx` into a server component fetching
+  from the API (the 3D canvas stays a client child).
 - `generateMetadata()`: title = sceneName, description = shortNarrative,
   OpenGraph + Twitter card.
-- (Tùy chọn, nếu còn thời gian) route `opengraph-image` sinh ảnh OG đơn giản
-  từ palette + tên cảnh.
+- (Optional) an `opengraph-image` route rendering a simple OG image from the
+  palette + scene name.
 
-Acceptance: `curl` trang share thấy đủ og:title/og:description trong HTML thô.
+Acceptance: `curl` on a share page shows og:title/og:description in raw HTML.
 
 ## 7. feat/fe/mobile-performance
 
-Việc làm:
+Work:
 
-- Phát hiện thiết bị yếu (deviceMemory/hardwareConcurrency) → giảm dpr,
-  tắt bloom, giảm segment sphere qua một `qualityProfile` đặt tên rõ.
-- Resize listener cho particle count (hiện chỉ đọc 1 lần lúc mount).
-- Lazy-load texture: planet ở xa dùng màu phẳng đến khi texture sẵn sàng
-  (tránh trắng màn đầu).
-- Kiểm tra thật trên điện thoại, ghi kết quả vào PR.
+- Detect weak devices (deviceMemory/hardwareConcurrency) and apply a named
+  `qualityProfile`: lower dpr, bloom off, fewer sphere segments.
+- A resize listener for particle counts (currently read once at mount).
+- Lazy texture loading: distant planets use flat colors until textures arrive
+  (avoids the initial white flash).
+- Test on a real phone; record results in the PR.
 
-Acceptance: Lighthouse mobile không tụt khung hình nghiêm trọng; không crash
-WebGL trên thiết bị thử.
+Acceptance: no severe frame drops in Lighthouse mobile; no WebGL crash on the
+test device.
 
 ## 8. refactor/fe/cleanup-a11y
 
-Việc làm:
+Work:
 
-- Rà `aria-label` cho mọi nút icon-only (export, copy, remove...).
-- Focus trap trong GeneratingOverlay; `prefers-reduced-motion` tắt animation quay.
-- Quét magic number còn sót → hằng số (theo notes/coding/coding-style.md).
-- Xóa code/import chết, đồng bộ lại `notes/fe/source-overview.md` với cấu trúc mới.
+- `aria-label` on every icon-only button (export, copy, remove, ...).
+- Focus trap in GeneratingOverlay; `prefers-reduced-motion` disables the
+  spinning animation.
+- Sweep remaining magic numbers into named constants (notes/coding/coding-style.md).
+- Delete dead code/imports; re-sync `notes/fe/source-overview.md` with the new
+  structure.
 
-Acceptance: `npm run lint` với rule jsx-a11y bật không lỗi.
+Acceptance: `npm run lint` passes with jsx-a11y rules enabled.
 
 ## Definition of production-ready (FE)
 
-- [ ] Có unit test cho lib (api normalize, scene helpers) chạy trong CI.
-- [ ] Không còn `any` trong `src/lib/`.
-- [ ] Form validate thật, không tự bịa dữ liệu cho user.
-- [ ] Share link có preview tử tế trên mạng xã hội.
-- [ ] Chạy mượt trên mobile tầm trung.
-- [ ] Mỗi page.tsx chỉ điều phối, logic nằm trong features/.
+- [ ] Unit tests for lib (api normalize, scene helpers) run in CI.
+- [ ] No `any` left in `src/lib/`.
+- [ ] The form validates for real and never invents data for the user.
+- [ ] Share links unfurl properly on social networks.
+- [ ] Runs smoothly on a mid-range phone.
+- [ ] Every page.tsx only orchestrates; logic lives in features/.

@@ -19,13 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: services/universe-service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: services/universe-service/go.mod
+          cache-dependency-path: services/universe-service/go.sum
       - name: Verify modules
         run: go mod verify
       - name: Vet
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: clients/web-client
     env:
       NEXT_TELEMETRY_DISABLED: 1
     steps:
@@ -47,7 +47,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: clients/web-client/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Typecheck
