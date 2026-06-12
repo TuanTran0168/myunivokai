@@ -1,25 +1,27 @@
-# Notes — Tài liệu nội bộ của Myunivokai
+# Notes — Myunivokai internal documentation
 
-Thư mục này là nơi lưu kiến thức của dự án cho cả người và AI agent.
-Quy tắc: tài liệu chung để ở folder chung, tài liệu riêng FE/BE để đúng folder của nó.
+This folder is the project's knowledge base for both humans and AI agents.
+Rule: shared documents live in the shared folder; FE/BE-specific documents live
+in their own folder.
 
-## Cấu trúc
+## Structure
 
-| Đường dẫn | Nội dung | Ai cần đọc |
+| Path | Content | Who should read it |
 |---|---|---|
-| [coding/git-convention.md](coding/git-convention.md) | Quy ước branch, commit message, PR | Bắt buộc trước khi commit |
-| [coding/coding-style.md](coding/coding-style.md) | Style code: không hardcode, không viết tắt tên biến/hàm | Bắt buộc trước khi viết code |
-| [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | Kế hoạch CI GitHub Actions gác cổng PR | Trước khi bắt đầu refactor production |
-| [fe/refactor-plan.md](fe/refactor-plan.md) | Plan nâng cấp FE lên production (8 branch, làm theo thứ tự) | Khi làm refactor FE |
-| [be/refactor-plan.md](be/refactor-plan.md) | Plan nâng cấp BE lên production (8 branch, làm theo thứ tự) | Khi làm refactor BE |
-| [fe/source-overview.md](fe/source-overview.md) | Cơ chế hoạt động của source FE (Next.js): routes, data flow, state | Khi làm việc trong `clients/web-client` |
-| [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | Nguyên lý three.js, kiến trúc scene renderer, cách custom và mở rộng | Khi đụng vào phần 3D |
-| [be/source-overview.md](be/source-overview.md) | Cơ chế hoạt động của source BE (Go API): layers, AI provider, determinism | Khi làm việc trong `services/universe-service` |
-| [Myunivokai_Implementation_Plan.md](Myunivokai_Implementation_Plan.md) | Plan tổng thể ban đầu của dự án | Tham khảo định hướng |
-| [stitch_personal_universe_3d/](stitch_personal_universe_3d/) | Mockup UI từ Stitch (7 màn hình) | Khi polish UI |
+| [coding/git-convention.md](coding/git-convention.md) | Branch naming, commit message format, PR rules | Required before any commit |
+| [coding/coding-style.md](coding/coding-style.md) | Code style: no hardcoded values, no abbreviated names | Required before writing code |
+| [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | GitHub Actions CI gate for every PR | Before refactor work |
+| [fe/source-overview.md](fe/source-overview.md) | How the FE source works (Next.js): routes, data flow, state | When working in `clients/web-client` |
+| [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | three.js principles, scene renderer architecture, customization | Before touching any 3D code |
+| [fe/refactor-plan.md](fe/refactor-plan.md) | FE production upgrade plan (8 branches, in order) | When doing FE refactor work |
+| [be/source-overview.md](be/source-overview.md) | How the BE source works (Go API): layers, AI providers, determinism | When working in `services/universe-service` |
+| [be/refactor-plan.md](be/refactor-plan.md) | BE production upgrade plan (8 branches, in order) | When doing BE refactor work |
+| [Myunivokai_Implementation_Plan.md](Myunivokai_Implementation_Plan.md) | Original end-to-end project plan | Reference for direction |
+| [stitch_personal_universe_3d/](stitch_personal_universe_3d/) | Stitch UI mockups (7 screens) | When polishing UI |
 
-## Hướng dẫn cho AI agent
+## Instructions for AI agents
 
-1. Đọc `coding/` trước khi viết bất kỳ dòng code hay commit nào.
-2. Làm task FE thì đọc `fe/`, task BE thì đọc `be/`.
-3. Khi thêm cơ chế mới đáng ghi lại, cập nhật đúng file overview tương ứng — đừng tạo file trùng nội dung.
+1. Read `coding/` before writing any code or commit.
+2. Read `fe/` for FE tasks, `be/` for BE tasks.
+3. When you introduce a mechanism worth recording, update the matching
+   overview file — do not create duplicate documents.

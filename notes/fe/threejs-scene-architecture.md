@@ -1,46 +1,49 @@
-# Three.js trong Myunivokai — Nguyên lý và kiến trúc scene renderer
+# three.js in Myunivokai — Principles and scene renderer architecture
 
-Tài liệu này giải thích three.js hoạt động thế nào, repo đang dùng nó ra sao,
-và cách custom/mở rộng (thêm cảnh núi, thành phố... trong tương lai).
+This document explains how three.js works, how this repo uses it, and how to
+customize/extend it (mountain or city scenes in the future).
 
-## 1. Nguyên lý cơ bản của three.js
+## 1. three.js fundamentals
 
-Three.js là thư viện dựng hình 3D chạy trên WebGL. Mọi thứ xoay quanh 4 khái niệm:
+Three.js is a 3D rendering library on top of WebGL. Everything revolves around
+four concepts:
 
-### Scene graph (cây cảnh)
+### Scene graph
 
-Một cảnh 3D là một cái cây. Node cha xoay/di chuyển thì toàn bộ node con đi theo.
+A 3D scene is a tree. When a parent node rotates/moves, all children follow.
 
 ```txt
 Scene
 ├── Sun (mesh + point light)
-├── Group (nghiêng quỹ đạo)        ← xoay group này = nghiêng cả quỹ đạo
-│   ├── OrbitPath (vòng tròn mờ)
-│   └── Group (neo planet)          ← đổi position mỗi frame = planet bay quanh
-│       ├── Group (nghiêng trục)    ← rotation.z = axial tilt
-│       │   ├── Mesh planet         ← rotation.y tăng dần = tự xoay
-│       │   └── Mesh vành đai
+├── Group (orbit inclination)      <- rotating this group tilts the whole orbit
+│   ├── OrbitPath (faint ring)
+│   └── Group (planet anchor)       <- position changes each frame = planet orbits
+│       ├── Group (axial tilt)      <- rotation.z = axial tilt
+│       │   ├── Planet mesh         <- rotation.y increases = self rotation
+│       │   └── Ring mesh
 │       └── Html label
-└── Points (ngôi sao nền)
+└── Points (background stars)
 ```
 
-Đây chính là lý do code trong `solar-system/` lồng nhiều `<group>`: mỗi tầng
-group đảm nhận đúng một phép biến đổi, tách bạch quỹ đạo / trục nghiêng / tự xoay.
+This is exactly why the code in `solar-system/` nests multiple `<group>`
+elements: each level owns one transform, keeping orbit / axial tilt / spin
+independent of each other.
 
 ### Mesh = Geometry + Material
 
-- **Geometry**: hình khối (đỉnh, mặt). `sphereGeometry`, `ringGeometry`...
-- **Material**: bề mặt phản ứng với ánh sáng thế nào.
-  - `meshStandardMaterial`: có ánh sáng thật (planet — mặt hướng về mặt trời sáng, mặt kia tối).
-  - `meshBasicMaterial`: tự sáng, bỏ qua ánh sáng (mặt trời, orbit ring, skybox).
-- **Texture**: ảnh dán lên bề mặt theo tọa độ UV. Sphere của three.js có sẵn UV
-  dạng bản đồ thế giới, nên ảnh equirectangular (như texture NASA) dán lên là thành hành tinh.
+- **Geometry**: the shape (vertices, faces). `sphereGeometry`, `ringGeometry`, etc.
+- **Material**: how the surface reacts to light.
+  - `meshStandardMaterial`: real lighting (planets — the side facing the sun is lit, the far side is dark).
+  - `meshBasicMaterial`: self-lit, ignores lights (sun, orbit rings, skybox).
+- **Texture**: an image mapped onto the surface via UV coordinates. three.js
+  spheres ship with world-map-style UVs, so an equirectangular image (like NASA
+  textures) wraps straight into a planet.
 
 ### Render loop
 
-three.js vẽ lại ~60 lần/giây. Mỗi frame, code được phép thay đổi position/rotation
-trước khi vẽ — animation chính là vậy. Trong React Three Fiber (R3F), hook
-`useFrame((state, delta) => {...})` chạy mỗi frame:
+three.js redraws about 60 times per second. Each frame, code may mutate
+position/rotation before drawing — that IS animation. In React Three Fiber
+(R3F), the `useFrame((state, delta) => ...)` hook runs every frame:
 
 ```tsx
 useFrame(({ clock }) => {
@@ -49,116 +52,125 @@ useFrame(({ clock }) => {
 });
 ```
 
-Quy tắc quan trọng: **không setState trong useFrame** (sẽ re-render React 60fps).
-Thay đổi trực tiếp qua `ref` như trên.
+Key rule: **never call setState inside useFrame** (it would re-render React at
+60fps). Mutate through a `ref`, as above.
 
-### Camera, ánh sáng, tương tác
+### Camera, lights, interaction
 
-- `PerspectiveCamera(fov, aspect, near, far)` — mắt người xem. Repo đọc `distance`/`fov` từ config BE.
-- Ánh sáng: `pointLight` đặt tại mặt trời chiếu ra mọi hướng (planet có ngày/đêm),
-  `ambientLight` yếu để mặt tối không đen kịt.
-- Tương tác chuột: three.js dùng **raycasting** — bắn tia từ camera qua vị trí con
-  trỏ, xem trúng mesh nào. R3F gói sẵn thành `onClick` / `onPointerOver` trên mesh.
+- `PerspectiveCamera(fov, aspect, near, far)` — the viewer's eye. The repo reads
+  `distance`/`fov` from the BE config.
+- Lights: a `pointLight` at the sun shines in all directions (planets get
+  day/night sides), plus a weak `ambientLight` so the dark side stays visible.
+- Mouse interaction: three.js uses **raycasting** — a ray is shot from the
+  camera through the cursor to find the mesh it hits. R3F wraps this as
+  `onClick` / `onPointerOver` props on the mesh.
 
 ### React Three Fiber (R3F)
 
-R3F biến scene graph thành JSX: `<mesh>`, `<group>`, `<pointLight>` là các node.
-React quản lý cây, three.js quản lý vẽ. Kèm theo:
+R3F turns the scene graph into JSX: `<mesh>`, `<group>`, `<pointLight>` are
+tree nodes. React manages the tree; three.js does the drawing. On top of that:
 
-- `useLoader(TextureLoader, url)` — tải texture, tự suspend → bọc `<Suspense>`.
-- `@react-three/drei` — đồ dùng sẵn: `OrbitControls` (xoay/zoom chuột), `Html` (DOM neo theo vị trí 3D).
-- `@react-three/postprocessing` — hiệu ứng hậu kỳ; repo dùng `Bloom` (chỗ sáng lóa ra — mặt trời rực).
+- `useLoader(TextureLoader, url)` — loads textures and suspends, so wrap in `<Suspense>`.
+- `@react-three/drei` — ready-made utilities: `OrbitControls` (mouse rotate/zoom),
+  `Html` (DOM anchored to a 3D position).
+- `@react-three/postprocessing` — post effects; the repo uses `Bloom`
+  (bright spots bleed light — the sun blazes).
 
-## 2. Kiến trúc scene renderer của repo
+## 2. The repo's scene renderer architecture
 
-Nguyên tắc: **một cảnh = một renderer**, cắm vào qua registry. Universe chỉ là
-renderer đầu tiên; sau này muốn vẽ núi hay thành phố thì viết renderer mới,
-không sửa cái cũ.
+Principle: **one scene = one renderer**, plugged in through a registry. The
+universe is just the first renderer; a future mountain or city scene is a new
+renderer, never a modification of the old one.
 
 ```txt
 clients/web-client/src/
-├── components/UniverseCanvas.tsx          ← shell: Canvas + camera + bloom + overlay hover
+├── components/UniverseCanvas.tsx          <- shell: Canvas + camera + bloom + hover overlay
 └── features/scene-renderers/
-    ├── types.ts                           ← SceneRendererProps: hợp đồng mọi renderer phải theo
-    ├── registry.ts                        ← theme (string từ BE) → renderer component
-    ├── planetIdentity.ts                  ← sinh key định danh object chọn được
-    ├── shared/                            ← cảnh nào cũng dùng được
-    │   ├── CameraRig.tsx                  ← OrbitControls + camera bay đến object được chọn
-    │   ├── PlanetPositionTracker.ts       ← Map<key, Vector3>: renderer ghi vị trí, CameraRig đọc
-    │   ├── StarParticleField.tsx          ← sao nền bằng BufferGeometry + Points
-    │   └── PostEffects.tsx                ← Bloom, cường độ đọc từ config.postFX
-    ├── solar-system/                      ← renderer hệ mặt trời
-    │   ├── SolarSystemRenderer.tsx        ← ghép Sun + planets + orbit + skybox
-    │   ├── Sun.tsx                        ← texture mặt trời + glow + pointLight (nguồn sáng duy nhất)
-    │   ├── SolarPlanet.tsx                ← texture bề mặt, trục nghiêng, tự xoay, vành đai, label
-    │   ├── OrbitPath.tsx                  ← vòng quỹ đạo mờ
-    │   ├── Skybox.tsx                     ← sphere lộn mặt trong, dán texture dải ngân hà
-    │   └── planetTextureCatalog.ts        ← danh mục texture + độ nghiêng trục từng kiểu planet
-    └── fallback/FallbackUniverseRenderer.tsx ← cảnh trừu tượng khi chưa có config (landing preview)
+    ├── types.ts                           <- SceneRendererProps: the contract every renderer implements
+    ├── registry.ts                        <- theme (string from BE) -> renderer component
+    ├── planetIdentity.ts                  <- identity key for selectable objects
+    ├── shared/                            <- usable by every scene type
+    │   ├── CameraRig.tsx                  <- OrbitControls + fly-to-selected-object animation
+    │   ├── PlanetPositionTracker.ts       <- Map of key -> Vector3: renderers write, CameraRig reads
+    │   ├── StarParticleField.tsx          <- background stars via BufferGeometry + Points
+    │   └── PostEffects.tsx                <- Bloom, intensity from config.postFX
+    ├── solar-system/                      <- the solar system renderer
+    │   ├── SolarSystemRenderer.tsx        <- composes Sun + planets + orbits + skybox
+    │   ├── Sun.tsx                        <- sun texture + glow + pointLight (the only light source)
+    │   ├── SolarPlanet.tsx                <- surface texture, axial tilt, spin, ring, label
+    │   ├── OrbitPath.tsx                  <- faint orbit ring
+    │   ├── Skybox.tsx                     <- inside-out sphere with the milky-way texture
+    │   └── planetTextureCatalog.ts        <- texture catalog + per-style axial tilt
+    └── fallback/FallbackUniverseRenderer.tsx <- abstract scene when no config exists (landing preview)
 ```
 
-### Data flow từ backend xuống pixel
+### Data flow from backend to pixels
 
 ```txt
-BE trả WorldSceneConfig (JSON)
-  → lib/api.ts normalize về types trong lib/types.ts
-  → lib/scene.ts: helper đọc palette/planets/background an toàn
-  → UniverseCanvas: resolveSceneRenderer(config.theme) chọn renderer
-  → SolarSystemRenderer đọc config.planets (size, orbitRadius, orbitSpeed, phase, color, energy)
-  → từng SolarPlanet tự animate trong useFrame
+BE returns WorldSceneConfig (JSON)
+  -> lib/api.ts normalizes onto lib/types.ts types
+  -> lib/scene.ts: safe readers for palette/planets/background
+  -> UniverseCanvas: resolveSceneRenderer(config.theme) picks the renderer
+  -> SolarSystemRenderer reads config.planets (size, orbitRadius, orbitSpeed, phase, color, energy)
+  -> each SolarPlanet animates itself in useFrame
 ```
 
-Backend quyết định **dữ liệu** (bao nhiêu planet, quỹ đạo, tốc độ — sinh từ
-Personality DNA + seed). Frontend quyết định **cách thể hiện** (texture, ánh sáng, hiệu ứng).
+The backend decides the **data** (how many planets, orbits, speeds — derived
+from Personality DNA + seed). The frontend decides the **presentation**
+(textures, lighting, effects).
 
-### Tính tất định (determinism)
+### Determinism
 
-Cùng một seed phải vẽ ra đúng một cảnh. Mọi giá trị "ngẫu nhiên" phía FE
-(vị trí sao nền, độ nghiêng quỹ đạo) đều sinh từ `randomFromSeed(seed)` trong
-`lib/scene.ts` (xorshift PRNG) — không bao giờ dùng `Math.random()` trong scene.
+The same seed must always draw the same scene. Every "random" FE value
+(star positions, orbit inclinations) comes from `randomFromSeed(seed)` in
+`lib/scene.ts` (an xorshift PRNG) — `Math.random()` is forbidden in scene code.
 
-### Camera focus (giống NASA Eyes)
+### Camera focus (NASA-Eyes style)
 
-Click một planet → `CameraRig` lerp `OrbitControls.target` về vị trí planet đó
-mỗi frame (planet đang bay, camera bám theo). Click ra ngoài → lerp về tâm.
-Cầu nối là `PlanetPositionTracker`: mỗi planet ghi world position của nó vào
-một `Map` mỗi frame, CameraRig chỉ việc đọc. Renderer tương lai (thành phố...)
-ghi vị trí tòa nhà vào đúng Map này là camera focus hoạt động ngay, không sửa CameraRig.
+Clicking a planet makes `CameraRig` lerp the `OrbitControls` target toward that
+planet every frame (the planet keeps moving; the camera follows). Clicking
+empty space lerps back to the center. The bridge is `PlanetPositionTracker`:
+each planet writes its world position into a shared Map every frame, and
+CameraRig just reads it. A future renderer (city, etc.) writes building
+positions into the same Map and camera focus works with zero changes to
+CameraRig.
 
-## 3. Cách custom
+## 3. How to customize
 
-### Chỉnh cảm giác cảnh hiện tại
+### Tuning the current scene
 
-Mọi giá trị tinh chỉnh là hằng số đặt tên ở đầu file (theo coding style của repo):
+Every tunable is a named constant at the top of its file (per repo coding style):
 
-- Mặt trời to/nhỏ, sáng/tối: `SUN_SCALE_MULTIPLIER`, `SUN_LIGHT_INTENSITY` trong `Sun.tsx`
-- Độ rực bloom: `BLOOM_LUMINANCE_THRESHOLD` trong `PostEffects.tsx` (giảm = nhiều thứ lóa hơn), `bloomIntensity` do BE cấp
-- Planet to/nhỏ so với config: `PLANET_SIZE_MULTIPLIER` trong `SolarPlanet.tsx`
-- Độ nghiêng quỹ đạo: `MAXIMUM_ORBIT_INCLINATION_RADIANS` trong `SolarSystemRenderer.tsx`
-- Mật độ sao nền: BE cấp qua `config.particles`, fallback trong `StarParticleField.tsx`
+- Sun size/brightness: `SUN_SCALE_MULTIPLIER`, `SUN_LIGHT_INTENSITY` in `Sun.tsx`
+- Bloom strength: `BLOOM_LUMINANCE_THRESHOLD` in `PostEffects.tsx` (lower = more things glow); `bloomIntensity` itself comes from the BE
+- Planet size relative to config: `PLANET_SIZE_MULTIPLIER` in `SolarPlanet.tsx`
+- Orbit inclination: `MAXIMUM_ORBIT_INCLINATION_RADIANS` in `SolarSystemRenderer.tsx`
+- Star density: the BE supplies `config.particles`; fallbacks live in `StarParticleField.tsx`
 
-### Thay/thêm texture planet
+### Swapping/adding planet textures
 
-Thêm file vào `clients/web-client/public/textures/solar-system/` rồi thêm entry vào
-`planetTextureCatalog.ts` (kèm `axialTiltRadians`, `ringTextureUrl` nếu có vành đai).
-Texture lấy từ Solar System Scope (CC BY 4.0) — giữ ghi nguồn trong `ATTRIBUTION.md`.
+Drop a file into `clients/web-client/public/textures/solar-system/` and add an
+entry to `planetTextureCatalog.ts` (with `axialTiltRadians`, plus
+`ringTextureUrl` for ringed planets). Textures come from Solar System Scope
+(CC BY 4.0) — keep the credit in `ATTRIBUTION.md`.
 
-### Thêm một loại cảnh mới (núi, thành phố, đồng quê...)
+### Adding a new scene type (mountains, city, countryside, ...)
 
-1. Tạo folder `features/scene-renderers/<tên-cảnh>/`.
-2. Viết component chính nhận `SceneRendererProps` (xem `types.ts`) — tự do vẽ
-   bằng three.js: terrain bằng `PlaneGeometry` + displacement, nhà cửa bằng
-   `InstancedMesh`, trời bằng shader... không giới hạn.
-3. Object nào muốn click-focus được: ghi vị trí vào `PlanetPositionTracker` và
-   gọi `onSelectPlanet`/`onHoverPlanet` (hợp đồng dùng chung, tên giữ nguyên).
-4. Đăng ký 1 dòng trong `registry.ts`: `"mountain-valley": MountainValleyRenderer`.
-5. BE chỉ cần cho phép theme mới trong enum — không đổi schema.
+1. Create `features/scene-renderers/<scene-name>/`.
+2. Write the main component implementing `SceneRendererProps` (see `types.ts`) —
+   draw freely with three.js: terrain via `PlaneGeometry` + displacement,
+   buildings via `InstancedMesh`, sky via shaders... no limits.
+3. For click-focusable objects: write positions into `PlanetPositionTracker`
+   and call `onSelectPlanet`/`onHoverPlanet` (the shared contract keeps these names).
+4. Register one line in `registry.ts`: `"mountain-valley": MountainValleyRenderer`.
+5. The BE only needs to allow the new theme in its enum — no schema change.
 
-Button switch cảnh sau này = đổi giá trị theme gọi `resolveSceneRenderer()`. Không đụng renderer cũ.
+A future scene-switch button is just changing the theme passed to
+`resolveSceneRenderer()`. Old renderers are never touched.
 
-### Hiệu năng
+### Performance
 
-- `dpr={[1, 1.8]}` trên Canvas chặn render quá dày trên màn retina.
-- Particle count mobile thấp hơn desktop (BE cấp 2 số, FE tự chọn theo viewport).
-- Texture 2k là đủ; muốn nhẹ hơn nữa thì convert sang `.webp` hoặc dùng bản 1k.
-- Nhiều object lặp lại (asteroid, nhà cửa) → dùng `InstancedMesh`, 1 draw call cho cả nghìn object.
+- `dpr={[1, 1.8]}` on the Canvas caps render density on retina screens.
+- Mobile particle counts are lower than desktop (the BE sends both numbers; the FE picks by viewport).
+- 2k textures are enough; convert to `.webp` or use 1k versions to go lighter.
+- Many repeated objects (asteroids, buildings) -> use `InstancedMesh`: one draw call for thousands of objects.

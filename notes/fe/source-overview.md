@@ -1,43 +1,47 @@
 # FE Source Overview — clients/web-client
 
 Next.js 14 App Router + TypeScript + Tailwind + React Three Fiber.
-Toàn bộ trang là client component vì cần WebGL và localStorage.
+Every page is a client component because of WebGL and localStorage.
 
 ## Routes
 
-| Route | File | Vai trò |
+| Route | File | Role |
 |---|---|---|
-| `/` | `src/app/page.tsx` | Landing + form tạo universe (gộp chung). Submit → POST /worlds → redirect |
-| `/worlds/[worldId]` | `src/app/worlds/[worldId]/page.tsx` | Dashboard: canvas 3D, panel planets, variants, publish/share |
-| `/gallery` | `src/app/gallery/page.tsx` | Worlds đã lưu trên máy (localStorage), load song song từng world |
-| `/share/worlds/[shareSlug]` | `src/app/share/worlds/[shareSlug]/page.tsx` | Trang public, chỉ dữ liệu an toàn từ share API |
+| `/` | `src/app/page.tsx` | Landing + create-universe form (combined). Submit -> POST /worlds -> redirect |
+| `/worlds/[worldId]` | `src/app/worlds/[worldId]/page.tsx` | Dashboard: 3D canvas, planet panel, variants, publish/share, PNG export |
+| `/gallery` | `src/app/gallery/page.tsx` | Worlds saved on this device (localStorage), loaded in parallel |
+| `/share/worlds/[shareSlug]` | `src/app/share/worlds/[shareSlug]/page.tsx` | Public page, only safe data from the share API |
 
-## Tầng lib — nơi mọi data đi qua
+## The lib layer — every piece of data passes through here
 
-- `lib/api.ts` — client gọi API duy nhất. Quan trọng nhất là các hàm `normalize*`:
-  BE trả response dạng `{ world, selectedVariant, variants }` (list ở root response),
-  normalize ép về type `World`/`WorldVariant` thống nhất cho UI. **Bug dễ gặp nhất
-  của FE từng nằm ở đây** (đọc sai chỗ → canvas rơi về fallback). Sửa response shape
-  của BE thì phải sửa normalize trước tiên.
-- `lib/types.ts` — mirror đúng contract JSON của BE (`services/universe-service/internal/models/scene.go`).
-  Đổi schema BE thì đổi file này cùng lúc.
-- `lib/scene.ts` — helper đọc scene config an toàn (`planetsFromScene`, `paletteFromScene`,
-  `backgroundColorFromScene`) + `randomFromSeed` (PRNG tất định, cấm `Math.random()` trong scene).
-- `lib/savedWorlds.ts` — localStorage key `myunivokai.savedWorldIds`. Tự lưu khi
-  tạo world và khi mở trang world.
+- `lib/api.ts` — the single API client. The `normalize*` functions matter most:
+  the BE returns `{ world, selectedVariant, variants }` (variant list at the
+  response ROOT) and normalize maps everything onto the unified `World` /
+  `WorldVariant` types. **The FE's worst historical bug lived here** (reading
+  the wrong location sent the canvas into fallback mode). If a BE response
+  shape changes, fix normalize first.
+- `lib/types.ts` — mirrors the BE JSON contract
+  (`services/universe-service/internal/models/scene.go`). Change them together.
+- `lib/scene.ts` — safe scene-config readers (`planetsFromScene`,
+  `paletteFromScene`, `backgroundColorFromScene`) + `randomFromSeed`
+  (deterministic PRNG; `Math.random()` is forbidden in scene code).
+- `lib/savedWorlds.ts` — localStorage key `myunivokai.savedWorldIds`. IDs are
+  saved automatically on create and when opening a world page.
+- `lib/exportImage.ts` — downloads the WebGL canvas as PNG
+  (requires `preserveDrawingBuffer`, already set on the Canvas).
 
-## Phần 3D
+## The 3D part
 
-Đọc [threejs-scene-architecture.md](threejs-scene-architecture.md) — có giải thích
-nguyên lý three.js, kiến trúc registry và hướng dẫn thêm cảnh mới.
+Read [threejs-scene-architecture.md](threejs-scene-architecture.md) — it covers
+three.js principles, the renderer registry, and how to add new scene types.
 
 ## State
 
-Không dùng Redux/Zustand. Mỗi page tự quản state bằng `useState`/`useMemo`;
-selection planet đồng bộ giữa canvas và panel qua props (`selectedPlanetKey` +
-`onSelectPlanet`). Nếu sau này state phình ra giữa nhiều trang thì mới cân nhắc store.
+No Redux/Zustand. Each page owns its state with `useState`/`useMemo`; planet
+selection syncs between canvas and panel via props (`selectedPlanetKey` +
+`onSelectPlanet`). Reach for a store only if state starts spanning pages.
 
-## Checks bắt buộc trước khi commit
+## Required checks before committing
 
 ```bash
 cd clients/web-client
