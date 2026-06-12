@@ -4,7 +4,9 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
+import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { sceneFromVariant, selectedVariant } from "@/lib/scene";
 
@@ -77,6 +79,7 @@ export default function HomePage() {
     setLoading(true);
     try {
       const world = await api.createWorld(payload);
+      addWorldIdentifierToGallery(world.id);
       router.push(`/worlds/${world.id}`);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -91,6 +94,7 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-4 py-8 sm:px-6 lg:px-12">
+      <GeneratingOverlay isVisible={loading} />
       <div className="pointer-events-none absolute left-[-120px] top-6 h-[420px] w-[420px] rounded-full bg-primary-container/20 blur-[90px]" />
       <div className="pointer-events-none absolute bottom-[-180px] right-[-120px] h-[560px] w-[560px] rounded-full bg-secondary/15 blur-[90px]" />
 
