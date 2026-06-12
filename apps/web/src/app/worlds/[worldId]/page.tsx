@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, ExternalLink, Loader2, Plus, Rocket } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
-import { sceneFromVariant, selectedVariant } from "@/lib/scene";
-import type { World, WorldVariant } from "@/lib/types";
+import { planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
+import type { PlanetSceneConfig, World, WorldVariant } from "@/lib/types";
 import { StatusMessage } from "@/components/StatusMessage";
-import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
+import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { VariantList } from "@/components/VariantList";
 
 type PageProps = {
@@ -23,6 +24,7 @@ export default function WorldPage({ params }: PageProps) {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"variant" | "publish" | "select" | "copy" | null>(null);
+  const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
 
   async function loadWorld() {
     setError("");
@@ -58,6 +60,22 @@ export default function WorldPage({ params }: PageProps) {
     }
     return world.variants.find((variant) => variant.id === activeVariantId) ?? selectedVariant(world);
   }, [activeVariantId, world]);
+
+  const activeScene = useMemo(() => sceneFromVariant(activeVariant), [activeVariant]);
+  const activeScenePlanets = useMemo(() => planetsFromScene(activeScene), [activeScene]);
+
+  useEffect(() => {
+    setSelectedPlanetKey(null);
+  }, [activeVariantId]);
+
+  function handleSelectPlanet(planet: PlanetSceneConfig | null) {
+    if (!planet) {
+      setSelectedPlanetKey(null);
+      return;
+    }
+    const planetIndex = activeScenePlanets.indexOf(planet);
+    setSelectedPlanetKey(planetIdentityKey(planet, planetIndex));
+  }
 
   async function regenerateVariant() {
     setAction("variant");
@@ -141,10 +159,23 @@ export default function WorldPage({ params }: PageProps) {
     <main className="relative mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px]">
       <section className="grid gap-4">
         <div className="min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-cyan">
-          <UniverseCanvas scene={sceneFromVariant(activeVariant)} className="h-full" />
+          <UniverseCanvas
+            scene={activeScene}
+            className="h-full"
+            selectedPlanetKey={selectedPlanetKey}
+            onSelectPlanet={handleSelectPlanet}
+          />
         </div>
         <div className="glass-panel rounded-2xl p-5">
-          <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">{world.title || "Untitled universe"}</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+            {activeScene.sceneName || world.title || "Untitled universe"}
+          </h1>
+          {activeScene.archetype ? (
+            <p className="mt-1 font-mono text-xs uppercase tracking-widest text-secondary">{activeScene.archetype}</p>
+          ) : null}
+          {activeScene.quote ? (
+            <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
+          ) : null}
           {world.summary ? <p className="mt-2 text-sm leading-6 text-on-surface-variant">{world.summary}</p> : null}
         </div>
       </section>
@@ -152,6 +183,11 @@ export default function WorldPage({ params }: PageProps) {
       <aside className="grid content-start gap-4">
         {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
         {notice ? <StatusMessage>{notice}</StatusMessage> : null}
+        <PlanetDetailsPanel
+          planets={activeScenePlanets}
+          selectedPlanetKey={selectedPlanetKey}
+          onSelectPlanet={handleSelectPlanet}
+        />
         <div className="glass-panel rounded-2xl p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="font-display text-base font-semibold text-on-surface">Variants</h2>

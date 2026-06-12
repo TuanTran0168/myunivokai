@@ -1,6 +1,9 @@
-import type { SceneConfig, World, WorldVariant } from "./types";
+import type { PlanetSceneConfig, SceneConfig, ScenePalette, World, WorldVariant } from "./types";
 
-const fallbackPalette = ["#40798c", "#d8614c", "#d6a23f", "#44624a", "#101418"];
+const FALLBACK_PALETTE = ["#8B5CF6", "#06B6D4", "#FACC15", "#44624a", "#101418"];
+const FALLBACK_BACKGROUND_COLOR = "#050816";
+const FALLBACK_SEED = "myunivokai-local-seed";
+const MAXIMUM_PALETTE_COLORS = 6;
 
 export function selectedVariant(world: World): WorldVariant | undefined {
   return (
@@ -12,31 +15,48 @@ export function selectedVariant(world: World): WorldVariant | undefined {
 
 export function sceneFromVariant(variant?: WorldVariant): SceneConfig {
   return {
-    seed: variant?.seed ?? variant?.id ?? "myunivokai-local-seed",
-    palette: fallbackPalette,
+    seed: variant?.seed ?? variant?.id ?? FALLBACK_SEED,
     ...(variant?.sceneConfig ?? {})
   };
 }
 
+function isPaletteObject(palette: SceneConfig["palette"]): palette is ScenePalette {
+  return Boolean(palette) && typeof palette === "object" && !Array.isArray(palette);
+}
+
 export function paletteFromScene(scene?: SceneConfig): string[] {
   const palette = scene?.palette;
-  if (Array.isArray(palette) && palette.every((item) => typeof item === "string")) {
-    return palette.slice(0, 6);
+  if (Array.isArray(palette) && palette.every((color) => typeof color === "string")) {
+    return palette.slice(0, MAXIMUM_PALETTE_COLORS);
   }
-  if (palette && typeof palette === "object" && !Array.isArray(palette)) {
-    const objectPalette = palette;
-    const colors = [
-      objectPalette.background,
-      objectPalette.primary,
-      objectPalette.secondary,
-      objectPalette.accent,
-      ...(Array.isArray(objectPalette.gradient) ? objectPalette.gradient : [])
-    ].filter((item): item is string => typeof item === "string");
-    if (colors.length > 0) {
-      return colors.slice(0, 6);
+  if (isPaletteObject(palette)) {
+    const orderedColors = [
+      palette.primary,
+      palette.secondary,
+      palette.accent,
+      palette.background,
+      ...(Array.isArray(palette.gradient) ? palette.gradient : [])
+    ].filter((color): color is string => typeof color === "string" && color.length > 0);
+    if (orderedColors.length > 0) {
+      return orderedColors.slice(0, MAXIMUM_PALETTE_COLORS);
     }
   }
-  return fallbackPalette;
+  return FALLBACK_PALETTE;
+}
+
+export function backgroundColorFromScene(scene?: SceneConfig): string {
+  const palette = scene?.palette;
+  if (isPaletteObject(palette) && typeof palette.background === "string" && palette.background.length > 0) {
+    return palette.background;
+  }
+  return FALLBACK_BACKGROUND_COLOR;
+}
+
+export function planetsFromScene(scene?: SceneConfig): PlanetSceneConfig[] {
+  if (!scene?.planets || !Array.isArray(scene.planets)) {
+    return [];
+  }
+  return scene.planets.filter((planet) => typeof planet === "object" && planet !== null);
 }
 
 export function hashSeed(seed: string): number {
