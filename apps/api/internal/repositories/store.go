@@ -21,4 +21,7 @@ type Store interface {
 	SelectVariant(ctx context.Context, worldID, variantID string) (models.WorldVariant, error)
 	PublishWorld(ctx context.Context, worldID, slug string) (models.World, error)
 	GetPublicWorld(ctx context.Context, slug string) (WorldBundle, error)
+	// SaveAIGenerationLogs persists AI attempt logs outside the world-creation
+	// transaction, so failed generations are still recorded for debugging.
+	SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error
 }

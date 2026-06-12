@@ -128,6 +128,23 @@ func (s *MemoryStore) GetPublicWorld(ctx context.Context, slug string) (WorldBun
 	return WorldBundle{World: world, Variants: cloneVariants(s.variants[worldID])}, nil
 }
 
+func (s *MemoryStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logs = append(s.logs, logs...)
+	return nil
+}
+
+// AIGenerationLogs returns a copy of all stored AI logs; used by tests to
+// assert that failed generations are recorded.
+func (s *MemoryStore) AIGenerationLogs() []models.AIGenerationLog {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	logsCopy := make([]models.AIGenerationLog, len(s.logs))
+	copy(logsCopy, s.logs)
+	return logsCopy
+}
+
 func cloneVariants(in []models.WorldVariant) []models.WorldVariant {
 	out := make([]models.WorldVariant, len(in))
 	copy(out, in)
