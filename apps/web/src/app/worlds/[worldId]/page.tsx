@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, ExternalLink, Loader2, Plus, Rocket } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
+import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
 import type { PlanetSceneConfig, World, WorldVariant } from "@/lib/types";
 import { StatusMessage } from "@/components/StatusMessage";
@@ -45,6 +46,7 @@ export default function WorldPage({ params }: PageProps) {
         }
         setWorld(nextWorld);
         setActiveVariantId(selectedVariant(nextWorld)?.id);
+        addWorldIdentifierToGallery(nextWorld.id);
       })
       .catch((err) => mounted && setError(apiErrorMessage(err)))
       .finally(() => mounted && setLoading(false));

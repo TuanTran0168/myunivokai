@@ -23,7 +23,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/" className="font-display text-xl font-bold tracking-wide text-primary">
                 Personal Universe
               </Link>
-              <div className="font-mono text-xs uppercase tracking-widest text-secondary">MVP</div>
+              <nav className="flex items-center gap-5">
+                <Link
+                  href="/gallery"
+                  className="font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-on-surface"
+                >
+                  Gallery
+                </Link>
+                <div className="font-mono text-xs uppercase tracking-widest text-secondary">MVP</div>
+              </nav>
             </div>
           </header>
           <div className="pt-[57px]">{children}</div>
