@@ -136,6 +136,10 @@ func (s *MemoryStore) GetPublicWorld(ctx context.Context, slug string) (WorldBun
 	return WorldBundle{World: world, Variants: cloneVariants(s.variants[worldID])}, nil
 }
 
+func (s *MemoryStore) Ping(ctx context.Context) error {
+	return nil
+}
+
 func (s *MemoryStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

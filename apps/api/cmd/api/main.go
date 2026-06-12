@@ -28,7 +28,7 @@ func main() {
 	zerolog.TimeFieldFormat = time.RFC3339
 	cfg := config.Load()
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	pool, err := db.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("connect database")
 	}
@@ -47,8 +47,18 @@ func main() {
 		log.Fatal().Err(err).Msg("configure ai")
 	}
 	worldService := services.NewWorldService(cfg, store, orchestrator, services.NewWorldConfigBuilder())
-	router := handlers.NewRouter(cfg, handlers.NewHealthHandler(cfg), handlers.NewWorldHandler(worldService), handlers.NewShareHandler(worldService))
-	server := &http.Server{Addr: cfg.Addr(), Handler: router, ReadHeaderTimeout: 5 * time.Second}
+	router := handlers.NewRouter(cfg, handlers.NewHealthHandler(cfg, store), handlers.NewWorldHandler(worldService), handlers.NewShareHandler(worldService))
+	// WriteTimeout must outlive the slowest handler, which is world creation
+	// waiting on the AI provider (AITimeout per attempt, plus repair/fallback).
+	serverWriteTimeout := 3*cfg.AITimeout + 10*time.Second
+	server := &http.Server{
+		Addr:              cfg.Addr(),
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       120 * time.Second,
+	}
 	go func() {
 		log.Info().Str("addr", cfg.Addr()).Msg("api listening")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

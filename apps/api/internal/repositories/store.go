@@ -28,4 +28,6 @@ type Store interface {
 	// SaveAIGenerationLogs persists AI attempt logs outside the world-creation
 	// transaction, so failed generations are still recorded for debugging.
 	SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error
+	// Ping reports whether the backing storage is reachable; used by /readyz.
+	Ping(ctx context.Context) error
 }

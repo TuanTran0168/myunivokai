@@ -174,6 +174,10 @@ func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]mode
 	return variants, rows.Err()
 }
 
+func (s *PostgresStore) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 func (s *PostgresStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
 	for _, log := range logs {
 		if _, err := insertAIGeneration(ctx, s.pool, log); err != nil {
