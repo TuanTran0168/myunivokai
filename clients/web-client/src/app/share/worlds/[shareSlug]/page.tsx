@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import type { ShareWorld } from "@/lib/types";
+import { sceneFromVariant } from "@/lib/scene";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { StatusMessage } from "@/components/StatusMessage";
 
@@ -32,7 +33,7 @@ export default function ShareWorldPage({ params }: PageProps) {
     };
   }, [params.shareSlug]);
 
-  const scene = useMemo(() => world?.sceneConfig ?? world?.variant?.sceneConfig, [world]);
+  const scene = useMemo(() => sceneFromVariant(world?.variant), [world]);
 
   if (loading) {
     return (

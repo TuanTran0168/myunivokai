@@ -103,17 +103,8 @@ function normalizeShare(raw: any): ShareWorld {
     archetype: publicWorld.archetype,
     shareSlug: publicWorld.shareSlug ?? publicWorld.share_slug,
     variant,
-    sceneConfig: buildShareSceneConfig(publicWorld, variant),
     publishedAt: publicWorld.publishedAt ?? publicWorld.published_at
   };
-}
-
-function buildShareSceneConfig(publicWorld: any, variant?: WorldVariant) {
-  const sceneConfig = publicWorld.sceneConfig ?? publicWorld.scene_config ?? variant?.sceneConfig;
-  if (!sceneConfig) {
-    return undefined;
-  }
-  return { seed: variant?.seed, ...sceneConfig };
 }
 
 export const api = {

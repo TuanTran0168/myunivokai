@@ -105,7 +105,6 @@ export type ShareWorld = {
   archetype?: string;
   shareSlug?: string;
   variant?: WorldVariant;
-  sceneConfig?: SceneConfig;
   publishedAt?: string;
 };
 

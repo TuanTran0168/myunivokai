@@ -4,7 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { Suspense, useRef, useState } from "react";
 import type { Vector3 } from "three";
 import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
-import { backgroundColorFromScene, planetsFromScene } from "@/lib/scene";
+import { backgroundColorFromScene, planetsFromScene, CANONICAL_FALLBACK_SEED } from "@/lib/scene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { resolveSceneRenderer } from "@/features/scene-renderers/registry";
 import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
@@ -18,7 +18,6 @@ const DEFAULT_CAMERA_DISTANCE = 9;
 const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
 const CAMERA_HEIGHT_RATIO = 0.42;
 const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 1.8];
-const FALLBACK_SEED = "myunivokai";
 
 type UniverseCanvasProps = {
   scene?: SceneConfig;
@@ -36,7 +35,7 @@ export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPl
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
 
-  const seed = String(scene?.seed ?? FALLBACK_SEED);
+  const seed = String(scene?.seed ?? CANONICAL_FALLBACK_SEED);
   const backgroundColor = backgroundColorFromScene(scene);
   const cameraDistance = scene?.camera?.distance ?? DEFAULT_CAMERA_DISTANCE;
   const cameraFieldOfView = scene?.camera?.fov ?? DEFAULT_CAMERA_FIELD_OF_VIEW;
