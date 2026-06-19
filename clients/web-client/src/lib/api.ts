@@ -145,9 +145,26 @@ export const api = {
   }
 };
 
+function validationDetailMessages(details: unknown[]): string[] {
+  return details
+    .map((detail) => {
+      if (detail && typeof detail === "object" && "message" in detail) {
+        const message = (detail as { message?: unknown }).message;
+        return typeof message === "string" ? message : "";
+      }
+      return "";
+    })
+    .filter((message) => message.length > 0);
+}
+
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.requestId ? `${error.message} (${error.requestId})` : error.message;
+    // Surface the backend's field-level validation messages (e.g. "Goal must be
+    // 10-220 characters.") instead of the generic "Please check the highlighted
+    // fields." so the user can see exactly what to fix.
+    const detailMessages = validationDetailMessages(error.details);
+    const baseMessage = detailMessages.length > 0 ? detailMessages.join(" ") : error.message;
+    return error.requestId ? `${baseMessage} (${error.requestId})` : baseMessage;
   }
   if (error instanceof Error) {
     if (error.message === "Failed to fetch" || error.message.toLowerCase().includes("fetch failed")) {
