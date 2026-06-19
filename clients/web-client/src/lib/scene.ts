@@ -166,6 +166,38 @@ const BLOOM_INTENSITY_RANGE = 1.1;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
 const PLANET_COLOR_CYCLE_LENGTH = 3;
 
+// Mirror of services/universe-service/internal/services/mood_scene_profile.go.
+// The atmospheric mood tunes glow, star density, motion and background; keeping
+// these values identical to the backend keeps the preview and the generated
+// world reacting to mood in the same direction.
+type MoodSceneProfile = {
+  bloomMultiplier: number;
+  particleMultiplier: number;
+  motionMultiplier: number;
+  backgroundColor: string;
+};
+
+const NEUTRAL_MOOD_SCENE_PROFILE: MoodSceneProfile = {
+  bloomMultiplier: 1,
+  particleMultiplier: 1,
+  motionMultiplier: 1,
+  backgroundColor: PREVIEW_BACKGROUND_COLOR
+};
+
+const MOOD_SCENE_PROFILES: Record<string, MoodSceneProfile> = {
+  focused: { bloomMultiplier: 1, particleMultiplier: 1, motionMultiplier: 1, backgroundColor: "#050816" },
+  dreamy: { bloomMultiplier: 1.4, particleMultiplier: 1.25, motionMultiplier: 0.7, backgroundColor: "#0b0720" },
+  energetic: { bloomMultiplier: 1.5, particleMultiplier: 1.2, motionMultiplier: 1.5, backgroundColor: "#140712" },
+  reflective: { bloomMultiplier: 0.65, particleMultiplier: 0.7, motionMultiplier: 0.6, backgroundColor: "#04070c" }
+};
+
+const MINIMUM_BLOOM_INTENSITY_CLAMP = 0.2;
+const MAXIMUM_BLOOM_INTENSITY_CLAMP = 1.8;
+
+export function moodSceneProfile(mood: string): MoodSceneProfile {
+  return MOOD_SCENE_PROFILES[mood.trim().toLowerCase()] ?? NEUTRAL_MOOD_SCENE_PROFILE;
+}
+
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -203,6 +235,7 @@ export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
 
   const primaryColor = input.favoriteColors[0] ?? DEFAULT_PREVIEW_PRIMARY_COLOR;
   const secondaryColor = input.favoriteColors[1] ?? DEFAULT_PREVIEW_SECONDARY_COLOR;
+  const moodProfile = moodSceneProfile(input.mood);
 
   const planetCount = clampNumber(
     input.interests.length,
@@ -221,30 +254,44 @@ export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
         planetIndex * ORBIT_RADIUS_STEP_PER_PLANET +
         nextRandomValue() * ORBIT_RADIUS_JITTER_RANGE
     ),
-    orbitSpeed: roundToTwoDecimals(MINIMUM_PLANET_ORBIT_SPEED + nextRandomValue() * PLANET_ORBIT_SPEED_RANGE),
+    orbitSpeed: roundToTwoDecimals(
+      (MINIMUM_PLANET_ORBIT_SPEED + nextRandomValue() * PLANET_ORBIT_SPEED_RANGE) * moodProfile.motionMultiplier
+    ),
     phase: roundToTwoDecimals(nextRandomValue() * FULL_CIRCLE_RADIANS),
     energy: Math.round(MINIMUM_PLANET_ENERGY + nextRandomValue() * PLANET_ENERGY_RANGE)
   }));
 
   const coreShape = PREVIEW_CORE_SHAPES[Math.floor(nextRandomValue() * PREVIEW_CORE_SHAPES.length)];
   const coreScale = roundToTwoDecimals(MINIMUM_CORE_SCALE + nextRandomValue() * CORE_SCALE_RANGE);
-  const coreSpinSpeed = roundToTwoDecimals(MINIMUM_CORE_SPIN_SPEED + nextRandomValue() * CORE_SPIN_SPEED_RANGE);
+  const coreSpinSpeed = roundToTwoDecimals(
+    (MINIMUM_CORE_SPIN_SPEED + nextRandomValue() * CORE_SPIN_SPEED_RANGE) * moodProfile.motionMultiplier
+  );
 
-  const desktopParticleCount =
-    MINIMUM_DESKTOP_PARTICLE_COUNT + Math.floor(nextRandomValue() * (DESKTOP_PARTICLE_COUNT_RANGE + 1));
-  const mobileParticleCount =
-    MINIMUM_MOBILE_PARTICLE_COUNT + Math.floor(nextRandomValue() * (MOBILE_PARTICLE_COUNT_RANGE + 1));
+  const desktopParticleCount = Math.floor(
+    (MINIMUM_DESKTOP_PARTICLE_COUNT + Math.floor(nextRandomValue() * (DESKTOP_PARTICLE_COUNT_RANGE + 1))) *
+      moodProfile.particleMultiplier
+  );
+  const mobileParticleCount = Math.floor(
+    (MINIMUM_MOBILE_PARTICLE_COUNT + Math.floor(nextRandomValue() * (MOBILE_PARTICLE_COUNT_RANGE + 1))) *
+      moodProfile.particleMultiplier
+  );
   const particleSpread = roundToTwoDecimals(MINIMUM_PARTICLE_SPREAD + nextRandomValue() * PARTICLE_SPREAD_RANGE);
 
   const cameraDistance = roundToTwoDecimals(MINIMUM_CAMERA_DISTANCE + nextRandomValue() * CAMERA_DISTANCE_RANGE);
-  const bloomIntensity = roundToTwoDecimals(MINIMUM_BLOOM_INTENSITY + nextRandomValue() * BLOOM_INTENSITY_RANGE);
+  const bloomIntensity = roundToTwoDecimals(
+    clampNumber(
+      (MINIMUM_BLOOM_INTENSITY + nextRandomValue() * BLOOM_INTENSITY_RANGE) * moodProfile.bloomMultiplier,
+      MINIMUM_BLOOM_INTENSITY_CLAMP,
+      MAXIMUM_BLOOM_INTENSITY_CLAMP
+    )
+  );
 
   return {
     seed,
     schemaVersion: PREVIEW_SCHEMA_VERSION,
     theme: input.preferredWorldStyle,
     palette: {
-      background: PREVIEW_BACKGROUND_COLOR,
+      background: moodProfile.backgroundColor,
       primary: primaryColor,
       secondary: secondaryColor,
       accent: PREVIEW_ACCENT_COLOR,

@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   CANONICAL_FALLBACK_SEED,
+  backgroundColorFromScene,
   buildPreviewSceneConfig,
+  moodSceneProfile,
   planetsFromScene,
   randomFromSeed,
   resolveVariantSeed,
@@ -125,6 +127,41 @@ describe("buildPreviewSceneConfig", () => {
     const focused = buildPreviewSceneConfig({ ...baseInput, mood: "focused" });
     const dreamy = buildPreviewSceneConfig({ ...baseInput, mood: "dreamy" });
     expect(focused.seed).not.toBe(dreamy.seed);
+  });
+});
+
+describe("mood scene profile", () => {
+  it("makes energetic brighter and busier, reflective calmer", () => {
+    expect(moodSceneProfile("energetic").bloomMultiplier).toBeGreaterThan(moodSceneProfile("reflective").bloomMultiplier);
+    expect(moodSceneProfile("energetic").particleMultiplier).toBeGreaterThan(
+      moodSceneProfile("reflective").particleMultiplier
+    );
+    expect(moodSceneProfile("reflective").motionMultiplier).toBeLessThan(moodSceneProfile("focused").motionMultiplier);
+  });
+
+  it("falls back to a neutral profile for unknown moods", () => {
+    const neutral = moodSceneProfile("totally-unknown-mood");
+    expect(neutral.bloomMultiplier).toBe(1);
+    expect(neutral.particleMultiplier).toBe(1);
+    expect(neutral.motionMultiplier).toBe(1);
+    expect(neutral.backgroundColor).toBe("#050816");
+  });
+
+  it("applies the mood background to the built preview scene", () => {
+    const inputFor = (mood: string): PreviewSceneInput => ({
+      nickname: "Neo",
+      interests: ["Technology", "Design", "AI"],
+      traits: ["curious", "builder", "focused"],
+      mood,
+      preferredWorldStyle: "cosmic-galaxy",
+      favoriteColors: ["#8B5CF6", "#06B6D4"]
+    });
+    expect(backgroundColorFromScene(buildPreviewSceneConfig(inputFor("dreamy")))).toBe("#0b0720");
+    expect(backgroundColorFromScene(buildPreviewSceneConfig(inputFor("focused")))).toBe("#050816");
+    expect(backgroundColorFromScene(buildPreviewSceneConfig(inputFor("totally-unknown")))).toBe("#050816");
+    expect(backgroundColorFromScene(buildPreviewSceneConfig(inputFor("energetic")))).not.toBe(
+      backgroundColorFromScene(buildPreviewSceneConfig(inputFor("reflective")))
+    );
   });
 });
 
