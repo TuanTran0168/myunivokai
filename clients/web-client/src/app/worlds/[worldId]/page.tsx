@@ -186,7 +186,9 @@ export default function WorldPage({ params }: PageProps) {
           each glass island re-enables pointer events. */}
       <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
         {error || notice ? (
-          <div className="pointer-events-auto mx-auto w-full max-w-md lg:absolute lg:left-1/2 lg:top-4 lg:-translate-x-1/2">
+          // Fixed to the viewport (not the overlay) so the toast always clears
+          // the 57px header by 1rem, regardless of the canvas/HUD stacking.
+          <div className="pointer-events-auto mx-auto w-full max-w-md lg:fixed lg:left-1/2 lg:top-[calc(57px+1rem)] lg:z-30 lg:-translate-x-1/2">
             {error ? <StatusMessage tone="error">{error}</StatusMessage> : <StatusMessage>{notice}</StatusMessage>}
           </div>
         ) : null}
