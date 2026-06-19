@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
-import type { ShareWorld } from "@/lib/types";
+import type { PlanetSceneConfig, ShareWorld } from "@/lib/types";
 import { planetsFromScene, sceneFromVariant } from "@/lib/scene";
-import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { StatusMessage } from "@/components/StatusMessage";
 
 type PageProps = {
@@ -19,6 +20,7 @@ export default function ShareWorldPage({ params }: PageProps) {
   const [world, setWorld] = useState<ShareWorld | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -35,6 +37,19 @@ export default function ShareWorldPage({ params }: PageProps) {
 
   const scene = useMemo(() => sceneFromVariant(world?.variant), [world]);
   const planets = useMemo(() => planetsFromScene(scene), [scene]);
+
+  useEffect(() => {
+    setSelectedPlanetKey(null);
+  }, [world]);
+
+  function handleSelectPlanet(planet: PlanetSceneConfig | null) {
+    if (!planet) {
+      setSelectedPlanetKey(null);
+      return;
+    }
+    const planetIndex = planets.indexOf(planet);
+    setSelectedPlanetKey(planetIdentityKey(planet, planetIndex));
+  }
 
   if (loading) {
     return (
@@ -53,77 +68,59 @@ export default function ShareWorldPage({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-container-max px-margin-mobile py-12 md:px-margin-desktop lg:py-16">
-      {/* Hero: title + archetype + the live universe in a glass frame */}
-      <section className="relative mb-16">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[60vw] max-h-[640px] w-[60vw] max-w-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[120px]" />
-        <div className="mb-10 text-center">
-          {world.archetype ? (
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-secondary">{world.archetype}</p>
-          ) : null}
-          <h1 className="font-display text-4xl font-bold tracking-wide text-on-surface drop-shadow-[0_0_10px_rgba(255,255,255,0.15)] sm:text-5xl">
-            {world.title || "Shared universe"}
-          </h1>
-          {world.quote ? (
-            <p className="mx-auto mt-4 max-w-2xl text-lg italic leading-8 text-on-surface-variant">&ldquo;{world.quote}&rdquo;</p>
-          ) : null}
-        </div>
+    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+      {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
+          on desktop. Clicking a planet focuses the camera (read-only view state). */}
+      <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
+        <UniverseCanvas
+          scene={scene}
+          className="h-full"
+          selectedPlanetKey={selectedPlanetKey}
+          onSelectPlanet={handleSelectPlanet}
+        />
+      </div>
 
-        <div className="glass-panel glass-panel-glow relative h-[clamp(320px,60vh,680px)] overflow-hidden rounded-2xl">
-          <UniverseCanvas scene={scene} className="h-full" />
-        </div>
-
-        {world.summary ? (
-          <p className="mx-auto mt-8 max-w-2xl text-center text-base leading-7 text-on-surface-variant">{world.summary}</p>
-        ) : null}
-      </section>
-
-      {/* Celestial Bodies: the world's planets, each with its meaning */}
-      {planets.length ? (
-        <section className="mb-16">
-          <h2 className="mb-8 inline-block border-b border-white/10 pb-3 font-display text-2xl font-semibold text-secondary">
-            Celestial Bodies
-          </h2>
-          <div className="grid gap-4">
-            {planets.map((planet, index) => (
-              <div
-                key={`${planet.key ?? planet.name ?? "body"}-${index}`}
-                className="glass-panel flex items-center gap-5 rounded-2xl p-5 transition-colors hover:border-white/20"
-              >
-                <span
-                  className="h-14 w-14 flex-shrink-0 rounded-full shadow-[0_0_15px_rgba(208,188,255,0.25)]"
-                  style={{ background: `radial-gradient(circle at 30% 30%, ${planet.color ?? "#a078ff"}, #0e1323)` }}
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 className="font-display text-lg font-semibold text-on-surface">{planet.name ?? `Body ${index + 1}`}</h3>
-                  {planet.meaning ? (
-                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">{planet.meaning}</p>
-                  ) : null}
-                </div>
-              </div>
-            ))}
+      {/* HUD overlay — a scrolling column on mobile; on desktop a pointer-through
+          layer so orbit-drag passes between the floating glass islands. */}
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
+        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left island: identity */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
+            <div className="glass-panel glass-panel-glow rounded-2xl p-5">
+              {world.archetype ? (
+                <p className="mb-1 font-mono text-xs uppercase tracking-widest text-secondary">{world.archetype}</p>
+              ) : null}
+              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+                {world.title || "Shared universe"}
+              </h1>
+              {world.quote ? (
+                <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{world.quote}&rdquo;</p>
+              ) : null}
+              {world.summary ? <p className="mt-2 text-sm leading-6 text-on-surface-variant">{world.summary}</p> : null}
+            </div>
           </div>
-        </section>
-      ) : null}
 
-      {/* Closing CTA */}
-      <section className="relative py-16 text-center">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-transparent to-primary/10" />
-        <h2 className="mx-auto max-w-2xl font-display text-3xl font-bold tracking-wide text-on-surface sm:text-4xl">
-          Inspired by what you see?
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-on-surface-variant">
-          Every mind has a unique architecture. Uncover your traits and build your own digital cosmos.
-        </p>
-        <Link
-          href="/"
-          className="focus-ring btn-gradient mt-8 inline-flex items-center gap-2 rounded-full px-8 py-3.5 font-semibold"
-        >
-          Create Your Own Universe
-          <ArrowRight className="h-5 w-5" aria-hidden="true" />
-        </Link>
-      </section>
+          {/* Right island: World DNA (planets) */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
+            <PlanetDetailsPanel
+              planets={planets}
+              selectedPlanetKey={selectedPlanetKey}
+              onSelectPlanet={handleSelectPlanet}
+            />
+          </div>
+        </div>
+
+        {/* Bottom-center conversion CTA */}
+        <div className="pointer-events-auto mx-auto text-center">
+          <Link
+            href="/"
+            className="focus-ring btn-gradient inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-semibold"
+          >
+            Create Your Own Universe
+            <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }
