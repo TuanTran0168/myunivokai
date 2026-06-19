@@ -17,6 +17,7 @@ Status: mark ✅ when the PR is merged into `staging`.
 | 7 | `feat/be/db-pool-and-health` | 🟡 operations | ✅ |
 | 8 | `refactor/be/cleanup` | 🟢 cleanup | ⬜ (in PR) |
 | 9 | `feat/be/varied-fallback-dna` | 🔴 demo quality (no AI key yet) | ⬜ |
+| 10 | `feat/be/mood-scene-params` | 🔴 mood/style impact (pairs with FE) | ⬜ |
 
 ## 1. fix/be/request-hardening ✅
 
@@ -110,6 +111,23 @@ varied DNA from a preset library (`mock_presets.go`):
 
 Pairs with FE `feat/fe/mood-style-impact` (mood/style prominence + preview
 effect) so the preview and the generated world stay consistent.
+
+## 10. feat/be/mood-scene-params
+
+Problem: `WorldConfigBuilder` ignored the atmospheric mood entirely — the scene
+numbers came only from favoriteColors + the seed, so picking a different mood
+changed nothing visible in the generated world.
+
+Done: a `moodSceneProfile` (mood_scene_profile.go) tunes the deterministic scene
+numbers by mood — bloom intensity, star density, motion (core spin + planet
+orbit speed) and background color. The random call order is unchanged, so a
+given seed is still deterministic; only the multipliers/background shift by
+mood. An unknown mood uses a neutral profile (identical to the old behavior),
+so existing worlds are unaffected. The exact same mapping is mirrored in the
+frontend preview builder (FE `feat/fe/mood-style-impact`) so the live preview
+and the saved world react to mood in the same direction.
+
+Depends on `feat/be/varied-fallback-dna` (stacked); merge that first.
 
 ## Definition of production-ready (BE)
 

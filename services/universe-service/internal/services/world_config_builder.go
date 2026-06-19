@@ -22,6 +22,10 @@ func NewWorldConfigBuilder() *WorldConfigBuilder {
 
 func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldSceneConfig {
 	rng := seed.NewPRNG(input.Seed)
+	// The atmospheric mood tunes glow, star density, motion and background so the
+	// mood choice is visible in the rendered world. Mirrored by the frontend
+	// preview (see moodSceneProfile docs).
+	moodProfile := sceneProfileForMood(input.Input.Mood)
 	primary := "#8B5CF6"
 	secondary := "#06B6D4"
 	if len(input.Input.FavoriteColors) > 0 {
@@ -38,7 +42,7 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 		Quote:         input.DNA.Quote,
 		Theme:         input.DNA.VisualHints.Theme,
 		Palette: models.Palette{
-			Background: "#050816",
+			Background: moodProfile.BackgroundColor,
 			Primary:    primary,
 			Secondary:  secondary,
 			Accent:     "#FACC15",
@@ -49,11 +53,11 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 			Color:     primary,
 			Emissive:  secondary,
 			Scale:     round(1.05 + rng.Float64()*0.45),
-			SpinSpeed: round(0.08 + rng.Float64()*0.18),
+			SpinSpeed: round((0.08 + rng.Float64()*0.18) * moodProfile.MotionMultiplier),
 		},
 		Particles: models.ParticleConfig{
-			DesktopCount: 600 + rng.Intn(901),
-			MobileCount:  250 + rng.Intn(451),
+			DesktopCount: int(float64(600+rng.Intn(901)) * moodProfile.ParticleMultiplier),
+			MobileCount:  int(float64(250+rng.Intn(451)) * moodProfile.ParticleMultiplier),
 			Color:        secondary,
 			Spread:       round(12 + rng.Float64()*8),
 		},
@@ -62,7 +66,7 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 			FOV:      50,
 		},
 		PostFX: models.PostFXConfig{
-			BloomIntensity: round(0.3 + rng.Float64()*1.1),
+			BloomIntensity: round(clampFloat((0.3+rng.Float64()*1.1)*moodProfile.BloomMultiplier, minimumBloomIntensity, maximumBloomIntensity)),
 		},
 		HUD: models.HUDConfig{ShowTraitBars: true, ShowLabels: true},
 	}
@@ -80,7 +84,7 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 			Color:       color,
 			Size:        round(0.45 + rng.Float64()*0.8),
 			OrbitRadius: round(3.2 + float64(i)*1.05 + rng.Float64()*0.65),
-			OrbitSpeed:  round(0.04 + rng.Float64()*0.32),
+			OrbitSpeed:  round((0.04 + rng.Float64()*0.32) * moodProfile.MotionMultiplier),
 			Phase:       round(rng.Float64() * math.Pi * 2),
 			Energy:      planet.Energy,
 		})
