@@ -108,6 +108,11 @@ export type ShareWorld = {
   publishedAt?: string;
 };
 
+export type PublishResult = {
+  shareSlug: string;
+  shareUrl: string;
+};
+
 export type CreateWorldInput = {
   nickname: string;
   role?: string;

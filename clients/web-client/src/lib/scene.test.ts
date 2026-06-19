@@ -96,14 +96,29 @@ describe("buildPreviewSceneConfig", () => {
     expect(scene.theme).toBe("cosmic-galaxy");
   });
 
-  it("clamps planet count between 3 and 7", () => {
-    const fewInterests = buildPreviewSceneConfig({ ...baseInput, interests: ["Solo"] });
-    const manyInterests = buildPreviewSceneConfig({
+  it("clamps planet count between 3 and 7 (interests then traits, deduped)", () => {
+    const few = buildPreviewSceneConfig({ ...baseInput, interests: ["Solo"], traits: ["Only"] });
+    const exact = buildPreviewSceneConfig({ ...baseInput, interests: ["Art", "Science", "Music"], traits: ["Calm", "Focus"] });
+    const many = buildPreviewSceneConfig({
       ...baseInput,
-      interests: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+      interests: ["aa", "bb", "cc", "dd", "ee"],
+      traits: ["ff", "gg", "hh", "ii"]
     });
-    expect(planetsFromScene(fewInterests)).toHaveLength(3);
-    expect(planetsFromScene(manyInterests)).toHaveLength(7);
+    expect(planetsFromScene(few)).toHaveLength(3);
+    expect(planetsFromScene(exact)).toHaveLength(5);
+    expect(planetsFromScene(many)).toHaveLength(7);
+  });
+
+  it("sources planets from interests then traits, matching the generator", () => {
+    const scene = buildPreviewSceneConfig(baseInput);
+    expect(planetsFromScene(scene).map((planet) => planet.name)).toEqual([
+      "Technology",
+      "Design",
+      "AI",
+      "curious",
+      "builder",
+      "focused"
+    ]);
   });
 
   it("derives the palette from the chosen colors with a fixed background", () => {

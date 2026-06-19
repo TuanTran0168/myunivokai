@@ -118,8 +118,11 @@ export default function WorldPage({ params }: PageProps) {
     setError("");
     setNotice("");
     try {
-      const nextWorld = await api.publishWorld(params.worldId);
-      setWorld(nextWorld.shareSlug ? nextWorld : await api.getWorld(params.worldId));
+      await api.publishWorld(params.worldId);
+      // Publish returns only the share slug, not a full world. Re-fetch so the
+      // world keeps its variants/planets (otherwise the canvas falls back to the
+      // abstract renderer) and picks up the new shareSlug.
+      await loadWorld();
       setNotice("World published.");
     } catch (err) {
       setError(apiErrorMessage(err));
