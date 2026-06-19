@@ -1,4 +1,4 @@
-import type { ApiErrorPayload, CreateWorldInput, ShareWorld, World, WorldVariant } from "./types";
+import type { ApiErrorPayload, CreateWorldInput, PublishResult, ShareWorld, World, WorldVariant } from "./types";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
 
@@ -103,17 +103,8 @@ function normalizeShare(raw: any): ShareWorld {
     archetype: publicWorld.archetype,
     shareSlug: publicWorld.shareSlug ?? publicWorld.share_slug,
     variant,
-    sceneConfig: buildShareSceneConfig(publicWorld, variant),
     publishedAt: publicWorld.publishedAt ?? publicWorld.published_at
   };
-}
-
-function buildShareSceneConfig(publicWorld: any, variant?: WorldVariant) {
-  const sceneConfig = publicWorld.sceneConfig ?? publicWorld.scene_config ?? variant?.sceneConfig;
-  if (!sceneConfig) {
-    return undefined;
-  }
-  return { seed: variant?.seed, ...sceneConfig };
 }
 
 export const api = {
@@ -141,8 +132,12 @@ export const api = {
     );
   },
 
-  async publishWorld(worldId: string): Promise<World> {
-    return normalizeWorld(await request<unknown>(`/worlds/${worldId}/publish`, { method: "POST", body: "{}" }));
+  async publishWorld(worldId: string): Promise<PublishResult> {
+    const payload = await request<{ shareSlug?: string; shareUrl?: string; share_slug?: string }>(
+      `/worlds/${worldId}/publish`,
+      { method: "POST", body: "{}" }
+    );
+    return { shareSlug: payload.shareSlug ?? payload.share_slug ?? "", shareUrl: payload.shareUrl ?? "" };
   },
 
   async getShareWorld(shareSlug: string): Promise<ShareWorld> {
@@ -150,9 +145,26 @@ export const api = {
   }
 };
 
+function validationDetailMessages(details: unknown[]): string[] {
+  return details
+    .map((detail) => {
+      if (detail && typeof detail === "object" && "message" in detail) {
+        const message = (detail as { message?: unknown }).message;
+        return typeof message === "string" ? message : "";
+      }
+      return "";
+    })
+    .filter((message) => message.length > 0);
+}
+
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.requestId ? `${error.message} (${error.requestId})` : error.message;
+    // Surface the backend's field-level validation messages (e.g. "Goal must be
+    // 10-220 characters.") instead of the generic "Please check the highlighted
+    // fields." so the user can see exactly what to fix.
+    const detailMessages = validationDetailMessages(error.details);
+    const baseMessage = detailMessages.length > 0 ? detailMessages.join(" ") : error.message;
+    return error.requestId ? `${baseMessage} (${error.requestId})` : baseMessage;
   }
   if (error instanceof Error) {
     if (error.message === "Failed to fetch" || error.message.toLowerCase().includes("fetch failed")) {

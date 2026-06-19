@@ -16,6 +16,8 @@ Status: mark ✅ when the PR is merged into `staging`.
 | 6 | `fix/be/variant-and-slug-race` | 🟡 correctness under load | ✅ |
 | 7 | `feat/be/db-pool-and-health` | 🟡 operations | ✅ |
 | 8 | `refactor/be/cleanup` | 🟢 cleanup | ⬜ (in PR) |
+| 9 | `feat/be/varied-fallback-dna` | 🔴 demo quality (no AI key yet) | ⬜ |
+| 10 | `feat/be/mood-scene-params` | 🔴 mood/style impact (pairs with FE) | ⬜ |
 
 ## 1. fix/be/request-hardening ✅
 
@@ -85,6 +87,47 @@ WriteTimeout sized to outlive AI retries.
   transaction (removes 3 redundant queries).
 - Swagger UI mounted only outside production.
 - Single-letter variables renamed per coding style.
+
+## 9. feat/be/varied-fallback-dna
+
+Problem: with no AI key, `AI_PROVIDER` defaults to `mock`, and the mock returned
+a single hard-coded Personality DNA — every generated universe had the same
+archetype, scene name and 3 planets, so demos felt repetitive. Atmospheric mood
+had no effect on the result at all.
+
+Done: the mock now reads the same user prompt a real model would and assembles a
+varied DNA from a preset library (`mock_presets.go`):
+
+- The atmospheric **mood** selects a preset GROUP (focused / dreamy / energetic /
+  reflective); one preset within the group is chosen at random, so worlds vary
+  while still reflecting the mood. Unknown moods fall back to a balanced group.
+- The preferred **world style** drives `visualHints.theme` (validated; falls back
+  to `cosmic-galaxy`), so the style choice has a visible effect.
+- Planets are named from the user's own **interests then traits**, deduplicated
+  and clamped to the schema's 3-7 range, so each world feels personal.
+- Every preset is covered by a test that runs it through the same
+  `ValidatePersonalityDNA` the orchestrator uses; selection, naming, theme and
+  clamping are tested.
+
+Pairs with FE `feat/fe/mood-style-impact` (mood/style prominence + preview
+effect) so the preview and the generated world stay consistent.
+
+## 10. feat/be/mood-scene-params
+
+Problem: `WorldConfigBuilder` ignored the atmospheric mood entirely — the scene
+numbers came only from favoriteColors + the seed, so picking a different mood
+changed nothing visible in the generated world.
+
+Done: a `moodSceneProfile` (mood_scene_profile.go) tunes the deterministic scene
+numbers by mood — bloom intensity, star density, motion (core spin + planet
+orbit speed) and background color. The random call order is unchanged, so a
+given seed is still deterministic; only the multipliers/background shift by
+mood. An unknown mood uses a neutral profile (identical to the old behavior),
+so existing worlds are unaffected. The exact same mapping is mirrored in the
+frontend preview builder (FE `feat/fe/mood-style-impact`) so the live preview
+and the saved world react to mood in the same direction.
+
+Depends on `feat/be/varied-fallback-dna` (stacked); merge that first.
 
 ## Definition of production-ready (BE)
 

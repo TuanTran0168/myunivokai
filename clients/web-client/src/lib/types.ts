@@ -105,8 +105,12 @@ export type ShareWorld = {
   archetype?: string;
   shareSlug?: string;
   variant?: WorldVariant;
-  sceneConfig?: SceneConfig;
   publishedAt?: string;
+};
+
+export type PublishResult = {
+  shareSlug: string;
+  shareUrl: string;
 };
 
 export type CreateWorldInput = {

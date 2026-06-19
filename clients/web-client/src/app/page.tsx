@@ -1,14 +1,14 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
-import { sceneFromVariant, selectedVariant } from "@/lib/scene";
+import { buildPreviewSceneConfig } from "@/lib/scene";
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
@@ -19,13 +19,27 @@ const moodOptions = [
   { label: "Void", value: "reflective", gradient: "from-[#450a0a] to-[#ef4444]" }
 ];
 const styleOptions = [
-  { label: "Cosmic", value: "cosmic-galaxy" },
-  { label: "Nebula", value: "nebula" },
-  { label: "Crystal", value: "crystal" },
-  { label: "Aurora", value: "aurora" },
-  { label: "Cyber Orbit", value: "cyber-orbit" }
+  { label: "Cosmic", value: "cosmic-galaxy", gradient: "from-[#1e1b4b] to-[#8B5CF6]" },
+  { label: "Nebula", value: "nebula", gradient: "from-[#1e1b4b] to-[#a855f7]" },
+  { label: "Crystal", value: "crystal", gradient: "from-[#0c4a6e] to-[#22d3ee]" },
+  { label: "Aurora", value: "aurora", gradient: "from-[#064e3b] to-[#34d399]" },
+  { label: "Cyber Orbit", value: "cyber-orbit", gradient: "from-[#082f49] to-[#38bdf8]" }
 ];
 const colorOptions = ["#8B5CF6", "#06B6D4", "#F97316", "#22C55E", "#F43F5E", "#EAB308"];
+
+// The live preview rebuilds the WebGL scene whenever its inputs change. Debounce
+// so a burst of keystrokes/toggles only rebuilds the canvas once the user pauses,
+// instead of tearing down and recreating the GL context on every character.
+const PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS = 300;
+
+function useDebouncedValue<ValueType>(value: ValueType, delayMilliseconds: number): ValueType {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedValue(value), delayMilliseconds);
+    return () => clearTimeout(timeoutId);
+  }, [value, delayMilliseconds]);
+  return debouncedValue;
+}
 
 function toggleItem(current: string[], item: string, min: number, max: number) {
   if (current.includes(item)) {
@@ -72,6 +86,23 @@ export default function HomePage() {
       preferredWorldStyle
     };
   }, [challenge, favoriteColors, goal, interests, mood, nickname, preferredWorldStyle, role, traits]);
+
+  // Built from the same sanitized payload that is submitted (not the raw form
+  // state) so the preview's planet count and names match the generated world,
+  // and debounced so typing does not rebuild the canvas on every keystroke.
+  const debouncedPayload = useDebouncedValue(payload, PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS);
+  const previewScene = useMemo(
+    () =>
+      buildPreviewSceneConfig({
+        nickname: debouncedPayload.nickname,
+        interests: debouncedPayload.interests,
+        traits: debouncedPayload.traits,
+        mood: debouncedPayload.mood,
+        preferredWorldStyle: debouncedPayload.preferredWorldStyle,
+        favoriteColors: debouncedPayload.favoriteColors
+      }),
+    [debouncedPayload]
+  );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -239,52 +270,78 @@ export default function HomePage() {
                         key={option.value}
                         type="button"
                         onClick={() => setMood(option.value)}
-                        className={`focus-ring glass-panel rounded-xl border-2 p-3 text-center transition ${
-                          selected ? "border-secondary bg-secondary/10" : "border-transparent hover:border-white/20"
+                        aria-pressed={selected}
+                        className={`focus-ring glass-panel relative rounded-xl border-2 p-3 text-center transition ${
+                          selected
+                            ? "scale-[1.03] border-secondary bg-secondary/15 shadow-cyan ring-2 ring-secondary/40"
+                            : "border-transparent hover:border-white/20"
                         }`}
                       >
+                        {selected ? (
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-secondary text-[#001b1b]">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                          </span>
+                        ) : null}
                         <span className={`mb-2 block h-8 rounded bg-gradient-to-r ${option.gradient}`} />
-                        <span className="text-sm text-on-surface">{option.label}</span>
+                        <span className={`text-sm ${selected ? "font-semibold text-secondary" : "text-on-surface"}`}>
+                          {option.label}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                <label className="grid gap-2">
-                  <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">World Style</span>
-                  <select
-                    value={preferredWorldStyle}
-                    onChange={(event) => setPreferredWorldStyle(event.target.value)}
-                    className="focus-ring input-dark rounded-xl px-4 py-3 text-on-surface"
-                  >
-                    {styleOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="grid gap-2">
-                  <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Palette</span>
-                  <div className="flex flex-wrap gap-2">
-                    {colorOptions.map((color) => {
-                      const selected = favoriteColors.includes(color);
-                      return (
-                        <button
-                          key={color}
-                          type="button"
-                          title={color}
-                          aria-label={color}
-                          aria-pressed={selected}
-                          onClick={() => toggleColor(color)}
-                          className={`focus-ring h-10 w-10 rounded-xl border transition ${selected ? "border-primary ring-2 ring-primary/20" : "border-white/15"}`}
-                          style={{ backgroundColor: color }}
-                        />
-                      );
-                    })}
-                  </div>
+              <div className="grid gap-3">
+                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">World Style</span>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+                  {styleOptions.map((option) => {
+                    const selected = preferredWorldStyle === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setPreferredWorldStyle(option.value)}
+                        aria-pressed={selected}
+                        className={`focus-ring glass-panel relative rounded-xl border-2 p-3 text-center transition ${
+                          selected
+                            ? "scale-[1.03] border-primary bg-primary/15 shadow-glow ring-2 ring-primary/40"
+                            : "border-transparent hover:border-white/20"
+                        }`}
+                      >
+                        {selected ? (
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-primary text-[#23005c]">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        <span className={`mb-2 block h-8 rounded bg-gradient-to-r ${option.gradient}`} />
+                        <span className={`text-sm ${selected ? "font-semibold text-primary" : "text-on-surface"}`}>
+                          {option.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Palette</span>
+                <div className="flex flex-wrap gap-2">
+                  {colorOptions.map((color) => {
+                    const selected = favoriteColors.includes(color);
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        title={color}
+                        aria-label={color}
+                        aria-pressed={selected}
+                        onClick={() => toggleColor(color)}
+                        className={`focus-ring h-10 w-10 rounded-xl border transition ${selected ? "scale-[1.06] border-primary ring-2 ring-primary/30" : "border-white/15 hover:border-white/30"}`}
+                        style={{ backgroundColor: color }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
 
@@ -313,7 +370,7 @@ export default function HomePage() {
                 </div>
                 <span className="font-mono text-xs text-secondary/70">SYNCING...</span>
               </div>
-              <UniverseCanvas scene={sceneFromVariant(selectedVariant({ id: "preview", variants: [] }))} className="min-h-[360px] flex-1" />
+              <UniverseCanvas scene={previewScene} className="min-h-[360px] flex-1" />
             </div>
 
             <div className="glass-panel rounded-2xl p-5">
