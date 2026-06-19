@@ -1,4 +1,4 @@
-import type { ApiErrorPayload, CreateWorldInput, ShareWorld, World, WorldVariant } from "./types";
+import type { ApiErrorPayload, CreateWorldInput, PublishResult, ShareWorld, World, WorldVariant } from "./types";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
 
@@ -132,8 +132,12 @@ export const api = {
     );
   },
 
-  async publishWorld(worldId: string): Promise<World> {
-    return normalizeWorld(await request<unknown>(`/worlds/${worldId}/publish`, { method: "POST", body: "{}" }));
+  async publishWorld(worldId: string): Promise<PublishResult> {
+    const payload = await request<{ shareSlug?: string; shareUrl?: string; share_slug?: string }>(
+      `/worlds/${worldId}/publish`,
+      { method: "POST", body: "{}" }
+    );
+    return { shareSlug: payload.shareSlug ?? payload.share_slug ?? "", shareUrl: payload.shareUrl ?? "" };
   },
 
   async getShareWorld(shareSlug: string): Promise<ShareWorld> {
