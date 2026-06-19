@@ -17,12 +17,13 @@ body {
   min-height: 100%;
 }
 
+/* Level 0 (DESIGN.md): deep space navy with a faint fractal-noise texture to
+   prevent gradient banding. Ambient glow now lives in animated shell orbs
+   (.pulse-bg) instead of a static body gradient. */
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(160, 120, 255, 0.18), transparent 28%),
-    radial-gradient(circle at 86% 78%, rgba(76, 215, 246, 0.14), transparent 30%),
-    #050816;
+  background-color: #050816;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
   color: #dee1f9;
   font-family: var(--font-inter), sans-serif;
 }
@@ -42,12 +43,22 @@ textarea {
   outline-color: #4cd7f6;
 }
 
+/* Level 1: Surface Glass — 20px backdrop blur, 1px white border with a brighter
+   top edge to simulate a distant light source. */
 .glass-panel {
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-top-color: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(20px);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.16);
+}
+
+/* Level 3: floating panels — add an inner top highlight + soft purple light
+   emission for the highest-elevation cards (HUD overlays, modals). */
+.glass-panel-glow {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 0 40px rgba(160, 120, 255, 0.12);
 }
 
 .btn-gradient {
@@ -70,4 +81,59 @@ textarea {
 .input-dark:focus {
   border-color: #4cd7f6;
   box-shadow: 0 0 0 1px rgba(76, 215, 246, 0.25), inset 0 0 18px rgba(0, 0, 0, 0.22);
+}
+
+/* AI Pulse (DESIGN.md): a slow-pulsing blurred gradient orb that signals system
+   "thought". Mounted at the shell to give every page weightless cosmic depth. */
+.pulse-bg {
+  position: fixed;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: -10;
+  animation: pulse-slow 8s infinite alternate ease-in-out;
+}
+
+@keyframes pulse-slow {
+  0% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0.22;
+  }
+}
+
+/* Shimmer for chips that represent active AI-generated content. */
+.chip-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.chip-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: rotate(45deg);
+  animation: shimmer 3s infinite linear;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) rotate(45deg);
+  }
+  100% {
+    transform: translateX(100%) rotate(45deg);
+  }
+}
+
+/* Respect users who ask for less motion: freeze the ambient/decorative loops. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-bg,
+  .chip-shimmer::after {
+    animation: none;
+  }
 }

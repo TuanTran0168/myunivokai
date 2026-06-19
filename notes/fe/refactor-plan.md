@@ -8,8 +8,12 @@ Status: mark ✅ when the PR is merged into `staging`.
 
 | # | Branch | Priority | Status |
 |---|---|---|---|
-| 1 | `fix/fe/scene-render-consistency` | 🔴🔴 highest — visible bug | ✅ |
-| 1b | `feat/fe/mood-style-impact` | 🔴 highest — pairs with BE mood | ⬜ |
+| U1 | `feat/fe/ui-shell-and-tokens` | 🔴🔴🔴 highest — UI overhaul foundation | ⬜ |
+| U2 | `feat/fe/create-canvas-hero` | 🔴🔴🔴 highest — canvas-first create page | ⬜ |
+| U3 | `feat/fe/dashboard-hud` | 🔴🔴 high — command-deck world page | ⬜ |
+| U4 | `feat/fe/share-gallery-landing` | 🔴 high — public surfaces polish | ⬜ |
+| 1 | `fix/fe/scene-render-consistency` | 🔴🔴 visible bug | ✅ |
+| 1b | `feat/fe/mood-style-impact` | 🔴 pairs with BE mood | ✅ |
 | 2 | `feat/fe/unit-testing-setup` | 🔴 foundation | ⬜ |
 | 3 | `refactor/fe/typed-api-client` | 🔴 required before deploy | ⬜ |
 | 4 | `refactor/fe/form-validation` | 🔴 required before deploy | ⬜ |
@@ -18,6 +22,102 @@ Status: mark ✅ when the PR is merged into `staging`.
 | 7 | `feat/fe/share-page-ssr-metadata` | 🟡 social sharing | ⬜ |
 | 8 | `feat/fe/mobile-performance` | 🟡 weak devices | ⬜ |
 | 9 | `refactor/fe/cleanup-a11y` | 🟢 cleanup | ⬜ |
+
+## UI Overhaul (U1–U4) — TOP PRIORITY
+
+Goal: a premium, professional interface where the **3D canvas is the hero**, not a
+boxed-in widget — the "futuristic command deck" feel of the Stitch reference
+(`notes/stitch_personal_universe_3d_v2`), benchmarked against the restraint of
+Apple / supercar / interior-design sites. **Pure presentation: no logic or
+behavior change.** Same form state, same payload, same API calls, same scene
+builder (`buildPreviewSceneConfig` / `sceneFromVariant`), same handlers — only
+layout, spacing, and chrome change. Every U-branch must keep all existing tests
+green (`npm run typecheck && lint && build && test`).
+
+Design language is already half-built and stays the single source of truth — see
+`notes/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md`:
+deep-space navy `#050816`, glassmorphism (20px backdrop blur, 1px white/10
+border, brighter top edge), gradient CTA (purple→cyan), Space Grotesk headlines /
+Inter body / JetBrains Mono data-labels. The tokens and fonts already exist in
+`tailwind.config.ts` + `globals.css`; what is missing is **layout composition**
+(canvas as hero + floating HUD panels) and a few ambient utilities.
+
+Reference → screen mapping:
+- Create page → `create_universe_form_3` (full-bleed canvas right, narrow form rail left).
+- World page → `3d_universe_dashboard_1` / `_2` (full-bleed solar system, floating glass HUD overlays + bottom action toolbar).
+- Share page → `public_share_page_1` (canvas hero, then traits / celestial-bodies / CTA).
+- Gallery → `saved_worlds_gallery` (card grid with thumbnail, tags, seed/created stats).
+- Landing (optional) → `landing_page_1` (hero + 3-step "Architecting Your Soul").
+
+### U1. feat/fe/ui-shell-and-tokens
+
+Foundation every other U-branch builds on. No page reflow yet — just the shared
+shell and missing design primitives.
+
+- Extend `tailwind.config.ts`: named font sizes (`display-lg` 48/`headline-md`
+  24/`label-caps` 12/`stat-lg` 28) and any missing color tokens
+  (`on-primary-fixed` `#23005c`, etc.) so utilities read like the DESIGN.md scale.
+- `globals.css`: add ambient `pulse-bg` (slow-pulsing blurred gradient orbs),
+  `chip-shimmer` (AI-processing shimmer on active chips), `glass-panel-glow`
+  (gradient top-left stroke), and the faint SVG noise texture on `body` (kills
+  banding). All behind `prefers-reduced-motion` where animated.
+- `layout.tsx` shell: real nav (How it works / Gallery — keep links honest, no
+  dead routes), a footer, container max-width `1440px` with generous desktop
+  margins (48px), ambient pulse orbs mounted once at the shell level.
+
+Acceptance: shell renders on every page with the new chrome; no page-body layout
+change yet; all gates green.
+
+### U2. feat/fe/create-canvas-hero  ← the user's #1 ask ("more canvas space")
+
+Restructure `app/page.tsx` to the `create_universe_form_3` layout: the Live DNA
+Preview canvas goes **full-bleed on the right (~58% width, edge-to-edge, no card
+frame)** as the hero; the form collapses into a **narrow glass rail on the left
+(~42%) that scrolls internally** while the canvas stays pinned. On mobile the
+canvas stacks on top as a tall hero, form below.
+
+- Keep EVERY field and all state/handlers byte-for-byte: nickname, role,
+  interests, traits, goal, challenge, mood (4 buttons), world style (5 buttons),
+  palette, submit → `api.createWorld(payload)`. The debounced `previewScene`
+  pipeline is untouched.
+- The form rail uses tighter vertical rhythm + section dividers so all fields fit
+  a scrollable column without feeling cramped (Apple-style restraint).
+- Sticky submit CTA at the bottom of the rail; keep the progress stepper.
+- Fold the small "Signature / Active palette" stats into a compact HUD strip
+  overlaid on the canvas corner (reference) instead of a separate card.
+
+Acceptance: canvas occupies markedly more screen than today; form fully usable by
+scrolling the rail; preview still updates live; identical payload submitted;
+tests green.
+
+### U3. feat/fe/dashboard-hud
+
+Restructure the world page (`app/worlds/[worldId]/page.tsx`) to the
+`3d_universe_dashboard_1/_2` command-deck: the `UniverseCanvas` fills the viewport
+behind floating glass HUD panels — profile/archetype card, "Trait Mapping" bars,
+"World DNA" planet list, and a centered bottom action toolbar
+(Regenerate Variant / Export Image / Share Link / Save World).
+
+- All actions wire to the EXISTING handlers (regenerateVariant, publishWorld +
+  loadWorld, selectVariant, gallery save). No new endpoints, no behavior change.
+- Panels are `pointer-events-auto` islands over a `pointer-events-none` canvas
+  layer so orbit-drag still works in the gaps.
+- Reuse the share-page canvas-sizing fix (absolute inset-0 canvas under a
+  relative z-10 overlay) so there is no zoom/blur/lag regression.
+
+Acceptance: world page reads as a HUD over the live solar system; every existing
+action works unchanged; consistent scene with create-preview and `/share`.
+
+### U4. feat/fe/share-gallery-landing
+
+Public-facing polish (can split into 2 PRs if it grows): share page →
+`public_share_page_1` (canvas hero, then Core Traits / Celestial Bodies / "Inspired
+by what you see?" CTA); gallery → `saved_worlds_gallery` card grid (thumbnail,
+title, tags, SEED/CREATED mono stats); optional landing hero `landing_page_1`.
+Coordinate with item #7 (share SSR metadata) — do the visual layout here, keep the
+server-component/OG-tag conversion as #7 so the two concerns stay separate.
+
+Acceptance: share + gallery match the reference visual quality; no behavior change.
 
 ## 1. fix/fe/scene-render-consistency
 
