@@ -132,6 +132,9 @@ const PREVIEW_SCHEMA_VERSION = "1.0";
 
 const MINIMUM_PREVIEW_PLANET_COUNT = 3;
 const MAXIMUM_PREVIEW_PLANET_COUNT = 7;
+const MINIMUM_PLANET_NAME_LENGTH = 2;
+const MAXIMUM_PLANET_NAME_LENGTH = 40;
+const DEFAULT_PREVIEW_PLANET_NAMES = ["Core", "Drive", "Spark", "Origin"];
 
 const MINIMUM_PLANET_SIZE = 0.45;
 const PLANET_SIZE_RANGE = 0.8;
@@ -229,6 +232,45 @@ function previewPlanetColor(planetIndex: number, primaryColor: string, secondary
   return secondaryColor;
 }
 
+// Names the preview planets from the user's interests then traits, deduplicated
+// and clamped to 3-7. This mirrors the backend mock's collectPlanetSources
+// (services/.../mock_presets.go) so the preview shows the same planet count and
+// names as the generated world.
+function previewPlanetNames(interests: string[], traits: string[]): string[] {
+  const seenNames = new Set<string>();
+  const planetNames: string[] = [];
+  const addName = (rawName: string) => {
+    // Mirror the backend sanitizePlanetName: measure and truncate by code point
+    // (Go []rune semantics) BEFORE computing the dedup key, so names that only
+    // differ past the 40th character dedup the same way on both sides.
+    const trimmedName = rawName.trim();
+    const codePoints = Array.from(trimmedName);
+    if (codePoints.length < MINIMUM_PLANET_NAME_LENGTH) {
+      return;
+    }
+    const name =
+      codePoints.length > MAXIMUM_PLANET_NAME_LENGTH
+        ? codePoints.slice(0, MAXIMUM_PLANET_NAME_LENGTH).join("").trim()
+        : trimmedName;
+    const nameKey = name.toLowerCase();
+    if (seenNames.has(nameKey)) {
+      return;
+    }
+    seenNames.add(nameKey);
+    planetNames.push(name);
+  };
+
+  interests.forEach(addName);
+  traits.forEach(addName);
+  for (const fallbackName of DEFAULT_PREVIEW_PLANET_NAMES) {
+    if (planetNames.length >= MINIMUM_PREVIEW_PLANET_COUNT) {
+      break;
+    }
+    addName(fallbackName);
+  }
+  return planetNames.slice(0, MAXIMUM_PREVIEW_PLANET_COUNT);
+}
+
 export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
   const seed = previewSeedFromInputs(input);
   const nextRandomValue = randomFromSeed(seed);
@@ -237,12 +279,8 @@ export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
   const secondaryColor = input.favoriteColors[1] ?? DEFAULT_PREVIEW_SECONDARY_COLOR;
   const moodProfile = moodSceneProfile(input.mood);
 
-  const planetCount = clampNumber(
-    input.interests.length,
-    MINIMUM_PREVIEW_PLANET_COUNT,
-    MAXIMUM_PREVIEW_PLANET_COUNT
-  );
-  const planetNameSources = [...input.interests, ...input.traits];
+  const planetNameSources = previewPlanetNames(input.interests, input.traits);
+  const planetCount = planetNameSources.length;
 
   const planets: PlanetSceneConfig[] = Array.from({ length: planetCount }, (_, planetIndex) => ({
     key: `preview-planet-${planetIndex + 1}`,
