@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
-import type { ShareWorld } from "@/lib/types";
-import { sceneFromVariant } from "@/lib/scene";
-import { UniverseCanvas } from "@/components/UniverseCanvas";
+import type { PlanetSceneConfig, ShareWorld } from "@/lib/types";
+import { planetsFromScene, sceneFromVariant } from "@/lib/scene";
+import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { StatusMessage } from "@/components/StatusMessage";
 
 type PageProps = {
@@ -19,6 +20,7 @@ export default function ShareWorldPage({ params }: PageProps) {
   const [world, setWorld] = useState<ShareWorld | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -34,6 +36,20 @@ export default function ShareWorldPage({ params }: PageProps) {
   }, [params.shareSlug]);
 
   const scene = useMemo(() => sceneFromVariant(world?.variant), [world]);
+  const planets = useMemo(() => planetsFromScene(scene), [scene]);
+
+  useEffect(() => {
+    setSelectedPlanetKey(null);
+  }, [world]);
+
+  function handleSelectPlanet(planet: PlanetSceneConfig | null) {
+    if (!planet) {
+      setSelectedPlanetKey(null);
+      return;
+    }
+    const planetIndex = planets.indexOf(planet);
+    setSelectedPlanetKey(planetIdentityKey(planet, planetIndex));
+  }
 
   if (loading) {
     return (
@@ -52,24 +68,57 @@ export default function ShareWorldPage({ params }: PageProps) {
   }
 
   return (
-    <main className="relative min-h-[calc(100vh-57px)] overflow-hidden">
-      <div className="absolute inset-0">
-        <UniverseCanvas scene={scene} className="h-full" />
+    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+      {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
+          on desktop. Clicking a planet focuses the camera (read-only view state). */}
+      <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
+        <UniverseCanvas
+          scene={scene}
+          className="h-full"
+          selectedPlanetKey={selectedPlanetKey}
+          onSelectPlanet={handleSelectPlanet}
+        />
       </div>
-      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-57px)] w-full max-w-7xl flex-col justify-between px-4 py-6 sm:px-6">
-        <Link href="/" className="focus-ring glass-panel inline-flex w-fit items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-on-surface">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Myunivokai
-        </Link>
-        <div className="max-w-2xl pb-6 text-on-surface">
-          {world.archetype ? (
-            <p className="mb-2 font-mono text-xs uppercase tracking-widest text-secondary">{world.archetype}</p>
-          ) : null}
-          <h1 className="text-4xl font-semibold tracking-normal sm:text-5xl">{world.title || "Shared universe"}</h1>
-          {world.quote ? (
-            <p className="mt-3 max-w-xl text-lg italic leading-7 text-on-surface">&ldquo;{world.quote}&rdquo;</p>
-          ) : null}
-          {world.summary ? <p className="mt-4 max-w-xl text-base leading-7 text-on-surface-variant">{world.summary}</p> : null}
+
+      {/* HUD overlay — a scrolling column on mobile; on desktop a pointer-through
+          layer so orbit-drag passes between the floating glass islands. */}
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
+        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left island: identity */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
+            <div className="glass-panel glass-panel-glow rounded-2xl p-5">
+              {world.archetype ? (
+                <p className="mb-1 font-mono text-xs uppercase tracking-widest text-secondary">{world.archetype}</p>
+              ) : null}
+              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+                {world.title || "Shared universe"}
+              </h1>
+              {world.quote ? (
+                <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{world.quote}&rdquo;</p>
+              ) : null}
+              {world.summary ? <p className="mt-2 text-sm leading-6 text-on-surface-variant">{world.summary}</p> : null}
+            </div>
+          </div>
+
+          {/* Right island: World DNA (planets) */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
+            <PlanetDetailsPanel
+              planets={planets}
+              selectedPlanetKey={selectedPlanetKey}
+              onSelectPlanet={handleSelectPlanet}
+            />
+          </div>
+        </div>
+
+        {/* Bottom-center conversion CTA */}
+        <div className="pointer-events-auto mx-auto text-center">
+          <Link
+            href="/"
+            className="focus-ring btn-gradient inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-semibold"
+          >
+            Create Your Own Universe
+            <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          </Link>
         </div>
       </div>
     </main>
