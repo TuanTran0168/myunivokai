@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -8,7 +8,7 @@ import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
-import { sceneFromVariant, selectedVariant } from "@/lib/scene";
+import { buildPreviewSceneConfig } from "@/lib/scene";
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
@@ -26,6 +26,20 @@ const styleOptions = [
   { label: "Cyber Orbit", value: "cyber-orbit" }
 ];
 const colorOptions = ["#8B5CF6", "#06B6D4", "#F97316", "#22C55E", "#F43F5E", "#EAB308"];
+
+// The live preview rebuilds the WebGL scene whenever its inputs change. Debounce
+// so a burst of keystrokes/toggles only rebuilds the canvas once the user pauses,
+// instead of tearing down and recreating the GL context on every character.
+const PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS = 300;
+
+function useDebouncedValue<ValueType>(value: ValueType, delayMilliseconds: number): ValueType {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedValue(value), delayMilliseconds);
+    return () => clearTimeout(timeoutId);
+  }, [value, delayMilliseconds]);
+  return debouncedValue;
+}
 
 function toggleItem(current: string[], item: string, min: number, max: number) {
   if (current.includes(item)) {
@@ -72,6 +86,23 @@ export default function HomePage() {
       preferredWorldStyle
     };
   }, [challenge, favoriteColors, goal, interests, mood, nickname, preferredWorldStyle, role, traits]);
+
+  // Built from the same sanitized payload that is submitted (not the raw form
+  // state) so the preview's planet count and names match the generated world,
+  // and debounced so typing does not rebuild the canvas on every keystroke.
+  const debouncedPayload = useDebouncedValue(payload, PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS);
+  const previewScene = useMemo(
+    () =>
+      buildPreviewSceneConfig({
+        nickname: debouncedPayload.nickname,
+        interests: debouncedPayload.interests,
+        traits: debouncedPayload.traits,
+        mood: debouncedPayload.mood,
+        preferredWorldStyle: debouncedPayload.preferredWorldStyle,
+        favoriteColors: debouncedPayload.favoriteColors
+      }),
+    [debouncedPayload]
+  );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -313,7 +344,7 @@ export default function HomePage() {
                 </div>
                 <span className="font-mono text-xs text-secondary/70">SYNCING...</span>
               </div>
-              <UniverseCanvas scene={sceneFromVariant(selectedVariant({ id: "preview", variants: [] }))} className="min-h-[360px] flex-1" />
+              <UniverseCanvas scene={previewScene} className="min-h-[360px] flex-1" />
             </div>
 
             <div className="glass-panel rounded-2xl p-5">
