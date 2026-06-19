@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Personal Universe 3D</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500;600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#574500",
+                        "on-secondary-container": "#00424e",
+                        "outline-variant": "#494454",
+                        "secondary-fixed": "#acedff",
+                        "surface-container-high": "#25293a",
+                        "on-primary-fixed-variant": "#5516be",
+                        "on-background": "#dee1f9",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#e9ddff",
+                        "surface-container-highest": "#2f3446",
+                        "primary-container": "#a078ff",
+                        "tertiary": "#eec200",
+                        "tertiary-fixed-dim": "#eec200",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "surface-container-lowest": "#080d1d",
+                        "outline": "#958ea0",
+                        "on-primary-container": "#340080",
+                        "primary": "#d0bcff",
+                        "on-error-container": "#ffdad6",
+                        "surface-dim": "#0e1323",
+                        "surface-bright": "#34394a",
+                        "primary-fixed-dim": "#d0bcff",
+                        "surface-container": "#1a1f30",
+                        "on-surface": "#dee1f9",
+                        "on-tertiary": "#3c2f00",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#ffe083",
+                        "on-secondary-fixed": "#001f26",
+                        "on-secondary": "#003640",
+                        "on-primary-fixed": "#23005c",
+                        "secondary": "#4cd7f6",
+                        "inverse-surface": "#dee1f9",
+                        "background": "#0e1323",
+                        "surface": "#0e1323",
+                        "inverse-on-surface": "#2b3041",
+                        "on-tertiary-fixed": "#231b00",
+                        "inverse-primary": "#6d3bd7",
+                        "surface-tint": "#d0bcff",
+                        "on-primary": "#3c0091",
+                        "surface-container-low": "#161b2b",
+                        "tertiary-container": "#cea700",
+                        "surface-variant": "#2f3446",
+                        "secondary-container": "#03b5d3",
+                        "on-tertiary-container": "#4e3e00",
+                        "on-surface-variant": "#cbc3d7",
+                        "error": "#ffb4ab"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "unit": "4px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Space Grotesk"],
+                        "body-md": ["Inter"],
+                        "stat-lg": ["JetBrains Mono"],
+                        "body-lg": ["Inter"],
+                        "display-lg-mobile": ["Space Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "stat-lg": ["28px", { "lineHeight": "1", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #050816; /* Overriding slightly for deeper space feel as per style guide */
+            background-image: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                              radial-gradient(circle at 100% 100%, rgba(76, 215, 246, 0.1) 0%, transparent 40%);
+            background-attachment: fixed;
+        }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-panel-glow {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            border-left: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-primary-glow {
+            background: linear-gradient(45deg, #a078ff, #03b5d3);
+            box-shadow: 0 4px 20px rgba(160, 120, 255, 0.4);
+            transition: all 0.3s ease;
+        }
+        .btn-primary-glow:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+            box-shadow: 0 6px 25px rgba(160, 120, 255, 0.6);
+        }
+
+        .ai-pulse-bg {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(139,92,246,0.2) 0%, rgba(0,0,0,0) 70%);
+            border-radius: 50%;
+            animation: pulse 4s infinite alternate;
+            z-index: -1;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+        
+        /* Subtle stars pattern */
+        .stars-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.3), rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.2), rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 90px 40px, rgba(255,255,255,0.4), rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 160px 120px, rgba(255,255,255,0.1), rgba(0,0,0,0));
+            background-repeat: repeat;
+            background-size: 200px 200px;
+            z-index: -2;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="text-on-background antialiased overflow-x-hidden">
+<div class="stars-overlay"></div>
+<!-- TopNavBar Shared Component -->
+<nav class="bg-surface/70 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-white/10 shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+<div class="flex justify-between items-center px-margin-mobile md:px-margin-desktop py-4 max-w-container-max mx-auto">
+<div class="font-display-lg text-headline-md font-bold text-primary tracking-wider">
+                Personal Universe
+            </div>
+<div class="hidden md:flex gap-8">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">How it works</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">Gallery</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">Pricing</a>
+</div>
+<button class="hidden md:block btn-primary-glow text-on-primary-container px-6 py-2 rounded-lg font-body-md text-body-md font-semibold">
+                Create Universe
+            </button>
+<button class="md:hidden text-primary">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</nav>
+<main class="pt-24">
+<!-- Hero Section -->
+<section class="relative min-h-[921px] flex items-center px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center w-full relative z-10">
+<!-- Left Content -->
+<div class="flex flex-col gap-6 lg:pr-12">
+<div class="inline-flex items-center gap-2 glass-panel px-4 py-2 rounded-full w-fit mb-4 border-l border-t border-white/10">
+<span class="material-symbols-outlined text-secondary text-sm">auto_awesome</span>
+<span class="font-label-caps text-label-caps text-secondary tracking-widest uppercase">AI-Generated Worlds</span>
+</div>
+<h1 class="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+                        Turn your personality into a <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">living 3D universe.</span>
+</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-lg">
+                        AI transforms user interests, traits, goals, and colors into a unique 3D world. Experience your digital soul rendered in real-time cosmic fidelity.
+                    </p>
+<div class="flex flex-col sm:flex-row gap-4 mt-4">
+<button class="btn-primary-glow text-on-primary-container px-8 py-4 rounded-lg font-body-md text-body-md font-semibold flex items-center justify-center gap-2">
+                            Create My Universe
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+<button class="glass-panel text-on-surface px-8 py-4 rounded-lg font-body-md text-body-md font-medium hover:bg-surface-variant/50 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">play_circle</span>
+                            View Demo Galaxy
+                        </button>
+</div>
+<div class="mt-8 flex items-center gap-4 text-on-surface-variant font-label-caps text-label-caps">
+<div class="flex -space-x-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline/30"></div>
+<div class="w-8 h-8 rounded-full bg-surface-container border border-outline/30"></div>
+<div class="w-8 h-8 rounded-full bg-surface-bright border border-outline/30 flex items-center justify-center text-[10px]">+2k</div>
+</div>
+<p>Universes generated today</p>
+</div>
+</div>
+<!-- Right Visual -->
+<div class="relative h-[500px] lg:h-[600px] w-full flex items-center justify-center">
+<div class="ai-pulse-bg top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div>
+<!-- Main 3D Mockup Container -->
+<div class="relative w-full h-full rounded-2xl overflow-hidden glass-panel glass-panel-glow shadow-[0_0_50px_rgba(139,92,246,0.15)] flex items-center justify-center">
+<img alt="3D galaxy rendering" class="w-full h-full object-cover opacity-80 mix-blend-screen" data-alt="A stunning, high-resolution 3D rendering of a personal galaxy suspended in a dark, glowing void. The central core is a luminous, faceted crystal emitting neon purple and secondary cyan light. Several miniature planets with distinct textures orbit the core along thin, glowing orbital paths. The aesthetic is highly futuristic, emphasizing glassmorphism, ethereal lighting, and deep cosmic depth, perfectly matching a premium AI interface." src="https://lh3.googleusercontent.com/aida/ADBb0ujk0cJUbewyMy1XhafTpgq86QPI0yLKgXW6kOFJPpV6ziBR3Ft9dIAcUbt_WW1a22fm2sfjONPpntt8FbjpGSjwKqQrhdt_b9YA3nN94HkO_-52DrYBllSrDiTBI_4hfZCYf7-v8Ksm-tY7CSCFN80Asxl1Bw0sFxuztNknj9Tr70NSJOnF1Ddo-GbxLnrP_HxT_yCbEALfaYsG5DtxNih5YvJHVH9w9FnvYV9JYkgqGTMsAjgmgzS3MR4"/>
+<!-- Floating Glass Cards (Trait Bars) -->
+<div class="absolute top-12 left-8 glass-panel px-4 py-3 rounded-xl border border-white/10 w-48 animate-[bounce_4s_ease-in-out_infinite]">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-caps text-label-caps text-primary">Creativity</span>
+<span class="font-stat-lg text-[14px] text-on-surface">92%</span>
+</div>
+<div class="w-full h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary w-[92%] shimmer"></div>
+</div>
+</div>
+<div class="absolute bottom-20 right-8 glass-panel px-4 py-3 rounded-xl border border-white/10 w-52 animate-[bounce_5s_ease-in-out_infinite_reverse]">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-caps text-label-caps text-secondary">Logic Density</span>
+<span class="font-stat-lg text-[14px] text-on-surface">78%</span>
+</div>
+<div class="w-full h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[78%] shimmer"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- How it works Section -->
+<section class="py-24 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto relative">
+<div class="text-center mb-16 relative z-10">
+<h2 class="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface mb-4">
+                    Architecting <span class="text-primary">Your Soul</span>
+</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+                    A three-step neural translation from human experience to celestial manifestation.
+                </p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+<!-- Card 1 -->
+<div class="glass-panel glass-panel-glow rounded-xl p-8 flex flex-col gap-6 hover:bg-surface-variant/30 transition-all duration-300 group">
+<div class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center border border-primary/30 group-hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-2xl">edit_document</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Input your story</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                            Feed the core with your daily habits, long-term goals, favorite palettes, and personal milestones.
+                        </p>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-panel glass-panel-glow rounded-xl p-8 flex flex-col gap-6 hover:bg-surface-variant/30 transition-all duration-300 group relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center border border-secondary/30 group-hover:border-secondary transition-colors relative z-10">
+<span class="material-symbols-outlined text-secondary text-2xl">memory</span>
+</div>
+<div class="relative z-10">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">AI creates your DNA</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                            Our neural engine synthesizes your data into a unique cosmic genome, determining gravity, atmosphere, and mass.
+                        </p>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-panel glass-panel-glow rounded-xl p-8 flex flex-col gap-6 hover:bg-surface-variant/30 transition-all duration-300 group">
+<div class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center border border-tertiary/30 group-hover:border-tertiary transition-colors">
+<span class="material-symbols-outlined text-tertiary text-2xl">explore</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Explore your universe</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                            Navigate your generated galaxy in full 3D. Share your coordinates, or let it evolve as you update your life inputs.
+                        </p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Shared Component -->
+<footer class="bg-surface-container-lowest w-full py-12 border-t border-white/5 mt-20 relative z-20">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto gap-gutter">
+<div class="font-display-lg text-body-lg font-bold text-primary">
+                Personal Universe
+            </div>
+<div class="flex gap-6">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Terms</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Privacy</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Contact</a>
+</div>
+<div class="font-body-md text-body-md text-secondary">
+                © 2024 Personal Universe 3D. All rights reserved.
+            </div>
+</div>
+</footer>
+</body></html>
