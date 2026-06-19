@@ -14,11 +14,31 @@ import { Sun } from "./Sun";
 const AMBIENT_LIGHT_INTENSITY = 0.18;
 const MAXIMUM_ORBIT_INCLINATION_RADIANS = 0.14;
 
-function buildOrbitInclinations(seed: string, planetCount: number): number[] {
+// The world style gives each scene a distinct orbital character: flat ordered
+// rings vs scattered, tilted orbits. This applies to both the live preview and
+// the generated world (both carry theme = the chosen style), so the style
+// choice is visible without overriding the user's color palette.
+const THEME_ORBIT_INCLINATION_MULTIPLIERS: Record<string, number> = {
+  "cosmic-galaxy": 1,
+  nebula: 1.7,
+  crystal: 0.35,
+  aurora: 1.2,
+  "cyber-orbit": 0.2
+};
+const DEFAULT_ORBIT_INCLINATION_MULTIPLIER = 1;
+
+function orbitInclinationMultiplierForTheme(theme?: string): number {
+  if (theme && theme in THEME_ORBIT_INCLINATION_MULTIPLIERS) {
+    return THEME_ORBIT_INCLINATION_MULTIPLIERS[theme];
+  }
+  return DEFAULT_ORBIT_INCLINATION_MULTIPLIER;
+}
+
+function buildOrbitInclinations(seed: string, planetCount: number, inclinationMultiplier: number): number[] {
   const random = randomFromSeed(`${seed}-orbit-inclinations`);
   return Array.from(
     { length: planetCount },
-    () => (random() * 2 - 1) * MAXIMUM_ORBIT_INCLINATION_RADIANS
+    () => (random() * 2 - 1) * MAXIMUM_ORBIT_INCLINATION_RADIANS * inclinationMultiplier
   );
 }
 
@@ -39,9 +59,10 @@ export function SolarSystemRenderer({
   const planets = planetsFromScene(scene);
   const showPlanetLabels = scene.hud?.showLabels !== false;
 
+  const orbitInclinationMultiplier = orbitInclinationMultiplierForTheme(scene.theme);
   const orbitInclinations = useMemo(
-    () => buildOrbitInclinations(seed, planets.length),
-    [seed, planets.length]
+    () => buildOrbitInclinations(seed, planets.length, orbitInclinationMultiplier),
+    [seed, planets.length, orbitInclinationMultiplier]
   );
 
   return (

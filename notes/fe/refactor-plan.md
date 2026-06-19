@@ -8,7 +8,8 @@ Status: mark ✅ when the PR is merged into `staging`.
 
 | # | Branch | Priority | Status |
 |---|---|---|---|
-| 1 | `fix/fe/scene-render-consistency` | 🔴🔴 highest — visible bug | ⬜ |
+| 1 | `fix/fe/scene-render-consistency` | 🔴🔴 highest — visible bug | ✅ |
+| 1b | `feat/fe/mood-style-impact` | 🔴 highest — pairs with BE mood | ⬜ |
 | 2 | `feat/fe/unit-testing-setup` | 🔴 foundation | ⬜ |
 | 3 | `refactor/fe/typed-api-client` | 🔴 required before deploy | ⬜ |
 | 4 | `refactor/fe/form-validation` | 🔴 required before deploy | ⬜ |
@@ -80,6 +81,34 @@ Acceptance:
   star field and orbits).
 - `/share` renders the solar system for any published world.
 - `npm run test` covers the unified scene builder and the preview builder.
+
+## 1b. feat/fe/mood-style-impact
+
+Problem: the Atmospheric Mood and World Style controls did not stand out when
+selected, and neither changed the Live DNA preview — World Style was a plain
+`<select>` and Mood only reshuffled the seed.
+
+Work:
+
+- Make selection prominent: Mood and World Style are both button grids now
+  (ring + glow + scale + a check badge on the selected one); World Style is no
+  longer a dropdown.
+- Mood drives the preview's bloom, star density, motion and background via a
+  `MOOD_SCENE_PROFILES` map that mirrors the backend `moodSceneProfile`
+  (`feat/be/mood-scene-params`) exactly, so the preview and the generated world
+  react to mood in the same direction.
+- World Style drives the orbital character (orbit inclination multiplier per
+  theme) in the shared `SolarSystemRenderer`, so the style choice visibly
+  changes both the preview and the generated world without overriding the
+  user's color palette.
+- Tests: the mood profile mapping (energetic brighter/busier than reflective,
+  neutral fallback) and the mood background applied to the built preview.
+
+Pairs with BE `feat/be/mood-scene-params`; the mood mapping values are kept
+identical on both sides.
+
+Acceptance: clicking a Mood or World Style visibly changes the preview, and the
+selected control is unmistakable.
 
 ## 2. feat/fe/unit-testing-setup
 
