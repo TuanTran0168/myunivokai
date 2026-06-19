@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, ExternalLink, Loader2, Plus, Rocket } from "lucide-react";
+import { Copy, Download, ExternalLink, Loader2, RefreshCw, Rocket } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { exportSceneCanvasAsPng } from "@/lib/exportImage";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
@@ -169,92 +169,128 @@ export default function WorldPage({ params }: PageProps) {
   }
 
   return (
-    <main className="relative mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px]">
-      <section className="grid gap-4">
-        <div ref={sceneContainerReference} className="relative min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-cyan">
-          <button
-            type="button"
-            title="Export PNG"
-            onClick={exportSceneImage}
-            className="focus-ring absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/15 bg-surface-low/80 text-on-surface backdrop-blur hover:border-white/30"
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <UniverseCanvas
-            scene={activeScene}
-            className="h-full"
-            selectedPlanetKey={selectedPlanetKey}
-            onSelectPlanet={handleSelectPlanet}
-          />
-        </div>
-        <div className="glass-panel rounded-2xl p-5">
-          <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
-            {activeScene.sceneName || world.title || "Untitled universe"}
-          </h1>
-          {activeScene.archetype ? (
-            <p className="mt-1 font-mono text-xs uppercase tracking-widest text-secondary">{activeScene.archetype}</p>
-          ) : null}
-          {activeScene.quote ? (
-            <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
-          ) : null}
-          {world.summary ? <p className="mt-2 text-sm leading-6 text-on-surface-variant">{world.summary}</p> : null}
-        </div>
-      </section>
-
-      <aside className="grid content-start gap-4">
-        {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
-        {notice ? <StatusMessage>{notice}</StatusMessage> : null}
-        <PlanetDetailsPanel
-          planets={activeScenePlanets}
+    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+      {/* Full-bleed solar system: an in-flow hero on mobile, the command-deck
+          background on desktop. The ref wraps the canvas so Export captures it. */}
+      <div ref={sceneContainerReference} className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
+        <UniverseCanvas
+          scene={activeScene}
+          className="h-full"
           selectedPlanetKey={selectedPlanetKey}
           onSelectPlanet={handleSelectPlanet}
         />
-        <div className="glass-panel rounded-2xl p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="font-display text-base font-semibold text-on-surface">Variants</h2>
-            <button
-              type="button"
-              onClick={regenerateVariant}
-              disabled={action !== null}
-              title="Create variant"
-              className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-surface-bright text-on-surface hover:border-white/25 disabled:opacity-45"
-            >
-              {action === "variant" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-            </button>
-          </div>
-          {world.variants.length ? (
-            <VariantList world={world} activeVariantId={activeVariant?.id} busyVariantId={action === "select" ? activeVariant?.id : undefined} onSelect={selectCurrentVariant} />
-          ) : (
-            <p className="text-sm text-on-surface-variant">No variants yet.</p>
-          )}
-        </div>
+      </div>
 
-        <div className="glass-panel rounded-2xl p-4">
-          <h2 className="mb-3 font-display text-base font-semibold text-on-surface">Publish</h2>
-          <div className="grid gap-2">
-            <button
-              type="button"
-              onClick={publishWorld}
-              disabled={action !== null}
-              className="focus-ring btn-gradient inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 font-semibold disabled:opacity-45"
-            >
-              {action === "publish" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Rocket className="h-4 w-4" aria-hidden="true" />}
-              Publish
-            </button>
+      {/* HUD overlay — a normal scrolling column on mobile; on desktop it becomes
+          a pointer-transparent layer so orbit-drag passes through the gaps, while
+          each glass island re-enables pointer events. */}
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
+        {error || notice ? (
+          // Fixed to the viewport (not the overlay) so the toast always clears
+          // the 57px header by 1rem, regardless of the canvas/HUD stacking.
+          <div className="pointer-events-auto mx-auto w-full max-w-md lg:fixed lg:left-1/2 lg:top-[calc(57px+1rem)] lg:z-30 lg:-translate-x-1/2">
+            {error ? <StatusMessage tone="error">{error}</StatusMessage> : <StatusMessage>{notice}</StatusMessage>}
+          </div>
+        ) : null}
+
+        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left island: identity + variants */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">
+            <div className="glass-panel glass-panel-glow rounded-2xl p-5">
+              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+                {activeScene.sceneName || world.title || "Untitled universe"}
+              </h1>
+              {activeScene.archetype ? (
+                <p className="mt-1 font-mono text-xs uppercase tracking-widest text-secondary">{activeScene.archetype}</p>
+              ) : null}
+              {activeScene.quote ? (
+                <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
+              ) : null}
+              {world.summary ? <p className="mt-2 text-sm leading-6 text-on-surface-variant">{world.summary}</p> : null}
+            </div>
+
+            <div className="glass-panel rounded-2xl p-4">
+              <h2 className="mb-3 font-display text-base font-semibold text-on-surface">Variants</h2>
+              {world.variants.length ? (
+                <VariantList
+                  world={world}
+                  activeVariantId={activeVariant?.id}
+                  busyVariantId={action === "select" ? activeVariant?.id : undefined}
+                  onSelect={selectCurrentVariant}
+                />
+              ) : (
+                <p className="text-sm text-on-surface-variant">No variants yet.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Right island: World DNA (planets) + share */}
+          <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
+            <PlanetDetailsPanel
+              planets={activeScenePlanets}
+              selectedPlanetKey={selectedPlanetKey}
+              onSelectPlanet={handleSelectPlanet}
+            />
             {world.shareSlug ? (
-              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-white/10 bg-surface-low p-2">
-                <span className="truncate text-sm text-on-surface-variant">/share/worlds/{world.shareSlug}</span>
-                <button type="button" title="Copy" onClick={copyShareLink} className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface">
-                  {action === "copy" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
-                </button>
-                <Link href={`/share/worlds/${world.shareSlug}`} title="Open" className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface">
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                </Link>
+              <div className="glass-panel rounded-2xl p-4">
+                <h2 className="mb-3 font-display text-base font-semibold text-on-surface">Share</h2>
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-white/10 bg-surface-low p-2">
+                  <span className="truncate text-sm text-on-surface-variant">/share/worlds/{world.shareSlug}</span>
+                  <button
+                    type="button"
+                    title="Copy link"
+                    aria-label="Copy share link"
+                    onClick={copyShareLink}
+                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface"
+                  >
+                    {action === "copy" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                  </button>
+                  <Link
+                    href={`/share/worlds/${world.shareSlug}`}
+                    title="Open share page"
+                    aria-label="Open share page"
+                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface"
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </div>
               </div>
             ) : null}
           </div>
         </div>
-      </aside>
+
+        {/* Bottom-center action toolbar */}
+        <div className="pointer-events-auto mx-auto">
+          <div className="glass-panel glass-panel-glow flex flex-wrap items-center justify-center gap-2 rounded-2xl p-2">
+            <button
+              type="button"
+              onClick={regenerateVariant}
+              disabled={action !== null}
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25 disabled:opacity-45"
+            >
+              {action === "variant" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+              Regenerate Variant
+            </button>
+            <button
+              type="button"
+              onClick={exportSceneImage}
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Export Image
+            </button>
+            <button
+              type="button"
+              onClick={publishWorld}
+              disabled={action !== null}
+              className="focus-ring btn-gradient inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-45"
+            >
+              {action === "publish" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Rocket className="h-4 w-4" aria-hidden="true" />}
+              {world.shareSlug ? "Re-publish" : "Publish"}
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

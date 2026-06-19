@@ -32,6 +32,11 @@ const colorOptions = ["#8B5CF6", "#06B6D4", "#F97316", "#22C55E", "#F43F5E", "#E
 // instead of tearing down and recreating the GL context on every character.
 const PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS = 300;
 
+// The submit button is pinned in the rail footer, outside the <form> element, so
+// it stays visible while the field column scrolls; this id wires it back to the
+// form via the HTML `form` attribute.
+const CREATE_FORM_ELEMENT_ID = "create-universe-form";
+
 function useDebouncedValue<ValueType>(value: ValueType, delayMilliseconds: number): ValueType {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -124,48 +129,77 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-4 py-8 sm:px-6 lg:px-12">
+    <main className="relative lg:h-[calc(100vh-57px)] lg:overflow-hidden">
       <GeneratingOverlay isVisible={loading} />
-      <div className="pointer-events-none absolute left-[-120px] top-6 h-[420px] w-[420px] rounded-full bg-primary-container/20 blur-[90px]" />
-      <div className="pointer-events-none absolute bottom-[-180px] right-[-120px] h-[560px] w-[560px] rounded-full bg-secondary/15 blur-[90px]" />
 
-      <div className="relative z-10 mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col items-center">
-          <div className="relative flex w-full max-w-2xl items-center justify-between">
-            <div className="absolute left-0 top-4 h-px w-full bg-white/10" />
-            <div className="absolute left-0 top-4 h-0.5 w-1/3 bg-gradient-to-r from-primary-container to-secondary shadow-cyan" />
-            {["Identity", "Traits", "Finalize"].map((step, index) => (
-              <div key={step} className="relative flex flex-col items-center gap-2">
-                <div
-                  className={`grid h-8 w-8 place-items-center rounded-full border text-sm font-semibold ${
-                    index === 0
-                      ? "border-primary bg-surface-high text-primary shadow-glow"
-                      : index === 1
-                        ? "border-primary-container bg-primary-container text-[#23005c]"
-                        : "border-white/10 bg-surface-high text-on-surface-variant"
-                  }`}
-                >
-                  {index + 1}
-                </div>
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">{step}</span>
+      <div className="grid lg:h-full lg:grid-cols-[minmax(360px,40%)_1fr]">
+        {/* Canvas hero — the live solar system is the hero of the page. First on
+            mobile (a tall hero), the larger right column on desktop. */}
+        <div className="relative order-1 h-[44vh] min-h-[320px] lg:order-2 lg:h-full">
+          <UniverseCanvas scene={previewScene} className="h-full" />
+
+          <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-surface-lowest/60 px-3 py-1.5 backdrop-blur">
+            <Sparkles className="h-4 w-4 animate-pulse text-secondary" aria-hidden="true" />
+            <span className="font-display text-sm font-semibold tracking-wide text-on-surface">Live DNA Preview</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-secondary/70">syncing</span>
+          </div>
+
+          {/* Signature + palette HUD strip, overlaid on the canvas instead of a
+              separate card (DESIGN.md HUD-over-3D pattern). */}
+          <div className="glass-panel glass-panel-glow pointer-events-none absolute bottom-4 left-4 flex flex-col gap-2 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">Signature</span>
+              <span className="font-mono text-sm text-primary">
+                {payload.interests.slice(0, 2).join("-").toUpperCase()}-01
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">Palette</span>
+              <div className="flex gap-1">
+                {payload.favoriteColors.map((color) => (
+                  <span
+                    key={color}
+                    className="h-3.5 w-3.5 rounded-full border border-white/20"
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-12">
-          <section className="glass-panel rounded-2xl p-5 sm:p-8 lg:col-span-7">
-            <div className="mb-7">
-              <div className="mb-2 flex items-center gap-2 text-secondary">
-                <Wand2 className="h-5 w-5" aria-hidden="true" />
-                <span className="font-mono text-xs uppercase tracking-widest">Create Universe</span>
-              </div>
-              <h1 className="font-display text-4xl font-bold tracking-wide text-primary sm:text-5xl">Define Your Core</h1>
-              <p className="mt-3 text-on-surface-variant">Input parameters to initialize your personal 3D data space.</p>
+        {/* Form rail — second on mobile (full width), the slim left column on
+            desktop where only the field area scrolls. */}
+        <section className="relative z-10 order-2 flex flex-col bg-surface/60 backdrop-blur-xl lg:order-1 lg:h-full lg:overflow-hidden lg:border-r lg:border-white/10">
+          <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
+            <div className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              {["Identity", "Traits", "Finalize"].map((step, index) => (
+                <div key={step} className="flex items-center gap-2">
+                  <span
+                    className={`grid h-6 w-6 place-items-center rounded-full border text-xs font-semibold ${
+                      index === 0
+                        ? "border-primary bg-surface-high text-primary shadow-glow"
+                        : "border-white/10 bg-surface-high text-on-surface-variant"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">{step}</span>
+                  {index < 2 ? <span className="mx-1 h-px w-5 bg-white/10" aria-hidden="true" /> : null}
+                </div>
+              ))}
             </div>
+            <div className="mb-1 flex items-center gap-2 text-secondary">
+              <Wand2 className="h-4 w-4" aria-hidden="true" />
+              <span className="font-mono text-xs uppercase tracking-widest">Create Universe</span>
+            </div>
+            <h1 className="font-display text-3xl font-bold tracking-wide text-primary">Define Your Core</h1>
+            <p className="mt-2 text-sm text-on-surface-variant">Input parameters to initialize your personal 3D data space.</p>
+          </div>
 
-            <form className="grid gap-5" onSubmit={onSubmit}>
-              <div className="grid gap-4 md:grid-cols-2">
+          <div className="min-h-0 flex-1 lg:overflow-y-auto">
+            <form id={CREATE_FORM_ELEMENT_ID} className="grid gap-5 px-5 py-6 sm:px-7" onSubmit={onSubmit}>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2">
                   <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Nickname</span>
                   <input
@@ -262,7 +296,7 @@ export default function HomePage() {
 
               <div className="grid gap-3">
                 <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Atmospheric Mood</span>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3">
                   {moodOptions.map((option) => {
                     const selected = mood === option.value;
                     return (
@@ -294,7 +328,7 @@ export default function HomePage() {
 
               <div className="grid gap-3">
                 <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">World Style</span>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {styleOptions.map((option) => {
                     const selected = preferredWorldStyle === option.value;
                     return (
@@ -344,52 +378,23 @@ export default function HomePage() {
                   })}
                 </div>
               </div>
-
-              {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
-
-              <div className="flex justify-end pt-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="focus-ring btn-gradient inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-8 py-3 font-semibold transition disabled:cursor-wait disabled:opacity-70"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-                  Generate My 3D Universe
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
             </form>
-          </section>
+          </div>
 
-          <aside className="grid gap-6 lg:col-span-5">
-            <div className="glass-panel flex min-h-[420px] flex-col overflow-hidden rounded-2xl border-secondary/30 shadow-cyan">
-              <div className="flex items-center justify-between border-b border-white/5 bg-surface-lowest/50 p-5">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="h-5 w-5 animate-pulse text-secondary" aria-hidden="true" />
-                  <h2 className="font-display text-lg font-semibold tracking-wide text-on-surface">Live DNA Preview</h2>
-                </div>
-                <span className="font-mono text-xs text-secondary/70">SYNCING...</span>
-              </div>
-              <UniverseCanvas scene={previewScene} className="min-h-[360px] flex-1" />
-            </div>
-
-            <div className="glass-panel rounded-2xl p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Signature</span>
-                <span className="font-mono text-sm text-primary">{payload.interests.slice(0, 2).join("-").toUpperCase()}-01</span>
-              </div>
-              <div className="mb-3 h-px bg-white/5" />
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Active Palette</span>
-                <div className="flex gap-1">
-                  {payload.favoriteColors.map((color) => (
-                    <span key={color} className="h-4 w-4 rounded-full border border-white/20" style={{ backgroundColor: color }} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </aside>
-        </div>
+          <div className="grid gap-3 border-t border-white/10 bg-surface-lowest/60 px-5 py-4 sm:px-7">
+            {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+            <button
+              type="submit"
+              form={CREATE_FORM_ELEMENT_ID}
+              disabled={loading}
+              className="focus-ring btn-gradient inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 font-semibold transition disabled:cursor-wait disabled:opacity-70"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+              Generate My 3D Universe
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
       </div>
     </main>
   );
