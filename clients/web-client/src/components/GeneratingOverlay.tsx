@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
 
 const STATUS_MESSAGE_ROTATION_INTERVAL_MILLISECONDS = 2200;
 
 const GENERATION_STATUS_MESSAGES = [
-  "Analyzing your personality profile...",
-  "Generating your Personality DNA...",
-  "Forging a unique world seed...",
-  "Placing planets on their orbits...",
-  "Igniting the sun of your universe..."
+  "Reading your portrait...",
+  "Resolving your Personality DNA...",
+  "Seeding your universe...",
+  "Placing your worlds...",
+  "Curating the final view..."
 ];
 
 type GeneratingOverlayProps = {
@@ -43,23 +42,22 @@ export function GeneratingOverlay({ isVisible }: GeneratingOverlayProps) {
     <div className="fixed inset-0 z-[100] grid place-items-center bg-surface-lowest/90 backdrop-blur-md">
       <div className="flex flex-col items-center gap-8 px-6 text-center">
         <div className="relative h-36 w-36">
-          <div className="absolute inset-0 animate-[spin_6s_linear_infinite] rounded-full border border-primary/30" />
-          <div className="absolute inset-3 animate-[spin_4s_linear_infinite_reverse] rounded-full border border-secondary/40" />
+          <div className="absolute inset-0 animate-[spin_6s_linear_infinite] rounded-full border border-brass/30" />
+          <div className="absolute inset-3 animate-[spin_4s_linear_infinite_reverse] rounded-full border border-brass/15" />
           <div className="absolute inset-0 animate-[spin_6s_linear_infinite]">
-            <span className="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-primary shadow-glow" />
+            <span className="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-brass shadow-[0_0_10px_rgba(201,163,91,0.6)]" />
           </div>
           <div className="absolute inset-3 animate-[spin_4s_linear_infinite_reverse]">
-            <span className="absolute -bottom-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-secondary shadow-cyan" />
+            <span className="absolute -bottom-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.7)]" />
           </div>
           <div className="absolute inset-0 grid place-items-center">
-            <span className="h-10 w-10 animate-pulse rounded-full bg-gradient-to-br from-primary to-secondary shadow-glow" />
+            <span className="h-10 w-10 animate-pulse rounded-full bg-brass shadow-[0_0_24px_rgba(201,163,91,0.5)]" />
           </div>
         </div>
 
         <div className="grid gap-2">
-          <div className="flex items-center justify-center gap-2 text-secondary">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            <span className="font-mono text-xs uppercase tracking-widest">Creating your universe</span>
+          <div className="flex items-center justify-center gap-2 text-brass">
+            <span className="font-mono text-xs uppercase tracking-[0.2em]">Curating your universe</span>
           </div>
           <p className="min-h-7 text-lg font-semibold text-on-surface" aria-live="polite">
             {GENERATION_STATUS_MESSAGES[statusMessageIndex]}
