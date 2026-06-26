@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus } from "lucide-react";
 import { StatusMessage } from "@/components/StatusMessage";
 import { SavedWorldCard } from "@/features/gallery/SavedWorldCard";
 import { useSavedWorlds } from "@/features/gallery/useSavedWorlds";
@@ -24,11 +24,8 @@ export default function GalleryPage() {
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-secondary">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-            <span className="font-mono text-xs uppercase tracking-widest">Saved Worlds</span>
-          </div>
-          <h1 className="font-display text-4xl font-bold tracking-wide text-primary">Your Gallery</h1>
+          <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Saved Worlds</div>
+          <h1 className="font-display text-4xl font-semibold tracking-normal text-paper">Your Gallery</h1>
           <p className="mt-2 text-on-surface-variant">
             Universes you created on this device. They live in your browser storage.
           </p>

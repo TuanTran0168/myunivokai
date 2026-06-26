@@ -8,6 +8,7 @@ Status: mark ✅ when the PR is merged into `staging`.
 
 | # | Branch | Priority | Status |
 |---|---|---|---|
+| V | **Visual reskin V1–V6** (de-AI the chrome) — see §V below | 🔴🔴🔴 highest — supersedes the U visual language | ⬜ |
 | U1 | `feat/fe/ui-shell-and-tokens` | 🔴🔴🔴 highest — UI overhaul foundation | ⬜ |
 | U2 | `feat/fe/create-canvas-hero` | 🔴🔴🔴 highest — canvas-first create page | ⬜ |
 | U3 | `feat/fe/dashboard-hud` | 🔴🔴 high — command-deck world page | ⬜ |
@@ -22,6 +23,148 @@ Status: mark ✅ when the PR is merged into `staging`.
 | 7 | `feat/fe/share-page-ssr-metadata` | 🟡 social sharing | ⬜ |
 | 8 | `feat/fe/mobile-performance` | 🟡 weak devices | ⬜ |
 | 9 | `refactor/fe/cleanup-a11y` | 🟢 cleanup | ⬜ |
+
+## V. Visual Reskin Overhaul (V1–V6) — de-AI the chrome
+
+Goal: kill the "looks fake / AI-generated" *surface* and reach the Apple /
+supercar-interior / interior-design bar the product is benchmarked against —
+**without re-architecting the canvas-hero layout (U1–U4 stays) and without any
+behavior change.** Same form state, same payload, same API calls, same scene
+builder, same handlers, same pointer-events choreography. Only tokens, chrome
+surfaces, copy, and iconography change. Every V-branch must keep all gates green
+(`npm run typecheck && lint && build && test`).
+
+This **supersedes the cosmic "command deck" visual language** that U1–U4
+introduced. U1–U4 fixed the *layout* (canvas as hero — that is genuinely good
+and is kept); they did **not** touch the visual language, and that language is
+the actual "AI template" tell. The look V kills (read from the code, not
+guessed):
+
+- the purple→cyan 45° CTA gradient — `globals.css:64` `.btn-gradient`
+  `linear-gradient(45deg,#a078ff,#4cd7f6)`, the single most recognizable
+  AI-startup signature, repeated on every CTA;
+- **uniform** glassmorphism as a reflex on every surface — `globals.css:48`
+  `.glass-panel` (`rgba(15,23,42,.72)` + `blur(20px)` + white/10 top-lit border).
+  *(The chosen Vitrine direction brings glass back deliberately as one defined
+  Liquid-Glass material on floating islands — see below. V kills the
+  frost-everything reflex, not glass itself.)*;
+- decorative glow — `tailwind.config.ts:50-52` `shadow-glow`/`shadow-cyan`,
+  `globals.css:56` `.glass-panel-glow`;
+- ambient pulsing orbs — `.pulse-bg` + the two orbs mounted in `layout.tsx`;
+- the `.chip-shimmer` "AI is thinking" sweep;
+- the **Material-Design-3 default token vocabulary** copied verbatim
+  (`surface`/`on-surface`/`primary-container`/`*-fixed`) — the fingerprint of an
+  untouched theme-builder export;
+- HUD-cosplay microcopy — `page.tsx:144` "syncing", `:151` the fake
+  `INTEREST-INTEREST-01` "Signature", `:197` "initialize your personal 3D data
+  space", and the theatrical `GeneratingOverlay` phrases ("Forging a unique
+  world seed…");
+- `Sparkles`/`Wand2` "magic AI" iconography on the create header and submit.
+
+### The constraint that decides the direction (verified in code)
+
+The 3D canvas background is **deterministic per atmospheric mood**, mirrored from
+the Go backend: `lib/scene.ts:190-195` `MOOD_SCENE_PROFILES` →
+focused `#050816`, dreamy `#0b0720`, energetic `#140712`, reflective `#04070c`
+(↔ `internal/services/mood_scene_profile.go`), fed into the palette at
+`scene.ts:332`. It is **seed-locked and cannot be recolored without breaking the
+determinism brand promise.**
+
+Consequence: a **warm-paper or warm-graphite** chrome (the editorial "Atlas" and
+automotive "Coachwork" directions) would wrap a *cool* dreamy/reflective world in
+*warm* chrome on every generation and read as two unrelated apps stapled
+together — and you cannot fix it without diverging from Go or breaking seed-lock.
+So the chrome must be **dark and neutral.** That rules out 3 of the 5 explored
+directions on engineering grounds, not taste. (Full exploration: a 5-direction /
+3-judge design study; the dark-neutral finalists were "Observatory" and "The
+Vitrine".)
+
+### Chosen direction (LOCKED 2026-06-26): The Vitrine + Liquid Glass
+
+A warm true-black **gallery** that mounts the universe like a masterwork: a single
+**brass** metallic accent (`#C9A35B`), an **editorial serif masthead** (production
+self-hosts a Didone — Fraunces/Playfair — via `next/font`; CSP-safe), brass
+small-caps placard labels, a **vermillion** live dot, and the engraved
+**accession placard** ("UNIVERSE NO. 0XX · CURATED FROM …") leading the identity.
+
+The chrome is **Apple-style Liquid Glass, not flat frosted glassmorphism.** The
+world goes **full-bleed**; the form rail, identity, and caption become **floating
+glass islands** hovering above it. The material is deliberate and used *only* on
+those floating islands — never the old reflex of frosting every surface:
+
+- a translucent dark tint kept **very transparent** (≈`rgba(16,15,20,0.30–0.34)`)
+  so the live world reads through it;
+- `backdrop-filter: blur(26px) saturate(160%) brightness(1.05)` — the
+  `saturate`/`brightness` are what make it *refract* the per-mood world behind it
+  (the move only works because the canvas is the live thing behind the glass);
+- a bright **specular** top-left edge + a faint brass inner rule;
+- a soft, large shadow that **lifts** each island off the world.
+
+The two warmth grafts still apply: the **planet caption-plate** (name + brass
+rule + meaning line) and the **accession placard** replacing the fake
+`Signature: INTEREST-INTEREST-01` tag.
+
+Why this still escapes the AI look despite using glass: the tell was never "blur"
+— it was *uniform* frost + `white/10` borders on every element with no light
+interaction. Here glass is **one named material, on floating islands only, over a
+full-bleed live world, with real specular + lift** — the Apple bar the product is
+benchmarked against. The purple→cyan gradient, glow shadows, pulse orbs, shimmer,
+and the MD3 token vocabulary are still deleted.
+
+> **Reference:** the create-page Liquid-Glass mockup approved 2026-06-26 (warm
+> true-black, brass, serif, very-transparent floating glass rail over the
+> full-bleed world). The Observatory matte "instrument deck" remains the
+> documented fallback **if the glass proves too heavy on weak devices** — V6 /
+> mobile-perf gates `backdrop-filter` behind the existing `qualityProfile`
+> (reduce blur radius / drop `saturate` on low-end).
+
+### Token map (current → house system)
+
+| Current | New | Note |
+|---|---|---|
+| `surface` `#0e1323` | `mount` `#0B0B0E` | Warm near-black island base (under the glass tint) |
+| `surface-lowest` `#080d1d` | `void` `#08080A` | Page ground behind the full-bleed world |
+| `surface-low`/`-container`/`-high`/`-bright` (4 navy steps) | `card` `#131217` / hover `#1A181E` | Tonal navy steps → warm-black levels |
+| `on-surface` `#dee1f9` | `paper` `#F2EEE6` | Warm gallery-white, not cool default white |
+| `on-surface-variant`/`outline`/`outline-variant` | `grey` `#B6B0A4` / `faint` `#807868` / `hairline` `rgba(255,255,255,.10)` | Out of MD3 vocabulary; AA-checked |
+| `primary`/`primary-container` (`#a078ff`) | `brass` `#C9A35B` | One brass metallic accent replaces the gradient |
+| `secondary`/`secondary-container` (cyan) | **removed**; `vermillion` `#E0573A` for the live dot only | Deletes the two-stop gradient |
+| `primary`/`*-fixed`/`on-*-fixed` (MD3) | **removed** | The theme-builder fingerprint |
+| `boxShadow.glow`/`boxShadow.cyan` | **removed**; one soft neutral *lift* shadow for floating glass | Emphasis = brass rule + value contrast, not neon |
+| `.glass-panel` (flat 20px frost + white/10) | **`liquid-glass` material**: very-transparent tint + `blur+saturate+brightness` + specular edge + lift | Deliberate; floating islands only |
+| `fontFamily.display` (Space Grotesk) | editorial **serif** (self-hosted Didone in prod) | Gallery masthead voice |
+| `label-caps` (0.1em mono-upper) | **brass small-caps** labels (kept — on-brand for the gallery) | Vitrine *keeps* engraved caps; mono stays for data |
+| body `#050816` + feTurbulence noise | `void #08080A`, no grain | Warm gallery ground, not cosmic void |
+
+### Branch sequence (one concern per branch, off `staging`)
+
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| V1 | `feat/fe/v-foundation-tokens` | `tailwind.config.ts` + `globals.css` only: remap/rename tokens to the warm-black + brass house system, define the **`liquid-glass`** material (very transparent) + `btn-brass`, neutralize `.pulse-bg`/`.chip-shimmer`/noise, recolor `.btn-gradient`→solid brass + `.focus-ring`→brass, serif `display` font. **Shim: keep old token names + utility classes resolving to the new look so no page reflows mid-migration.** | ⬜ |
+| V2 | `feat/fe/v-shell-and-deck` | `layout.tsx` shell: remove the two pulse orbs, matte graphite header/footer + hairline, **keep the documented 57px header offset contract.** | ⬜ |
+| V3 | `feat/fe/v-create-reskin` | `app/page.tsx` chrome: glass rail → matte panel, sentence-case labels, drop `Sparkles`/`Wand2`, placard + honest SEED·BODIES readout, stepper → quiet serif chapter numerals, ink swatches/CTA. **Preserve every field, handler, the debounced preview, and the canvas-hero split-grid byte-for-byte.** | ⬜ |
+| V4 | `feat/fe/v-dashboard-hud-reskin` | World page + `PlanetDetailsPanel` + `VariantList`: HUD islands → opaque graphite plates (keep pointer-events choreography exactly), **graft the planet caption-plate**, solid-ink bars. Preserve the PNG export ref + all action handlers. | ⬜ |
+| V5 | `feat/fe/v-share-gallery-reskin` | Share + gallery + `SavedWorldCard` + `GeneratingOverlay`: **graft the engraved accession placard**, matte gallery cards with mono SEED/CREATED data line, one-shot scan loader + terse copy (keep `aria-live`). | ⬜ |
+| V6 | `feat/fe/v-scene-coherence-tune` | **Optional, last.** Retint `UniverseCanvas.tsx:95` bottom fade → `deck`; *if* the scene still over-glows against matte chrome, lower the bloom **scale** — note bloom is seed-derived (`scene.ts:319-321` → `postFX.bloomIntensity`, fallback `DEFAULT_BLOOM_INTENSITY` in `PostEffects.tsx`), so scale globally, do **not** rewire the seed→bloom mapping. **Do NOT touch `MOOD_SCENE_PROFILES` backgrounds — determinism + the seed-locked per-mood void are preserved.** | ⬜ |
+
+### Acceptance (V overhaul)
+
+- [ ] No purple→cyan gradient, no `.pulse-bg`/`.chip-shimmer`, no
+      `shadow-glow`/`shadow-cyan`, no `Sparkles`/`Wand2`, no MD3 `*-fixed` tokens.
+      Glass appears **only** as the one defined `liquid-glass` material on floating
+      islands — never flat frost on every surface.
+- [ ] The live world is the luminous element; chrome is one Liquid-Glass material
+      + brass hairlines, floating above the full-bleed canvas.
+- [ ] Every planet shows a name + meaning caption-plate; the world shows a
+      curatorial accession placard, not the fake "Signature" tag.
+- [ ] Canvas-hero layout, all form fields, handlers, the debounced preview, the
+      pointer-events choreography, the PNG export ref, and the 57px header
+      contract are byte-for-byte unchanged.
+- [ ] WCAG AA contrast holds (paper `#F2F0EA` ~15:1 on deck; `grey #9A968C`
+      ≥4.5:1; amber/brass used as signal/large only); `prefers-reduced-motion`
+      freezes the one-shot scan and the live dot.
+- [ ] Determinism intact: no change to `MOOD_SCENE_PROFILES`, no `Math.random`
+      in scene code.
 
 ## UI Overhaul (U1–U4) — TOP PRIORITY
 
