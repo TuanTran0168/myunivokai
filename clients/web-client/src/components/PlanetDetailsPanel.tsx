@@ -29,7 +29,7 @@ export function PlanetDetailsPanel({ planets, selectedPlanetKey, onSelectPlanet 
   );
 
   return (
-    <div className="glass-panel rounded-2xl p-4">
+    <div className="glass-panel glass-rise rounded-2xl p-4">
       <div className="mb-3 flex items-center gap-2">
         <Orbit className="h-4 w-4 text-brass" aria-hidden="true" />
         <h2 className="font-display text-base font-semibold text-paper">World DNA</h2>

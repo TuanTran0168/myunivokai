@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Link from "next/link";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -62,6 +63,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </footer>
         </div>
+
+        {/* Liquid-Glass toasts: brief, auto-dismissing, cleared below the 57px
+            header. Styled in globals.css (.lg-toast). */}
+        <Toaster
+          position="top-center"
+          theme="dark"
+          duration={2600}
+          offset="72px"
+          toastOptions={{ className: "lg-toast" }}
+        />
       </body>
     </html>
   );
