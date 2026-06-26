@@ -31,8 +31,8 @@ export function PlanetDetailsPanel({ planets, selectedPlanetKey, onSelectPlanet 
   return (
     <div className="glass-panel rounded-2xl p-4">
       <div className="mb-3 flex items-center gap-2">
-        <Orbit className="h-4 w-4 text-secondary" aria-hidden="true" />
-        <h2 className="font-display text-base font-semibold text-on-surface">Planets</h2>
+        <Orbit className="h-4 w-4 text-brass" aria-hidden="true" />
+        <h2 className="font-display text-base font-semibold text-paper">World DNA</h2>
       </div>
 
       <ul className="grid gap-2">
@@ -64,12 +64,14 @@ export function PlanetDetailsPanel({ planets, selectedPlanetKey, onSelectPlanet 
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary-container to-secondary"
+                    className="h-full rounded-full bg-brass"
                     style={{ width: `${energyValue}%` }}
                   />
                 </div>
                 {isSelected && planet.meaning ? (
-                  <p className="mt-3 text-sm leading-6 text-on-surface-variant">{planet.meaning}</p>
+                  // Caption-plate: the planet's meaning, set off by a brass rule —
+                  // "every planet maps to a real input with a stated meaning".
+                  <p className="mt-3 border-t border-brass/25 pt-3 text-sm leading-6 text-grey">{planet.meaning}</p>
                 ) : null}
               </button>
             </li>

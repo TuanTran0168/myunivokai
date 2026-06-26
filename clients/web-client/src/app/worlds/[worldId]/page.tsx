@@ -197,12 +197,12 @@ export default function WorldPage({ params }: PageProps) {
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">
             <div className="glass-panel glass-panel-glow rounded-2xl p-5">
-              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+              {activeScene.archetype ? (
+                <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-brass">{activeScene.archetype}</p>
+              ) : null}
+              <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {activeScene.sceneName || world.title || "Untitled universe"}
               </h1>
-              {activeScene.archetype ? (
-                <p className="mt-1 font-mono text-xs uppercase tracking-widest text-secondary">{activeScene.archetype}</p>
-              ) : null}
               {activeScene.quote ? (
                 <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
               ) : null}
