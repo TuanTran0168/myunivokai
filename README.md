@@ -81,9 +81,9 @@ Open http://localhost:3000. The FE calls the API through
 `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080/api/v1`, example env
 in `clients/web-client/.env.example`).
 
-Create a world from the form, then open its page to see the 3D scene. Note:
-the landing page shows an abstract preview; the full solar system renders only
-for a real world.
+Create a world from the form — the Live DNA Preview renders a solar system that
+updates live with your inputs (palette, mood, interests, traits), and submitting
+opens the generated world on its own page.
 
 ## Run with Docker Compose
 
@@ -102,11 +102,13 @@ This starts PostgreSQL, runs goose migrations, then serves the API on port
 cd services/universe-service && go test ./... && go vet ./...
 
 # Frontend
-cd clients/web-client && npm run typecheck && npm run lint && npm run build
+cd clients/web-client && npm run typecheck && npm run lint && npm run test && npm run build
 ```
 
-Backend tests always use the mock provider — no real AI calls.
-CI (GitHub Actions) runs both suites on every PR into `staging`/`main`.
+Backend tests always use the mock provider — no real AI calls. CI (GitHub
+Actions) runs the Go test suite plus the frontend typecheck, lint, and build on
+every PR into `staging`/`main`. (The frontend vitest suite runs locally; wiring
+it into CI is tracked in `notes/fe/refactor-plan.md`.)
 
 ## Documentation
 
