@@ -152,7 +152,7 @@ export default function WorldPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <main className="mx-auto grid min-h-[calc(100vh-57px)] w-full max-w-7xl place-items-center px-4 py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
         <StatusMessage tone="loading">Loading world...</StatusMessage>
       </main>
     );
@@ -160,16 +160,17 @@ export default function WorldPage({ params }: PageProps) {
 
   if (!world) {
     return (
-      <main className="mx-auto grid min-h-[calc(100vh-57px)] w-full max-w-7xl place-items-center px-4 py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
         <StatusMessage tone="error">{error || "World not found"}</StatusMessage>
       </main>
     );
   }
 
   return (
-    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
       {/* Full-bleed solar system: an in-flow hero on mobile, the command-deck
-          background on desktop. The ref wraps the canvas so Export captures it. */}
+          background on desktop (bleeds behind the glass header). The ref wraps
+          the canvas so Export captures it. */}
       <div ref={sceneContainerReference} className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
         <UniverseCanvas
           scene={activeScene}
@@ -182,7 +183,7 @@ export default function WorldPage({ params }: PageProps) {
       {/* HUD overlay — a normal scrolling column on mobile; on desktop it becomes
           a pointer-transparent layer so orbit-drag passes through the gaps, while
           each glass island re-enables pointer events. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-0 lg:top-[57px]">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">
@@ -256,7 +257,7 @@ export default function WorldPage({ params }: PageProps) {
               type="button"
               onClick={regenerateVariant}
               disabled={action !== null}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25 disabled:opacity-45"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25 disabled:opacity-45"
             >
               {action === "variant" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               Regenerate Variant
@@ -264,7 +265,7 @@ export default function WorldPage({ params }: PageProps) {
             <button
               type="button"
               onClick={exportSceneImage}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
               Export Image

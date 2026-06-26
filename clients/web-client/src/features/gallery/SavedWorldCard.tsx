@@ -32,7 +32,7 @@ export function SavedWorldCard({ world, onRemove }: SavedWorldCardProps) {
   const paletteStripColors = scenePalette.slice(0, PALETTE_STRIP_COLOR_COUNT);
 
   return (
-    <div className="glass-panel glass-lift group relative overflow-hidden rounded-2xl border border-white/10 transition hover:border-white/25">
+    <div className="glass-panel glass-lift glass-rise group relative overflow-hidden rounded-2xl border border-white/10 transition hover:border-white/25">
       <Link href={`/worlds/${world.id}`} className="focus-ring block">
         {/* Palette specimen strip — solid swatches, not a gradient bar. */}
         <div className="flex h-2 w-full">
