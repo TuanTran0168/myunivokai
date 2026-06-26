@@ -28,8 +28,8 @@
   --hairline: rgba(255, 255, 255, 0.10);
 
   /* The one Liquid-Glass material (very transparent so the live world reads through) */
-  --glass-tint: rgba(16, 15, 20, 0.32);
-  --glass-blur: blur(26px) saturate(160%) brightness(1.05);
+  --glass-tint: rgba(15, 14, 19, 0.30);
+  --glass-blur: blur(30px) saturate(180%) brightness(1.07);
 }
 
 * {
@@ -170,9 +170,51 @@ textarea {
   content: none;
 }
 
+/* ---------- Liquid-Glass motion (Apple-style) ---------- */
+.glass-panel,
+.liquid-glass {
+  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Entrance: floating glass islands settle up into place. */
+@keyframes glass-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.glass-rise {
+  animation: glass-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Interactive glass lifts toward the viewer on hover/focus. */
+.glass-lift:hover,
+.glass-lift:focus-visible {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(201, 163, 91, 0.16),
+    0 40px 90px -26px rgba(0, 0, 0, 0.85);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn-brass:active,
   .btn-gradient:active {
+    transform: none;
+  }
+  .glass-rise {
+    animation: none;
+  }
+  .glass-panel,
+  .liquid-glass,
+  .glass-lift:hover,
+  .glass-lift:focus-visible {
+    transition: none;
     transform: none;
   }
 }

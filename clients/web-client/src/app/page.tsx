@@ -129,47 +129,44 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
       <GeneratingOverlay isVisible={loading} />
 
-      <div className="grid lg:h-full lg:grid-cols-[minmax(360px,40%)_1fr]">
-        {/* Canvas hero — the live solar system is the hero of the page. First on
-            mobile (a tall hero), the larger right column on desktop. */}
-        <div className="relative order-1 h-[44vh] min-h-[320px] lg:order-2 lg:h-full">
-          <UniverseCanvas scene={previewScene} className="h-full" />
+      {/* Full-bleed live world: a tall hero on mobile, the immersive background on
+          desktop so the preview owns the screen and the rail floats over it. */}
+      <div className="relative h-[46vh] min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full">
+        <UniverseCanvas scene={previewScene} className="h-full" />
 
-          <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-mount/60 px-3 py-1.5 backdrop-blur">
+        {/* Floating identity island (desktop): live state, the curatorial
+            accession, and the palette — opposite the form rail. */}
+        <div className="glass-panel glass-panel-glow glass-rise pointer-events-none absolute right-5 top-5 hidden w-[290px] flex-col gap-3 rounded-2xl px-4 py-3.5 lg:flex">
+          <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-grey">Live preview</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-grey">Live preview</span>
           </div>
-
-          {/* Accession placard, overlaid on the canvas: the curatorial identity of
-              the world forming from the inputs (HUD-over-3D pattern). */}
-          <div className="glass-panel glass-panel-glow pointer-events-none absolute bottom-4 left-4 flex flex-col gap-2 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-brass">Curated from</span>
-              <span className="font-mono text-sm text-paper">
-                {payload.interests.slice(0, 3).join(" · ")}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-brass">Palette</span>
-              <div className="flex gap-1">
-                {payload.favoriteColors.map((color) => (
-                  <span
-                    key={color}
-                    className="h-3.5 w-3.5 rounded-full border border-white/20"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Curated from</div>
+            <div className="mt-1 font-mono text-sm text-paper">{payload.interests.slice(0, 3).join(" · ")}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Palette</span>
+            <div className="flex gap-1.5">
+              {payload.favoriteColors.map((color) => (
+                <span
+                  key={color}
+                  className="h-3.5 w-3.5 rounded-full border border-white/20"
+                  style={{ backgroundColor: color }}
+                />
+              ))}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Form rail — second on mobile (full width), the slim left column on
-            desktop where only the field area scrolls. */}
-        <section className="relative z-10 order-2 flex flex-col bg-mount/45 backdrop-blur-xl lg:order-1 lg:h-full lg:overflow-hidden lg:border-r lg:border-white/10 lg:shadow-[1px_0_0_0_rgba(201,163,91,0.16)]">
+      {/* Floating Liquid-Glass form rail: an in-flow card on mobile (pulled up over
+          the hero), a floating glass island on the left on desktop where only the
+          field column scrolls. */}
+      <section className="glass-panel glass-panel-glow glass-rise relative z-10 -mt-10 mx-3 mb-3 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-6 lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
           <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
             <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Curate</div>
             <h1 className="font-display text-3xl font-semibold text-paper">A portrait of you.</h1>
@@ -360,7 +357,7 @@ export default function HomePage() {
             </form>
           </div>
 
-          <div className="grid gap-3 border-t border-white/10 bg-void/50 px-5 py-4 sm:px-7">
+          <div className="grid gap-3 border-t border-white/10 px-5 py-4 sm:px-7">
             {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
             <button
               type="submit"
@@ -373,8 +370,7 @@ export default function HomePage() {
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-        </section>
-      </div>
+      </section>
     </main>
   );
 }
