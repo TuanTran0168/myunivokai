@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Plus, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, Plus } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
@@ -13,17 +13,17 @@ import { buildPreviewSceneConfig } from "@/lib/scene";
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
 const moodOptions = [
-  { label: "Cybernetic", value: "focused", gradient: "from-[#0f172a] to-[#3b82f6]" },
-  { label: "Nebula", value: "dreamy", gradient: "from-[#1e1b4b] to-[#a855f7]" },
-  { label: "Solar", value: "energetic", gradient: "from-[#422006] to-[#eab308]" },
-  { label: "Void", value: "reflective", gradient: "from-[#450a0a] to-[#ef4444]" }
+  { label: "Cybernetic", value: "focused", swatch: "#3b82f6" },
+  { label: "Nebula", value: "dreamy", swatch: "#a855f7" },
+  { label: "Solar", value: "energetic", swatch: "#eab308" },
+  { label: "Void", value: "reflective", swatch: "#ef4444" }
 ];
 const styleOptions = [
-  { label: "Cosmic", value: "cosmic-galaxy", gradient: "from-[#1e1b4b] to-[#8B5CF6]" },
-  { label: "Nebula", value: "nebula", gradient: "from-[#1e1b4b] to-[#a855f7]" },
-  { label: "Crystal", value: "crystal", gradient: "from-[#0c4a6e] to-[#22d3ee]" },
-  { label: "Aurora", value: "aurora", gradient: "from-[#064e3b] to-[#34d399]" },
-  { label: "Cyber Orbit", value: "cyber-orbit", gradient: "from-[#082f49] to-[#38bdf8]" }
+  { label: "Cosmic", value: "cosmic-galaxy", swatch: "#8B5CF6" },
+  { label: "Nebula", value: "nebula", swatch: "#a855f7" },
+  { label: "Crystal", value: "crystal", swatch: "#22d3ee" },
+  { label: "Aurora", value: "aurora", swatch: "#34d399" },
+  { label: "Cyber Orbit", value: "cyber-orbit", swatch: "#38bdf8" }
 ];
 const colorOptions = ["#8B5CF6", "#06B6D4", "#F97316", "#22C55E", "#F43F5E", "#EAB308"];
 
@@ -138,23 +138,22 @@ export default function HomePage() {
         <div className="relative order-1 h-[44vh] min-h-[320px] lg:order-2 lg:h-full">
           <UniverseCanvas scene={previewScene} className="h-full" />
 
-          <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-surface-lowest/60 px-3 py-1.5 backdrop-blur">
-            <Sparkles className="h-4 w-4 animate-pulse text-secondary" aria-hidden="true" />
-            <span className="font-display text-sm font-semibold tracking-wide text-on-surface">Live DNA Preview</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-secondary/70">syncing</span>
+          <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-mount/60 px-3 py-1.5 backdrop-blur">
+            <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-grey">Live preview</span>
           </div>
 
-          {/* Signature + palette HUD strip, overlaid on the canvas instead of a
-              separate card (DESIGN.md HUD-over-3D pattern). */}
+          {/* Accession placard, overlaid on the canvas: the curatorial identity of
+              the world forming from the inputs (HUD-over-3D pattern). */}
           <div className="glass-panel glass-panel-glow pointer-events-none absolute bottom-4 left-4 flex flex-col gap-2 rounded-xl px-4 py-3">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">Signature</span>
-              <span className="font-mono text-sm text-primary">
-                {payload.interests.slice(0, 2).join("-").toUpperCase()}-01
+              <span className="font-mono text-[10px] uppercase tracking-widest text-brass">Curated from</span>
+              <span className="font-mono text-sm text-paper">
+                {payload.interests.slice(0, 3).join(" · ")}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">Palette</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-brass">Palette</span>
               <div className="flex gap-1">
                 {payload.favoriteColors.map((color) => (
                   <span
@@ -170,38 +169,18 @@ export default function HomePage() {
 
         {/* Form rail — second on mobile (full width), the slim left column on
             desktop where only the field area scrolls. */}
-        <section className="relative z-10 order-2 flex flex-col bg-surface/60 backdrop-blur-xl lg:order-1 lg:h-full lg:overflow-hidden lg:border-r lg:border-white/10">
+        <section className="relative z-10 order-2 flex flex-col bg-mount/45 backdrop-blur-xl lg:order-1 lg:h-full lg:overflow-hidden lg:border-r lg:border-white/10 lg:shadow-[1px_0_0_0_rgba(201,163,91,0.16)]">
           <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
-            <div className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1">
-              {["Identity", "Traits", "Finalize"].map((step, index) => (
-                <div key={step} className="flex items-center gap-2">
-                  <span
-                    className={`grid h-6 w-6 place-items-center rounded-full border text-xs font-semibold ${
-                      index === 0
-                        ? "border-primary bg-surface-high text-primary shadow-glow"
-                        : "border-white/10 bg-surface-high text-on-surface-variant"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">{step}</span>
-                  {index < 2 ? <span className="mx-1 h-px w-5 bg-white/10" aria-hidden="true" /> : null}
-                </div>
-              ))}
-            </div>
-            <div className="mb-1 flex items-center gap-2 text-secondary">
-              <Wand2 className="h-4 w-4" aria-hidden="true" />
-              <span className="font-mono text-xs uppercase tracking-widest">Create Universe</span>
-            </div>
-            <h1 className="font-display text-3xl font-bold tracking-wide text-primary">Define Your Core</h1>
-            <p className="mt-2 text-sm text-on-surface-variant">Input parameters to initialize your personal 3D data space.</p>
+            <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Curate</div>
+            <h1 className="font-display text-3xl font-semibold text-paper">A portrait of you.</h1>
+            <p className="mt-2 text-sm text-grey">Your details are mounted as a world that is exactly, only, yours.</p>
           </div>
 
           <div className="min-h-0 flex-1 lg:overflow-y-auto">
             <form id={CREATE_FORM_ELEMENT_ID} className="grid gap-5 px-5 py-6 sm:px-7" onSubmit={onSubmit}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2">
-                  <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Nickname</span>
+                  <span className="font-mono text-xs uppercase tracking-widest text-brass">Nickname</span>
                   <input
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
@@ -211,7 +190,7 @@ export default function HomePage() {
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Primary Role</span>
+                  <span className="font-mono text-xs uppercase tracking-widest text-brass">Primary Role</span>
                   <input
                     value={role}
                     onChange={(event) => setRole(event.target.value)}
@@ -223,7 +202,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Core Interests</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Core Interests</span>
                 <div className="flex flex-wrap gap-2">
                   {interestOptions.map((item) => {
                     const selected = interests.includes(item);
@@ -250,7 +229,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Traits</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Traits</span>
                 <div className="flex flex-wrap gap-2">
                   {traitOptions.map((item) => {
                     const selected = traits.includes(item);
@@ -273,7 +252,7 @@ export default function HomePage() {
               </div>
 
               <label className="grid gap-2">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Goal</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Goal</span>
                 <textarea
                   value={goal}
                   onChange={(event) => setGoal(event.target.value)}
@@ -284,7 +263,7 @@ export default function HomePage() {
               </label>
 
               <label className="grid gap-2">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Hidden Challenge</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Hidden Challenge</span>
                 <input
                   value={challenge}
                   onChange={(event) => setChallenge(event.target.value)}
@@ -295,7 +274,7 @@ export default function HomePage() {
               </label>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Atmospheric Mood</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Atmospheric Mood</span>
                 <div className="grid grid-cols-2 gap-3">
                   {moodOptions.map((option) => {
                     const selected = mood === option.value;
@@ -312,12 +291,12 @@ export default function HomePage() {
                         }`}
                       >
                         {selected ? (
-                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-secondary text-[#001b1b]">
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-brass text-ink">
                             <Check className="h-3 w-3" aria-hidden="true" />
                           </span>
                         ) : null}
-                        <span className={`mb-2 block h-8 rounded bg-gradient-to-r ${option.gradient}`} />
-                        <span className={`text-sm ${selected ? "font-semibold text-secondary" : "text-on-surface"}`}>
+                        <span className="mb-2 block h-8 rounded" style={{ backgroundColor: option.swatch }} />
+                        <span className={`text-sm ${selected ? "font-semibold text-brass" : "text-on-surface"}`}>
                           {option.label}
                         </span>
                       </button>
@@ -327,7 +306,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">World Style</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">World Style</span>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {styleOptions.map((option) => {
                     const selected = preferredWorldStyle === option.value;
@@ -344,12 +323,12 @@ export default function HomePage() {
                         }`}
                       >
                         {selected ? (
-                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-primary text-[#23005c]">
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-brass text-ink">
                             <Check className="h-3 w-3" aria-hidden="true" />
                           </span>
                         ) : null}
-                        <span className={`mb-2 block h-8 rounded bg-gradient-to-r ${option.gradient}`} />
-                        <span className={`text-sm ${selected ? "font-semibold text-primary" : "text-on-surface"}`}>
+                        <span className="mb-2 block h-8 rounded" style={{ backgroundColor: option.swatch }} />
+                        <span className={`text-sm ${selected ? "font-semibold text-brass" : "text-on-surface"}`}>
                           {option.label}
                         </span>
                       </button>
@@ -359,7 +338,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-2">
-                <span className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">Palette</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">Palette</span>
                 <div className="flex flex-wrap gap-2">
                   {colorOptions.map((color) => {
                     const selected = favoriteColors.includes(color);
@@ -381,16 +360,16 @@ export default function HomePage() {
             </form>
           </div>
 
-          <div className="grid gap-3 border-t border-white/10 bg-surface-lowest/60 px-5 py-4 sm:px-7">
+          <div className="grid gap-3 border-t border-white/10 bg-void/50 px-5 py-4 sm:px-7">
             {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
             <button
               type="submit"
               form={CREATE_FORM_ELEMENT_ID}
               disabled={loading}
-              className="focus-ring btn-gradient inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 font-semibold transition disabled:cursor-wait disabled:opacity-70"
+              className="focus-ring btn-brass inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold uppercase tracking-[0.04em] transition disabled:cursor-wait disabled:opacity-70"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-              Generate My 3D Universe
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              Curate this universe
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
