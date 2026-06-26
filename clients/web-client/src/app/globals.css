@@ -2,10 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* House design system — "The Vitrine + Liquid Glass" (notes/fe/refactor-plan.md §V).
+   V1 SHIM: legacy utility classes (.glass-panel / .btn-gradient / .input-dark /
+   .pulse-bg / .chip-shimmer) are redefined in place so every page adopts the new
+   look without touching component markup. New canonical utilities (.liquid-glass,
+   .btn-brass) are added for later V-branches to migrate onto. */
+
 :root {
   color-scheme: dark;
-  background: #050816;
-  color: #dee1f9;
+  background: #08080A;
+  color: #F2EEE6;
+
+  /* House palette (CSS custom properties for component use) */
+  --void: #08080A;
+  --mount: #0B0B0E;
+  --card: #131217;
+  --card-hover: #1A181E;
+  --paper: #F2EEE6;
+  --grey: #B6B0A4;
+  --faint: #807868;
+  --brass: #C9A35B;
+  --brass-soft: rgba(201, 163, 91, 0.5);
+  --vermillion: #E0573A;
+  --ink: #1B1402;
+  --hairline: rgba(255, 255, 255, 0.10);
+
+  /* The one Liquid-Glass material (very transparent so the live world reads through) */
+  --glass-tint: rgba(16, 15, 20, 0.32);
+  --glass-blur: blur(26px) saturate(160%) brightness(1.05);
 }
 
 * {
@@ -17,14 +41,12 @@ body {
   min-height: 100%;
 }
 
-/* Level 0 (DESIGN.md): deep space navy with a faint fractal-noise texture to
-   prevent gradient banding. Ambient glow now lives in animated shell orbs
-   (.pulse-bg) instead of a static body gradient. */
+/* Warm gallery ground (no SVG grain) — most pages are covered by the full-bleed
+   3D world; this is the void it sits in. */
 body {
   margin: 0;
-  background-color: #050816;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-  color: #dee1f9;
+  background-color: #08080A;
+  color: #F2EEE6;
   font-family: var(--font-inter), sans-serif;
 }
 
@@ -40,100 +62,117 @@ textarea {
 }
 
 .focus-ring:focus-visible {
-  outline-color: #4cd7f6;
+  outline-color: var(--brass);
 }
 
-/* Level 1: Surface Glass — 20px backdrop blur, 1px white border with a brighter
-   top edge to simulate a distant light source. */
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+/* ---------- The Liquid-Glass material ---------- */
+/* Canonical class for floating islands (rail / identity / caption / HUD panels).
+   Apply over the live world: it refracts and saturates the per-mood background,
+   carries a specular top-left edge, a faint brass inner rule, and a soft lift. */
+.liquid-glass {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 42%),
+    var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    0 30px 70px -22px rgba(0, 0, 0, 0.7);
+}
+
+/* SHIM: the old "frost everything" panel now resolves to the Liquid-Glass material.
+   (Components keep their .glass-panel class; only the material changes.) */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top-color: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 42%),
+    var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
-/* Level 3: floating panels — add an inner top highlight + soft purple light
-   emission for the highest-elevation cards (HUD overlays, modals). */
+/* Highest-elevation islands get a touch more lift + brass edge. */
 .glass-panel-glow {
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-    0 0 40px rgba(160, 120, 255, 0.12);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(201, 163, 91, 0.14),
+    0 36px 80px -24px rgba(0, 0, 0, 0.82);
 }
 
+/* ---------- Brass controls ---------- */
+/* Canonical solid-brass button (engraved dark label, square-ish, no gradient). */
+.btn-brass {
+  background: var(--brass);
+  color: var(--ink);
+  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+}
+
+.btn-brass:hover {
+  filter: brightness(1.07);
+}
+
+.btn-brass:active {
+  transform: translateY(1px);
+}
+
+/* SHIM: the old purple→cyan gradient CTA now resolves to solid brass. */
 .btn-gradient {
-  background: linear-gradient(45deg, #a078ff, #4cd7f6);
-  box-shadow: 0 4px 15px rgba(160, 120, 255, 0.4);
-  color: #23005c;
+  background: var(--brass);
+  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  color: var(--ink);
 }
 
 .btn-gradient:hover {
-  filter: brightness(1.1);
-  transform: scale(1.02);
+  filter: brightness(1.07);
 }
 
+.btn-gradient:active {
+  transform: translateY(1px);
+}
+
+/* SHIM: glassy input → translucent field with a brass focus rule. */
 .input-dark {
-  background: rgba(8, 13, 29, 0.82);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.22);
 }
 
 .input-dark:focus {
-  border-color: #4cd7f6;
-  box-shadow: 0 0 0 1px rgba(76, 215, 246, 0.25), inset 0 0 18px rgba(0, 0, 0, 0.22);
+  border-color: var(--brass);
+  box-shadow: 0 0 0 1px rgba(201, 163, 91, 0.32);
 }
 
-/* AI Pulse (DESIGN.md): a slow-pulsing blurred gradient orb that signals system
-   "thought". Mounted at the shell to give every page weightless cosmic depth. */
+/* ---------- Removed decorations (neutralized for the shim) ---------- */
+/* Ambient pulsing orbs: the look V kills. Hidden here; the markup in layout.tsx
+   is removed in V2 (feat/fe/v-shell-and-deck). */
 .pulse-bg {
-  position: fixed;
-  border-radius: 9999px;
-  filter: blur(80px);
-  opacity: 0.15;
-  pointer-events: none;
-  z-index: -10;
-  animation: pulse-slow 8s infinite alternate ease-in-out;
+  display: none;
 }
 
-@keyframes pulse-slow {
-  0% {
-    transform: scale(1);
-    opacity: 0.1;
-  }
-  100% {
-    transform: scale(1.2);
-    opacity: 0.22;
-  }
-}
-
-/* Shimmer for chips that represent active AI-generated content. */
+/* "AI is thinking" shimmer sweep: removed. */
 .chip-shimmer {
   position: relative;
   overflow: hidden;
 }
 
 .chip-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: -50%;
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent);
-  transform: rotate(45deg);
-  animation: shimmer 3s infinite linear;
+  content: none;
 }
 
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%) rotate(45deg);
-  }
-  100% {
-    transform: translateX(100%) rotate(45deg);
-  }
-}
-
-/* Respect users who ask for less motion: freeze the ambient/decorative loops. */
 @media (prefers-reduced-motion: reduce) {
-  .pulse-bg,
-  .chip-shimmer::after {
-    animation: none;
+  .btn-brass:active,
+  .btn-gradient:active {
+    transform: none;
   }
 }
