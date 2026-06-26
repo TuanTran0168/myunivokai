@@ -117,6 +117,7 @@ textarea {
   background: var(--brass);
   color: var(--ink);
   box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
 
 .btn-brass:hover {
@@ -124,7 +125,7 @@ textarea {
 }
 
 .btn-brass:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.97);
 }
 
 /* SHIM: the old purple→cyan gradient CTA now resolves to solid brass. */
@@ -132,6 +133,7 @@ textarea {
   background: var(--brass);
   box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
   color: var(--ink);
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
 
 .btn-gradient:hover {
@@ -139,7 +141,7 @@ textarea {
 }
 
 .btn-gradient:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.97);
 }
 
 /* SHIM: glassy input → translucent field with a brass focus rule. */
@@ -213,6 +215,21 @@ textarea {
   animation: glass-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+/* Page transition: each route cross-fades in (re-mounted by app/template.tsx).
+   Opacity-only so it never becomes a containing block for fixed backdrops. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-enter {
+  animation: page-enter 380ms ease both;
+}
+
 /* Interactive glass lifts toward the viewer on hover/focus. */
 .glass-lift:hover,
 .glass-lift:focus-visible {
@@ -281,5 +298,8 @@ textarea {
   }
   .tappable:active {
     transform: none;
+  }
+  .page-enter {
+    animation: none;
   }
 }

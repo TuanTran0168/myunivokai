@@ -129,7 +129,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
       <GeneratingOverlay isVisible={loading} />
 
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
@@ -139,7 +139,7 @@ export default function HomePage() {
 
         {/* Floating identity island (desktop): live state, the curatorial
             accession, and the palette — opposite the form rail. */}
-        <div className="glass-panel glass-panel-glow glass-rise pointer-events-none absolute right-5 top-5 hidden w-[290px] flex-col gap-3 rounded-2xl px-4 py-3.5 lg:flex">
+        <div className="glass-panel glass-panel-glow glass-rise pointer-events-none absolute right-5 top-[72px] hidden w-[290px] flex-col gap-3 rounded-2xl px-4 py-3.5 lg:flex">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-grey">Live preview</span>
@@ -166,7 +166,7 @@ export default function HomePage() {
       {/* Floating Liquid-Glass form rail: an in-flow card on mobile (pulled up over
           the hero), a floating glass island on the left on desktop where only the
           field column scrolls. */}
-      <section className="glass-panel glass-panel-glow glass-rise relative z-10 mx-3 mb-4 mt-4 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-6 lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
+      <section className="glass-panel glass-panel-glow glass-rise relative z-10 mx-3 mb-4 mt-4 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
           <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
             <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Curate</div>
             <h1 className="font-display text-3xl font-semibold text-paper">A portrait of you.</h1>

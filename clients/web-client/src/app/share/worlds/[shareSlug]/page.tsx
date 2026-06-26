@@ -53,7 +53,7 @@ export default function ShareWorldPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <main className="mx-auto grid min-h-[calc(100vh-57px)] w-full max-w-7xl place-items-center px-4 py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
         <StatusMessage tone="loading">Loading shared world...</StatusMessage>
       </main>
     );
@@ -61,14 +61,14 @@ export default function ShareWorldPage({ params }: PageProps) {
 
   if (!world) {
     return (
-      <main className="mx-auto grid min-h-[calc(100vh-57px)] w-full max-w-7xl place-items-center px-4 py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
         <StatusMessage tone="error">{error || "Shared world not found"}</StatusMessage>
       </main>
     );
   }
 
   return (
-    <main className="relative flex min-h-[calc(100vh-57px)] flex-col lg:block lg:h-[calc(100vh-57px)] lg:overflow-hidden">
+    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
       {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
           on desktop. Clicking a planet focuses the camera (read-only view state). */}
       <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
@@ -82,7 +82,7 @@ export default function ShareWorldPage({ params }: PageProps) {
 
       {/* HUD overlay — a scrolling column on mobile; on desktop a pointer-through
           layer so orbit-drag passes between the floating glass islands. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-0 lg:top-[57px]">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">

@@ -9,6 +9,7 @@ import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { resolveSceneRenderer } from "@/features/scene-renderers/registry";
 import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
 import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
+import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
 import { PlanetPositionTrackerContext } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 
@@ -68,7 +69,7 @@ export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPl
       >
         <color attach="background" args={[backgroundColor]} />
         <PlanetPositionTrackerContext.Provider value={planetPositionTrackerReference.current}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<CanvasLoader />}>
             <SceneRenderer
               scene={scene ?? {}}
               seed={seed}
