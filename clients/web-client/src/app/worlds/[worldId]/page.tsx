@@ -257,7 +257,7 @@ export default function WorldPage({ params }: PageProps) {
               type="button"
               onClick={regenerateVariant}
               disabled={action !== null}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25 disabled:opacity-45"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25 disabled:opacity-45"
             >
               {action === "variant" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               Regenerate Variant
@@ -265,7 +265,7 @@ export default function WorldPage({ params }: PageProps) {
             <button
               type="button"
               onClick={exportSceneImage}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface transition hover:border-white/25"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
               Export Image
