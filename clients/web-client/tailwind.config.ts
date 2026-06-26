@@ -1,42 +1,62 @@
 import type { Config } from "tailwindcss";
 
-// Mirrors notes/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md.
-// These are the single source of truth for the cosmic "command deck" look; the
-// UI-overhaul branches (U1-U4) compose layouts from these tokens rather than
-// reaching for raw hex values or ad-hoc text-[..] sizes.
+// House design system — "The Vitrine + Liquid Glass" (notes/fe/refactor-plan.md §V).
+//
+// V1 (feat/fe/v-foundation-tokens) is a SHIM migration: the legacy Material-Design-3
+// token NAMES (surface / on-surface / primary-container / *-fixed / secondary ...)
+// are kept so existing components keep compiling, but their VALUES are remapped to
+// the warm-true-black + single-brass house palette. Later V-branches migrate call
+// sites onto the new house names below, and a final cleanup deletes the legacy
+// aliases. Until then nothing reflows mid-migration — only the look changes.
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        surface: "#0e1323",
-        "surface-lowest": "#080d1d",
-        "surface-low": "#161b2b",
-        "surface-container": "#1a1f30",
-        "surface-high": "#25293a",
-        "surface-bright": "#34394a",
-        "on-surface": "#dee1f9",
-        "on-surface-variant": "#cbc3d7",
-        outline: "#958ea0",
-        "outline-variant": "#494454",
-        primary: "#d0bcff",
-        "primary-container": "#a078ff",
-        "primary-fixed": "#e9ddff",
-        "on-primary-fixed": "#23005c",
-        secondary: "#4cd7f6",
-        "secondary-container": "#03b5d3",
-        "secondary-fixed": "#acedff",
-        "on-secondary-fixed": "#001f26",
-        tertiary: "#eec200",
-        error: "#ffb4ab",
-        "error-container": "#93000a"
+        // ---- House palette (new names; prefer these going forward) ----
+        void: "#08080A", // page ground behind the full-bleed world
+        mount: "#0B0B0E", // warm near-black island base (under the glass tint)
+        card: "#131217",
+        "card-hover": "#1A181E",
+        paper: "#F2EEE6", // warm gallery-white
+        grey: "#B6B0A4",
+        faint: "#807868",
+        brass: "#C9A35B", // the single metallic accent
+        "brass-deep": "#A8843F",
+        vermillion: "#E0573A", // the live dot only
+        ink: "#1B1402", // engraved dark label on brass fills
+        hairline: "rgba(255,255,255,0.10)",
+
+        // ---- Legacy MD3 names (SHIM: remapped to the house palette) ----
+        surface: "#0B0B0E",
+        "surface-lowest": "#08080A",
+        "surface-low": "#131217",
+        "surface-container": "#15141A",
+        "surface-high": "#1A181E",
+        "surface-bright": "#222028",
+        "on-surface": "#F2EEE6",
+        "on-surface-variant": "#B6B0A4",
+        outline: "#807868",
+        "outline-variant": "#2A2730",
+        primary: "#C9A35B",
+        "primary-container": "#C9A35B",
+        "primary-fixed": "#E7D6AE",
+        "on-primary-fixed": "#1B1402",
+        secondary: "#C9A35B",
+        "secondary-container": "#A8843F",
+        "secondary-fixed": "#E7D6AE",
+        "on-secondary-fixed": "#1B1402",
+        tertiary: "#C9A35B",
+        error: "#E86A52",
+        "error-container": "#5A1B10"
       },
       fontSize: {
-        "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "0.05em", fontWeight: "700" }],
-        "display-lg-mobile": ["32px", { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "700" }],
-        "headline-md": ["24px", { lineHeight: "1.3", letterSpacing: "0.02em", fontWeight: "600" }],
+        "display-lg": ["48px", { lineHeight: "1.05", letterSpacing: "0", fontWeight: "600" }],
+        "display-lg-mobile": ["32px", { lineHeight: "1.1", letterSpacing: "0", fontWeight: "600" }],
+        "headline-md": ["24px", { lineHeight: "1.2", letterSpacing: "0", fontWeight: "600" }],
         "body-lg": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
-        "label-caps": ["12px", { lineHeight: "1", letterSpacing: "0.1em", fontWeight: "500" }],
+        // Engraved brass small-caps label — kept (on-brand for the gallery voice).
+        "label-caps": ["11px", { lineHeight: "1", letterSpacing: "0.2em", fontWeight: "600" }],
         "stat-lg": ["28px", { lineHeight: "1", fontWeight: "600" }]
       },
       maxWidth: {
@@ -47,12 +67,22 @@ const config: Config = {
         "margin-desktop": "48px",
         gutter: "24px"
       },
+      borderRadius: {
+        glass: "22px"
+      },
       boxShadow: {
-        glow: "0 0 24px rgba(160, 120, 255, 0.28)",
-        cyan: "0 0 24px rgba(76, 215, 246, 0.22)"
+        // Emphasis is value contrast + brass rule + a soft LIFT, never neon glow.
+        lift: "0 30px 70px -22px rgba(0,0,0,0.7)",
+        "brass-lift": "0 8px 22px -8px rgba(201,163,91,0.55)",
+        // Legacy names (SHIM: remapped from violet/cyan halos to the neutral lift).
+        glow: "0 30px 70px -22px rgba(0,0,0,0.7)",
+        cyan: "0 30px 70px -22px rgba(0,0,0,0.7)"
       },
       fontFamily: {
-        display: ["var(--font-space-grotesk)", "var(--font-inter)", "sans-serif"],
+        // Editorial serif masthead (production self-hosts a Didone via next/font;
+        // until then a high-quality serif system stack carries the voice).
+        display: ['"Iowan Old Style"', '"Palatino Linotype"', "Palatino", '"Book Antiqua"', "Georgia", "serif"],
+        serif: ['"Iowan Old Style"', '"Palatino Linotype"', "Palatino", '"Book Antiqua"', "Georgia", "serif"],
         body: ["var(--font-inter)", "sans-serif"],
         mono: ["var(--font-jetbrains-mono)", "monospace"]
       }

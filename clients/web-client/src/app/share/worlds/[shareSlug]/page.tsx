@@ -88,11 +88,18 @@ export default function ShareWorldPage({ params }: PageProps) {
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
             <div className="glass-panel glass-panel-glow rounded-2xl p-5">
               {world.archetype ? (
-                <p className="mb-1 font-mono text-xs uppercase tracking-widest text-secondary">{world.archetype}</p>
+                <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-brass">{world.archetype}</p>
               ) : null}
-              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+              <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {world.title || "Shared universe"}
               </h1>
+              {planets.length ? (
+                // Engraved accession placard — the world's identity as curatorial
+                // wall-text, in place of the old fake "Signature" tag.
+                <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-brass">
+                  Curated from {planets.slice(0, 3).map((planet) => planet.name).filter(Boolean).join(" · ")}
+                </p>
+              ) : null}
               {world.quote ? (
                 <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{world.quote}&rdquo;</p>
               ) : null}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, ExternalLink, Loader2, RefreshCw, Rocket } from "lucide-react";
+import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
 import { exportSceneCanvasAsPng } from "@/lib/exportImage";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
@@ -23,7 +24,6 @@ export default function WorldPage({ params }: PageProps) {
   const [world, setWorld] = useState<World | null>(null);
   const [activeVariantId, setActiveVariantId] = useState<string>();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"variant" | "publish" | "select" | "copy" | null>(null);
   const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
@@ -83,15 +83,13 @@ export default function WorldPage({ params }: PageProps) {
 
   async function regenerateVariant() {
     setAction("variant");
-    setError("");
-    setNotice("");
     try {
       const variant = await api.regenerateVariant(params.worldId);
       await loadWorld();
       setActiveVariantId(variant.id);
-      setNotice("Variant created.");
+      toast.success("Variant created.");
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setAction(null);
     }
@@ -99,15 +97,13 @@ export default function WorldPage({ params }: PageProps) {
 
   async function selectCurrentVariant(variant: WorldVariant) {
     setAction("select");
-    setError("");
-    setNotice("");
     setActiveVariantId(variant.id);
     try {
       await api.selectVariant(params.worldId, variant.id);
       await loadWorld();
-      setNotice("Variant selected.");
+      toast.success("Variant selected.");
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setAction(null);
     }
@@ -115,17 +111,15 @@ export default function WorldPage({ params }: PageProps) {
 
   async function publishWorld() {
     setAction("publish");
-    setError("");
-    setNotice("");
     try {
       await api.publishWorld(params.worldId);
       // Publish returns only the share slug, not a full world. Re-fetch so the
       // world keeps its variants/planets (otherwise the canvas falls back to the
       // abstract renderer) and picks up the new shareSlug.
       await loadWorld();
-      setNotice("World published.");
+      toast.success("World published.");
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setAction(null);
     }
@@ -134,7 +128,11 @@ export default function WorldPage({ params }: PageProps) {
   function exportSceneImage() {
     const exportFileName = `myunivokai-${activeScene.sceneName ?? world?.id ?? "universe"}`;
     const exportSucceeded = exportSceneCanvasAsPng(sceneContainerReference.current, exportFileName);
-    setNotice(exportSucceeded ? "Image exported." : "Could not export image.");
+    if (exportSucceeded) {
+      toast.success("Image exported.");
+    } else {
+      toast.error("Could not export image.");
+    }
   }
 
   async function copyShareLink() {
@@ -144,9 +142,9 @@ export default function WorldPage({ params }: PageProps) {
     setAction("copy");
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/share/worlds/${world.shareSlug}`);
-      setNotice("Share link copied.");
+      toast.success("Share link copied.");
     } catch {
-      setNotice("Share link ready.");
+      toast("Share link ready.");
     } finally {
       setAction(null);
     }
@@ -185,24 +183,16 @@ export default function WorldPage({ params }: PageProps) {
           a pointer-transparent layer so orbit-drag passes through the gaps, while
           each glass island re-enables pointer events. */}
       <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-0">
-        {error || notice ? (
-          // Fixed to the viewport (not the overlay) so the toast always clears
-          // the 57px header by 1rem, regardless of the canvas/HUD stacking.
-          <div className="pointer-events-auto mx-auto w-full max-w-md lg:fixed lg:left-1/2 lg:top-[calc(57px+1rem)] lg:z-30 lg:-translate-x-1/2">
-            {error ? <StatusMessage tone="error">{error}</StatusMessage> : <StatusMessage>{notice}</StatusMessage>}
-          </div>
-        ) : null}
-
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">
-            <div className="glass-panel glass-panel-glow rounded-2xl p-5">
-              <h1 className="font-display text-2xl font-semibold tracking-wide text-primary">
+            <div className="glass-panel glass-panel-glow glass-rise rounded-2xl p-5">
+              {activeScene.archetype ? (
+                <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-brass">{activeScene.archetype}</p>
+              ) : null}
+              <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {activeScene.sceneName || world.title || "Untitled universe"}
               </h1>
-              {activeScene.archetype ? (
-                <p className="mt-1 font-mono text-xs uppercase tracking-widest text-secondary">{activeScene.archetype}</p>
-              ) : null}
               {activeScene.quote ? (
                 <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
               ) : null}
@@ -261,7 +251,7 @@ export default function WorldPage({ params }: PageProps) {
 
         {/* Bottom-center action toolbar */}
         <div className="pointer-events-auto mx-auto">
-          <div className="glass-panel glass-panel-glow flex flex-wrap items-center justify-center gap-2 rounded-2xl p-2">
+          <div className="glass-panel glass-panel-glow glass-rise flex flex-wrap items-center justify-center gap-2 rounded-2xl p-2">
             <button
               type="button"
               onClick={regenerateVariant}

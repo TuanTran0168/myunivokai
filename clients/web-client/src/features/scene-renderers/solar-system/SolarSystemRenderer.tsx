@@ -12,20 +12,24 @@ import { SolarPlanet, orbitRadiusForPlanet } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
 const AMBIENT_LIGHT_INTENSITY = 0.18;
-const MAXIMUM_ORBIT_INCLINATION_RADIANS = 0.14;
+// Headroom for orbital tilt. Kept high so the world-style contrast below is
+// clearly visible (a steeply scattered nebula vs flat, precise cyber rings),
+// not a few near-identical degrees.
+const MAXIMUM_ORBIT_INCLINATION_RADIANS = 0.42;
 
 // The world style gives each scene a distinct orbital character: flat ordered
-// rings vs scattered, tilted orbits. This applies to both the live preview and
-// the generated world (both carry theme = the chosen style), so the style
-// choice is visible without overriding the user's color palette.
+// rings vs steeply scattered, tilted orbits. This applies to both the live
+// preview and the generated world (both carry theme = the chosen style), so the
+// style choice is visible without overriding the user's color palette. The
+// spread is deliberately wide so switching styles is obvious at a glance.
 const THEME_ORBIT_INCLINATION_MULTIPLIERS: Record<string, number> = {
-  "cosmic-galaxy": 1,
-  nebula: 1.7,
-  crystal: 0.35,
-  aurora: 1.2,
-  "cyber-orbit": 0.2
+  "cosmic-galaxy": 0.8, // gentle galactic tilt
+  nebula: 2, // chaotic, steeply scattered planes
+  crystal: 0.12, // near-flat, ordered lattice
+  aurora: 1.3, // flowing, clearly tilted
+  "cyber-orbit": 0.05 // flat, precise concentric rings
 };
-const DEFAULT_ORBIT_INCLINATION_MULTIPLIER = 1;
+const DEFAULT_ORBIT_INCLINATION_MULTIPLIER = 0.8;
 
 function orbitInclinationMultiplierForTheme(theme?: string): number {
   if (theme && theme in THEME_ORBIT_INCLINATION_MULTIPLIERS) {
