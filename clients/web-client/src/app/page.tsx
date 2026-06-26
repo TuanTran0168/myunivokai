@@ -166,16 +166,16 @@ export default function HomePage() {
       {/* Floating Liquid-Glass form rail: an in-flow card on mobile (pulled up over
           the hero), a floating glass island on the left on desktop where only the
           field column scrolls. */}
-      <section className="glass-panel glass-panel-glow glass-rise relative z-10 -mt-10 mx-3 mb-3 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-6 lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
+      <section className="glass-panel glass-panel-glow glass-rise relative z-10 mx-3 mb-4 mt-4 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-6 lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
           <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
             <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Curate</div>
             <h1 className="font-display text-3xl font-semibold text-paper">A portrait of you.</h1>
             <p className="mt-2 text-sm text-grey">Your details are mounted as a world that is exactly, only, yours.</p>
           </div>
 
-          <div className="min-h-0 flex-1 lg:overflow-y-auto">
+          <div className="rail-scroll min-h-0 flex-1 overflow-x-hidden lg:overflow-y-auto">
             <form id={CREATE_FORM_ELEMENT_ID} className="grid gap-5 px-5 py-6 sm:px-7" onSubmit={onSubmit}>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4">
                 <label className="grid gap-2">
                   <span className="font-mono text-xs uppercase tracking-widest text-brass">Nickname</span>
                   <input
@@ -208,7 +208,7 @@ export default function HomePage() {
                         key={item}
                         type="button"
                         onClick={() => setInterests((current) => toggleItem(current, item, 3, 8))}
-                        className={`focus-ring rounded-full border px-4 py-1.5 text-sm transition ${
+                        className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
                             ? "border-primary/50 bg-primary/20 text-primary shadow-glow"
                             : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
@@ -235,7 +235,7 @@ export default function HomePage() {
                         key={item}
                         type="button"
                         onClick={() => setTraits((current) => toggleItem(current, item, 3, 6))}
-                        className={`focus-ring rounded-full border px-4 py-1.5 text-sm capitalize transition ${
+                        className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm capitalize ${
                           selected
                             ? "border-secondary/50 bg-secondary/15 text-secondary shadow-cyan"
                             : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
@@ -281,7 +281,7 @@ export default function HomePage() {
                         type="button"
                         onClick={() => setMood(option.value)}
                         aria-pressed={selected}
-                        className={`focus-ring glass-panel relative rounded-xl border-2 p-3 text-center transition ${
+                        className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
                             ? "scale-[1.03] border-secondary bg-secondary/15 shadow-cyan ring-2 ring-secondary/40"
                             : "border-transparent hover:border-white/20"
@@ -313,7 +313,7 @@ export default function HomePage() {
                         type="button"
                         onClick={() => setPreferredWorldStyle(option.value)}
                         aria-pressed={selected}
-                        className={`focus-ring glass-panel relative rounded-xl border-2 p-3 text-center transition ${
+                        className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
                             ? "scale-[1.03] border-primary bg-primary/15 shadow-glow ring-2 ring-primary/40"
                             : "border-transparent hover:border-white/20"
@@ -347,7 +347,7 @@ export default function HomePage() {
                         aria-label={color}
                         aria-pressed={selected}
                         onClick={() => toggleColor(color)}
-                        className={`focus-ring h-10 w-10 rounded-xl border transition ${selected ? "scale-[1.06] border-primary ring-2 ring-primary/30" : "border-white/15 hover:border-white/30"}`}
+                        className={`focus-ring tappable h-10 w-10 rounded-xl border ${selected ? "scale-[1.06] border-primary ring-2 ring-primary/30" : "border-white/15 hover:border-white/30"}`}
                         style={{ backgroundColor: color }}
                       />
                     );
