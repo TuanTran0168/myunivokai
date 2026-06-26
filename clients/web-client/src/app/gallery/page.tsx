@@ -14,14 +14,14 @@ export default function GalleryPage() {
 
   if (isLoading) {
     return (
-      <main className="mx-auto grid min-h-[calc(100vh-57px)] w-full max-w-7xl place-items-center px-4 py-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
         <StatusMessage tone="loading">Loading your saved worlds...</StatusMessage>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-7xl px-4 pb-12 pt-[76px] sm:px-6">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Saved Worlds</div>
