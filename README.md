@@ -5,6 +5,21 @@ My universe, okay? You describe yourself in a short form, AI distills it into a
 and the frontend renders your own solar system in 3D with three.js. You can
 regenerate variants, keep a gallery, and publish a public share link.
 
+## Live
+
+| What | URL |
+| --- | --- |
+| Web (production, Vercel) | <https://myunivokai.vercel.app> |
+| API (production, Render) | <https://myunivokai.onrender.com/api/v1> |
+| API health check | <https://myunivokai.onrender.com/api/v1/healthz> |
+| Swagger UI (local development only) | <http://localhost:8080/swagger/index.html> |
+
+Swagger documents internal endpoints, so the route is only mounted outside
+production (`internal/handlers/router.go`) — on Render (`APP_ENV=production`)
+it intentionally returns 404. The Render free plan sleeps after ~15 minutes of
+inactivity; the first request after that takes up to ~50 seconds to wake the
+API.
+
 ## How it works
 
 ```txt
@@ -61,6 +76,8 @@ Health checks and Swagger:
 curl http://localhost:8080/api/v1/healthz   # liveness
 curl http://localhost:8080/api/v1/readyz    # readiness (pings the store)
 # http://localhost:8080/swagger/index.html  (disabled in production)
+
+curl https://myunivokai.onrender.com/api/v1/healthz   # production liveness
 ```
 
 Regenerate Swagger after changing handlers/models:
@@ -114,6 +131,7 @@ it into CI is tracked in `notes/fe/refactor-plan.md`.)
 
 - `notes/README.md` — index of internal docs (git convention, coding style, FE/BE architecture)
 - `notes/fe/threejs-scene-architecture.md` — how three.js is used and how to add new scene types
+- `notes/perf-render-plan.md` — the gallery-429 root cause, batch endpoint design, and the Render deploy kit
 - `AGENTS.md` — rules for AI agents working in this repo
 
 Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
@@ -121,6 +139,37 @@ Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
 
 ## Deployment
 
-Web on Vercel, API on Railway/Fly/Render, database on Neon PostgreSQL (pooled
-URL for runtime, direct URL for migrations). Production CORS only allows the
-real web domain — never a wildcard.
+Production runs the web client on Vercel, the API on Render (Docker), and the
+database on Neon PostgreSQL. Live URLs are in the [Live](#live) section.
+
+### API on Render
+
+`render.yaml` at the repo root is a Render Blueprint for the API service. It
+builds `services/universe-service/Dockerfile.render`; the container entrypoint
+(`docker-entrypoint-render.sh`) runs goose migrations first when
+`RUN_MIGRATIONS_ON_START=true` (against `DATABASE_DIRECT_URL`), then starts the
+API. Render injects `PORT` at runtime — the config reads `API_PORT` first, then
+`PORT` (`internal/config/config.go`), so no port setting is needed.
+
+Secrets are declared `sync: false` in the blueprint: their values live only in
+the Render dashboard (Environment tab), never in git. A local, untracked
+cheat-sheet with the production values is kept at
+`services/universe-service/.env.render` (`.gitignore` excludes all `.env.*`).
+
+- Neon connection strings: the pooled URL (host contains `-pooler`) for
+  `DATABASE_URL` (runtime), the direct URL for `DATABASE_DIRECT_URL`
+  (migrations); both with `sslmode=require`, without `channel_binding=require`
+  (not a pgx option).
+- CORS: `API_ALLOWED_ORIGINS=https://myunivokai.vercel.app` — the exact web
+  origin, never a wildcard, no trailing slash.
+- AI: the blueprint defaults to `AI_PROVIDER=mock` (no key needed). Switch to
+  `gemini`/`openai` plus the matching API key in the dashboard for real
+  generation.
+
+### Web on Vercel
+
+Set `NEXT_PUBLIC_API_BASE_URL=https://myunivokai.onrender.com/api/v1` in
+Vercel → Project → Settings → Environment Variables (Production). Next.js
+inlines `NEXT_PUBLIC_*` values at build time, so after changing one, redeploy
+without the build cache. Cheat-sheet: `clients/web-client/.env.render`
+(untracked).
