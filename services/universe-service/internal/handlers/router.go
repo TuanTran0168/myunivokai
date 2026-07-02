@@ -10,7 +10,7 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
-func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, share *ShareHandler) http.Handler {
+func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, share *ShareHandler, landing *LandingHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recover)
@@ -24,6 +24,11 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+
+	// A human-friendly welcome at the bare service URL (Render health probes
+	// also HEAD this path). API consumers live under /api/v1.
+	r.Get("/", landing.Handle)
+	r.Head("/", landing.Handle)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", health.Handle)
