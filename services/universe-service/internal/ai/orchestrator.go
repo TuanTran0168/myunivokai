@@ -4,10 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/models"
 )
+
+// ErrProviderUnavailable marks transport-level failures (network errors,
+// timeouts, non-2xx responses) as opposed to schema-validation failures, so
+// callers can answer "temporarily unavailable, try again" instead of blaming
+// the response content.
+var ErrProviderUnavailable = errors.New("ai provider unavailable")
 
 type ResponseValidator func(json.RawMessage) (models.PersonalityDNA, error)
 
@@ -32,6 +39,7 @@ type Orchestrator struct {
 	fallback          Provider
 	validate          ResponseValidator
 	timeout           time.Duration
+	totalBudget       time.Duration
 	maxRepairAttempts int
 }
 
@@ -51,9 +59,26 @@ func (o *Orchestrator) WithRepairAttempts(maxRepairAttempts int) *Orchestrator {
 	return o
 }
 
+// WithTotalBudget caps the combined duration of every provider call, repair
+// retry, and fallback inside one GeneratePersonalityDNA run. Without a cap the
+// worst case is (1+maxRepairAttempts) calls x 2 providers x timeout, which can
+// outlive the HTTP server's write timeout. Zero disables the cap.
+func (o *Orchestrator) WithTotalBudget(totalBudget time.Duration) *Orchestrator {
+	if totalBudget < 0 {
+		totalBudget = 0
+	}
+	o.totalBudget = totalBudget
+	return o
+}
+
 func (o *Orchestrator) GeneratePersonalityDNA(ctx context.Context, req StructuredRequest) (*DNAResult, error) {
 	if o.primary == nil {
 		return nil, errors.New("primary provider is required")
+	}
+	if o.totalBudget > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.totalBudget)
+		defer cancel()
 	}
 	attempts := make([]AttemptLog, 0, 2)
 	result, err := o.tryProvider(ctx, o.primary, req, &attempts)
@@ -73,7 +98,7 @@ func (o *Orchestrator) GeneratePersonalityDNA(ctx context.Context, req Structure
 func (o *Orchestrator) tryProvider(ctx context.Context, provider Provider, req StructuredRequest, attempts *[]AttemptLog) (*DNAResult, error) {
 	result, validationErr, transportErr := o.callProviderOnce(ctx, provider, req, attempts)
 	if transportErr != nil {
-		return nil, transportErr
+		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, transportErr)
 	}
 	if validationErr == nil {
 		return result, nil
@@ -84,7 +109,7 @@ func (o *Orchestrator) tryProvider(ctx context.Context, provider Provider, req S
 		repairRequest.UserPrompt = buildRepairUserPrompt(req, validationErr)
 		result, validationErr, transportErr = o.callProviderOnce(ctx, provider, repairRequest, attempts)
 		if transportErr != nil {
-			return nil, transportErr
+			return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, transportErr)
 		}
 		if validationErr == nil {
 			return result, nil

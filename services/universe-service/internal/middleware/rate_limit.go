@@ -40,7 +40,7 @@ type perClientRateLimiter struct {
 // RateLimit limits each client (by IP) independently, so one abusive client
 // cannot exhaust the shared budget for everyone. RATE_LIMIT_RPS and
 // RATE_LIMIT_BURST therefore apply per IP, not globally.
-func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Handler {
+func RateLimit(requestsPerSecond float64, burst int, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	limiter := &perClientRateLimiter{
 		requestsPerSecond: requestsPerSecond,
 		burst:             burst,
@@ -49,7 +49,7 @@ func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Han
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !limiter.allow(clientKeyFromRequest(r)) {
+			if !limiter.allow(clientKeyFromRequest(r, trustProxyHeaders)) {
 				w.Header().Set("Retry-After", retryAfterSeconds)
 				httpx.WriteError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests. Please slow down.", nil)
 				return
@@ -95,15 +95,21 @@ func (l *perClientRateLimiter) removeIdleClientsLocked(now time.Time) {
 	}
 }
 
-// clientKeyFromRequest identifies the caller. Behind a reverse proxy
-// (Railway/Fly/Render all set it) the first X-Forwarded-For address is the
-// real client; locally it falls back to the connection's remote address.
-func clientKeyFromRequest(r *http.Request) string {
-	forwardedFor := r.Header.Get("X-Forwarded-For")
-	if forwardedFor != "" {
-		firstAddress := strings.TrimSpace(strings.Split(forwardedFor, ",")[0])
-		if firstAddress != "" {
-			return firstAddress
+// clientKeyFromRequest identifies the caller. X-Forwarded-For is honored only
+// when the deployment declares a trusted reverse proxy in front (TRUST_PROXY):
+// the proxy appends the real client address as the LAST entry, so that entry
+// is the only one the client cannot forge. Earlier entries — and the whole
+// header when no trusted proxy exists — are attacker-controlled; keying on
+// them would let one caller mint a fresh rate-limit bucket per request.
+func clientKeyFromRequest(r *http.Request, trustProxyHeaders bool) string {
+	if trustProxyHeaders {
+		forwardedFor := r.Header.Get("X-Forwarded-For")
+		if forwardedFor != "" {
+			addresses := strings.Split(forwardedFor, ",")
+			lastAddress := strings.TrimSpace(addresses[len(addresses)-1])
+			if lastAddress != "" {
+				return lastAddress
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

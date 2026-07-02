@@ -27,7 +27,7 @@ func okHandler() http.Handler {
 func TestRateLimitIsIndependentPerClient(t *testing.T) {
 	requestsPerSecond := 0.001 // effectively no refill during the test
 	burst := 2
-	handler := RateLimit(requestsPerSecond, burst)(okHandler())
+	handler := RateLimit(requestsPerSecond, burst, false)(okHandler())
 
 	clientA := "10.0.0.1:1111"
 	clientB := "10.0.0.2:2222"
@@ -48,7 +48,7 @@ func TestRateLimitIsIndependentPerClient(t *testing.T) {
 func TestRateLimitSetsRetryAfterOn429(t *testing.T) {
 	requestsPerSecond := 0.001
 	burst := 1
-	handler := RateLimit(requestsPerSecond, burst)(okHandler())
+	handler := RateLimit(requestsPerSecond, burst, false)(okHandler())
 
 	client := "10.0.0.3:3333"
 	if code := performRequest(t, handler, client, ""); code != http.StatusOK {
@@ -67,10 +67,11 @@ func TestRateLimitSetsRetryAfterOn429(t *testing.T) {
 	}
 }
 
-func TestRateLimitUsesForwardedForHeader(t *testing.T) {
+func TestRateLimitUsesForwardedForBehindTrustedProxy(t *testing.T) {
 	requestsPerSecond := 0.001
 	burst := 1
-	handler := RateLimit(requestsPerSecond, burst)(okHandler())
+	trustProxyHeaders := true
+	handler := RateLimit(requestsPerSecond, burst, trustProxyHeaders)(okHandler())
 
 	sharedProxyAddr := "172.16.0.9:4000"
 
@@ -82,5 +83,42 @@ func TestRateLimitUsesForwardedForHeader(t *testing.T) {
 	}
 	if code := performRequest(t, handler, sharedProxyAddr, "203.0.113.8"); code != http.StatusOK {
 		t.Fatalf("different forwarded client behind same proxy: expected 200, got %d", code)
+	}
+}
+
+func TestRateLimitUsesLastForwardedForEntryBehindTrustedProxy(t *testing.T) {
+	requestsPerSecond := 0.001
+	burst := 1
+	trustProxyHeaders := true
+	handler := RateLimit(requestsPerSecond, burst, trustProxyHeaders)(okHandler())
+
+	sharedProxyAddr := "172.16.0.9:4000"
+	realClientAddress := "198.51.100.5"
+
+	// The trusted proxy appends the real client last; whatever the client put
+	// in front of it must not open a fresh bucket.
+	if code := performRequest(t, handler, sharedProxyAddr, "6.6.6.1, "+realClientAddress); code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", code)
+	}
+	if code := performRequest(t, handler, sharedProxyAddr, "6.6.6.2, "+realClientAddress); code != http.StatusTooManyRequests {
+		t.Fatalf("spoofed prefix must not evade the limit: expected 429, got %d", code)
+	}
+}
+
+func TestRateLimitIgnoresForwardedForWithoutTrustedProxy(t *testing.T) {
+	requestsPerSecond := 0.001
+	burst := 1
+	trustProxyHeaders := false
+	handler := RateLimit(requestsPerSecond, burst, trustProxyHeaders)(okHandler())
+
+	directClientAddr := "10.0.0.4:5555"
+
+	if code := performRequest(t, handler, directClientAddr, "203.0.113.50"); code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", code)
+	}
+	// A direct caller forging X-Forwarded-For must stay in the RemoteAddr
+	// bucket instead of minting a new one per forged value.
+	if code := performRequest(t, handler, directClientAddr, "203.0.113.51"); code != http.StatusTooManyRequests {
+		t.Fatalf("forged header must not evade the limit: expected 429, got %d", code)
 	}
 }

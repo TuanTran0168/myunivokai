@@ -103,6 +103,68 @@ func TestOrchestratorDoesNotRepairTransportErrors(t *testing.T) {
 	}
 }
 
+// alwaysInvalidProvider is reachable but never returns schema-valid JSON.
+type alwaysInvalidProvider struct{}
+
+func (p alwaysInvalidProvider) Name() ProviderName { return ProviderName("invalid") }
+
+func (p alwaysInvalidProvider) GenerateStructured(ctx context.Context, req StructuredRequest) (*StructuredResponse, error) {
+	return &StructuredResponse{Provider: p.Name(), Model: "invalid", JSON: json.RawMessage(`{"archetype":123}`)}, nil
+}
+
+func TestOrchestratorMarksTransportFailuresUnavailable(t *testing.T) {
+	orch := NewOrchestrator(failingProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
+	_, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})
+	if !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("expected ErrProviderUnavailable for a transport failure, got %v", err)
+	}
+}
+
+func TestOrchestratorDoesNotMarkValidationFailuresUnavailable(t *testing.T) {
+	orch := NewOrchestrator(alwaysInvalidProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
+	_, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	// The provider WAS reachable; presenting this as an availability problem
+	// would tell users to retry something that will fail identically.
+	if errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("validation failure must not read as unavailable: %v", err)
+	}
+}
+
+// blockingProvider hangs until its context is cancelled, simulating a
+// provider that neither answers nor errors.
+type blockingProvider struct{}
+
+func (p blockingProvider) Name() ProviderName { return ProviderName("blocking") }
+
+func (p blockingProvider) GenerateStructured(ctx context.Context, req StructuredRequest) (*StructuredResponse, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestOrchestratorHonorsTotalBudget(t *testing.T) {
+	perCallTimeout := time.Second
+	totalBudget := 50 * time.Millisecond
+	orch := NewOrchestrator(blockingProvider{}, blockingProvider{}, validation.ValidatePersonalityDNA, perCallTimeout).
+		WithRepairAttempts(2).
+		WithTotalBudget(totalBudget)
+
+	start := time.Now()
+	_, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected an error once the total budget is exhausted")
+	}
+	// Without the budget this run would block for up to 6 per-call timeouts
+	// (3 attempts x 2 providers x 1s); the cap must end it almost immediately.
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("total budget not honored: run took %v", elapsed)
+	}
+}
+
 func TestOrchestratorFallback(t *testing.T) {
 	orch := NewOrchestrator(failingProvider{}, successProvider{}, validation.ValidatePersonalityDNA, time.Second)
 	result, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})

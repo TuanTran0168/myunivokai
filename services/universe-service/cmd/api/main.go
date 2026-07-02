@@ -54,9 +54,10 @@ func main() {
 	}
 	worldService := services.NewWorldService(cfg, store, orchestrator, services.NewWorldConfigBuilder())
 	router := handlers.NewRouter(cfg, handlers.NewHealthHandler(cfg, store), handlers.NewWorldHandler(worldService), handlers.NewShareHandler(worldService), handlers.NewLandingHandler(cfg, time.Now()))
-	// WriteTimeout must outlive the slowest handler, which is world creation
-	// waiting on the AI provider (AITimeout per attempt, plus repair/fallback).
-	serverWriteTimeout := 3*cfg.AITimeout + 10*time.Second
+	// WriteTimeout must outlive the slowest handler, which is world creation:
+	// the orchestrator's total budget caps all AI attempts combined, and the
+	// margin covers validation, storage, and response writing.
+	serverWriteTimeout := cfg.AITotalBudget + 10*time.Second
 	server := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           router,

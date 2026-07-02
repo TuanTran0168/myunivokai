@@ -21,6 +21,11 @@ import (
 
 var ErrInvalidAIOutput = errors.New("ai output invalid")
 
+// ErrAIUnavailable distinguishes "the AI provider could not be reached"
+// (transport failure — the caller should retry later) from ErrInvalidAIOutput
+// ("the provider answered but the content was unusable").
+var ErrAIUnavailable = errors.New("ai service unavailable")
+
 // Concurrent requests can race on unique columns (variant_no, share_slug).
 // The store reports ErrConflict and the service retries with fresh values.
 const (
@@ -64,7 +69,11 @@ func (s *WorldService) CreateWorld(ctx context.Context, input models.WorldInput)
 				log.Error().Err(saveErr).Msg("save failed ai generation logs")
 			}
 		}
-		return models.CreateWorldResponse{}, fmt.Errorf("%w: %v", ErrInvalidAIOutput, err)
+		serviceErr := ErrInvalidAIOutput
+		if errors.Is(err, ai.ErrProviderUnavailable) {
+			serviceErr = ErrAIUnavailable
+		}
+		return models.CreateWorldResponse{}, fmt.Errorf("%w: %v", serviceErr, err)
 	}
 	worldSeed, err := seed.NewWorldSeed()
 	if err != nil {

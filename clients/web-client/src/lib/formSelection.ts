@@ -19,16 +19,26 @@ export function toggleItem(current: string[], item: string, min: number, max: nu
 }
 
 /**
- * Merges `values` with `defaults`, trims, dedupes (first occurrence wins) and
- * caps at `max`.
+ * Trims, dedupes (first occurrence wins) and caps `values` at `max`; when the
+ * selection is below `min`, pads with `defaults` just far enough to reach it.
  *
- * Locked quirk: the defaults are ALWAYS merged in, so choosing 3 non-default
- * interests submits those 3 plus the defaults (up to `max`). The create form
- * has relied on this since the beginning — the payload, preview seed, and
- * planet count all reflect it. Making the form stop inventing values is
- * tracked as refactor-plan item 4 (form-validation), not here.
+ * The user's selection is submitted as-is: choosing 3 non-default interests
+ * sends exactly those 3. (Until 2026-07 the defaults were ALWAYS merged in —
+ * the form silently invented values the user never picked. Fixed as the
+ * form-validation item of the refactor plan; the payload and preview seed for
+ * NEW worlds change, stored worlds are untouched.)
  */
 export function ensureRange(values: string[], defaults: string[], min: number, max: number) {
-  const merged = [...values, ...defaults].map((item) => item.trim()).filter(Boolean);
-  return Array.from(new Set(merged)).slice(0, max).slice(0, Math.max(min, Math.min(max, merged.length)));
+  const cleanedSelection = Array.from(new Set(values.map((item) => item.trim()).filter(Boolean)));
+  const padded = [...cleanedSelection];
+  for (const defaultItem of defaults) {
+    if (padded.length >= min) {
+      break;
+    }
+    const trimmedDefault = defaultItem.trim();
+    if (trimmedDefault && !padded.includes(trimmedDefault)) {
+      padded.push(trimmedDefault);
+    }
+  }
+  return padded.slice(0, max);
 }

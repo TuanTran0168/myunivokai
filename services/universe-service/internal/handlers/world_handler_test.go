@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -226,6 +228,56 @@ func testRouter() http.Handler {
 	store := repositories.NewMemoryStore()
 	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
 	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service), NewLandingHandler(cfg, time.Now()))
+}
+
+// unreachableProvider simulates an AI provider that is down at the transport
+// level (network error, timeout), as opposed to answering with bad content.
+type unreachableProvider struct{}
+
+func (p unreachableProvider) Name() ai.ProviderName { return ai.ProviderName("unreachable") }
+
+func (p unreachableProvider) GenerateStructured(ctx context.Context, req ai.StructuredRequest) (*ai.StructuredResponse, error) {
+	return nil, errors.New("connection refused")
+}
+
+func TestWorldHandlerCreateReturns503WhenAIIsUnavailable(t *testing.T) {
+	cfg := config.Config{
+		AppName:         "Myunivokai",
+		AppEnv:          "test",
+		PublicWebURL:    "http://localhost:3000",
+		AllowedOrigins:  []string{"http://localhost:3000"},
+		AIPromptVersion: "world-dna-v1",
+		AITimeout:       time.Second,
+		RateLimitRPS:    1000,
+		RateLimitBurst:  1000,
+	}
+	orch := ai.NewOrchestrator(unreachableProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
+	store := repositories.NewMemoryStore()
+	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service), NewLandingHandler(cfg, time.Now()))
+
+	input := models.WorldInput{
+		Nickname:            "Tuan",
+		Interests:           []string{"coding", "travel", "photo"},
+		Traits:              []string{"curious", "builder", "focused"},
+		Goal:                "Build a beautiful AI product",
+		Mood:                "futuristic calm",
+		FavoriteColors:      []string{"#8B5CF6"},
+		PreferredWorldStyle: "cosmic-galaxy",
+	}
+	body, _ := json.Marshal(input)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/api/v1/worlds", bytes.NewReader(body)))
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when the AI provider is unreachable, got %d body=%s", res.Code, res.Body.String())
+	}
+	if retryAfter := res.Header().Get("Retry-After"); retryAfter == "" {
+		t.Fatal("503 must carry Retry-After so clients know to retry shortly")
+	}
+	if !strings.Contains(res.Body.String(), "AI_UNAVAILABLE") {
+		t.Fatalf("expected the AI_UNAVAILABLE error code, got %s", res.Body.String())
+	}
 }
 
 func TestSwaggerIsDisabledInProduction(t *testing.T) {
