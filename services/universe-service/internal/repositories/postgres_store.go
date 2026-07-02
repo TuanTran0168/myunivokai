@@ -59,10 +59,8 @@ func (s *PostgresStore) CreateWorld(ctx context.Context, world models.World, var
 	if _, err := tx.Exec(ctx, `UPDATE worlds SET selected_variant_id=$1 WHERE id=$2`, variant.ID, world.ID); err != nil {
 		return WorldBundle{}, err
 	}
-	for _, log := range logs {
-		if _, err := insertAIGeneration(ctx, tx, log); err != nil {
-			return WorldBundle{}, err
-		}
+	if err := sendAIGenerationLogs(ctx, tx, logs); err != nil {
+		return WorldBundle{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return WorldBundle{}, err
@@ -71,11 +69,23 @@ func (s *PostgresStore) CreateWorld(ctx context.Context, world models.World, var
 }
 
 func (s *PostgresStore) GetWorld(ctx context.Context, worldID string) (WorldBundle, error) {
-	world, err := s.getWorldByQuery(ctx, `WHERE id=$1`, worldID)
+	// Both statements travel in one pgx batch: a single network round trip to
+	// Neon instead of two sequential queries.
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT `+worldSelectColumns+` FROM worlds WHERE id=$1`, worldID)
+	batch.Queue(`SELECT `+variantSelectColumns+` FROM world_variants WHERE world_id=$1 ORDER BY variant_no`, worldID)
+	results := s.pool.SendBatch(ctx, batch)
+	defer results.Close()
+
+	world, err := scanWorld(results.QueryRow())
+	if err != nil {
+		return WorldBundle{}, mapNoRows(err)
+	}
+	rows, err := results.Query()
 	if err != nil {
 		return WorldBundle{}, err
 	}
-	variants, err := s.getVariants(ctx, world.ID)
+	variants, err := scanVariantRows(rows)
 	if err != nil {
 		return WorldBundle{}, err
 	}
@@ -105,15 +115,11 @@ func (s *PostgresStore) SelectVariant(ctx context.Context, worldID, variantID st
 	if _, err := tx.Exec(ctx, `UPDATE world_variants SET is_selected=false WHERE world_id=$1`, worldID); err != nil {
 		return models.WorldVariant{}, err
 	}
-	var variant models.WorldVariant
-	var configJSON []byte
 	row := tx.QueryRow(ctx, `UPDATE world_variants SET is_selected=true WHERE world_id=$1 AND id=$2
-		RETURNING id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at`, worldID, variantID)
-	if err := row.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
+		RETURNING `+variantSelectColumns, worldID, variantID)
+	variant, err := scanVariant(row)
+	if err != nil {
 		return models.WorldVariant{}, mapNoRows(err)
-	}
-	if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
-		return models.WorldVariant{}, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE worlds SET selected_variant_id=$1, updated_at=NOW() WHERE id=$2`, variantID, worldID); err != nil {
 		return models.WorldVariant{}, err
@@ -158,6 +164,10 @@ func (s *PostgresStore) GetPublicWorld(ctx context.Context, slug string) (WorldB
 const worldSelectColumns = `id::text, nickname, COALESCE(role,''), input, personality_dna, archetype, scene_name, quote,
 	visibility, share_slug, selected_variant_id::text, created_at, updated_at`
 
+// variantSelectColumns is the single source of truth for reading a variant
+// row; scanVariant must stay in sync with this column order.
+const variantSelectColumns = `id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at`
+
 // rowScanner is satisfied by both pgx.Row and pgx.Rows, so single-row and
 // batch reads share one scan routine.
 type rowScanner interface {
@@ -178,6 +188,31 @@ func scanWorld(scanner rowScanner) (models.World, error) {
 	}
 	world.ShortNarrative = world.PersonalityDNA.ShortNarrative
 	return world, nil
+}
+
+func scanVariant(scanner rowScanner) (models.WorldVariant, error) {
+	var variant models.WorldVariant
+	var configJSON []byte
+	if err := scanner.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
+		return models.WorldVariant{}, err
+	}
+	if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
+		return models.WorldVariant{}, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
+	}
+	return variant, nil
+}
+
+func scanVariantRows(rows pgx.Rows) ([]models.WorldVariant, error) {
+	defer rows.Close()
+	var variants []models.WorldVariant
+	for rows.Next() {
+		variant, err := scanVariant(rows)
+		if err != nil {
+			return nil, err
+		}
+		variants = append(variants, variant)
+	}
+	return variants, rows.Err()
 }
 
 func (s *PostgresStore) getWorldByQuery(ctx context.Context, where, arg string) (models.World, error) {
@@ -230,7 +265,7 @@ func (s *PostgresStore) GetWorldsByIDs(ctx context.Context, worldIDs []string) (
 }
 
 func (s *PostgresStore) getVariantsForWorlds(ctx context.Context, worldIDs []string) (map[string][]models.WorldVariant, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at
+	rows, err := s.pool.Query(ctx, `SELECT `+variantSelectColumns+`
 		FROM world_variants WHERE world_id = ANY($1::uuid[]) ORDER BY world_id, variant_no`, worldIDs)
 	if err != nil {
 		return nil, err
@@ -238,13 +273,9 @@ func (s *PostgresStore) getVariantsForWorlds(ctx context.Context, worldIDs []str
 	defer rows.Close()
 	variantsByWorldID := make(map[string][]models.WorldVariant, len(worldIDs))
 	for rows.Next() {
-		var variant models.WorldVariant
-		var configJSON []byte
-		if err := rows.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
+		variant, err := scanVariant(rows)
+		if err != nil {
 			return nil, err
-		}
-		if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
-			return nil, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
 		}
 		variantsByWorldID[variant.WorldID] = append(variantsByWorldID[variant.WorldID], variant)
 	}
@@ -252,25 +283,12 @@ func (s *PostgresStore) getVariantsForWorlds(ctx context.Context, worldIDs []str
 }
 
 func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]models.WorldVariant, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at
+	rows, err := s.pool.Query(ctx, `SELECT `+variantSelectColumns+`
 		FROM world_variants WHERE world_id=$1 ORDER BY variant_no`, worldID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var variants []models.WorldVariant
-	for rows.Next() {
-		var variant models.WorldVariant
-		var configJSON []byte
-		if err := rows.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
-			return nil, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
-		}
-		variants = append(variants, variant)
-	}
-	return variants, rows.Err()
+	return scanVariantRows(rows)
 }
 
 func (s *PostgresStore) Ping(ctx context.Context) error {
@@ -278,24 +296,37 @@ func (s *PostgresStore) Ping(ctx context.Context) error {
 }
 
 func (s *PostgresStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
+	return sendAIGenerationLogs(ctx, s.pool, logs)
+}
+
+const insertAIGenerationStatement = `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`
+
+// batchSender is satisfied by both pgx.Tx and *pgxpool.Pool, so AI logs can be
+// written inside the world-creation transaction or standalone on failure.
+type batchSender interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+}
+
+// sendAIGenerationLogs writes every attempt log in a single pgx batch: one
+// network round trip regardless of how many repair/fallback attempts ran.
+func sendAIGenerationLogs(ctx context.Context, sender batchSender, logs []models.AIGenerationLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
 	for _, log := range logs {
-		if _, err := insertAIGeneration(ctx, s.pool, log); err != nil {
+		batch.Queue(insertAIGenerationStatement,
+			log.Provider, log.Model, log.Task, log.PromptVersion, log.InputHash, nullableJSON(log.RequestJSON), nullableJSON(log.ResponseJSON), nullableJSON(log.UsageJSON), log.LatencyMS, log.Status, log.Error)
+	}
+	results := sender.SendBatch(ctx, batch)
+	defer results.Close()
+	for range logs {
+		if _, err := results.Exec(); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// commandExecutor is satisfied by both pgx.Tx and *pgxpool.Pool, so AI logs can
-// be written inside the world-creation transaction or standalone on failure.
-type commandExecutor interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-}
-
-func insertAIGeneration(ctx context.Context, executor commandExecutor, log models.AIGenerationLog) (any, error) {
-	return executor.Exec(ctx, `INSERT INTO ai_generations (provider, model, task, prompt_version, input_hash, request_json, response_json, usage_json, latency_ms, status, error)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		log.Provider, log.Model, log.Task, log.PromptVersion, log.InputHash, nullableJSON(log.RequestJSON), nullableJSON(log.ResponseJSON), nullableJSON(log.UsageJSON), log.LatencyMS, log.Status, log.Error)
 }
 
 func nullableJSON(value []byte) any {

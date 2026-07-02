@@ -34,7 +34,7 @@ jobs:
         run: go test ./...
 
   frontend-checks:
-    name: Frontend (typecheck + lint + build)
+    name: Frontend (typecheck + lint + test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,6 +54,7 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      # TODO(feat/fe/unit-testing-setup): add "npm run test" once vitest lands
+      - name: Test
+        run: npm run test
       - name: Build
         run: npm run build

@@ -24,6 +24,10 @@ const maximumRequestBodyBytes = 64 * 1024
 // database for an unbounded id list.
 const maximumBatchWorldIDs = 50
 
+// aiUnavailableRetryAfterSeconds is advertised on 503 responses when the AI
+// provider is unreachable; transient provider hiccups usually clear quickly.
+const aiUnavailableRetryAfterSeconds = "5"
+
 type WorldHandler struct {
 	service *services.WorldService
 }
@@ -54,6 +58,7 @@ func requireUUIDPathParameter(w http.ResponseWriter, r *http.Request, parameterN
 // @Success 201 {object} models.CreateWorldResponse
 // @Failure 400 {object} httpx.ErrorEnvelope
 // @Failure 502 {object} httpx.ErrorEnvelope
+// @Failure 503 {object} httpx.ErrorEnvelope
 // @Failure 500 {object} httpx.ErrorEnvelope
 // @Router /worlds [post]
 func (h *WorldHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +236,10 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, repositories.ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found.", nil)
+	case errors.Is(err, services.ErrAIUnavailable):
+		log.Error().Err(err).Str("requestId", httpx.RequestID(r.Context())).Str("path", r.URL.Path).Msg("ai provider unavailable")
+		w.Header().Set("Retry-After", aiUnavailableRetryAfterSeconds)
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "AI_UNAVAILABLE", "The AI service is temporarily unavailable. Please try again in a moment.", nil)
 	case errors.Is(err, services.ErrInvalidAIOutput):
 		log.Error().Err(err).Str("requestId", httpx.RequestID(r.Context())).Str("path", r.URL.Path).Msg("ai output rejected")
 		httpx.WriteError(w, r, http.StatusBadGateway, "AI_OUTPUT_INVALID", "The AI response could not be used. Please try again.", nil)

@@ -77,12 +77,26 @@ Fix is layered (each safe on its own):
 
 ## Reviewed but deliberately deferred (would change behavior or is large)
 
-- Error taxonomy: transport/timeout AI failures currently 502
-  `AI_OUTPUT_INVALID`; splitting out a 503 `ErrAIUnavailable` changes status
-  codes → needs explicit approval.
-- `X-Forwarded-For` trusted unconditionally (rate-limit identity spoofable if
-  ever exposed without a proxy) → add a TRUST_PROXY flag later.
-- `cache: "no-store"` on all GETs; Canvas remount key including camera params;
-  `pgx.Batch` for single GetWorld; AI-log batch INSERT; total AI budget
-  deadline; `api.ts` typed readers (refactor-plan item 3 / zod);
-  page decomposition (item 5).
+Shipped 2026-07 on `feat/fe-be/prod-hardening` (approved by the owner):
+
+- ~~Error taxonomy~~ — transport/timeout AI failures now answer 503
+  `AI_UNAVAILABLE` with `Retry-After`; content failures keep 502
+  `AI_OUTPUT_INVALID` (`ai.ErrProviderUnavailable` → `services.ErrAIUnavailable`).
+- ~~TRUST_PROXY~~ — `X-Forwarded-For` is only honored when `TRUST_PROXY=true`
+  (set on Render), and only its LAST entry (appended by the trusted proxy);
+  forged prefixes and direct traffic key on RemoteAddr.
+- ~~`pgx.Batch` for single GetWorld~~ — world + variants in one round trip.
+- ~~AI-log batch INSERT~~ — all attempt logs in one `pgx.Batch`.
+- ~~Total AI budget deadline~~ — `AI_TOTAL_BUDGET` (default 3× AI timeout)
+  caps repairs + fallback combined; the server write timeout derives from it.
+- ~~ensureRange defaults quirk~~ — defaults now pad only up to the minimum;
+  a sufficient selection is submitted exactly as picked.
+- ~~FE vitest in CI~~; share pages now serve SSR OG/Twitter metadata.
+
+Still deferred (each deserves its own branch):
+
+- `cache: "no-store"` on all GETs; Canvas remount key including camera params.
+- `api.ts` typed readers (refactor-plan item 3 / zod) — new dependency plus a
+  rewrite of every normalizer fallback; needs dedicated tests first.
+- Create-page decomposition (item 5) — a large mechanical diff; do it alone so
+  the review is meaningful.
