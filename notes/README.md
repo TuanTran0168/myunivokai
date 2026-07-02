@@ -17,6 +17,7 @@ in their own folder.
 | [be/source-overview.md](be/source-overview.md) | How the BE source works (Go API): layers, AI providers, determinism | When working in `services/universe-service` |
 | [be/refactor-plan.md](be/refactor-plan.md) | BE production upgrade plan (8 branches, in order) | When doing BE refactor work |
 | [Myunivokai_Implementation_Plan.md](Myunivokai_Implementation_Plan.md) | Original end-to-end project plan | Reference for direction |
+| [scene-services-vision.md](scene-services-vision.md) | Product direction: many scene families (city, nature, ...), scene services, renderer registry | Before any architecture decision |
 | [stitch_personal_universe_3d/](stitch_personal_universe_3d/) | Stitch UI mockups (7 screens) | When polishing UI |
 
 ## Instructions for AI agents
