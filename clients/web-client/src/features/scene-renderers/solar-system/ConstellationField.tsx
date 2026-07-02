@@ -12,19 +12,19 @@ import { randomFromSeed } from "@/lib/scene";
  * <lineSegments> draw call total, nothing animates per frame.
  */
 
-const CONSTELLATION_COUNT = 6;
-const MINIMUM_STARS_PER_CONSTELLATION = 4;
-const MAXIMUM_STARS_PER_CONSTELLATION = 7;
+const CONSTELLATION_COUNT = 14;
+const MINIMUM_STARS_PER_CONSTELLATION = 5;
+const MAXIMUM_STARS_PER_CONSTELLATION = 9;
 // Just inside the Skybox sphere (radius 60) so stars never clip through it.
 const CELESTIAL_SPHERE_RADIUS = 52;
-const CONSTELLATION_ANGULAR_SPREAD_RADIANS = 0.16;
+const CONSTELLATION_ANGULAR_SPREAD_RADIANS = 0.2;
 // Bias anchors away from the poles, where connected lines look distorted.
 const POLE_AVOIDANCE_RATIO = 0.75;
-const CONSTELLATION_STAR_POINT_SIZE = 0.55;
-const CONSTELLATION_STAR_OPACITY = 0.95;
-const CONSTELLATION_LINE_OPACITY = 0.22;
+const CONSTELLATION_STAR_POINT_SIZE = 1.1;
+const CONSTELLATION_STAR_OPACITY = 1;
+const CONSTELLATION_LINE_OPACITY = 0.5;
 const CONSTELLATION_STAR_COLOR = "#F2EEE6";
-const CONSTELLATION_LINE_COLOR = "#C9A35B";
+const CONSTELLATION_LINE_COLOR = "#D9B96E";
 
 type ConstellationFieldProps = {
   seed: string;
@@ -90,6 +90,7 @@ export function ConstellationField({ seed }: ConstellationFieldProps) {
           sizeAttenuation
           depthWrite={false}
           blending={AdditiveBlending}
+          toneMapped={false}
         />
       </points>
       <lineSegments>
@@ -107,6 +108,7 @@ export function ConstellationField({ seed }: ConstellationFieldProps) {
           opacity={CONSTELLATION_LINE_OPACITY}
           depthWrite={false}
           blending={AdditiveBlending}
+          toneMapped={false}
         />
       </lineSegments>
     </group>

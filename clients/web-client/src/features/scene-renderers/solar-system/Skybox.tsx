@@ -15,7 +15,9 @@ export function Skybox() {
   return (
     <mesh>
       <sphereGeometry args={[SKYBOX_RADIUS, 48, 32]} />
-      <meshBasicMaterial map={milkyWayTexture} side={BackSide} transparent opacity={SKYBOX_OPACITY} />
+      {/* toneMapped=false: ACES tone mapping crushes the already-dark starfield
+          texture; raw output keeps the Milky Way band clearly visible. */}
+      <meshBasicMaterial map={milkyWayTexture} side={BackSide} transparent opacity={SKYBOX_OPACITY} toneMapped={false} />
     </mesh>
   );
 }
