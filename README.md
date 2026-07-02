@@ -41,6 +41,49 @@ Two architecture decisions worth knowing:
    `AI_PROVIDER` env change, not a code change. `mock` powers tests and
    key-less development.
 
+## Core concepts
+
+| Concept | Meaning |
+| --- | --- |
+| Personality DNA | The AI-generated semantic profile (archetype, scene name, planet meanings) distilled from the form — the only thing AI produces. |
+| World Seed | A deterministic seed derived by the backend; the same seed always produces the same 3D scene. No `Math.random` in scene code. |
+| World Scene Config | The full numeric scene description (planets, orbits, palette, mood) computed from the seed within safe bounds — AI-free. |
+| Variant | An alternative scene config for the same world, regenerated from a new seed at zero AI cost; one variant is "selected". |
+| Mood scene profiles | Per-mood rendering parameters mirrored between Go (`mood_scene_profile.go`) and TypeScript (`scene.ts`) — the two sides must stay in sync. |
+| Share slug | Publishing a world mints a public read-only URL (`/share/worlds/{slug}`). |
+| Gallery | Saved world ids kept client-side and loaded through one batch request (`GET /worlds?ids=`). |
+
+## Tech stack
+
+### Backend — `services/universe-service`
+
+- Go 1.25, [chi](https://github.com/go-chi/chi) router + `go-chi/cors`
+- PostgreSQL via `pgx/v5` + pgxpool; [goose](https://github.com/pressly/goose)
+  migrations; an in-memory store fallback so local dev needs no database
+- `zerolog` structured logging with request ids; `swaggo` Swagger UI
+- Per-IP token-bucket rate limiting (`golang.org/x/time/rate`) with
+  `Retry-After` on 429
+- AI providers (Gemini / OpenAI / mock) called over plain REST behind one
+  interface — no vendor SDKs
+
+### Frontend — `clients/web-client`
+
+- Next.js 14 (App Router) + React 18 + TypeScript
+- three.js via React Three Fiber (`@react-three/fiber`, `drei`,
+  `postprocessing`) rendering deterministic, seed-driven scenes
+- Tailwind CSS with the house "Vitrine + Liquid Glass" design system,
+  `sonner` toasts, `lucide-react` icons
+- `vitest` unit tests
+
+### Deploy platforms
+
+| Layer | Platform | Notes |
+| --- | --- | --- |
+| Web client | [Vercel](https://vercel.com) | Builds `clients/web-client`; `NEXT_PUBLIC_API_BASE_URL` set in the dashboard |
+| API | [Render](https://render.com) (Docker) | Blueprint `render.yaml` → `Dockerfile.render`; migrations run at boot |
+| Database | [Neon](https://neon.tech) PostgreSQL | Pooled URL for runtime, direct URL for migrations |
+| CI | GitHub Actions | Go tests + FE typecheck/lint/build on every PR into `staging`/`main` |
+
 ## Repository layout
 
 ```txt
@@ -94,7 +137,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The FE calls the API through
+Open <http://localhost:3000>. The FE calls the API through
 `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080/api/v1`, example env
 in `clients/web-client/.env.example`).
 
