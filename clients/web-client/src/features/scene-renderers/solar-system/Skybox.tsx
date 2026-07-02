@@ -5,7 +5,9 @@ import { BackSide, TextureLoader } from "three";
 import { MILKY_WAY_SKYBOX_TEXTURE_URL } from "./planetTextureCatalog";
 
 const SKYBOX_RADIUS = 60;
-const SKYBOX_OPACITY = 0.85;
+// Full opacity so the Milky Way band reads clearly instead of sinking into
+// the background color.
+const SKYBOX_OPACITY = 1;
 
 export function Skybox() {
   const milkyWayTexture = useLoader(TextureLoader, MILKY_WAY_SKYBOX_TEXTURE_URL);
