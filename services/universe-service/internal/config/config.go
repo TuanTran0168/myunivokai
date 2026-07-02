@@ -29,8 +29,11 @@ type Config struct {
 	AIFallbackProvider string
 	AIEnableFallback   bool
 	AITimeout          time.Duration
-	AIMaxRetries       int
-	AIPromptVersion    string
+	// AITotalBudget caps one whole DNA generation (all repair retries and the
+	// fallback provider combined); AITimeout caps each individual call.
+	AITotalBudget   time.Duration
+	AIMaxRetries    int
+	AIPromptVersion string
 	GeminiAPIKey       string
 	GeminiModel        string
 	OpenAIAPIKey       string
@@ -44,9 +47,14 @@ type Config struct {
 	ShareSlugLength   int
 }
 
+// defaultAITotalBudgetMultiplier derives the whole-generation budget from the
+// per-call timeout when AI_TOTAL_BUDGET is unset: enough for a primary call, a
+// repair retry, and the fallback, while staying under the server write timeout.
+const defaultAITotalBudgetMultiplier = 3
+
 func Load() Config {
 	LoadEnv()
-	return Config{
+	cfg := Config{
 		AppEnv:             getAny([]string{"APP_ENV", "ENV"}, "development"),
 		AppName:            get("APP_NAME", "Myunivokai"),
 		PublicWebURL:       get("PUBLIC_WEB_URL", "http://localhost:3000"),
@@ -67,6 +75,9 @@ func Load() Config {
 		AIFallbackProvider: get("AI_FALLBACK_PROVIDER", "mock"),
 		AIEnableFallback:   getBool("AI_ENABLE_FALLBACK", true),
 		AITimeout:          time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
+		// 0 means "derive from AI_TIMEOUT_SECONDS"; resolved right below so
+		// every consumer (orchestrator, server write timeout) sees one value.
+		AITotalBudget:      getDuration("AI_TOTAL_BUDGET", 0),
 		AIMaxRetries:       getInt("AI_MAX_RETRIES", 2),
 		AIPromptVersion:    get("AI_PROMPT_VERSION", "world-dna-v1"),
 		GeminiAPIKey:       get("GEMINI_API_KEY", ""),
@@ -81,6 +92,10 @@ func Load() Config {
 		TrustProxyHeaders: getBool("TRUST_PROXY", false),
 		ShareSlugLength:   getInt("SHARE_SLUG_LENGTH", 10),
 	}
+	if cfg.AITotalBudget <= 0 {
+		cfg.AITotalBudget = defaultAITotalBudgetMultiplier * cfg.AITimeout
+	}
+	return cfg
 }
 
 func LoadEnv() {

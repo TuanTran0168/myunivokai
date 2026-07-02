@@ -39,6 +39,7 @@ type Orchestrator struct {
 	fallback          Provider
 	validate          ResponseValidator
 	timeout           time.Duration
+	totalBudget       time.Duration
 	maxRepairAttempts int
 }
 
@@ -58,9 +59,26 @@ func (o *Orchestrator) WithRepairAttempts(maxRepairAttempts int) *Orchestrator {
 	return o
 }
 
+// WithTotalBudget caps the combined duration of every provider call, repair
+// retry, and fallback inside one GeneratePersonalityDNA run. Without a cap the
+// worst case is (1+maxRepairAttempts) calls x 2 providers x timeout, which can
+// outlive the HTTP server's write timeout. Zero disables the cap.
+func (o *Orchestrator) WithTotalBudget(totalBudget time.Duration) *Orchestrator {
+	if totalBudget < 0 {
+		totalBudget = 0
+	}
+	o.totalBudget = totalBudget
+	return o
+}
+
 func (o *Orchestrator) GeneratePersonalityDNA(ctx context.Context, req StructuredRequest) (*DNAResult, error) {
 	if o.primary == nil {
 		return nil, errors.New("primary provider is required")
+	}
+	if o.totalBudget > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.totalBudget)
+		defer cancel()
 	}
 	attempts := make([]AttemptLog, 0, 2)
 	result, err := o.tryProvider(ctx, o.primary, req, &attempts)
