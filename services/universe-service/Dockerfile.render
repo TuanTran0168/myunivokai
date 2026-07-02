@@ -1,0 +1,47 @@
+# Render deploy image for the universe-service API.
+#
+# Differences from the compose-oriented Dockerfile: Render has no compose
+# ordering, so the entrypoint optionally runs migrations before the API
+# (RUN_MIGRATIONS_ON_START=true). The server binds the platform-injected PORT
+# automatically (config resolves API_PORT, then PORT, then 8080).
+#
+# Required Render environment (set in the dashboard, values in .env.render):
+#   APP_ENV=production           (gates Swagger off; makes empty DATABASE_URL fatal)
+#   DATABASE_URL                 (Neon POOLED url, sslmode=require)
+#   DATABASE_DIRECT_URL          (Neon DIRECT url for migrations, sslmode=require)
+#   API_ALLOWED_ORIGINS          (the real web origin, e.g. https://myunivokai.vercel.app)
+#   PUBLIC_WEB_URL               (same origin; used to build share links)
+#   RUN_MIGRATIONS_ON_START=true
+#   AI_PROVIDER=mock             (or gemini/openai + the matching *_API_KEY)
+# Health check path: /api/v1/healthz
+
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/migrate ./cmd/migrate
+
+FROM alpine:3.22
+
+WORKDIR /app
+
+RUN adduser -D -H myunivokai
+COPY --from=build /out/api /app/api
+COPY --from=build /out/migrate /app/migrate
+COPY migrations /app/migrations
+COPY docker-entrypoint-render.sh /app/docker-entrypoint-render.sh
+# Strip Windows line endings if the checkout introduced them; a CR in the
+# shebang breaks busybox sh.
+RUN sed -i 's/\r$//' /app/docker-entrypoint-render.sh && chmod +x /app/docker-entrypoint-render.sh
+
+ENV MIGRATIONS_DIR=/app/migrations
+
+USER myunivokai
+
+EXPOSE 8080
+CMD ["/app/docker-entrypoint-render.sh"]

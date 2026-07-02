@@ -1,0 +1,38 @@
+# Render blueprint for the Myunivokai API (https://render.com/docs/blueprint-spec).
+# Secrets are `sync: false`: their values live ONLY in the Render dashboard
+# (templates with placeholders: services/universe-service/.env.render, untracked).
+# The web client deploys separately (Vercel per README, or a Render static site)
+# with NEXT_PUBLIC_API_BASE_URL pointing at this service.
+services:
+  - type: web
+    name: myunivokai-api
+    runtime: docker
+    rootDir: services/universe-service
+    dockerfilePath: ./Dockerfile.render
+    plan: free
+    healthCheckPath: /api/v1/healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
+      # mock needs no key; switch to gemini/openai in the dashboard when a real
+      # key is configured.
+      - key: AI_PROVIDER
+        value: mock
+      - key: AI_FALLBACK_PROVIDER
+        value: mock
+      # Neon POOLED url (runtime) and DIRECT url (migrations), sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      # The real web origin, e.g. https://myunivokai.vercel.app
+      - key: API_ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
