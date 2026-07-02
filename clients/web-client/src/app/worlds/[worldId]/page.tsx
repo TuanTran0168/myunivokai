@@ -177,6 +177,7 @@ export default function WorldPage({ params }: PageProps) {
           className="h-full"
           selectedPlanetKey={selectedPlanetKey}
           onSelectPlanet={handleSelectPlanet}
+          preserveDrawingBuffer
         />
       </div>
 

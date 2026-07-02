@@ -19,24 +19,50 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    cache: "no-store"
-  });
+// Idempotent GETs retry once on 429: the backend's token bucket refills within
+// about a second (and says so via Retry-After), so a transient burst should not
+// become a permanent error tile. Mutating requests are never retried — a
+// duplicate POST could create a second world/variant.
+const MAXIMUM_GET_RETRIES_ON_RATE_LIMIT = 1;
+const DEFAULT_RATE_LIMIT_RETRY_MILLISECONDS = 1000;
 
-  const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
-
-  if (!response.ok) {
-    throw new ApiError(response.status, payload);
+function rateLimitRetryDelayMilliseconds(response: Response): number {
+  const retryAfterSeconds = Number(response.headers.get("Retry-After"));
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return retryAfterSeconds * 1000;
   }
+  return DEFAULT_RATE_LIMIT_RETRY_MILLISECONDS;
+}
 
-  return payload as T;
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isIdempotentGet = !init?.method || init.method.toUpperCase() === "GET";
+  let rateLimitRetriesLeft = isIdempotentGet ? MAXIMUM_GET_RETRIES_ON_RATE_LIMIT : 0;
+
+  for (;;) {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      },
+      cache: "no-store"
+    });
+
+    if (response.status === 429 && rateLimitRetriesLeft > 0) {
+      rateLimitRetriesLeft -= 1;
+      await new Promise((resolve) => setTimeout(resolve, rateLimitRetryDelayMilliseconds(response)));
+      continue;
+    }
+
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      throw new ApiError(response.status, payload);
+    }
+
+    return payload as T;
+  }
 }
 
 function normalizeVariant(raw: any): WorldVariant {
@@ -119,6 +145,20 @@ export const api = {
 
   async getWorld(worldId: string): Promise<World> {
     return normalizeWorld(await request<unknown>(`/worlds/${worldId}`));
+  },
+
+  // Batch read: one request for the whole gallery instead of one per world.
+  // Each returned entry has the same shape as GET /worlds/{id}; ids the
+  // backend does not know are simply absent from the result.
+  async getWorldsByIds(worldIds: string[]): Promise<World[]> {
+    if (worldIds.length === 0) {
+      return [];
+    }
+    const payload = await request<{ worlds?: unknown[] }>(
+      `/worlds?ids=${worldIds.map(encodeURIComponent).join(",")}`
+    );
+    const rawWorlds = Array.isArray(payload.worlds) ? payload.worlds : [];
+    return rawWorlds.map(normalizeWorld).filter((world) => world.id);
   },
 
   async regenerateVariant(worldId: string): Promise<WorldVariant> {

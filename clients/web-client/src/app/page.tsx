@@ -8,6 +8,7 @@ import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
+import { ensureRange, toggleItem } from "@/lib/formSelection";
 import { buildPreviewSceneConfig } from "@/lib/scene";
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
@@ -37,6 +38,14 @@ const PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS = 300;
 // form via the HTML `form` attribute.
 const CREATE_FORM_ELEMENT_ID = "create-universe-form";
 
+// Custom-interest limits mirror the backend validation exactly
+// (validation/world.go: interests 3-8 items, each 2-32 characters), so a value
+// accepted here is never rejected server-side.
+const MINIMUM_INTEREST_CHARACTERS = 2;
+const MAXIMUM_INTEREST_CHARACTERS = 32;
+const MINIMUM_INTERESTS = 3;
+const MAXIMUM_INTERESTS = 8;
+
 function useDebouncedValue<ValueType>(value: ValueType, delayMilliseconds: number): ValueType {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -44,18 +53,6 @@ function useDebouncedValue<ValueType>(value: ValueType, delayMilliseconds: numbe
     return () => clearTimeout(timeoutId);
   }, [value, delayMilliseconds]);
   return debouncedValue;
-}
-
-function toggleItem(current: string[], item: string, min: number, max: number) {
-  if (current.includes(item)) {
-    return current.length <= min ? current : current.filter((value) => value !== item);
-  }
-  return current.length >= max ? current : [...current, item];
-}
-
-function ensureRange(values: string[], defaults: string[], min: number, max: number) {
-  const merged = [...values, ...defaults].map((item) => item.trim()).filter(Boolean);
-  return Array.from(new Set(merged)).slice(0, max).slice(0, Math.max(min, Math.min(max, merged.length)));
 }
 
 export default function HomePage() {
@@ -69,11 +66,13 @@ export default function HomePage() {
   const [mood, setMood] = useState("focused");
   const [preferredWorldStyle, setPreferredWorldStyle] = useState("cosmic-galaxy");
   const [favoriteColors, setFavoriteColors] = useState<string[]>(["#8B5CF6", "#06B6D4"]);
+  const [customInterestDraft, setCustomInterestDraft] = useState("");
+  const [isAddingCustomInterest, setIsAddingCustomInterest] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const payload = useMemo(() => {
-    const safeInterests = ensureRange(interests, ["Technology", "Design", "AI"], 3, 8);
+    const safeInterests = ensureRange(interests, ["Technology", "Design", "AI"], MINIMUM_INTERESTS, MAXIMUM_INTERESTS);
     const safeTraits = ensureRange(traits, ["curious", "builder", "focused"], 3, 6);
     const safeGoal =
       goal.trim() ||
@@ -126,6 +125,28 @@ export default function HomePage() {
 
   function toggleColor(color: string) {
     setFavoriteColors((current) => toggleItem(current, color, 1, 4));
+  }
+
+  // Commits the typed custom interest through the same toggleItem path the
+  // predefined chips use, so the 8-item cap and dedupe hold automatically.
+  // Returns whether the draft was accepted (too-short drafts are kept for
+  // further typing rather than silently discarded).
+  function commitCustomInterest(): boolean {
+    const draftInterest = customInterestDraft.trim();
+    if (draftInterest.length < MINIMUM_INTEREST_CHARACTERS) {
+      return false;
+    }
+    setInterests((current) =>
+      current.includes(draftInterest) ? current : toggleItem(current, draftInterest, MINIMUM_INTERESTS, MAXIMUM_INTERESTS)
+    );
+    setCustomInterestDraft("");
+    return true;
+  }
+
+  function closeCustomInterestInput() {
+    commitCustomInterest();
+    setCustomInterestDraft("");
+    setIsAddingCustomInterest(false);
   }
 
   return (
@@ -207,7 +228,7 @@ export default function HomePage() {
                       <button
                         key={item}
                         type="button"
-                        onClick={() => setInterests((current) => toggleItem(current, item, 3, 8))}
+                        onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
                             ? "border-primary/50 bg-primary/20 text-primary shadow-glow"
@@ -218,10 +239,54 @@ export default function HomePage() {
                       </button>
                     );
                   })}
-                  <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-white/15 bg-surface-bright px-4 py-1.5 text-sm text-outline">
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                    Custom
-                  </span>
+                  {/* Custom interests live in the same selection array as the
+                      predefined chips; clicking one removes it (min 3 holds). */}
+                  {interests
+                    .filter((item) => !interestOptions.includes(item))
+                    .map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        aria-pressed="true"
+                        onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
+                        className="focus-ring tappable rounded-full border border-primary/50 bg-primary/20 px-4 py-1.5 text-sm text-primary shadow-glow"
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  {isAddingCustomInterest ? (
+                    <input
+                      autoFocus
+                      value={customInterestDraft}
+                      onChange={(event) => setCustomInterestDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          // Enter adds the interest; without this the form submits.
+                          event.preventDefault();
+                          commitCustomInterest();
+                        }
+                        if (event.key === "Escape") {
+                          setCustomInterestDraft("");
+                          setIsAddingCustomInterest(false);
+                        }
+                      }}
+                      onBlur={closeCustomInterestInput}
+                      maxLength={MAXIMUM_INTEREST_CHARACTERS}
+                      placeholder="Your own interest"
+                      aria-label="Add a custom interest (2-32 characters)"
+                      className="focus-ring w-40 rounded-full border border-primary/50 bg-transparent px-4 py-1.5 text-sm text-on-surface placeholder:text-outline"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCustomInterest(true)}
+                      disabled={interests.length >= MAXIMUM_INTERESTS}
+                      className="focus-ring tappable inline-flex items-center gap-1 rounded-full border border-dashed border-white/15 bg-surface-bright px-4 py-1.5 text-sm text-outline hover:border-primary/40 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Custom
+                    </button>
+                  )}
                 </div>
               </div>
 
