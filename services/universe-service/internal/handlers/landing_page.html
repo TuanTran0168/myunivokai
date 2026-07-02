@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.AppName}} · Universe Service</title>
+  <style>
+    :root {
+      --ink: #08080a;
+      --paper: #f2eee6;
+      --brass: #c9a35b;
+      --vermillion: #e0573a;
+      --grey: #9a958a;
+      --glass-tint: rgba(15, 14, 19, 0.30);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      background: radial-gradient(ellipse at 50% 130%, #151020 0%, var(--ink) 62%);
+      color: var(--paper);
+      font-family: Georgia, "Times New Roman", serif;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    #starfield { position: fixed; inset: 0; }
+    main { position: relative; text-align: center; padding: 24px; max-width: 92vw; }
+    .placard {
+      display: inline-block;
+      background: var(--glass-tint);
+      -webkit-backdrop-filter: blur(30px) saturate(180%) brightness(1.07);
+      backdrop-filter: blur(30px) saturate(180%) brightness(1.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 42px 52px 34px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      animation: placard-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes placard-rise {
+      from { opacity: 0; transform: translateY(18px) scale(0.985); }
+      to { opacity: 1; transform: none; }
+    }
+    .label {
+      font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--brass);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--vermillion);
+      box-shadow: 0 0 0 0 rgba(224, 87, 58, 0.55);
+      animation: live-pulse 2.2s ease-out infinite;
+    }
+    @keyframes live-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(224, 87, 58, 0.55); }
+      70% { box-shadow: 0 0 0 9px rgba(224, 87, 58, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(224, 87, 58, 0); }
+    }
+    h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 600; letter-spacing: 0.01em; margin-top: 10px; }
+    .tagline { color: var(--grey); font-style: italic; font-size: 15px; margin-top: 6px; }
+    .orbit {
+      position: relative;
+      width: 96px; height: 96px;
+      margin: 26px auto 22px;
+    }
+    .orbit .sun {
+      position: absolute; inset: 34px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #ffdf9e, var(--brass) 55%, #6e5426);
+      box-shadow: 0 0 24px rgba(201, 163, 91, 0.45);
+    }
+    .orbit .ring {
+      position: absolute; inset: 0;
+      border: 1px solid rgba(201, 163, 91, 0.35);
+      border-radius: 50%;
+      animation: orbit-spin 9s linear infinite;
+    }
+    .orbit .planet {
+      position: absolute; top: -4px; left: 50%;
+      width: 9px; height: 9px; margin-left: -4.5px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #ff9d82, var(--vermillion) 60%, #6b2413);
+    }
+    @keyframes orbit-spin { to { transform: rotate(360deg); } }
+    .clock {
+      font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+      font-size: clamp(34px, 7vw, 52px);
+      letter-spacing: 0.08em;
+      color: var(--paper);
+      font-variant-numeric: tabular-nums;
+    }
+    .clock-date, .uptime {
+      font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--grey);
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .uptime b { color: var(--brass); font-weight: 600; }
+    .links { margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .links a {
+      font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--paper);
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      padding: 9px 16px;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s, color 0.2s;
+    }
+    .links a:hover { border-color: var(--brass); color: var(--brass); transform: translateY(-2px); }
+    .links a:active { transform: scale(0.94); }
+    .credit { margin-top: 26px; color: var(--grey); font-size: 13px; font-style: italic; }
+    .credit b { color: var(--paper); font-style: normal; font-weight: 600; }
+    .credit .heart { color: var(--vermillion); }
+    @media (prefers-reduced-motion: reduce) {
+      .placard, .orbit .ring, .live-dot { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="starfield" aria-hidden="true"></canvas>
+  <main>
+    <div class="placard">
+      <p class="label"><span class="live-dot" aria-hidden="true"></span>Universe Service · {{.Environment}}</p>
+      <h1>{{.AppName}}</h1>
+      <p class="tagline">My universe, okay? — every visitor gets a solar system of their own.</p>
+      <div class="orbit" aria-hidden="true">
+        <div class="sun"></div>
+        <div class="ring"><span class="planet"></span></div>
+      </div>
+      <p class="clock" id="clock-time" aria-live="off">--:--:--</p>
+      <p class="clock-date" id="clock-date"></p>
+      <p class="uptime">In orbit for <b id="uptime-counter">0d 00h 00m 00s</b></p>
+      <nav class="links">
+        <a href="{{.PublicWebURL}}">Open the universe ↗</a>
+        <a href="/api/v1/healthz">Health</a>
+        <a href="https://github.com/TuanTran0168">GitHub</a>
+      </nav>
+      <p class="credit">Crafted with <span class="heart">♥</span> by <b>Trần Đăng Tuấn</b></p>
+    </div>
+  </main>
+  <script>
+    "use strict";
+    var SERVER_START_UNIX_MILLISECONDS = {{.ServerStartUnixMilliseconds}};
+    var CLOCK_TICK_MILLISECONDS = 1000;
+    var STARFIELD_SEED = 20260702;
+    var STAR_COUNT = 140;
+    var STAR_MAXIMUM_RADIUS_PIXELS = 1.6;
+    var TWINKLE_SPEED_RADIANS_PER_MILLISECOND = 0.0012;
+    var MILLISECONDS_PER_SECOND = 1000;
+    var SECONDS_PER_MINUTE = 60;
+    var MINUTES_PER_HOUR = 60;
+    var HOURS_PER_DAY = 24;
+
+    // Deterministic PRNG (mulberry32): the same seed always draws the same sky,
+    // matching the project rule that scene visuals never use Math.random.
+    function createSeededRandom(seedValue) {
+      var state = seedValue >>> 0;
+      return function nextRandom() {
+        state = (state + 0x6d2b79f5) >>> 0;
+        var mixed = state;
+        mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+        mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    var starfieldCanvas = document.getElementById("starfield");
+    var starfieldContext = starfieldCanvas.getContext("2d");
+    var stars = [];
+    var reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function buildStars() {
+      var nextRandom = createSeededRandom(STARFIELD_SEED);
+      stars = [];
+      for (var starIndex = 0; starIndex < STAR_COUNT; starIndex += 1) {
+        stars.push({
+          horizontalFraction: nextRandom(),
+          verticalFraction: nextRandom(),
+          radiusPixels: 0.4 + nextRandom() * STAR_MAXIMUM_RADIUS_PIXELS,
+          twinklePhaseRadians: nextRandom() * Math.PI * 2
+        });
+      }
+    }
+
+    function resizeStarfield() {
+      starfieldCanvas.width = window.innerWidth;
+      starfieldCanvas.height = window.innerHeight;
+      drawStarfield(0);
+    }
+
+    function drawStarfield(elapsedMilliseconds) {
+      starfieldContext.clearRect(0, 0, starfieldCanvas.width, starfieldCanvas.height);
+      for (var starIndex = 0; starIndex < stars.length; starIndex += 1) {
+        var star = stars[starIndex];
+        var twinkle = reducedMotionQuery.matches
+          ? 0.75
+          : 0.55 + 0.45 * Math.sin(star.twinklePhaseRadians + elapsedMilliseconds * TWINKLE_SPEED_RADIANS_PER_MILLISECOND);
+        starfieldContext.globalAlpha = twinkle;
+        starfieldContext.fillStyle = "#f2eee6";
+        starfieldContext.beginPath();
+        starfieldContext.arc(
+          star.horizontalFraction * starfieldCanvas.width,
+          star.verticalFraction * starfieldCanvas.height,
+          star.radiusPixels,
+          0,
+          Math.PI * 2
+        );
+        starfieldContext.fill();
+      }
+      starfieldContext.globalAlpha = 1;
+    }
+
+    function animateStarfield(frameTimestampMilliseconds) {
+      drawStarfield(frameTimestampMilliseconds);
+      window.requestAnimationFrame(animateStarfield);
+    }
+
+    function padToTwoDigits(numericValue) {
+      return String(numericValue).padStart(2, "0");
+    }
+
+    function updateClock() {
+      var now = new Date();
+      document.getElementById("clock-time").textContent =
+        padToTwoDigits(now.getHours()) + ":" + padToTwoDigits(now.getMinutes()) + ":" + padToTwoDigits(now.getSeconds());
+      document.getElementById("clock-date").textContent = now.toDateString();
+
+      var uptimeTotalSeconds = Math.max(0, Math.floor((now.getTime() - SERVER_START_UNIX_MILLISECONDS) / MILLISECONDS_PER_SECOND));
+      var uptimeDays = Math.floor(uptimeTotalSeconds / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY));
+      var uptimeHours = Math.floor(uptimeTotalSeconds / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR)) % HOURS_PER_DAY;
+      var uptimeMinutes = Math.floor(uptimeTotalSeconds / SECONDS_PER_MINUTE) % MINUTES_PER_HOUR;
+      var uptimeSeconds = uptimeTotalSeconds % SECONDS_PER_MINUTE;
+      document.getElementById("uptime-counter").textContent =
+        uptimeDays + "d " + padToTwoDigits(uptimeHours) + "h " + padToTwoDigits(uptimeMinutes) + "m " + padToTwoDigits(uptimeSeconds) + "s";
+    }
+
+    buildStars();
+    resizeStarfield();
+    window.addEventListener("resize", resizeStarfield);
+    if (!reducedMotionQuery.matches) {
+      window.requestAnimationFrame(animateStarfield);
+    }
+    updateClock();
+    window.setInterval(updateClock, CLOCK_TICK_MILLISECONDS);
+  </script>
+</body>
+</html>
