@@ -47,8 +47,11 @@ func Load() Config {
 		AppName:            get("APP_NAME", "Myunivokai"),
 		PublicWebURL:       get("PUBLIC_WEB_URL", "http://localhost:3000"),
 		PublicAPIURL:       get("PUBLIC_API_URL", "http://localhost:8080"),
-		APIHost:            get("API_HOST", "0.0.0.0"),
-		APIPort:            get("API_PORT", "8080"),
+		APIHost: get("API_HOST", "0.0.0.0"),
+		// API_PORT wins locally; PORT is the platform-injected port on
+		// Render/Heroku-style hosts, so an unconfigured deploy still binds
+		// where the platform routes traffic.
+		APIPort: getAny([]string{"API_PORT", "PORT"}, "8080"),
 		AllowedOrigins:     split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
 		DatabaseURL:        get("DATABASE_URL", ""),
 		DatabaseDirectURL:  get("DATABASE_DIRECT_URL", ""),
@@ -66,8 +69,11 @@ func Load() Config {
 		GeminiModel:        get("GEMINI_MODEL", "gemini-2.5-flash"),
 		OpenAIAPIKey:       get("OPENAI_API_KEY", ""),
 		OpenAIModel:        get("OPENAI_MODEL", "gpt-4.1-mini"),
-		RateLimitRPS:       getFloat("RATE_LIMIT_RPS", 2),
-		RateLimitBurst:     getInt("RATE_LIMIT_BURST", 8),
+		RateLimitRPS: getFloat("RATE_LIMIT_RPS", 2),
+		// Burst must comfortably exceed one screen's legitimate fan-out (the
+		// gallery burst); 20 keeps abuse protection while never starving a
+		// single user's page load.
+		RateLimitBurst:  getInt("RATE_LIMIT_BURST", 20),
 		ShareSlugLength:    getInt("SHARE_SLUG_LENGTH", 10),
 	}
 }
@@ -93,6 +99,13 @@ func LoadEnv() {
 
 func (c Config) Addr() string {
 	return c.APIHost + ":" + c.APIPort
+}
+
+// IsProduction reports whether the app runs with a production APP_ENV; shared
+// by the Swagger gate and the prod-only startup guards.
+func (c Config) IsProduction() bool {
+	normalized := strings.ToLower(strings.TrimSpace(c.AppEnv))
+	return normalized == "production" || normalized == "prod"
 }
 
 func envAliases(appEnv string) []string {

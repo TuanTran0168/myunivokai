@@ -57,6 +57,20 @@ func (s *MemoryStore) GetWorld(ctx context.Context, worldID string) (WorldBundle
 	return WorldBundle{World: world, Variants: cloneVariants(s.variants[worldID])}, nil
 }
 
+func (s *MemoryStore) GetWorldsByIDs(ctx context.Context, worldIDs []string) ([]WorldBundle, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	bundles := make([]WorldBundle, 0, len(worldIDs))
+	for _, worldID := range worldIDs {
+		world, ok := s.worlds[worldID]
+		if !ok {
+			continue
+		}
+		bundles = append(bundles, WorldBundle{World: world, Variants: cloneVariants(s.variants[worldID])})
+	}
+	return bundles, nil
+}
+
 func (s *MemoryStore) AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

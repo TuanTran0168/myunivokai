@@ -93,6 +93,11 @@ export default function ShareWorldPage({ params }: PageProps) {
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {world.title || "Shared universe"}
               </h1>
+              {world.nickname ? (
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
+                  A portrait of {world.nickname}
+                </p>
+              ) : null}
               {planets.length ? (
                 // Engraved accession placard — the world's identity as curatorial
                 // wall-text, in place of the old fake "Signature" tag.

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -30,6 +29,7 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 		r.Get("/healthz", health.Handle)
 		r.Get("/readyz", health.HandleReadiness)
 		r.Post("/worlds", worlds.Create)
+		r.Get("/worlds", worlds.GetBatch)
 		r.Get("/worlds/{worldId}", worlds.Get)
 		r.Post("/worlds/{worldId}/variants", worlds.RegenerateVariant)
 		r.Post("/worlds/{worldId}/variants/{variantId}/select", worlds.SelectVariant)
@@ -37,13 +37,8 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 		r.Get("/share/worlds/{shareSlug}", share.GetWorld)
 	})
 	// Swagger UI documents internal endpoints; expose it outside production only.
-	if !isProductionEnvironment(cfg.AppEnv) {
+	if !cfg.IsProduction() {
 		r.Get("/swagger/*", httpSwagger.WrapHandler)
 	}
 	return r
-}
-
-func isProductionEnvironment(appEnv string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(appEnv))
-	return normalized == "production" || normalized == "prod"
 }

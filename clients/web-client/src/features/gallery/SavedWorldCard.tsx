@@ -49,6 +49,11 @@ export function SavedWorldCard({ world, onRemove }: SavedWorldCardProps) {
           <h2 className="font-display text-lg font-semibold tracking-normal text-paper">
             {worldScene.sceneName || world.title || "Untitled universe"}
           </h2>
+          {world.nickname ? (
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
+              A portrait of {world.nickname}
+            </p>
+          ) : null}
           {worldScene.quote ? (
             <p className="mt-3 line-clamp-2 text-sm italic leading-6 text-on-surface-variant">
               &ldquo;{worldScene.quote}&rdquo;

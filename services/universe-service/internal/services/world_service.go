@@ -104,6 +104,26 @@ func (s *WorldService) GetWorld(ctx context.Context, worldID string) (models.Wor
 	}, nil
 }
 
+// GetWorlds loads a batch of worlds in one store round-trip pair; ids that do
+// not exist are simply absent from the result (the caller decides how to
+// present gaps), matching batch-read semantics rather than failing everything.
+func (s *WorldService) GetWorlds(ctx context.Context, worldIDs []string) (models.WorldListResponse, error) {
+	bundles, err := s.store.GetWorldsByIDs(ctx, worldIDs)
+	if err != nil {
+		return models.WorldListResponse{}, err
+	}
+	worlds := make([]models.WorldResponse, 0, len(bundles))
+	for _, bundle := range bundles {
+		worlds = append(worlds, models.WorldResponse{
+			World:           bundle.World,
+			SelectedVariant: selectedVariant(bundle.Variants),
+			Variants:        bundle.Variants,
+			PersonalityDNA:  bundle.World.PersonalityDNA,
+		})
+	}
+	return models.WorldListResponse{Worlds: worlds}, nil
+}
+
 func (s *WorldService) RegenerateVariant(ctx context.Context, worldID string) (models.VariantResponse, error) {
 	var lastConflictErr error
 	for attempt := 1; attempt <= maximumVariantCreateAttempts; attempt++ {
