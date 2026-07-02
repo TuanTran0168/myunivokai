@@ -225,7 +225,7 @@ func testRouter() http.Handler {
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
 	store := repositories.NewMemoryStore()
 	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
-	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
+	return NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service), NewLandingHandler(cfg, time.Now()))
 }
 
 func TestSwaggerIsDisabledInProduction(t *testing.T) {
@@ -233,7 +233,7 @@ func TestSwaggerIsDisabledInProduction(t *testing.T) {
 	store := repositories.NewMemoryStore()
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
 	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
-	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service))
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service), NewLandingHandler(cfg, time.Now()))
 
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))

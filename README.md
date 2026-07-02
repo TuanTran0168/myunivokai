@@ -5,6 +5,21 @@ My universe, okay? You describe yourself in a short form, AI distills it into a
 and the frontend renders your own solar system in 3D with three.js. You can
 regenerate variants, keep a gallery, and publish a public share link.
 
+## Live
+
+| What | URL |
+| --- | --- |
+| Web (production, Vercel) | <https://myunivokai.vercel.app> |
+| API (production, Render) | <https://myunivokai.onrender.com/api/v1> |
+| API health check | <https://myunivokai.onrender.com/api/v1/healthz> |
+| Swagger UI (local development only) | <http://localhost:8080/swagger/index.html> |
+
+Swagger documents internal endpoints, so the route is only mounted outside
+production (`internal/handlers/router.go`) — on Render (`APP_ENV=production`)
+it intentionally returns 404. The Render free plan sleeps after ~15 minutes of
+inactivity; the first request after that takes up to ~50 seconds to wake the
+API.
+
 ## How it works
 
 ```txt
@@ -25,6 +40,49 @@ Two architecture decisions worth knowing:
 2. AI providers sit behind a single interface. Switching Gemini to OpenAI is an
    `AI_PROVIDER` env change, not a code change. `mock` powers tests and
    key-less development.
+
+## Core concepts
+
+| Concept | Meaning |
+| --- | --- |
+| Personality DNA | The AI-generated semantic profile (archetype, scene name, planet meanings) distilled from the form — the only thing AI produces. |
+| World Seed | A deterministic seed derived by the backend; the same seed always produces the same 3D scene. No `Math.random` in scene code. |
+| World Scene Config | The full numeric scene description (planets, orbits, palette, mood) computed from the seed within safe bounds — AI-free. |
+| Variant | An alternative scene config for the same world, regenerated from a new seed at zero AI cost; one variant is "selected". |
+| Mood scene profiles | Per-mood rendering parameters mirrored between Go (`mood_scene_profile.go`) and TypeScript (`scene.ts`) — the two sides must stay in sync. |
+| Share slug | Publishing a world mints a public read-only URL (`/share/worlds/{slug}`). |
+| Gallery | Saved world ids kept client-side and loaded through one batch request (`GET /worlds?ids=`). |
+
+## Tech stack
+
+### Backend — `services/universe-service`
+
+- Go 1.25, [chi](https://github.com/go-chi/chi) router + `go-chi/cors`
+- PostgreSQL via `pgx/v5` + pgxpool; [goose](https://github.com/pressly/goose)
+  migrations; an in-memory store fallback so local dev needs no database
+- `zerolog` structured logging with request ids; `swaggo` Swagger UI
+- Per-IP token-bucket rate limiting (`golang.org/x/time/rate`) with
+  `Retry-After` on 429
+- AI providers (Gemini / OpenAI / mock) called over plain REST behind one
+  interface — no vendor SDKs
+
+### Frontend — `clients/web-client`
+
+- Next.js 14 (App Router) + React 18 + TypeScript
+- three.js via React Three Fiber (`@react-three/fiber`, `drei`,
+  `postprocessing`) rendering deterministic, seed-driven scenes
+- Tailwind CSS with the house "Vitrine + Liquid Glass" design system,
+  `sonner` toasts, `lucide-react` icons
+- `vitest` unit tests
+
+### Deploy platforms
+
+| Layer | Platform | Notes |
+| --- | --- | --- |
+| Web client | [Vercel](https://vercel.com) | Builds `clients/web-client`; `NEXT_PUBLIC_API_BASE_URL` set in the dashboard |
+| API | [Render](https://render.com) (Docker) | Blueprint `render.yaml` → `Dockerfile.render`; migrations run at boot |
+| Database | [Neon](https://neon.tech) PostgreSQL | Pooled URL for runtime, direct URL for migrations |
+| CI | GitHub Actions | Go tests + FE typecheck/lint/build on every PR into `staging`/`main` |
 
 ## Repository layout
 
@@ -61,6 +119,8 @@ Health checks and Swagger:
 curl http://localhost:8080/api/v1/healthz   # liveness
 curl http://localhost:8080/api/v1/readyz    # readiness (pings the store)
 # http://localhost:8080/swagger/index.html  (disabled in production)
+
+curl https://myunivokai.onrender.com/api/v1/healthz   # production liveness
 ```
 
 Regenerate Swagger after changing handlers/models:
@@ -77,7 +137,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The FE calls the API through
+Open <http://localhost:3000>. The FE calls the API through
 `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080/api/v1`, example env
 in `clients/web-client/.env.example`).
 
@@ -114,6 +174,7 @@ it into CI is tracked in `notes/fe/refactor-plan.md`.)
 
 - `notes/README.md` — index of internal docs (git convention, coding style, FE/BE architecture)
 - `notes/fe/threejs-scene-architecture.md` — how three.js is used and how to add new scene types
+- `notes/perf-render-plan.md` — the gallery-429 root cause, batch endpoint design, and the Render deploy kit
 - `AGENTS.md` — rules for AI agents working in this repo
 
 Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
@@ -121,6 +182,37 @@ Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
 
 ## Deployment
 
-Web on Vercel, API on Railway/Fly/Render, database on Neon PostgreSQL (pooled
-URL for runtime, direct URL for migrations). Production CORS only allows the
-real web domain — never a wildcard.
+Production runs the web client on Vercel, the API on Render (Docker), and the
+database on Neon PostgreSQL. Live URLs are in the [Live](#live) section.
+
+### API on Render
+
+`render.yaml` at the repo root is a Render Blueprint for the API service. It
+builds `services/universe-service/Dockerfile.render`; the container entrypoint
+(`docker-entrypoint-render.sh`) runs goose migrations first when
+`RUN_MIGRATIONS_ON_START=true` (against `DATABASE_DIRECT_URL`), then starts the
+API. Render injects `PORT` at runtime — the config reads `API_PORT` first, then
+`PORT` (`internal/config/config.go`), so no port setting is needed.
+
+Secrets are declared `sync: false` in the blueprint: their values live only in
+the Render dashboard (Environment tab), never in git. A local, untracked
+cheat-sheet with the production values is kept at
+`services/universe-service/.env.render` (`.gitignore` excludes all `.env.*`).
+
+- Neon connection strings: the pooled URL (host contains `-pooler`) for
+  `DATABASE_URL` (runtime), the direct URL for `DATABASE_DIRECT_URL`
+  (migrations); both with `sslmode=require`, without `channel_binding=require`
+  (not a pgx option).
+- CORS: `API_ALLOWED_ORIGINS=https://myunivokai.vercel.app` — the exact web
+  origin, never a wildcard, no trailing slash.
+- AI: the blueprint defaults to `AI_PROVIDER=mock` (no key needed). Switch to
+  `gemini`/`openai` plus the matching API key in the dashboard for real
+  generation.
+
+### Web on Vercel
+
+Set `NEXT_PUBLIC_API_BASE_URL=https://myunivokai.onrender.com/api/v1` in
+Vercel → Project → Settings → Environment Variables (Production). Next.js
+inlines `NEXT_PUBLIC_*` values at build time, so after changing one, redeploy
+without the build cache. Cheat-sheet: `clients/web-client/.env.render`
+(untracked).
