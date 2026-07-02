@@ -45,6 +45,28 @@ func TestRateLimitIsIndependentPerClient(t *testing.T) {
 	}
 }
 
+func TestRateLimitSetsRetryAfterOn429(t *testing.T) {
+	requestsPerSecond := 0.001
+	burst := 1
+	handler := RateLimit(requestsPerSecond, burst)(okHandler())
+
+	client := "10.0.0.3:3333"
+	if code := performRequest(t, handler, client, ""); code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", code)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.RemoteAddr = client
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf("over burst: expected 429, got %d", recorder.Code)
+	}
+	if retryAfter := recorder.Header().Get("Retry-After"); retryAfter == "" {
+		t.Fatal("429 response must carry a Retry-After header so clients know when to retry")
+	}
+}
+
 func TestRateLimitUsesForwardedForHeader(t *testing.T) {
 	requestsPerSecond := 0.001
 	burst := 1

@@ -87,6 +87,7 @@ export type WorldVariant = {
 
 export type World = {
   id: string;
+  nickname?: string;
   title?: string;
   summary?: string;
   status?: string;
@@ -99,6 +100,7 @@ export type World = {
 
 export type ShareWorld = {
   id: string;
+  nickname?: string;
   title?: string;
   summary?: string;
   quote?: string;

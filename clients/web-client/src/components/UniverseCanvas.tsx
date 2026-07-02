@@ -25,6 +25,14 @@ type UniverseCanvasProps = {
   className?: string;
   selectedPlanetKey?: string | null;
   onSelectPlanet?: (planet: PlanetSceneConfig | null) => void;
+  /**
+   * Keep the GL backbuffer readable after each frame. Costs a driver fast-path
+   * and extra memory, so it defaults to off; only the world page opts in
+   * because its Export Image reads the canvas pixels.
+   */
+  preserveDrawingBuffer?: boolean;
+  /** Device-pixel-ratio clamp; ambient backdrops pass a lower cap. */
+  devicePixelRatioRange?: [number, number];
 };
 
 /**
@@ -32,7 +40,14 @@ type UniverseCanvasProps = {
  * the scene theme via the registry, hosts camera, post-processing and the
  * hover overlay. Scene-specific visuals live in features/scene-renderers/.
  */
-export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPlanet }: UniverseCanvasProps) {
+export function UniverseCanvas({
+  scene,
+  className,
+  selectedPlanetKey,
+  onSelectPlanet,
+  preserveDrawingBuffer = false,
+  devicePixelRatioRange = CANVAS_DEVICE_PIXEL_RATIO_RANGE
+}: UniverseCanvasProps) {
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
 
@@ -63,8 +78,8 @@ export function UniverseCanvas({ scene, className, selectedPlanetKey, onSelectPl
           position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
           fov: cameraFieldOfView
         }}
-        dpr={CANVAS_DEVICE_PIXEL_RATIO_RANGE}
-        gl={{ preserveDrawingBuffer: true }}
+        dpr={devicePixelRatioRange}
+        gl={{ preserveDrawingBuffer }}
         onPointerMissed={() => onSelectPlanet?.(null)}
       >
         <color attach="background" args={[backgroundColor]} />

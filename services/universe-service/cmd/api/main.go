@@ -37,6 +37,12 @@ func main() {
 	}
 	var store repositories.Store
 	if pool == nil {
+		// In production a silent in-memory fallback would mean every world
+		// vanishes on restart/scale with readiness still green — fail fast so
+		// the misconfiguration is caught at deploy time instead.
+		if cfg.IsProduction() {
+			log.Fatal().Msg("DATABASE_URL must be set in production; refusing to start with the in-memory store")
+		}
 		log.Warn().Msg("DATABASE_URL is empty; using in-memory store")
 		store = repositories.NewMemoryStore()
 	} else {

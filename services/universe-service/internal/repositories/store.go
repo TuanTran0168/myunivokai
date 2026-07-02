@@ -21,6 +21,10 @@ type WorldBundle struct {
 type Store interface {
 	CreateWorld(ctx context.Context, world models.World, variant models.WorldVariant, logs []models.AIGenerationLog) (WorldBundle, error)
 	GetWorld(ctx context.Context, worldID string) (WorldBundle, error)
+	// GetWorldsByIDs returns the bundles for every id that exists, in the same
+	// order as the requested ids; unknown ids are skipped rather than failing
+	// the whole batch. Backs the gallery's single-request load.
+	GetWorldsByIDs(ctx context.Context, worldIDs []string) ([]WorldBundle, error)
 	AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error)
 	SelectVariant(ctx context.Context, worldID, variantID string) (models.WorldVariant, error)
 	PublishWorld(ctx context.Context, worldID, slug string) (models.World, error)

@@ -23,10 +23,37 @@ const docTemplate = `{
                 "tags": [
                     "health"
                 ],
-                "summary": "Health check",
+                "summary": "Health check (liveness)",
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness check (dependencies)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -57,25 +84,63 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorldResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
             }
         },
         "/worlds": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "worlds"
+                ],
+                "summary": "Get universes by ids",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated world IDs (max 50)",
+                        "name": "ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            },
             "post": {
                 "consumes": [
                     "application/json"
@@ -94,7 +159,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldInput"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput"
                         }
                     }
                 ],
@@ -102,25 +167,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CreateWorldResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -148,19 +213,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -188,19 +253,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublishResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -228,19 +293,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -275,19 +340,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope"
+                            "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -295,7 +360,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorBody": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody": {
             "type": "object",
             "properties": {
                 "code": {
@@ -304,7 +369,7 @@ const docTemplate = `{
                 "details": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorDetail"
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail"
                     }
                 },
                 "message": {
@@ -315,7 +380,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorDetail": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail": {
             "type": "object",
             "properties": {
                 "field": {
@@ -326,15 +391,15 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope": {
             "type": "object",
             "properties": {
                 "error": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorBody"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.CameraConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig": {
             "type": "object",
             "properties": {
                 "distance": {
@@ -345,7 +410,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.CoreConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig": {
             "type": "object",
             "properties": {
                 "color": {
@@ -365,21 +430,21 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.CreateWorldResponse": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse": {
             "type": "object",
             "properties": {
                 "personalityDNA": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA"
                 },
                 "variant": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant"
                 },
                 "world": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.World"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet": {
             "type": "object",
             "properties": {
                 "energy": {
@@ -399,7 +464,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.EnergySignature": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature": {
             "type": "object",
             "properties": {
                 "intensity": {
@@ -413,7 +478,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.HUDConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig": {
             "type": "object",
             "properties": {
                 "showLabels": {
@@ -424,7 +489,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.Palette": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette": {
             "type": "object",
             "properties": {
                 "accent": {
@@ -447,7 +512,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.ParticleConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig": {
             "type": "object",
             "properties": {
                 "color": {
@@ -464,19 +529,19 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA": {
             "type": "object",
             "properties": {
                 "archetype": {
                     "type": "string"
                 },
                 "energySignature": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.EnergySignature"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature"
                 },
                 "planets": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet"
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet"
                     }
                 },
                 "quote": {
@@ -492,14 +557,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "traitScores": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores"
                 },
                 "visualHints": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VisualHints"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PlanetSceneConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig": {
             "type": "object",
             "properties": {
                 "color": {
@@ -531,7 +596,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PostFXConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig": {
             "type": "object",
             "properties": {
                 "bloomIntensity": {
@@ -539,32 +604,32 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PublicDNA": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA": {
             "type": "object",
             "properties": {
                 "planets": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet"
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet"
                     }
                 },
                 "traitScores": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PublicVariant": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant": {
             "type": "object",
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig"
                 },
                 "seed": {
                     "type": "string"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorld": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld": {
             "type": "object",
             "properties": {
                 "archetype": {
@@ -584,21 +649,21 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorldResponse": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse": {
             "type": "object",
             "properties": {
                 "publicDNA": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicDNA"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA"
                 },
                 "variant": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicVariant"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant"
                 },
                 "world": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorld"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.PublishResponse": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse": {
             "type": "object",
             "properties": {
                 "shareSlug": {
@@ -609,7 +674,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores": {
             "type": "object",
             "properties": {
                 "creativity": {
@@ -629,15 +694,15 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse": {
             "type": "object",
             "properties": {
                 "variant": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.VisualHints": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints": {
             "type": "object",
             "properties": {
                 "coreSymbol": {
@@ -654,7 +719,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.World": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.World": {
             "type": "object",
             "properties": {
                 "archetype": {
@@ -695,7 +760,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.WorldInput": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput": {
             "type": "object",
             "properties": {
                 "challenge": {
@@ -736,55 +801,66 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.WorldResponse": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse": {
+            "type": "object",
+            "properties": {
+                "worlds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse"
+                    }
+                }
+            }
+        },
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse": {
             "type": "object",
             "properties": {
                 "personalityDNA": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA"
                 },
                 "selectedVariant": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant"
                 },
                 "variants": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant"
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant"
                     }
                 },
                 "world": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.World"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World"
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig": {
             "type": "object",
             "properties": {
                 "archetype": {
                     "type": "string"
                 },
                 "camera": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CameraConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig"
                 },
                 "core": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CoreConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig"
                 },
                 "hud": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.HUDConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig"
                 },
                 "palette": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.Palette"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette"
                 },
                 "particles": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.ParticleConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig"
                 },
                 "planets": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PlanetSceneConfig"
+                        "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig"
                     }
                 },
                 "postFX": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PostFXConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig"
                 },
                 "quote": {
                     "type": "string"
@@ -800,11 +876,11 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant": {
+        "github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant": {
             "type": "object",
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig"
+                    "$ref": "#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig"
                 },
                 "createdAt": {
                     "type": "string"

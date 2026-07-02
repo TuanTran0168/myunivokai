@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/ai"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/ai/providers"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/config"
@@ -79,6 +80,81 @@ func TestWorldHandlerFlow(t *testing.T) {
 	if strings.Contains(res.Body.String(), "overthink") {
 		t.Fatalf("public response leaked challenge: %s", res.Body.String())
 	}
+}
+
+func TestWorldHandlerGetBatch(t *testing.T) {
+	router := testRouter()
+	firstWorldID := createTestWorld(t, router, "Tuan")
+	secondWorldID := createTestWorld(t, router, "Neo")
+
+	missingWorldID := "3f2f4c1e-9d5a-4b7e-8c6d-0a1b2c3d4e5f"
+	batchIDs := firstWorldID + "," + secondWorldID + "," + missingWorldID + ",not-a-uuid," + firstWorldID
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/worlds?ids="+batchIDs, nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("batch status=%d body=%s", res.Code, res.Body.String())
+	}
+	var batch models.WorldListResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &batch); err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Worlds) != 2 {
+		t.Fatalf("expected 2 worlds (missing + malformed + duplicate ids skipped), got %d", len(batch.Worlds))
+	}
+	if batch.Worlds[0].World.ID != firstWorldID || batch.Worlds[1].World.ID != secondWorldID {
+		t.Fatalf("expected requested-id order, got %s then %s", batch.Worlds[0].World.ID, batch.Worlds[1].World.ID)
+	}
+	for _, worldResponse := range batch.Worlds {
+		if worldResponse.SelectedVariant.ID == "" || len(worldResponse.Variants) == 0 {
+			t.Fatalf("batch entry must match the single-get shape, got %+v", worldResponse)
+		}
+	}
+}
+
+func TestWorldHandlerGetBatchRejectsMissingAndOversizedIDs(t *testing.T) {
+	router := testRouter()
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/worlds", nil))
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 without ids, got %d", res.Code)
+	}
+
+	oversizedIDs := make([]string, 0, maximumBatchWorldIDs+1)
+	for range maximumBatchWorldIDs + 1 {
+		oversizedIDs = append(oversizedIDs, uuid.NewString())
+	}
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/worlds?ids="+strings.Join(oversizedIDs, ","), nil))
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for more than %d ids, got %d", maximumBatchWorldIDs, res.Code)
+	}
+}
+
+// createTestWorld creates a world through the full router and returns its id.
+func createTestWorld(t *testing.T, router http.Handler, nickname string) string {
+	t.Helper()
+	input := models.WorldInput{
+		Nickname:            nickname,
+		Role:                "Developer",
+		Interests:           []string{"coding", "travel", "photo"},
+		Traits:              []string{"curious", "builder", "focused"},
+		Goal:                "Build a beautiful AI product",
+		Mood:                "focused",
+		FavoriteColors:      []string{"#8B5CF6"},
+		PreferredWorldStyle: "cosmic-galaxy",
+	}
+	body, _ := json.Marshal(input)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/api/v1/worlds", bytes.NewReader(body)))
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", res.Code, res.Body.String())
+	}
+	var created models.CreateWorldResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	return created.World.ID
 }
 
 func TestWorldHandlerValidationError(t *testing.T) {
