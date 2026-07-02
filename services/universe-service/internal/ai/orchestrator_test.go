@@ -103,6 +103,36 @@ func TestOrchestratorDoesNotRepairTransportErrors(t *testing.T) {
 	}
 }
 
+// alwaysInvalidProvider is reachable but never returns schema-valid JSON.
+type alwaysInvalidProvider struct{}
+
+func (p alwaysInvalidProvider) Name() ProviderName { return ProviderName("invalid") }
+
+func (p alwaysInvalidProvider) GenerateStructured(ctx context.Context, req StructuredRequest) (*StructuredResponse, error) {
+	return &StructuredResponse{Provider: p.Name(), Model: "invalid", JSON: json.RawMessage(`{"archetype":123}`)}, nil
+}
+
+func TestOrchestratorMarksTransportFailuresUnavailable(t *testing.T) {
+	orch := NewOrchestrator(failingProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
+	_, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})
+	if !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("expected ErrProviderUnavailable for a transport failure, got %v", err)
+	}
+}
+
+func TestOrchestratorDoesNotMarkValidationFailuresUnavailable(t *testing.T) {
+	orch := NewOrchestrator(alwaysInvalidProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
+	_, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	// The provider WAS reachable; presenting this as an availability problem
+	// would tell users to retry something that will fail identically.
+	if errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("validation failure must not read as unavailable: %v", err)
+	}
+}
+
 func TestOrchestratorFallback(t *testing.T) {
 	orch := NewOrchestrator(failingProvider{}, successProvider{}, validation.ValidatePersonalityDNA, time.Second)
 	result, err := orch.GeneratePersonalityDNA(context.Background(), StructuredRequest{})

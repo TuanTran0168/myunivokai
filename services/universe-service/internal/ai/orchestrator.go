@@ -4,10 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/models"
 )
+
+// ErrProviderUnavailable marks transport-level failures (network errors,
+// timeouts, non-2xx responses) as opposed to schema-validation failures, so
+// callers can answer "temporarily unavailable, try again" instead of blaming
+// the response content.
+var ErrProviderUnavailable = errors.New("ai provider unavailable")
 
 type ResponseValidator func(json.RawMessage) (models.PersonalityDNA, error)
 
@@ -73,7 +80,7 @@ func (o *Orchestrator) GeneratePersonalityDNA(ctx context.Context, req Structure
 func (o *Orchestrator) tryProvider(ctx context.Context, provider Provider, req StructuredRequest, attempts *[]AttemptLog) (*DNAResult, error) {
 	result, validationErr, transportErr := o.callProviderOnce(ctx, provider, req, attempts)
 	if transportErr != nil {
-		return nil, transportErr
+		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, transportErr)
 	}
 	if validationErr == nil {
 		return result, nil
@@ -84,7 +91,7 @@ func (o *Orchestrator) tryProvider(ctx context.Context, provider Provider, req S
 		repairRequest.UserPrompt = buildRepairUserPrompt(req, validationErr)
 		result, validationErr, transportErr = o.callProviderOnce(ctx, provider, repairRequest, attempts)
 		if transportErr != nil {
-			return nil, transportErr
+			return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, transportErr)
 		}
 		if validationErr == nil {
 			return result, nil
