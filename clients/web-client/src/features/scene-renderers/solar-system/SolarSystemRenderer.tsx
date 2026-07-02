@@ -7,6 +7,7 @@ import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
 import { ConstellationField } from "./ConstellationField";
+import { MilkyWayBand } from "./MilkyWayBand";
 import { OrbitPath } from "./OrbitPath";
 import { Skybox } from "./Skybox";
 import { SolarPlanet, orbitRadiusForPlanet } from "./SolarPlanet";
@@ -74,6 +75,7 @@ export function SolarSystemRenderer({
     <>
       <ambientLight intensity={AMBIENT_LIGHT_INTENSITY} />
       <Skybox />
+      <MilkyWayBand />
       <ConstellationField seed={seed} />
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
       <Sun coreConfig={scene.core} />

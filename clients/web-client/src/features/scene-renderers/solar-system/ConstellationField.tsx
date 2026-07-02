@@ -20,9 +20,9 @@ const CELESTIAL_SPHERE_RADIUS = 52;
 const CONSTELLATION_ANGULAR_SPREAD_RADIANS = 0.2;
 // Bias anchors away from the poles, where connected lines look distorted.
 const POLE_AVOIDANCE_RATIO = 0.75;
-const CONSTELLATION_STAR_POINT_SIZE = 1.1;
-const CONSTELLATION_STAR_OPACITY = 1;
-const CONSTELLATION_LINE_OPACITY = 0.5;
+const CONSTELLATION_STAR_POINT_SIZE = 0.75;
+const CONSTELLATION_STAR_OPACITY = 0.95;
+const CONSTELLATION_LINE_OPACITY = 0.3;
 const CONSTELLATION_STAR_COLOR = "#F2EEE6";
 const CONSTELLATION_LINE_COLOR = "#D9B96E";
 
@@ -73,7 +73,10 @@ export function ConstellationField({ seed }: ConstellationFieldProps) {
 
   return (
     <group>
-      <points>
+      {/* frustumCulled=false on both: the auto bounding sphere of hand-built
+          buffer geometry misjudges these sky-wide shells, so orbiting the
+          camera made whole constellations pop in and out of existence. */}
+      <points frustumCulled={false}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -93,7 +96,7 @@ export function ConstellationField({ seed }: ConstellationFieldProps) {
           toneMapped={false}
         />
       </points>
-      <lineSegments>
+      <lineSegments frustumCulled={false}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
