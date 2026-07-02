@@ -13,6 +13,12 @@ type WorldResponse struct {
 	PersonalityDNA  PersonalityDNA `json:"personalityDNA"`
 }
 
+// WorldListResponse carries a batch read; each entry has the exact same shape
+// as a single GET /worlds/{id} response so clients reuse one normalizer.
+type WorldListResponse struct {
+	Worlds []WorldResponse `json:"worlds"`
+}
+
 type VariantResponse struct {
 	Variant WorldVariant `json:"variant"`
 }

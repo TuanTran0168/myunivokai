@@ -28,7 +28,9 @@ func (p *GeminiProvider) GenerateStructured(ctx context.Context, req ai.Structur
 	if p.apiKey == "" || p.model == "" {
 		return nil, errors.New("gemini provider is missing api key or model")
 	}
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", p.model, p.apiKey)
+	// The key travels in a header, never the URL: URLs end up in access logs,
+	// proxies, and error traces, and a query-string key would leak with them.
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", p.model)
 	body := map[string]any{
 		"systemInstruction": map[string]any{"parts": []map[string]string{{"text": req.SystemPrompt}}},
 		"contents":          []map[string]any{{"role": "user", "parts": []map[string]string{{"text": req.UserPrompt}}}},
@@ -39,7 +41,7 @@ func (p *GeminiProvider) GenerateStructured(ctx context.Context, req ai.Structur
 			"responseSchema":   sanitizeSchemaForGemini(req.Schema),
 		},
 	}
-	raw, err := postJSON(ctx, p.client, url, body, nil)
+	raw, err := postJSON(ctx, p.client, url, body, map[string]string{"x-goog-api-key": p.apiKey})
 	if err != nil {
 		return nil, err
 	}

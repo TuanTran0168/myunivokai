@@ -26,9 +26,20 @@ func (s *PostgresStore) CreateWorld(ctx context.Context, world models.World, var
 		return WorldBundle{}, err
 	}
 	defer tx.Rollback(ctx)
-	inputJSON, _ := json.Marshal(world.Input)
-	dnaJSON, _ := json.Marshal(world.PersonalityDNA)
-	configJSON, _ := json.Marshal(variant.Config)
+	// A silent marshal failure here would persist NULL/empty JSON for the
+	// determinism-critical scene config; surface it as an error instead.
+	inputJSON, err := json.Marshal(world.Input)
+	if err != nil {
+		return WorldBundle{}, fmt.Errorf("marshal world input: %w", err)
+	}
+	dnaJSON, err := json.Marshal(world.PersonalityDNA)
+	if err != nil {
+		return WorldBundle{}, fmt.Errorf("marshal personality dna: %w", err)
+	}
+	configJSON, err := json.Marshal(variant.Config)
+	if err != nil {
+		return WorldBundle{}, fmt.Errorf("marshal scene config: %w", err)
+	}
 	row := tx.QueryRow(ctx, `INSERT INTO worlds (nickname, role, input, personality_dna, archetype, scene_name, quote, visibility)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,'private')
 		RETURNING id::text, created_at, updated_at`,
@@ -72,7 +83,10 @@ func (s *PostgresStore) GetWorld(ctx context.Context, worldID string) (WorldBund
 }
 
 func (s *PostgresStore) AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error) {
-	configJSON, _ := json.Marshal(variant.Config)
+	configJSON, err := json.Marshal(variant.Config)
+	if err != nil {
+		return models.WorldVariant{}, fmt.Errorf("marshal scene config: %w", err)
+	}
 	row := s.pool.QueryRow(ctx, `INSERT INTO world_variants (world_id, variant_no, seed, config)
 		VALUES ($1,$2,$3,$4)
 		RETURNING id::text, world_id::text, created_at`, worldID, variant.VariantNo, variant.Seed, configJSON)
@@ -139,13 +153,22 @@ func (s *PostgresStore) GetPublicWorld(ctx context.Context, slug string) (WorldB
 	return WorldBundle{World: world, Variants: variants}, nil
 }
 
-func (s *PostgresStore) getWorldByQuery(ctx context.Context, where, arg string) (models.World, error) {
+// worldSelectColumns is the single source of truth for reading a world row;
+// scanWorld must stay in sync with this column order.
+const worldSelectColumns = `id::text, nickname, COALESCE(role,''), input, personality_dna, archetype, scene_name, quote,
+	visibility, share_slug, selected_variant_id::text, created_at, updated_at`
+
+// rowScanner is satisfied by both pgx.Row and pgx.Rows, so single-row and
+// batch reads share one scan routine.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanWorld(scanner rowScanner) (models.World, error) {
 	var world models.World
 	var inputJSON, dnaJSON []byte
-	row := s.pool.QueryRow(ctx, `SELECT id::text, nickname, COALESCE(role,''), input, personality_dna, archetype, scene_name, quote,
-		visibility, share_slug, selected_variant_id::text, created_at, updated_at FROM worlds `+where, arg)
-	if err := row.Scan(&world.ID, &world.Nickname, &world.Role, &inputJSON, &dnaJSON, &world.Archetype, &world.SceneName, &world.Quote, &world.Visibility, &world.ShareSlug, &world.SelectedVariantID, &world.CreatedAt, &world.UpdatedAt); err != nil {
-		return models.World{}, mapNoRows(err)
+	if err := scanner.Scan(&world.ID, &world.Nickname, &world.Role, &inputJSON, &dnaJSON, &world.Archetype, &world.SceneName, &world.Quote, &world.Visibility, &world.ShareSlug, &world.SelectedVariantID, &world.CreatedAt, &world.UpdatedAt); err != nil {
+		return models.World{}, err
 	}
 	if err := json.Unmarshal(inputJSON, &world.Input); err != nil {
 		return models.World{}, fmt.Errorf("decode world input for %s: %w", world.ID, err)
@@ -155,6 +178,77 @@ func (s *PostgresStore) getWorldByQuery(ctx context.Context, where, arg string) 
 	}
 	world.ShortNarrative = world.PersonalityDNA.ShortNarrative
 	return world, nil
+}
+
+func (s *PostgresStore) getWorldByQuery(ctx context.Context, where, arg string) (models.World, error) {
+	row := s.pool.QueryRow(ctx, `SELECT `+worldSelectColumns+` FROM worlds `+where, arg)
+	world, err := scanWorld(row)
+	if err != nil {
+		return models.World{}, mapNoRows(err)
+	}
+	return world, nil
+}
+
+// GetWorldsByIDs loads any number of worlds in a fixed two-query round-trip
+// pair (worlds by ANY, then all their variants by ANY), instead of the 2xN
+// sequential queries N single GetWorld calls would cost.
+func (s *PostgresStore) GetWorldsByIDs(ctx context.Context, worldIDs []string) ([]WorldBundle, error) {
+	if len(worldIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+worldSelectColumns+` FROM worlds WHERE id = ANY($1::uuid[])`, worldIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	worldsByID := make(map[string]models.World, len(worldIDs))
+	for rows.Next() {
+		world, err := scanWorld(rows)
+		if err != nil {
+			return nil, err
+		}
+		worldsByID[world.ID] = world
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	variantsByWorldID, err := s.getVariantsForWorlds(ctx, worldIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	bundles := make([]WorldBundle, 0, len(worldsByID))
+	for _, worldID := range worldIDs {
+		world, found := worldsByID[worldID]
+		if !found {
+			continue
+		}
+		bundles = append(bundles, WorldBundle{World: world, Variants: variantsByWorldID[worldID]})
+	}
+	return bundles, nil
+}
+
+func (s *PostgresStore) getVariantsForWorlds(ctx context.Context, worldIDs []string) (map[string][]models.WorldVariant, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id::text, world_id::text, variant_no, seed, config, COALESCE(thumbnail_url,''), is_selected, created_at
+		FROM world_variants WHERE world_id = ANY($1::uuid[]) ORDER BY world_id, variant_no`, worldIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	variantsByWorldID := make(map[string][]models.WorldVariant, len(worldIDs))
+	for rows.Next() {
+		var variant models.WorldVariant
+		var configJSON []byte
+		if err := rows.Scan(&variant.ID, &variant.WorldID, &variant.VariantNo, &variant.Seed, &configJSON, &variant.ThumbnailURL, &variant.IsSelected, &variant.CreatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(configJSON, &variant.Config); err != nil {
+			return nil, fmt.Errorf("decode scene config for variant %s: %w", variant.ID, err)
+		}
+		variantsByWorldID[variant.WorldID] = append(variantsByWorldID[variant.WorldID], variant)
+	}
+	return variantsByWorldID, rows.Err()
 }
 
 func (s *PostgresStore) getVariants(ctx context.Context, worldID string) ([]models.WorldVariant, error) {

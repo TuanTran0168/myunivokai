@@ -18,6 +18,10 @@ const (
 	// cleanupInterval bounds how often the idle sweep runs. The sweep happens
 	// lazily inside request handling, so no background goroutine is needed.
 	cleanupInterval = time.Minute
+	// retryAfterSeconds is advertised on 429 responses. The bucket refills at
+	// RATE_LIMIT_RPS tokens/second, so one second is an honest lower bound for
+	// when a rejected client can try again.
+	retryAfterSeconds = "1"
 )
 
 type clientLimiterEntry struct {
@@ -46,6 +50,7 @@ func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !limiter.allow(clientKeyFromRequest(r)) {
+				w.Header().Set("Retry-After", retryAfterSeconds)
 				httpx.WriteError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests. Please slow down.", nil)
 				return
 			}
@@ -55,6 +60,14 @@ func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Han
 }
 
 func (l *perClientRateLimiter) allow(clientKey string) bool {
+	// Only the map bookkeeping needs l.mutex; rate.Limiter has its own internal
+	// lock, so calling Allow() outside the map lock keeps concurrent requests
+	// from serializing on one mutex (the hot path the gallery burst hits).
+	entry := l.entryForClient(clientKey)
+	return entry.limiter.Allow()
+}
+
+func (l *perClientRateLimiter) entryForClient(clientKey string) *clientLimiterEntry {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -67,7 +80,7 @@ func (l *perClientRateLimiter) allow(clientKey string) bool {
 		l.clients[clientKey] = entry
 	}
 	entry.lastSeenTime = now
-	return entry.limiter.Allow()
+	return entry
 }
 
 func (l *perClientRateLimiter) removeIdleClientsLocked(now time.Time) {

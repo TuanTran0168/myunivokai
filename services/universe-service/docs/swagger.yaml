@@ -1,38 +1,38 @@
 basePath: /api/v1
 definitions:
-  github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorBody:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody:
     properties:
       code:
         type: string
       details:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorDetail'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail'
         type: array
       message:
         type: string
       requestId:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorDetail:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail:
     properties:
       field:
         type: string
       message:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope:
     properties:
       error:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorBody'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.CameraConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig:
     properties:
       distance:
         type: number
       fov:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.CoreConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig:
     properties:
       color:
         type: string
@@ -45,16 +45,16 @@ definitions:
       spinSpeed:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.CreateWorldResponse:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse:
     properties:
       personalityDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA'
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.World'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet:
     properties:
       energy:
         type: integer
@@ -67,7 +67,7 @@ definitions:
       type:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.EnergySignature:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature:
     properties:
       intensity:
         type: integer
@@ -76,14 +76,14 @@ definitions:
       secondary:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.HUDConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig:
     properties:
       showLabels:
         type: boolean
       showTraitBars:
         type: boolean
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.Palette:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette:
     properties:
       accent:
         type: string
@@ -98,7 +98,7 @@ definitions:
       secondary:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.ParticleConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig:
     properties:
       color:
         type: string
@@ -109,15 +109,15 @@ definitions:
       spread:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA:
     properties:
       archetype:
         type: string
       energySignature:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.EnergySignature'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature'
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet'
         type: array
       quote:
         type: string
@@ -128,11 +128,11 @@ definitions:
       shortNarrative:
         type: string
       traitScores:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores'
       visualHints:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VisualHints'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PlanetSceneConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig:
     properties:
       color:
         type: string
@@ -153,28 +153,28 @@ definitions:
       size:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PostFXConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig:
     properties:
       bloomIntensity:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PublicDNA:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA:
     properties:
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.DNAPlanet'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet'
         type: array
       traitScores:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PublicVariant:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant:
     properties:
       config:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig'
       seed:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorld:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld:
     properties:
       archetype:
         type: string
@@ -187,23 +187,23 @@ definitions:
       shortNarrative:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorldResponse:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse:
     properties:
       publicDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicDNA'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA'
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicVariant'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant'
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorld'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.PublishResponse:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse:
     properties:
       shareSlug:
         type: string
       shareUrl:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.TraitScores:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores:
     properties:
       creativity:
         type: integer
@@ -216,12 +216,12 @@ definitions:
       focus:
         type: integer
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse:
     properties:
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.VisualHints:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints:
     properties:
       coreSymbol:
         type: string
@@ -232,7 +232,7 @@ definitions:
       theme:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.World:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.World:
     properties:
       archetype:
         type: string
@@ -259,7 +259,7 @@ definitions:
       visibility:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.WorldInput:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput:
     properties:
       challenge:
         type: string
@@ -286,39 +286,46 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.WorldResponse:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse:
+    properties:
+      worlds:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse'
+        type: array
+    type: object
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse:
     properties:
       personalityDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PersonalityDNA'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA'
       selectedVariant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
       variants:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
         type: array
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.World'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World'
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig:
     properties:
       archetype:
         type: string
       camera:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CameraConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig'
       core:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CoreConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig'
       hud:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.HUDConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig'
       palette:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.Palette'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette'
       particles:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.ParticleConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig'
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PlanetSceneConfig'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig'
         type: array
       postFX:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PostFXConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig'
       quote:
         type: string
       sceneName:
@@ -328,10 +335,10 @@ definitions:
       theme:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_apps_api_internal_models.WorldVariant:
+  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant:
     properties:
       config:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldSceneConfig'
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig'
       createdAt:
         type: string
       id:
@@ -363,7 +370,25 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Health check
+      summary: Health check (liveness)
+      tags:
+      - health
+  /readyz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Readiness check (dependencies)
       tags:
       - health
   /share/worlds/{shareSlug}:
@@ -380,19 +405,44 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublicWorldResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Get public universe
       tags:
       - share
   /worlds:
+    get:
+      parameters:
+      - description: Comma-separated world IDs (max 50)
+        in: query
+        name: ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+      summary: Get universes by ids
+      tags:
+      - worlds
     post:
       consumes:
       - application/json
@@ -402,26 +452,26 @@ paths:
         name: input
         required: true
         schema:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldInput'
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.CreateWorldResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Create universe
       tags:
       - worlds
@@ -439,15 +489,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.WorldResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Get universe
       tags:
       - worlds
@@ -465,15 +515,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.PublishResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Publish universe
       tags:
       - worlds
@@ -491,15 +541,15 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Regenerate universe variant
       tags:
       - worlds
@@ -522,15 +572,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_models.VariantResponse'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_apps_api_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
       summary: Select universe variant
       tags:
       - worlds
