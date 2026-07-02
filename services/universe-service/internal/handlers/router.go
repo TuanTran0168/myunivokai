@@ -15,7 +15,7 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recover)
 	r.Use(middleware.Logging)
-	r.Use(middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst))
+	r.Use(middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.TrustProxyHeaders))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},

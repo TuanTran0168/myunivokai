@@ -16,6 +16,10 @@ services:
         value: production
       - key: RUN_MIGRATIONS_ON_START
         value: "true"
+      # Render's proxy appends the real client IP to X-Forwarded-For; without
+      # this flag the rate limiter ignores the header and keys on RemoteAddr.
+      - key: TRUST_PROXY
+        value: "true"
       # mock needs no key; switch to gemini/openai in the dashboard when a real
       # key is configured.
       - key: AI_PROVIDER

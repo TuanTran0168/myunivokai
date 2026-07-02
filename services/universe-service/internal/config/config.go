@@ -37,7 +37,11 @@ type Config struct {
 	OpenAIModel        string
 	RateLimitRPS       float64
 	RateLimitBurst     int
-	ShareSlugLength    int
+	// TrustProxyHeaders declares that a trusted reverse proxy (Render, a load
+	// balancer) sits in front of the API and appends the real client address
+	// to X-Forwarded-For. Only then may rate limiting key on that header.
+	TrustProxyHeaders bool
+	ShareSlugLength   int
 }
 
 func Load() Config {
@@ -73,8 +77,9 @@ func Load() Config {
 		// Burst must comfortably exceed one screen's legitimate fan-out (the
 		// gallery burst); 20 keeps abuse protection while never starving a
 		// single user's page load.
-		RateLimitBurst:  getInt("RATE_LIMIT_BURST", 20),
-		ShareSlugLength:    getInt("SHARE_SLUG_LENGTH", 10),
+		RateLimitBurst:    getInt("RATE_LIMIT_BURST", 20),
+		TrustProxyHeaders: getBool("TRUST_PROXY", false),
+		ShareSlugLength:   getInt("SHARE_SLUG_LENGTH", 10),
 	}
 }
 
