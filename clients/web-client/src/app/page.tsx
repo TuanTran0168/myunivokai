@@ -165,6 +165,11 @@ export default function HomePage() {
             <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-grey">Live preview</span>
           </div>
+          {/* The world's owner, live from the form (payload defaults keep it
+              non-empty), so the placard reads like the mockup's title card. */}
+          <div className="font-display text-lg font-semibold leading-tight text-paper">
+            {payload.nickname}&rsquo;s Universe
+          </div>
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Curated from</div>
             <div className="mt-1 font-mono text-sm text-paper">{payload.interests.slice(0, 3).join(" · ")}</div>

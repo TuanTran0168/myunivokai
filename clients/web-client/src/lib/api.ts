@@ -96,6 +96,7 @@ function normalizeWorld(raw: any): World {
     world.selectedVariantId ?? world.selected_variant_id ?? raw.selectedVariant?.id ?? raw.selected_variant?.id;
   return {
     id: String(world.id ?? world.worldId ?? world.world_id ?? ""),
+    nickname: world.nickname,
     title: world.title ?? world.name ?? world.sceneName ?? world.scene_name ?? world.nickname,
     summary: world.summary ?? world.description ?? world.shortNarrative ?? world.short_narrative ?? world.quote,
     status: world.status ?? world.visibility,
@@ -114,6 +115,7 @@ function normalizeShare(raw: any): ShareWorld {
   const variant = variantRaw ? normalizeVariant(variantRaw) : undefined;
   return {
     id: String(publicWorld.id ?? publicWorld.worldId ?? publicWorld.world_id ?? ""),
+    nickname: publicWorld.nickname,
     title:
       publicWorld.title ??
       publicWorld.name ??

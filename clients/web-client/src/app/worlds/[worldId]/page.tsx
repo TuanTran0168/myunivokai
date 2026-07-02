@@ -195,6 +195,11 @@ export default function WorldPage({ params }: PageProps) {
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {activeScene.sceneName || world.title || "Untitled universe"}
               </h1>
+              {world.nickname ? (
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
+                  A portrait of {world.nickname}
+                </p>
+              ) : null}
               {activeScene.quote ? (
                 <p className="mt-2 text-sm italic leading-6 text-on-surface">&ldquo;{activeScene.quote}&rdquo;</p>
               ) : null}
