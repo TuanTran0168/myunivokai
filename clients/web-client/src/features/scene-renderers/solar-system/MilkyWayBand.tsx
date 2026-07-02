@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { AdditiveBlending } from "three";
 import { randomFromSeed } from "@/lib/scene";
+import { getSoftCircleTexture } from "../shared/softCircleTexture";
 
 /**
  * A procedural Milky Way: two point layers concentrated in a tilted band
@@ -21,16 +22,16 @@ const BAND_SPHERE_RADIUS = 56;
 const BAND_TILT_X_RADIANS = 0.5;
 const BAND_TILT_Z_RADIANS = 0.35;
 
-const HAZE_POINT_COUNT = 2200;
-const HAZE_BAND_SIGMA_RADIANS = 0.14;
-const HAZE_POINT_SIZE = 2.6;
-const HAZE_OPACITY = 0.05;
-const HAZE_COLOR = "#AFC3E8";
+const HAZE_POINT_COUNT = 3200;
+const HAZE_BAND_SIGMA_RADIANS = 0.13;
+const HAZE_POINT_SIZE = 1.7;
+const HAZE_OPACITY = 0.08;
+const HAZE_COLOR = "#B9C9EA";
 
-const BRIGHT_STAR_COUNT = 900;
-const BRIGHT_BAND_SIGMA_RADIANS = 0.2;
-const BRIGHT_POINT_SIZE = 0.5;
-const BRIGHT_OPACITY = 0.85;
+const BRIGHT_STAR_COUNT = 1100;
+const BRIGHT_BAND_SIGMA_RADIANS = 0.19;
+const BRIGHT_POINT_SIZE = 0.45;
+const BRIGHT_OPACITY = 0.9;
 const BRIGHT_COLOR = "#EDE8DC";
 
 type RandomSource = () => number;
@@ -64,6 +65,7 @@ export function MilkyWayBand() {
       brightPositions: buildBandPositions(random, BRIGHT_STAR_COUNT, BRIGHT_BAND_SIGMA_RADIANS)
     };
   }, []);
+  const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
 
   return (
     <group rotation={[BAND_TILT_X_RADIANS, 0, BAND_TILT_Z_RADIANS]}>
@@ -77,6 +79,8 @@ export function MilkyWayBand() {
           />
         </bufferGeometry>
         <pointsMaterial
+          map={softCircleTexture ?? undefined}
+          alphaTest={0.01}
           color={HAZE_COLOR}
           size={HAZE_POINT_SIZE}
           transparent
@@ -97,6 +101,8 @@ export function MilkyWayBand() {
           />
         </bufferGeometry>
         <pointsMaterial
+          map={softCircleTexture ?? undefined}
+          alphaTest={0.01}
           color={BRIGHT_COLOR}
           size={BRIGHT_POINT_SIZE}
           transparent

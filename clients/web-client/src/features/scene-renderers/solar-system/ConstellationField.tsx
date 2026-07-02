@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { AdditiveBlending } from "three";
 import { randomFromSeed } from "@/lib/scene";
+import { getSoftCircleTexture } from "../shared/softCircleTexture";
 
 /**
  * Seed-deterministic constellations on the celestial sphere: a handful of
@@ -70,6 +71,7 @@ function buildConstellationGeometry(seed: string): ConstellationGeometry {
 
 export function ConstellationField({ seed }: ConstellationFieldProps) {
   const { starPositions, linePositions } = useMemo(() => buildConstellationGeometry(seed), [seed]);
+  const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
 
   return (
     <group>
@@ -86,6 +88,8 @@ export function ConstellationField({ seed }: ConstellationFieldProps) {
           />
         </bufferGeometry>
         <pointsMaterial
+          map={softCircleTexture ?? undefined}
+          alphaTest={0.01}
           color={CONSTELLATION_STAR_COLOR}
           size={CONSTELLATION_STAR_POINT_SIZE}
           transparent
