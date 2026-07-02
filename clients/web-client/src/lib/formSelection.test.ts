@@ -25,28 +25,20 @@ describe("ensureRange (behavior lock — see formSelection.ts)", () => {
     expect(ensureRange([], defaults, 3, 8)).toEqual(defaults);
   });
 
-  it("locks the quirk: defaults are always merged after the selection", () => {
-    expect(ensureRange(["Music", "Art", "Science"], defaults, 3, 8)).toEqual([
-      "Music",
-      "Art",
-      "Science",
-      "Technology",
-      "Design",
-      "AI"
-    ]);
+  it("submits a sufficient selection exactly as picked — no invented defaults", () => {
+    expect(ensureRange(["Music", "Art", "Science"], defaults, 3, 8)).toEqual(["Music", "Art", "Science"]);
   });
 
-  it("dedupes with first occurrence winning and trims whitespace", () => {
+  it("pads with defaults only up to the minimum, skipping duplicates", () => {
     expect(ensureRange([" Technology ", "Music", ""], defaults, 3, 8)).toEqual([
       "Technology",
       "Music",
-      "Design",
-      "AI"
+      "Design"
     ]);
   });
 
-  it("caps the merged list at the maximum", () => {
-    const eightSelections = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
-    expect(ensureRange(eightSelections, defaults, 3, 8)).toEqual(eightSelections);
+  it("caps the selection at the maximum", () => {
+    const nineSelections = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];
+    expect(ensureRange(nineSelections, defaults, 3, 8)).toEqual(nineSelections.slice(0, 8));
   });
 });
