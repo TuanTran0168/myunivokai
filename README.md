@@ -9,8 +9,8 @@ regenerate variants, keep a gallery, and publish a public share link.
 
 | What | URL |
 | --- | --- |
-| Web (production, Vercel) | <https://myunivokai.vercel.app> |
-| API (production, Render) | <https://myunivokai.onrender.com/api/v1> |
+| Frontend (production, Vercel) | <https://myunivokai.vercel.app> |
+| Backend (production, Render) | <https://myunivokai.onrender.com> |
 | API health check | <https://myunivokai.onrender.com/api/v1/healthz> |
 | Swagger UI (local development only) | <http://localhost:8080/swagger/index.html> |
 
