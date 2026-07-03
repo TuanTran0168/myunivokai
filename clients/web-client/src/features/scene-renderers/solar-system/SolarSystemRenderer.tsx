@@ -76,7 +76,7 @@ export function SolarSystemRenderer({
       <ambientLight intensity={AMBIENT_LIGHT_INTENSITY} />
       <Skybox />
       <MilkyWayBand />
-      <ConstellationField seed={seed} />
+      <ConstellationField seed={seed} scene={scene} />
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
       <Sun coreConfig={scene.core} />
       {planets.map((planet, planetIndex) => {
