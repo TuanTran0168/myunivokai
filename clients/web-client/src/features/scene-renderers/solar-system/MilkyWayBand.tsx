@@ -3,164 +3,321 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { AdditiveBlending, NormalBlending, type Group } from "three";
+import type { SceneMilkyWayConfig, WeightedSkyColor } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import { SizedStarPoints, hexColorToUnitRgb, type StarLayerAttributes } from "../shared/SizedStarPoints";
+import {
+  DUST_CLOUD_ATLAS_VARIANT_INDEX,
+  EMISSIVE_CLOUD_ATLAS_VARIANT_COUNT
+} from "../shared/nebulaCloudTexture";
 import { NebulaCloudPoints, type CloudLayerAttributes } from "./NebulaCloudPoints";
 
 /**
- * A procedural Milky Way modeled on wide-field photographs, built from
- * seven layers on the celestial sphere:
+ * A procedural Milky Way modeled on wide-field photographs. Everything it
+ * draws with — seeds, star/cloud counts, weighted palettes, opacities, tilt,
+ * drift speed — comes from the scene config's `sky.milkyWay` section that the
+ * BACKEND generates and stores per world; the constants below are only the
+ * fallback for worlds created before schemaVersion 1.1 (and a defensive clamp
+ * against malformed data).
  *
- *   stars (custom shader, PER-STAR power-law sizes + twinkle):
- *     1. all-sky stars   — faint pinpricks covering the whole sky
- *     2. band stars      — a denser strip inside the tilted band
- *     3. core stars      — a warm crowded bulge at one spot on the band
- *     4. hero stars      — a couple dozen big glowing standouts
- *
- *   clouds (noise-texture sprites that fuse into continuous nebulosity):
- *     5. band nebulosity — blue-grey / dusty-pink glow along the band
- *     6. core glow       — warm amber clouds around the galactic center
- *     7. dust lanes      — dark clouds carving the band's midline
- *                          (normal blending: the only layer that can DARKEN)
- *
- * The band's width wobbles along its length so it reads organic, not like a
- * perfect ring. Fixed seed on purpose: there is one Milky Way, so every
- * world shares the same galaxy while its constellations stay personal.
+ * Structure (in band coordinates, azimuth = position along the band):
+ *   - star sizes/brightness follow the real magnitude system: counts triple
+ *     per magnitude step, brightness falls 2.512x per step (photographically
+ *     compressed), size ~ luminance^0.45 (Stellarium's rule);
+ *   - the band's half-width wobbles and WIDENS around the galactic-core
+ *     azimuth (the bulge), where warm core stars and amber clouds cluster;
+ *   - the GREAT RIFT — a meandering dark absorption lane — rejects stars and
+ *     emissive clouds near its centerline over roughly half the band, and the
+ *     dark dust sprites are laid ALONG it, splitting the band into the two
+ *     bright rails real photographs show;
+ *   - hero stars render with diffraction spikes (only the brightest stars
+ *     show spikes in real photos).
  */
 
-const MILKY_WAY_FIXED_SEED = "myunivokai-milky-way";
-// Between the constellations (52) and the skybox (60) so the band sits
-// behind the figures but inside the backdrop.
+// --- fallbacks for pre-1.1 configs + defensive clamps ------------------------
+const DEFAULT_MILKY_WAY_SEED = "myunivokai-milky-way";
+const DEFAULT_ALL_SKY_STAR_COUNT = 5200;
+const DEFAULT_BAND_STAR_COUNT = 5600;
+const DEFAULT_CORE_STAR_COUNT = 2600;
+const DEFAULT_HERO_STAR_COUNT = 26;
+const DEFAULT_NEBULA_CLOUD_COUNT = 420;
+const DEFAULT_CORE_CLOUD_COUNT = 160;
+const DEFAULT_DUST_CLOUD_COUNT = 260;
+const DEFAULT_NEBULA_CLOUD_OPACITY = 0.1;
+const DEFAULT_CORE_CLOUD_OPACITY = 0.12;
+const DEFAULT_DUST_CLOUD_OPACITY = 0.4;
+const DEFAULT_BAND_TILT_X_RADIANS = 0.5;
+const DEFAULT_BAND_TILT_Z_RADIANS = 0.35;
+const DEFAULT_ROTATION_RADIANS_PER_SECOND = 0.003;
+
+const MAXIMUM_STAR_COUNT_PER_LAYER = 20000;
+const MAXIMUM_CLOUD_COUNT_PER_LAYER = 2000;
+const MAXIMUM_BAND_TILT_RADIANS = Math.PI / 2;
+const MAXIMUM_ROTATION_RADIANS_PER_SECOND = 0.05;
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// Blackbody fallback palettes (vendian.org spectral anchors) for pre-1.1 configs.
+const FALLBACK_STAR_COLOR_DISTRIBUTION: WeightedColorEntry[] = [
+  { hexColor: "#9BB0FF", weight: 0.1 },
+  { hexColor: "#AABFFF", weight: 0.18 },
+  { hexColor: "#CAD7FF", weight: 0.22 },
+  { hexColor: "#F8F7FF", weight: 0.2 },
+  { hexColor: "#FFF4EA", weight: 0.15 },
+  { hexColor: "#FFD2A1", weight: 0.1 },
+  { hexColor: "#FFCC6F", weight: 0.05 }
+];
+const FALLBACK_CORE_STAR_COLOR_DISTRIBUTION: WeightedColorEntry[] = [
+  { hexColor: "#FFF4EA", weight: 0.3 },
+  { hexColor: "#FFD2A1", weight: 0.35 },
+  { hexColor: "#FFCC6F", weight: 0.25 },
+  { hexColor: "#F8F7FF", weight: 0.1 }
+];
+const FALLBACK_NEBULA_CLOUD_COLOR_DISTRIBUTION: WeightedColorEntry[] = [
+  { hexColor: "#2A3550", weight: 0.26 },
+  { hexColor: "#8FA5CE", weight: 0.22 },
+  { hexColor: "#E8DCC0", weight: 0.18 },
+  { hexColor: "#C9B7D6", weight: 0.14 },
+  { hexColor: "#6B4530", weight: 0.12 },
+  { hexColor: "#4A3020", weight: 0.08 }
+];
+const FALLBACK_CORE_CLOUD_COLOR_DISTRIBUTION: WeightedColorEntry[] = [
+  { hexColor: "#F5E3B8", weight: 0.4 },
+  { hexColor: "#E8C79A", weight: 0.3 },
+  { hexColor: "#D9A468", weight: 0.2 },
+  { hexColor: "#B98A58", weight: 0.1 }
+];
+const FALLBACK_DUST_CLOUD_COLOR_DISTRIBUTION: WeightedColorEntry[] = [
+  { hexColor: "#0D0D12", weight: 0.4 },
+  { hexColor: "#120C08", weight: 0.3 },
+  { hexColor: "#1A1210", weight: 0.3 }
+];
+
+// --- geometry ----------------------------------------------------------------
+// Between the constellations (52) and the skybox (60).
 const BAND_SPHERE_RADIUS = 56;
-// Slightly inside the glow layers so the dark patches sit visually on top
-// of the haze they are meant to occlude.
 const DUST_SPHERE_RADIUS = 55;
-const BAND_TILT_X_RADIANS = 0.5;
-const BAND_TILT_Z_RADIANS = 0.35;
-// The whole galaxy wheels slowly overhead, like a long-exposure night sky.
-// Farthest layer, so it drifts slower than the constellations in front.
-const BAND_ROTATION_RADIANS_PER_SECOND = 0.003;
-// The band's half-width breathes +-35% along its length (two slow waves),
-// which breaks the "perfect ring" look of a constant-sigma band.
+const SPHERE_RADIUS_JITTER_RATIO = 0.04;
 const BAND_WIDTH_WOBBLE_RATIO = 0.35;
 const BAND_WIDTH_WOBBLE_WAVES = 2;
-// Layers hug the sphere loosely (+-4% radius) so the band has a bit of depth.
-const SPHERE_RADIUS_JITTER_RATIO = 0.04;
-
-// The galactic core sits at ONE azimuth on the band, like the bright center
-// of the real Milky Way in wide-field photos.
-const CORE_AZIMUTH_CENTER_RADIANS = 0.9;
-
-// --- star populations -------------------------------------------------------
-// Star sizes follow a steep power law: almost every star is a faint
-// pinprick and only the rare tail is bright. This size spread is the single
-// biggest difference between a photographic starfield and uniform dots.
-const STAR_SIZE_POWER_LAW_EXPONENT = 5;
-// Brightness rises with the same draw that sets the size, so big stars glow
-// and small ones stay faint instead of every dot having equal weight.
-const STAR_MINIMUM_BRIGHTNESS = 0.45;
-
-const ALL_SKY_STAR_COUNT = 5200;
-const ALL_SKY_STAR_MINIMUM_SIZE = 0.06;
-const ALL_SKY_STAR_SIZE_RANGE = 0.5;
-
-const BAND_STAR_COUNT = 4200;
 const BAND_STAR_SIGMA_RADIANS = 0.1;
-const BAND_STAR_MINIMUM_SIZE = 0.05;
-const BAND_STAR_SIZE_RANGE = 0.42;
+const NEBULA_CLOUD_SIGMA_RADIANS = 0.085;
 
-const CORE_STAR_COUNT = 1800;
+// Galactic core (bulge): one azimuth where the band widens, brightens and warms.
+const CORE_AZIMUTH_CENTER_RADIANS = 0.9;
 const CORE_STAR_AZIMUTH_SIGMA_RADIANS = 0.35;
 const CORE_STAR_BAND_SIGMA_RADIANS = 0.15;
-const CORE_STAR_MINIMUM_SIZE = 0.05;
-const CORE_STAR_SIZE_RANGE = 0.34;
+const CORE_CLOUD_AZIMUTH_SIGMA_RADIANS = 0.32;
+const CORE_CLOUD_SIGMA_RADIANS = 0.12;
+const BULGE_SIGMA_WIDENING_RATIO = 0.9;
+const BULGE_AZIMUTH_SIGMA_RADIANS = 0.45;
 
-// A few standout stars with wide halos, like the bright foreground stars in
-// the reference photographs. Linear size spread — these are all meant to pop.
-const HERO_STAR_COUNT = 26;
-const HERO_STAR_SIZE_POWER_LAW_EXPONENT = 1;
-const HERO_STAR_MINIMUM_SIZE = 0.85;
-const HERO_STAR_SIZE_RANGE = 0.9;
+// Great Rift: a meandering absorption lane over roughly half the band, offset
+// from the core the way the real rift runs from Cygnus to Sagittarius.
+const RIFT_CENTER_AZIMUTH_OFFSET_RADIANS = 0.9;
+const RIFT_AZIMUTH_SIGMA_RADIANS = 1.1;
+const RIFT_MAXIMUM_ABSORPTION = 0.85;
+const RIFT_BASE_HALF_WIDTH_RADIANS = 0.035;
+const RIFT_HALF_WIDTH_WAVE_RADIANS = 0.02;
+const RIFT_MEANDER_PRIMARY_RADIANS = 0.02;
+const RIFT_MEANDER_SECONDARY_RADIANS = 0.012;
+const MAXIMUM_RIFT_RESAMPLE_ATTEMPTS = 4;
+// Dust sprites hug the rift centerline; these spread them along/across it.
+const DUST_ALONG_RIFT_AZIMUTH_RATIO = 0.9;
+const DUST_ACROSS_RIFT_WIDTH_RATIO = 0.8;
 
-type WeightedColor = {
+// --- star magnitudes (real-sky statistics) -----------------------------------
+// Counts roughly triple per magnitude step (pdf ~ 3^m) and brightness falls
+// 2.512x per step; photographic response compresses that huge range.
+const MAGNITUDE_COUNT_GROWTH = Math.log(3);
+const MAGNITUDE_BRIGHTNESS_FACTOR = 2.512;
+const PHOTOGRAPHIC_COMPRESSION_EXPONENT = 0.55;
+// Stellarium's rule: rendered radius ~ luminance^0.45.
+const STAR_SIZE_LUMINANCE_EXPONENT = 0.45;
+const FIELD_STAR_BRIGHTEST_MAGNITUDE = -1.5;
+const FIELD_STAR_FAINTEST_MAGNITUDE = 6.5;
+const HERO_STAR_BRIGHTEST_MAGNITUDE = -2.2;
+const HERO_STAR_FAINTEST_MAGNITUDE = -1.2;
+const MINIMUM_STAR_BRIGHTNESS = 0.16;
+
+const FIELD_STAR_MINIMUM_SIZE = 0.05;
+const FIELD_STAR_SIZE_RANGE = 0.85;
+const HERO_STAR_MINIMUM_SIZE = 1.6;
+const HERO_STAR_SIZE_RANGE = 1.2;
+const HERO_STAR_SPIKE_STRENGTH = 1;
+
+// Star cores read white while faint stars keep more of their blackbody tint.
+const BRIGHT_STAR_COLOR_SATURATION = 0.35;
+const FAINT_STAR_COLOR_SATURATION = 0.75;
+
+// --- clouds -------------------------------------------------------------------
+// Many sprites at low alpha (per-sprite alpha spread x layer opacity) so the
+// eye sees only their sum, never an individual puff.
+const NEBULA_CLOUD_MINIMUM_SIZE = 2.2;
+const NEBULA_CLOUD_SIZE_RANGE = 6;
+const CORE_CLOUD_MINIMUM_SIZE = 3;
+const CORE_CLOUD_SIZE_RANGE = 7;
+const DUST_CLOUD_MINIMUM_SIZE = 1.6;
+const DUST_CLOUD_SIZE_RANGE = 3.4;
+const CLOUD_MINIMUM_ALPHA = 0.2;
+const CLOUD_ALPHA_RANGE = 0.6;
+const DUST_CLOUD_MINIMUM_ALPHA = 0.25;
+const DUST_CLOUD_ALPHA_RANGE = 0.55;
+
+const MILKY_WAY_DUST_RENDER_ORDER = 1;
+
+// Phones get half the cloud sprites (fill-rate) — same check StarParticleField uses.
+const MOBILE_VIEWPORT_MAXIMUM_WIDTH = 768;
+const MOBILE_CLOUD_COUNT_RATIO = 0.5;
+
+type RandomSource = () => number;
+
+type WeightedColorEntry = {
   hexColor: string;
   weight: number;
 };
 
-// Blue-white dominant with a warm minority — the mix visible in real
-// starfield photographs.
-const SKY_STAR_COLOR_DISTRIBUTION: WeightedColor[] = [
-  { hexColor: "#9BB8FF", weight: 0.22 },
-  { hexColor: "#C7D8FF", weight: 0.26 },
-  { hexColor: "#EDF2FF", weight: 0.22 },
-  { hexColor: "#FFF3DC", weight: 0.16 },
-  { hexColor: "#FFD9A0", weight: 0.1 },
-  { hexColor: "#FF9F7A", weight: 0.04 }
-];
-// The galactic bulge is older and yellower than the disk.
-const CORE_STAR_COLOR_DISTRIBUTION: WeightedColor[] = [
-  { hexColor: "#FFE7C0", weight: 0.38 },
-  { hexColor: "#F4E4C8", weight: 0.3 },
-  { hexColor: "#FFD09A", weight: 0.22 },
-  { hexColor: "#E8F0FF", weight: 0.1 }
-];
+type ResolvedMilkyWayConfig = {
+  seed: string;
+  allSkyStarCount: number;
+  bandStarCount: number;
+  coreStarCount: number;
+  heroStarCount: number;
+  nebulaCloudCount: number;
+  coreCloudCount: number;
+  dustCloudCount: number;
+  starColors: WeightedColorEntry[];
+  coreStarColors: WeightedColorEntry[];
+  nebulaCloudColors: WeightedColorEntry[];
+  coreCloudColors: WeightedColorEntry[];
+  dustCloudColors: WeightedColorEntry[];
+  nebulaCloudOpacity: number;
+  coreCloudOpacity: number;
+  dustCloudOpacity: number;
+  bandTiltXRadians: number;
+  bandTiltZRadians: number;
+  rotationRadiansPerSecond: number;
+};
 
-// --- nebula clouds -----------------------------------------------------------
-const CLOUD_MINIMUM_ALPHA = 0.35;
-const CLOUD_ALPHA_RANGE = 0.65;
+function clampNumber(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
 
-const NEBULA_CLOUD_COUNT = 130;
-const NEBULA_CLOUD_SIGMA_RADIANS = 0.085;
-const NEBULA_CLOUD_MINIMUM_SIZE = 3.5;
-const NEBULA_CLOUD_SIZE_RANGE = 8.5;
-const NEBULA_CLOUD_LAYER_OPACITY = 0.16;
-// Blue-grey nebulosity with dusty pink and brown patches, like the
-// photographed band.
-const NEBULA_CLOUD_COLOR_DISTRIBUTION: WeightedColor[] = [
-  { hexColor: "#8FA5CE", weight: 0.35 },
-  { hexColor: "#B4C4E8", weight: 0.3 },
-  { hexColor: "#C9B7D6", weight: 0.15 },
-  { hexColor: "#A08A70", weight: 0.2 }
-];
+function resolveCount(value: number | undefined, fallback: number, maximum: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return Math.min(Math.floor(value), maximum);
+}
 
-const CORE_CLOUD_COUNT = 55;
-const CORE_CLOUD_AZIMUTH_SIGMA_RADIANS = 0.32;
-const CORE_CLOUD_SIGMA_RADIANS = 0.12;
-const CORE_CLOUD_MINIMUM_SIZE = 4.5;
-const CORE_CLOUD_SIZE_RANGE = 9.5;
-const CORE_CLOUD_LAYER_OPACITY = 0.18;
-const CORE_CLOUD_COLOR_DISTRIBUTION: WeightedColor[] = [
-  { hexColor: "#E8C79A", weight: 0.45 },
-  { hexColor: "#D9A468", weight: 0.35 },
-  { hexColor: "#C08A5A", weight: 0.2 }
-];
+function resolveUnitRange(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1) {
+    return fallback;
+  }
+  return value;
+}
 
-// Dark dust carving the band's midline. Normal blending darkens what is
-// behind it (additive layers can only ever brighten), drawn after the glow
-// layers via render order.
-const DUST_CLOUD_COUNT = 95;
-const DUST_CLOUD_SIGMA_RADIANS = 0.03;
-const DUST_CLOUD_MINIMUM_SIZE = 2.2;
-const DUST_CLOUD_SIZE_RANGE = 5;
-const DUST_CLOUD_LAYER_OPACITY = 0.55;
-const DUST_CLOUD_COLOR_DISTRIBUTION: WeightedColor[] = [
-  { hexColor: "#0A0710", weight: 0.5 },
-  { hexColor: "#120C08", weight: 0.5 }
-];
-const MILKY_WAY_DUST_RENDER_ORDER = 1;
+function resolveRadians(value: number | undefined, fallback: number, maximumMagnitude: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return clampNumber(value, -maximumMagnitude, maximumMagnitude);
+}
 
-type RandomSource = () => number;
+function sanitizeWeightedColors(colors: WeightedSkyColor[] | undefined, fallback: WeightedColorEntry[]): WeightedColorEntry[] {
+  if (!Array.isArray(colors)) {
+    return fallback;
+  }
+  const sanitized = colors
+    .filter(
+      (entry) =>
+        typeof entry?.color === "string" &&
+        HEX_COLOR_PATTERN.test(entry.color) &&
+        typeof entry?.weight === "number" &&
+        Number.isFinite(entry.weight) &&
+        entry.weight > 0
+    )
+    .map((entry) => ({ hexColor: entry.color as string, weight: entry.weight as number }));
+  return sanitized.length > 0 ? sanitized : fallback;
+}
 
-// Box-Muller: turns two uniform samples into one gaussian sample, which is
-// what concentrates points around the band's plane.
+function resolveMilkyWayConfig(sky: SceneMilkyWayConfig | undefined): ResolvedMilkyWayConfig {
+  return {
+    seed: typeof sky?.seed === "string" && sky.seed.length > 0 ? sky.seed : DEFAULT_MILKY_WAY_SEED,
+    allSkyStarCount: resolveCount(sky?.allSkyStarCount, DEFAULT_ALL_SKY_STAR_COUNT, MAXIMUM_STAR_COUNT_PER_LAYER),
+    bandStarCount: resolveCount(sky?.bandStarCount, DEFAULT_BAND_STAR_COUNT, MAXIMUM_STAR_COUNT_PER_LAYER),
+    coreStarCount: resolveCount(sky?.coreStarCount, DEFAULT_CORE_STAR_COUNT, MAXIMUM_STAR_COUNT_PER_LAYER),
+    heroStarCount: resolveCount(sky?.heroStarCount, DEFAULT_HERO_STAR_COUNT, MAXIMUM_STAR_COUNT_PER_LAYER),
+    nebulaCloudCount: resolveCount(sky?.nebulaCloudCount, DEFAULT_NEBULA_CLOUD_COUNT, MAXIMUM_CLOUD_COUNT_PER_LAYER),
+    coreCloudCount: resolveCount(sky?.coreCloudCount, DEFAULT_CORE_CLOUD_COUNT, MAXIMUM_CLOUD_COUNT_PER_LAYER),
+    dustCloudCount: resolveCount(sky?.dustCloudCount, DEFAULT_DUST_CLOUD_COUNT, MAXIMUM_CLOUD_COUNT_PER_LAYER),
+    starColors: sanitizeWeightedColors(sky?.starColors, FALLBACK_STAR_COLOR_DISTRIBUTION),
+    coreStarColors: sanitizeWeightedColors(sky?.coreStarColors, FALLBACK_CORE_STAR_COLOR_DISTRIBUTION),
+    nebulaCloudColors: sanitizeWeightedColors(sky?.nebulaCloudColors, FALLBACK_NEBULA_CLOUD_COLOR_DISTRIBUTION),
+    coreCloudColors: sanitizeWeightedColors(sky?.coreCloudColors, FALLBACK_CORE_CLOUD_COLOR_DISTRIBUTION),
+    dustCloudColors: sanitizeWeightedColors(sky?.dustCloudColors, FALLBACK_DUST_CLOUD_COLOR_DISTRIBUTION),
+    nebulaCloudOpacity: resolveUnitRange(sky?.nebulaCloudOpacity, DEFAULT_NEBULA_CLOUD_OPACITY),
+    coreCloudOpacity: resolveUnitRange(sky?.coreCloudOpacity, DEFAULT_CORE_CLOUD_OPACITY),
+    dustCloudOpacity: resolveUnitRange(sky?.dustCloudOpacity, DEFAULT_DUST_CLOUD_OPACITY),
+    bandTiltXRadians: resolveRadians(sky?.bandTiltXRadians, DEFAULT_BAND_TILT_X_RADIANS, MAXIMUM_BAND_TILT_RADIANS),
+    bandTiltZRadians: resolveRadians(sky?.bandTiltZRadians, DEFAULT_BAND_TILT_Z_RADIANS, MAXIMUM_BAND_TILT_RADIANS),
+    rotationRadiansPerSecond: resolveRadians(
+      sky?.rotationRadiansPerSecond,
+      DEFAULT_ROTATION_RADIANS_PER_SECOND,
+      MAXIMUM_ROTATION_RADIANS_PER_SECOND
+    )
+  };
+}
+
+// --- band structure -----------------------------------------------------------
+
+// Box-Muller: turns two uniform samples into one gaussian sample.
 function gaussianSample(random: RandomSource): number {
   const uniformA = Math.max(random(), Number.EPSILON);
   const uniformB = random();
   return Math.sqrt(-2 * Math.log(uniformA)) * Math.cos(2 * Math.PI * uniformB);
 }
 
-function wobbledSigma(baseSigmaRadians: number, azimuthRadians: number): number {
-  return baseSigmaRadians * (1 + BAND_WIDTH_WOBBLE_RATIO * Math.sin(BAND_WIDTH_WOBBLE_WAVES * azimuthRadians));
+function wrappedAngleDelta(angleRadians: number): number {
+  const fullCircle = Math.PI * 2;
+  return ((((angleRadians + Math.PI) % fullCircle) + fullCircle) % fullCircle) - Math.PI;
+}
+
+// The band's half-width breathes along its length and widens into the bulge.
+function bandSigmaAt(baseSigmaRadians: number, azimuthRadians: number): number {
+  const wobble = 1 + BAND_WIDTH_WOBBLE_RATIO * Math.sin(BAND_WIDTH_WOBBLE_WAVES * azimuthRadians);
+  const bulgeDelta = wrappedAngleDelta(azimuthRadians - CORE_AZIMUTH_CENTER_RADIANS);
+  const bulgeWidening =
+    1 +
+    BULGE_SIGMA_WIDENING_RATIO *
+      Math.exp(-(bulgeDelta * bulgeDelta) / (2 * BULGE_AZIMUTH_SIGMA_RADIANS * BULGE_AZIMUTH_SIGMA_RADIANS));
+  return baseSigmaRadians * wobble * bulgeWidening;
+}
+
+function riftCenterLatitude(azimuthRadians: number): number {
+  return (
+    RIFT_MEANDER_PRIMARY_RADIANS * Math.sin(azimuthRadians + 0.4) +
+    RIFT_MEANDER_SECONDARY_RADIANS * Math.sin(azimuthRadians * 3 + 1.7)
+  );
+}
+
+function riftHalfWidth(azimuthRadians: number): number {
+  return RIFT_BASE_HALF_WIDTH_RADIANS + RIFT_HALF_WIDTH_WAVE_RADIANS * (0.5 + 0.5 * Math.sin(azimuthRadians * 2 + 0.8));
+}
+
+function riftCenterAzimuth(): number {
+  return CORE_AZIMUTH_CENTER_RADIANS + RIFT_CENTER_AZIMUTH_OFFSET_RADIANS;
+}
+
+// Absorption probability at a band position: how strongly the Great Rift's
+// dust blocks the stars/glow there.
+function riftAbsorptionAt(azimuthRadians: number, latitudeRadians: number): number {
+  const azimuthDelta = wrappedAngleDelta(azimuthRadians - riftCenterAzimuth());
+  const alongRiftStrength =
+    RIFT_MAXIMUM_ABSORPTION *
+    Math.exp(-(azimuthDelta * azimuthDelta) / (2 * RIFT_AZIMUTH_SIGMA_RADIANS * RIFT_AZIMUTH_SIGMA_RADIANS));
+  const latitudeDelta = latitudeRadians - riftCenterLatitude(azimuthRadians);
+  const halfWidth = riftHalfWidth(azimuthRadians);
+  return alongRiftStrength * Math.exp(-(latitudeDelta * latitudeDelta) / (2 * halfWidth * halfWidth));
 }
 
 type SphereDirection = {
@@ -181,18 +338,35 @@ type BandAzimuthCluster = {
   sigmaRadians: number;
 };
 
+// Band positions get rejected inside the rift and resampled, which carves the
+// dark lane and leaves two bright rails — the real band's signature.
 function sampleBandDirection(
   random: RandomSource,
-  bandSigmaRadians: number,
+  baseSigmaRadians: number,
   azimuthCluster?: BandAzimuthCluster
 ): SphereDirection {
   const azimuthRadians = azimuthCluster
     ? azimuthCluster.centerRadians + gaussianSample(random) * azimuthCluster.sigmaRadians
     : random() * Math.PI * 2;
-  return {
-    azimuthRadians,
-    latitudeRadians: gaussianSample(random) * wobbledSigma(bandSigmaRadians, azimuthRadians)
-  };
+  const sigma = bandSigmaAt(baseSigmaRadians, azimuthRadians);
+  let latitudeRadians = gaussianSample(random) * sigma;
+  for (let attempt = 0; attempt < MAXIMUM_RIFT_RESAMPLE_ATTEMPTS; attempt += 1) {
+    if (random() >= riftAbsorptionAt(azimuthRadians, latitudeRadians)) {
+      break;
+    }
+    latitudeRadians = gaussianSample(random) * sigma;
+  }
+  return { azimuthRadians, latitudeRadians };
+}
+
+// Dust sprites are laid ALONG the rift: clustered around its azimuth arc,
+// scattered tightly across its meandering centerline.
+function sampleRiftDirection(random: RandomSource): SphereDirection {
+  const azimuthRadians =
+    riftCenterAzimuth() + gaussianSample(random) * RIFT_AZIMUTH_SIGMA_RADIANS * DUST_ALONG_RIFT_AZIMUTH_RATIO;
+  const latitudeRadians =
+    riftCenterLatitude(azimuthRadians) + gaussianSample(random) * riftHalfWidth(azimuthRadians) * DUST_ACROSS_RIFT_WIDTH_RATIO;
+  return { azimuthRadians, latitudeRadians };
 }
 
 function writeSpherePoint(
@@ -206,7 +380,45 @@ function writeSpherePoint(
   positions[pointIndex * 3 + 2] = radius * Math.cos(direction.latitudeRadians) * Math.sin(direction.azimuthRadians);
 }
 
-function pickWeightedColor(random: RandomSource, distribution: WeightedColor[]): [number, number, number] {
+// --- star + cloud population ----------------------------------------------------
+
+// Samples an apparent magnitude with the real sky's count distribution
+// (pdf ~ 3^m: each magnitude step has ~3x more stars than the last).
+function sampleMagnitude(random: RandomSource, brightestMagnitude: number, faintestMagnitude: number): number {
+  const brightestWeight = Math.exp(MAGNITUDE_COUNT_GROWTH * brightestMagnitude);
+  const faintestWeight = Math.exp(MAGNITUDE_COUNT_GROWTH * faintestMagnitude);
+  return Math.log(brightestWeight + (faintestWeight - brightestWeight) * random()) / MAGNITUDE_COUNT_GROWTH;
+}
+
+// Weighted color pick with a temperature bias: palettes are ordered hot -> cool,
+// bright stars lean toward the hot head of the list, faint stars toward the
+// cool tail — matching real-sky statistics.
+function pickWeightedColorWithTemperatureBias(
+  random: RandomSource,
+  distribution: WeightedColorEntry[],
+  hotAffinity: number
+): [number, number, number] {
+  const entryCount = distribution.length;
+  let totalWeight = 0;
+  const biasedWeights: number[] = new Array(entryCount);
+  for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+    const hotRamp = (entryCount - entryIndex) / entryCount;
+    const coolRamp = (entryIndex + 1) / entryCount;
+    const biasedWeight = distribution[entryIndex].weight * (coolRamp + (hotRamp - coolRamp) * hotAffinity);
+    biasedWeights[entryIndex] = biasedWeight;
+    totalWeight += biasedWeight;
+  }
+  let remainingWeight = random() * totalWeight;
+  for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+    remainingWeight -= biasedWeights[entryIndex];
+    if (remainingWeight <= 0) {
+      return hexColorToUnitRgb(distribution[entryIndex].hexColor);
+    }
+  }
+  return hexColorToUnitRgb(distribution[entryCount - 1].hexColor);
+}
+
+function pickWeightedColor(random: RandomSource, distribution: WeightedColorEntry[]): [number, number, number] {
   const totalWeight = distribution.reduce((weightSum, entry) => weightSum + entry.weight, 0);
   let remainingWeight = random() * totalWeight;
   for (const entry of distribution) {
@@ -222,8 +434,9 @@ type StarPopulationOptions = {
   starCount: number;
   minimumSize: number;
   sizeRange: number;
-  sizePowerLawExponent: number;
-  colorDistribution: WeightedColor[];
+  brightestMagnitude: number;
+  faintestMagnitude: number;
+  colorDistribution: WeightedColorEntry[];
   sampleDirection: (random: RandomSource) => SphereDirection;
 };
 
@@ -236,13 +449,19 @@ function buildStarLayer(random: RandomSource, options: StarPopulationOptions): S
     const radius = BAND_SPHERE_RADIUS * (1 + (random() * 2 - 1) * SPHERE_RADIUS_JITTER_RATIO);
     writeSpherePoint(positions, starIndex, radius, options.sampleDirection(random));
 
-    const sizeDraw = random();
-    sizes[starIndex] = options.minimumSize + sizeDraw ** options.sizePowerLawExponent * options.sizeRange;
-    const brightness = STAR_MINIMUM_BRIGHTNESS + (1 - STAR_MINIMUM_BRIGHTNESS) * sizeDraw;
-    const [red, green, blue] = pickWeightedColor(random, options.colorDistribution);
-    colors[starIndex * 3] = red * brightness;
-    colors[starIndex * 3 + 1] = green * brightness;
-    colors[starIndex * 3 + 2] = blue * brightness;
+    const magnitude = sampleMagnitude(random, options.brightestMagnitude, options.faintestMagnitude);
+    const normalizedLuminance = MAGNITUDE_BRIGHTNESS_FACTOR ** -(magnitude - options.brightestMagnitude);
+    const photoBrightness = normalizedLuminance ** PHOTOGRAPHIC_COMPRESSION_EXPONENT;
+    sizes[starIndex] = options.minimumSize + options.sizeRange * normalizedLuminance ** STAR_SIZE_LUMINANCE_EXPONENT;
+
+    const brightness = MINIMUM_STAR_BRIGHTNESS + (1 - MINIMUM_STAR_BRIGHTNESS) * photoBrightness;
+    const [red, green, blue] = pickWeightedColorWithTemperatureBias(random, options.colorDistribution, photoBrightness);
+    // Bright cores wash toward white; faint stars keep more blackbody tint.
+    const saturation =
+      BRIGHT_STAR_COLOR_SATURATION + (FAINT_STAR_COLOR_SATURATION - BRIGHT_STAR_COLOR_SATURATION) * (1 - photoBrightness);
+    colors[starIndex * 3] = (1 + (red - 1) * saturation) * brightness;
+    colors[starIndex * 3 + 1] = (1 + (green - 1) * saturation) * brightness;
+    colors[starIndex * 3 + 2] = (1 + (blue - 1) * saturation) * brightness;
 
     twinklePhases[starIndex] = random() * Math.PI * 2;
   }
@@ -253,10 +472,13 @@ type CloudPopulationOptions = {
   cloudCount: number;
   minimumSize: number;
   sizeRange: number;
-  colorDistribution: WeightedColor[];
-  bandSigmaRadians: number;
-  azimuthCluster?: BandAzimuthCluster;
+  minimumAlpha: number;
+  alphaRange: number;
+  colorDistribution: WeightedColorEntry[];
   sphereRadius: number;
+  atlasVariantCount: number;
+  fixedAtlasVariant?: number;
+  sampleDirection: (random: RandomSource) => SphereDirection;
 };
 
 function buildCloudLayer(random: RandomSource, options: CloudPopulationOptions): CloudLayerAttributes {
@@ -265,9 +487,9 @@ function buildCloudLayer(random: RandomSource, options: CloudPopulationOptions):
   const sizes = new Float32Array(options.cloudCount);
   const rotations = new Float32Array(options.cloudCount);
   const alphas = new Float32Array(options.cloudCount);
+  const variants = new Float32Array(options.cloudCount);
   for (let cloudIndex = 0; cloudIndex < options.cloudCount; cloudIndex += 1) {
-    const direction = sampleBandDirection(random, options.bandSigmaRadians, options.azimuthCluster);
-    writeSpherePoint(positions, cloudIndex, options.sphereRadius, direction);
+    writeSpherePoint(positions, cloudIndex, options.sphereRadius, options.sampleDirection(random));
 
     const [red, green, blue] = pickWeightedColor(random, options.colorDistribution);
     colors[cloudIndex * 3] = red;
@@ -276,103 +498,145 @@ function buildCloudLayer(random: RandomSource, options: CloudPopulationOptions):
 
     sizes[cloudIndex] = options.minimumSize + random() * options.sizeRange;
     rotations[cloudIndex] = random() * Math.PI * 2;
-    alphas[cloudIndex] = CLOUD_MINIMUM_ALPHA + random() * CLOUD_ALPHA_RANGE;
+    alphas[cloudIndex] = options.minimumAlpha + random() * options.alphaRange;
+    variants[cloudIndex] =
+      options.fixedAtlasVariant ?? Math.floor(random() * options.atlasVariantCount);
   }
-  return { positions, colors, sizes, rotations, alphas };
+  return { positions, colors, sizes, rotations, alphas, variants };
 }
 
-export function MilkyWayBand() {
+type MilkyWayBandProps = {
+  sky?: SceneMilkyWayConfig;
+};
+
+export function MilkyWayBand({ sky }: MilkyWayBandProps) {
+  const resolvedConfig = useMemo(() => resolveMilkyWayConfig(sky), [sky]);
+
   const layers = useMemo(() => {
-    const random = randomFromSeed(MILKY_WAY_FIXED_SEED);
+    const random = randomFromSeed(resolvedConfig.seed);
+    const isMobileViewport = typeof window !== "undefined" && window.innerWidth < MOBILE_VIEWPORT_MAXIMUM_WIDTH;
+    const cloudCountRatio = isMobileViewport ? MOBILE_CLOUD_COUNT_RATIO : 1;
     const coreAzimuthCluster: BandAzimuthCluster = {
       centerRadians: CORE_AZIMUTH_CENTER_RADIANS,
       sigmaRadians: CORE_STAR_AZIMUTH_SIGMA_RADIANS
     };
     return {
       allSkyStars: buildStarLayer(random, {
-        starCount: ALL_SKY_STAR_COUNT,
-        minimumSize: ALL_SKY_STAR_MINIMUM_SIZE,
-        sizeRange: ALL_SKY_STAR_SIZE_RANGE,
-        sizePowerLawExponent: STAR_SIZE_POWER_LAW_EXPONENT,
-        colorDistribution: SKY_STAR_COLOR_DISTRIBUTION,
+        starCount: resolvedConfig.allSkyStarCount,
+        minimumSize: FIELD_STAR_MINIMUM_SIZE,
+        sizeRange: FIELD_STAR_SIZE_RANGE,
+        brightestMagnitude: FIELD_STAR_BRIGHTEST_MAGNITUDE,
+        faintestMagnitude: FIELD_STAR_FAINTEST_MAGNITUDE,
+        colorDistribution: resolvedConfig.starColors,
         sampleDirection: sampleAllSkyDirection
       }),
       bandStars: buildStarLayer(random, {
-        starCount: BAND_STAR_COUNT,
-        minimumSize: BAND_STAR_MINIMUM_SIZE,
-        sizeRange: BAND_STAR_SIZE_RANGE,
-        sizePowerLawExponent: STAR_SIZE_POWER_LAW_EXPONENT,
-        colorDistribution: SKY_STAR_COLOR_DISTRIBUTION,
+        starCount: resolvedConfig.bandStarCount,
+        minimumSize: FIELD_STAR_MINIMUM_SIZE,
+        sizeRange: FIELD_STAR_SIZE_RANGE,
+        brightestMagnitude: FIELD_STAR_BRIGHTEST_MAGNITUDE,
+        faintestMagnitude: FIELD_STAR_FAINTEST_MAGNITUDE,
+        colorDistribution: resolvedConfig.starColors,
         sampleDirection: (randomSource) => sampleBandDirection(randomSource, BAND_STAR_SIGMA_RADIANS)
       }),
       coreStars: buildStarLayer(random, {
-        starCount: CORE_STAR_COUNT,
-        minimumSize: CORE_STAR_MINIMUM_SIZE,
-        sizeRange: CORE_STAR_SIZE_RANGE,
-        sizePowerLawExponent: STAR_SIZE_POWER_LAW_EXPONENT,
-        colorDistribution: CORE_STAR_COLOR_DISTRIBUTION,
+        starCount: resolvedConfig.coreStarCount,
+        minimumSize: FIELD_STAR_MINIMUM_SIZE,
+        sizeRange: FIELD_STAR_SIZE_RANGE,
+        brightestMagnitude: FIELD_STAR_BRIGHTEST_MAGNITUDE,
+        faintestMagnitude: FIELD_STAR_FAINTEST_MAGNITUDE,
+        colorDistribution: resolvedConfig.coreStarColors,
         sampleDirection: (randomSource) =>
           sampleBandDirection(randomSource, CORE_STAR_BAND_SIGMA_RADIANS, coreAzimuthCluster)
       }),
       heroStars: buildStarLayer(random, {
-        starCount: HERO_STAR_COUNT,
+        starCount: resolvedConfig.heroStarCount,
         minimumSize: HERO_STAR_MINIMUM_SIZE,
         sizeRange: HERO_STAR_SIZE_RANGE,
-        sizePowerLawExponent: HERO_STAR_SIZE_POWER_LAW_EXPONENT,
-        colorDistribution: SKY_STAR_COLOR_DISTRIBUTION,
+        brightestMagnitude: HERO_STAR_BRIGHTEST_MAGNITUDE,
+        faintestMagnitude: HERO_STAR_FAINTEST_MAGNITUDE,
+        colorDistribution: resolvedConfig.starColors,
         sampleDirection: sampleAllSkyDirection
       }),
       nebulaClouds: buildCloudLayer(random, {
-        cloudCount: NEBULA_CLOUD_COUNT,
+        cloudCount: Math.floor(resolvedConfig.nebulaCloudCount * cloudCountRatio),
         minimumSize: NEBULA_CLOUD_MINIMUM_SIZE,
         sizeRange: NEBULA_CLOUD_SIZE_RANGE,
-        colorDistribution: NEBULA_CLOUD_COLOR_DISTRIBUTION,
-        bandSigmaRadians: NEBULA_CLOUD_SIGMA_RADIANS,
-        sphereRadius: BAND_SPHERE_RADIUS
+        minimumAlpha: CLOUD_MINIMUM_ALPHA,
+        alphaRange: CLOUD_ALPHA_RANGE,
+        colorDistribution: resolvedConfig.nebulaCloudColors,
+        sphereRadius: BAND_SPHERE_RADIUS,
+        atlasVariantCount: EMISSIVE_CLOUD_ATLAS_VARIANT_COUNT,
+        sampleDirection: (randomSource) => sampleBandDirection(randomSource, NEBULA_CLOUD_SIGMA_RADIANS)
       }),
       coreClouds: buildCloudLayer(random, {
-        cloudCount: CORE_CLOUD_COUNT,
+        cloudCount: Math.floor(resolvedConfig.coreCloudCount * cloudCountRatio),
         minimumSize: CORE_CLOUD_MINIMUM_SIZE,
         sizeRange: CORE_CLOUD_SIZE_RANGE,
-        colorDistribution: CORE_CLOUD_COLOR_DISTRIBUTION,
-        bandSigmaRadians: CORE_CLOUD_SIGMA_RADIANS,
-        azimuthCluster: {
-          centerRadians: CORE_AZIMUTH_CENTER_RADIANS,
-          sigmaRadians: CORE_CLOUD_AZIMUTH_SIGMA_RADIANS
-        },
-        sphereRadius: BAND_SPHERE_RADIUS
+        minimumAlpha: CLOUD_MINIMUM_ALPHA,
+        alphaRange: CLOUD_ALPHA_RANGE,
+        colorDistribution: resolvedConfig.coreCloudColors,
+        sphereRadius: BAND_SPHERE_RADIUS,
+        atlasVariantCount: EMISSIVE_CLOUD_ATLAS_VARIANT_COUNT,
+        sampleDirection: (randomSource) =>
+          sampleBandDirection(randomSource, CORE_CLOUD_SIGMA_RADIANS, {
+            centerRadians: CORE_AZIMUTH_CENTER_RADIANS,
+            sigmaRadians: CORE_CLOUD_AZIMUTH_SIGMA_RADIANS
+          })
       }),
       dustClouds: buildCloudLayer(random, {
-        cloudCount: DUST_CLOUD_COUNT,
+        cloudCount: Math.floor(resolvedConfig.dustCloudCount * cloudCountRatio),
         minimumSize: DUST_CLOUD_MINIMUM_SIZE,
         sizeRange: DUST_CLOUD_SIZE_RANGE,
-        colorDistribution: DUST_CLOUD_COLOR_DISTRIBUTION,
-        bandSigmaRadians: DUST_CLOUD_SIGMA_RADIANS,
-        sphereRadius: DUST_SPHERE_RADIUS
+        minimumAlpha: DUST_CLOUD_MINIMUM_ALPHA,
+        alphaRange: DUST_CLOUD_ALPHA_RANGE,
+        colorDistribution: resolvedConfig.dustCloudColors,
+        sphereRadius: DUST_SPHERE_RADIUS,
+        atlasVariantCount: EMISSIVE_CLOUD_ATLAS_VARIANT_COUNT,
+        fixedAtlasVariant: DUST_CLOUD_ATLAS_VARIANT_INDEX,
+        sampleDirection: sampleRiftDirection
       })
     };
-  }, []);
+  }, [resolvedConfig]);
+
   const bandGroupReference = useRef<Group>(null);
 
   useFrame((_, deltaSeconds) => {
     if (bandGroupReference.current) {
-      bandGroupReference.current.rotation.y += BAND_ROTATION_RADIANS_PER_SECOND * deltaSeconds;
+      bandGroupReference.current.rotation.y += resolvedConfig.rotationRadiansPerSecond * deltaSeconds;
     }
   });
 
+  const geometryKey = `${resolvedConfig.seed}:${resolvedConfig.allSkyStarCount}:${resolvedConfig.bandStarCount}:${resolvedConfig.coreStarCount}:${resolvedConfig.nebulaCloudCount}:${resolvedConfig.dustCloudCount}`;
+
   return (
-    <group ref={bandGroupReference} rotation={[BAND_TILT_X_RADIANS, 0, BAND_TILT_Z_RADIANS]}>
-      <NebulaCloudPoints clouds={layers.nebulaClouds} globalOpacity={NEBULA_CLOUD_LAYER_OPACITY} blending={AdditiveBlending} />
-      <NebulaCloudPoints clouds={layers.coreClouds} globalOpacity={CORE_CLOUD_LAYER_OPACITY} blending={AdditiveBlending} />
-      <SizedStarPoints stars={layers.allSkyStars} />
-      <SizedStarPoints stars={layers.bandStars} />
-      <SizedStarPoints stars={layers.coreStars} />
-      <SizedStarPoints stars={layers.heroStars} />
+    <group ref={bandGroupReference} rotation={[resolvedConfig.bandTiltXRadians, 0, resolvedConfig.bandTiltZRadians]}>
+      <NebulaCloudPoints
+        clouds={layers.nebulaClouds}
+        globalOpacity={resolvedConfig.nebulaCloudOpacity}
+        blending={AdditiveBlending}
+        geometryKey={`${geometryKey}:nebula`}
+      />
+      <NebulaCloudPoints
+        clouds={layers.coreClouds}
+        globalOpacity={resolvedConfig.coreCloudOpacity}
+        blending={AdditiveBlending}
+        geometryKey={`${geometryKey}:core-clouds`}
+      />
+      <SizedStarPoints stars={layers.allSkyStars} geometryKey={`${geometryKey}:all-sky`} />
+      <SizedStarPoints stars={layers.bandStars} geometryKey={`${geometryKey}:band`} />
+      <SizedStarPoints stars={layers.coreStars} geometryKey={`${geometryKey}:core`} />
+      <SizedStarPoints
+        stars={layers.heroStars}
+        spikeStrength={HERO_STAR_SPIKE_STRENGTH}
+        geometryKey={`${geometryKey}:hero`}
+      />
       <NebulaCloudPoints
         clouds={layers.dustClouds}
-        globalOpacity={DUST_CLOUD_LAYER_OPACITY}
+        globalOpacity={resolvedConfig.dustCloudOpacity}
         blending={NormalBlending}
         renderOrder={MILKY_WAY_DUST_RENDER_ORDER}
+        geometryKey={`${geometryKey}:dust`}
       />
     </group>
   );

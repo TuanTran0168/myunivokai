@@ -3,14 +3,16 @@
 import { useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Blending } from "three";
-import { getNebulaCloudTexture } from "../shared/nebulaCloudTexture";
+import { getNebulaCloudAtlasTexture, NEBULA_CLOUD_ATLAS_VARIANT_COUNT } from "../shared/nebulaCloudTexture";
 
 /**
- * A layer of large, faint, individually-rotated cloud sprites sampled from
- * the shared noise texture. Dozens of overlapping copies fuse into
- * continuous nebulosity instead of visible dots. With additive blending the
- * layer glows (nebula, galactic core); with normal blending and a dark
- * color it darkens what is behind it (the Milky Way's dust lanes).
+ * A layer of large, faint, individually-rotated cloud sprites sampling one of
+ * the atlas's noise variants. Realistic nebulosity comes from overdraw
+ * statistics, not individual sprite quality: MANY sprites at very low alpha
+ * fuse into continuous wisps, while high-alpha sprites read as separate
+ * "puffs". With additive blending the layer glows (nebula, galactic core);
+ * with normal blending and dark colors it darkens what is behind it (the
+ * Great Rift's dust).
  */
 
 const CLOUD_VERTEX_SHADER = /* glsl */ `
@@ -18,30 +20,35 @@ const CLOUD_VERTEX_SHADER = /* glsl */ `
   attribute vec3 cloudColor;
   attribute float cloudRotation;
   attribute float cloudAlpha;
+  attribute float cloudVariant;
   uniform float uPointScale;
   varying vec3 vCloudColor;
   varying float vCloudRotation;
   varying float vCloudAlpha;
+  varying float vCloudVariant;
 
   void main() {
     vCloudColor = cloudColor;
     vCloudRotation = cloudRotation;
     vCloudAlpha = cloudAlpha;
+    vCloudVariant = cloudVariant;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = cloudSize * (uPointScale / -mvPosition.z);
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-// Each sprite samples the noise texture through a per-cloud rotation, so one
-// shared texture never reads as repeated stamps. Rotated corners sample past
-// the texture edge, which is fully transparent by construction.
+// Each sprite samples its atlas tile through a per-cloud rotation, so one
+// shared texture never reads as repeated stamps. Rotated corners are clamped
+// back into the tile, whose edge is fully transparent by construction.
 const CLOUD_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uCloudMap;
+  uniform float uAtlasVariantCount;
   uniform float uGlobalOpacity;
   varying vec3 vCloudColor;
   varying float vCloudRotation;
   varying float vCloudAlpha;
+  varying float vCloudVariant;
 
   void main() {
     vec2 centeredCoord = gl_PointCoord - vec2(0.5);
@@ -51,7 +58,9 @@ const CLOUD_FRAGMENT_SHADER = /* glsl */ `
       centeredCoord.x * rotationCosine - centeredCoord.y * rotationSine,
       centeredCoord.x * rotationSine + centeredCoord.y * rotationCosine
     ) + vec2(0.5);
-    float sampledAlpha = texture2D(uCloudMap, rotatedCoord).a;
+    vec2 tileCoord = clamp(rotatedCoord, 0.0, 1.0);
+    float atlasU = (tileCoord.x + vCloudVariant) / uAtlasVariantCount;
+    float sampledAlpha = texture2D(uCloudMap, vec2(atlasU, tileCoord.y)).a;
     float alpha = sampledAlpha * vCloudAlpha * uGlobalOpacity;
     if (alpha < 0.004) {
       discard;
@@ -66,6 +75,7 @@ export type CloudLayerAttributes = {
   sizes: Float32Array;
   rotations: Float32Array;
   alphas: Float32Array;
+  variants: Float32Array;
 };
 
 type NebulaCloudPointsProps = {
@@ -73,6 +83,8 @@ type NebulaCloudPointsProps = {
   globalOpacity: number;
   blending: Blending;
   renderOrder?: number;
+  /** Forces the buffer geometry to remount when the cloud arrays change. */
+  geometryKey?: string;
 };
 
 const DEFAULT_RENDER_ORDER = 0;
@@ -81,13 +93,15 @@ export function NebulaCloudPoints({
   clouds,
   globalOpacity,
   blending,
-  renderOrder = DEFAULT_RENDER_ORDER
+  renderOrder = DEFAULT_RENDER_ORDER,
+  geometryKey
 }: NebulaCloudPointsProps) {
   // Created once; useFrame keeps the values current without rebuilding the
   // material (a new uniforms object would recompile the shader program).
   const uniforms = useMemo(
     () => ({
-      uCloudMap: { value: getNebulaCloudTexture() },
+      uCloudMap: { value: getNebulaCloudAtlasTexture() },
+      uAtlasVariantCount: { value: NEBULA_CLOUD_ATLAS_VARIANT_COUNT },
       uPointScale: { value: 1 },
       uGlobalOpacity: { value: 0 }
     }),
@@ -103,7 +117,7 @@ export function NebulaCloudPoints({
 
   return (
     <points frustumCulled={false} renderOrder={renderOrder}>
-      <bufferGeometry>
+      <bufferGeometry key={geometryKey}>
         <bufferAttribute
           attach="attributes-position"
           count={clouds.positions.length / 3}
@@ -127,6 +141,12 @@ export function NebulaCloudPoints({
           attach="attributes-cloudAlpha"
           count={clouds.alphas.length}
           array={clouds.alphas}
+          itemSize={1}
+        />
+        <bufferAttribute
+          attach="attributes-cloudVariant"
+          count={clouds.variants.length}
+          array={clouds.variants}
           itemSize={1}
         />
       </bufferGeometry>
