@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { AdditiveBlending } from "three";
 import type { SceneConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
+import { getSoftCircleTexture } from "./softCircleTexture";
 
 const DEFAULT_PARTICLE_DESKTOP_COUNT = 900;
 const DEFAULT_PARTICLE_MOBILE_COUNT = 400;
@@ -44,9 +45,10 @@ export function StarParticleField({ scene, seed, fallbackColor }: StarParticleFi
     () => buildParticlePositions(seed, particleCount, particleSpread),
     [seed, particleCount, particleSpread]
   );
+  const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
 
   return (
-    <points>
+    <points frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -56,6 +58,8 @@ export function StarParticleField({ scene, seed, fallbackColor }: StarParticleFi
         />
       </bufferGeometry>
       <pointsMaterial
+        map={softCircleTexture ?? undefined}
+        alphaTest={0.01}
         color={particleColor}
         size={PARTICLE_POINT_SIZE}
         transparent

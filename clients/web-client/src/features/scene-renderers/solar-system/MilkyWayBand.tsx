@@ -34,6 +34,16 @@ const BRIGHT_POINT_SIZE = 0.45;
 const BRIGHT_OPACITY = 0.9;
 const BRIGHT_COLOR = "#EDE8DC";
 
+// The galactic core: a warm bright bulge at ONE spot on the band, like the
+// center of the real Milky Way in wide-field photos.
+const CORE_GLOW_POINT_COUNT = 900;
+const CORE_GLOW_AZIMUTH_CENTER_RADIANS = 0.9;
+const CORE_GLOW_AZIMUTH_SIGMA_RADIANS = 0.4;
+const CORE_GLOW_BAND_SIGMA_RADIANS = 0.17;
+const CORE_GLOW_POINT_SIZE = 3.2;
+const CORE_GLOW_OPACITY = 0.05;
+const CORE_GLOW_COLOR = "#E9C99B";
+
 type RandomSource = () => number;
 
 // Box-Muller: turns two uniform samples into one gaussian sample, which is
@@ -44,10 +54,22 @@ function gaussianSample(random: RandomSource): number {
   return Math.sqrt(-2 * Math.log(uniformA)) * Math.cos(2 * Math.PI * uniformB);
 }
 
-function buildBandPositions(random: RandomSource, pointCount: number, bandSigmaRadians: number): Float32Array {
+type BandAzimuthCluster = {
+  centerRadians: number;
+  sigmaRadians: number;
+};
+
+function buildBandPositions(
+  random: RandomSource,
+  pointCount: number,
+  bandSigmaRadians: number,
+  azimuthCluster?: BandAzimuthCluster
+): Float32Array {
   const positions = new Float32Array(pointCount * 3);
   for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
-    const azimuthRadians = random() * Math.PI * 2;
+    const azimuthRadians = azimuthCluster
+      ? azimuthCluster.centerRadians + gaussianSample(random) * azimuthCluster.sigmaRadians
+      : random() * Math.PI * 2;
     const latitudeRadians = gaussianSample(random) * bandSigmaRadians;
     const radius = BAND_SPHERE_RADIUS * (0.96 + random() * 0.08);
     positions[pointIndex * 3] = radius * Math.cos(latitudeRadians) * Math.cos(azimuthRadians);
@@ -58,11 +80,15 @@ function buildBandPositions(random: RandomSource, pointCount: number, bandSigmaR
 }
 
 export function MilkyWayBand() {
-  const { hazePositions, brightPositions } = useMemo(() => {
+  const { hazePositions, brightPositions, coreGlowPositions } = useMemo(() => {
     const random = randomFromSeed(MILKY_WAY_FIXED_SEED);
     return {
       hazePositions: buildBandPositions(random, HAZE_POINT_COUNT, HAZE_BAND_SIGMA_RADIANS),
-      brightPositions: buildBandPositions(random, BRIGHT_STAR_COUNT, BRIGHT_BAND_SIGMA_RADIANS)
+      brightPositions: buildBandPositions(random, BRIGHT_STAR_COUNT, BRIGHT_BAND_SIGMA_RADIANS),
+      coreGlowPositions: buildBandPositions(random, CORE_GLOW_POINT_COUNT, CORE_GLOW_BAND_SIGMA_RADIANS, {
+        centerRadians: CORE_GLOW_AZIMUTH_CENTER_RADIANS,
+        sigmaRadians: CORE_GLOW_AZIMUTH_SIGMA_RADIANS
+      })
     };
   }, []);
   const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
@@ -107,6 +133,28 @@ export function MilkyWayBand() {
           size={BRIGHT_POINT_SIZE}
           transparent
           opacity={BRIGHT_OPACITY}
+          sizeAttenuation
+          depthWrite={false}
+          blending={AdditiveBlending}
+          toneMapped={false}
+        />
+      </points>
+      <points frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            count={coreGlowPositions.length / 3}
+            array={coreGlowPositions}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          map={softCircleTexture ?? undefined}
+          alphaTest={0.01}
+          color={CORE_GLOW_COLOR}
+          size={CORE_GLOW_POINT_SIZE}
+          transparent
+          opacity={CORE_GLOW_OPACITY}
           sizeAttenuation
           depthWrite={false}
           blending={AdditiveBlending}
