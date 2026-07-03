@@ -2,6 +2,16 @@ import type { ApiErrorPayload, CreateWorldInput, PublishResult, ShareWorld, Worl
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
 
+/**
+ * The backend's origin (scheme + host) derived from the configured API base —
+ * https://myunivokai.onrender.com in production, http://localhost:8080 in dev.
+ * Used for links to the backend's own pages (landing page, Swagger), so no
+ * URL is ever hardcoded in the UI.
+ */
+export function backendOriginUrl(): string {
+  return new URL(API_BASE_URL).origin;
+}
+
 export class ApiError extends Error {
   code: string;
   details: unknown[];

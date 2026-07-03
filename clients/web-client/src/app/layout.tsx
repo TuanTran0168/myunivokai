@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Toaster } from "sonner";
+import { backendOriginUrl } from "@/lib/api";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -39,6 +40,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 >
                   Gallery
                 </Link>
+                {/* External: the Go service's landing page (origin derived from
+                    NEXT_PUBLIC_API_BASE_URL — never hardcoded). */}
+                <a
+                  href={backendOriginUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Universe Service — backend landing page"
+                  className="font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-secondary"
+                >
+                  API
+                </a>
                 <Link
                   href="/"
                   className="focus-ring btn-gradient rounded-full px-4 py-1.5 text-sm font-semibold"
