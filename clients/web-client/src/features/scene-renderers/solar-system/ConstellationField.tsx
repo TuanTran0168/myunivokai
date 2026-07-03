@@ -28,6 +28,9 @@ const POLE_AVOIDANCE_RATIO = 0.7;
 // The figures drift a touch faster than the Milky Way behind them, giving
 // the sky gentle parallax while orbiting.
 const CONSTELLATION_ROTATION_RADIANS_PER_SECOND = 0.005;
+// Drawn after the Milky Way's dark dust clouds (render order 1): the figures
+// sit INSIDE the dust sphere, so without this the dust would dim them.
+const CONSTELLATION_RENDER_ORDER = 2;
 
 const MAJOR_STAR_POINT_SIZE = 1.25;
 const MINOR_STAR_POINT_SIZE = 0.6;
@@ -161,7 +164,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
       {/* frustumCulled=false everywhere: the auto bounding sphere of
           hand-built buffer geometry misjudges these sky-wide shells, so
           orbiting the camera made whole constellations pop in and out. */}
-      <points frustumCulled={false}>
+      <points frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -183,7 +186,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           toneMapped={false}
         />
       </points>
-      <points frustumCulled={false}>
+      <points frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -205,7 +208,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           toneMapped={false}
         />
       </points>
-      <lineSegments frustumCulled={false}>
+      <lineSegments frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
