@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import { AdditiveBlending } from "three";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { AdditiveBlending, type Group } from "three";
 import { randomFromSeed } from "@/lib/scene";
 import { getSoftCircleTexture } from "../shared/softCircleTexture";
 
@@ -13,12 +14,15 @@ import { getSoftCircleTexture } from "../shared/softCircleTexture";
  * <lineSegments> draw call total, nothing animates per frame.
  */
 
-const CONSTELLATION_COUNT = 14;
+const CONSTELLATION_COUNT = 8;
 const MINIMUM_STARS_PER_CONSTELLATION = 5;
-const MAXIMUM_STARS_PER_CONSTELLATION = 9;
+const MAXIMUM_STARS_PER_CONSTELLATION = 8;
 // Just inside the Skybox sphere (radius 60) so stars never clip through it.
 const CELESTIAL_SPHERE_RADIUS = 52;
-const CONSTELLATION_ANGULAR_SPREAD_RADIANS = 0.2;
+const CONSTELLATION_ANGULAR_SPREAD_RADIANS = 0.24;
+// The figures drift a touch faster than the Milky Way behind them, giving
+// the sky gentle parallax while orbiting.
+const CONSTELLATION_ROTATION_RADIANS_PER_SECOND = 0.005;
 // Bias anchors away from the poles, where connected lines look distorted.
 const POLE_AVOIDANCE_RATIO = 0.75;
 const CONSTELLATION_STAR_POINT_SIZE = 0.75;
@@ -72,9 +76,16 @@ function buildConstellationGeometry(seed: string): ConstellationGeometry {
 export function ConstellationField({ seed }: ConstellationFieldProps) {
   const { starPositions, linePositions } = useMemo(() => buildConstellationGeometry(seed), [seed]);
   const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
+  const constellationGroupReference = useRef<Group>(null);
+
+  useFrame((_, deltaSeconds) => {
+    if (constellationGroupReference.current) {
+      constellationGroupReference.current.rotation.y += CONSTELLATION_ROTATION_RADIANS_PER_SECOND * deltaSeconds;
+    }
+  });
 
   return (
-    <group>
+    <group ref={constellationGroupReference}>
       {/* frustumCulled=false on both: the auto bounding sphere of hand-built
           buffer geometry misjudges these sky-wide shells, so orbiting the
           camera made whole constellations pop in and out of existence. */}

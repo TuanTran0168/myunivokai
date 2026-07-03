@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import { AdditiveBlending, Color, NormalBlending } from "three";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { AdditiveBlending, Color, NormalBlending, type Group } from "three";
 import { randomFromSeed } from "@/lib/scene";
 import { getSoftCircleTexture } from "../shared/softCircleTexture";
 
@@ -28,6 +29,9 @@ const MILKY_WAY_FIXED_SEED = "myunivokai-milky-way";
 const BAND_SPHERE_RADIUS = 56;
 const BAND_TILT_X_RADIANS = 0.5;
 const BAND_TILT_Z_RADIANS = 0.35;
+// The whole galaxy wheels slowly overhead, like a long-exposure night sky.
+// Farthest layer, so it drifts slower than the constellations in front.
+const BAND_ROTATION_RADIANS_PER_SECOND = 0.003;
 // The band's half-width breathes +-35% along its length (two slow waves),
 // which breaks the "perfect ring" look of a constant-sigma band.
 const BAND_WIDTH_WOBBLE_RATIO = 0.35;
@@ -185,9 +189,16 @@ export function MilkyWayBand() {
     return { allSkyPositions, allSkyColors, hazePositions, bandStarPositions, bandStarColors, coreGlowPositions, dustPositions };
   }, []);
   const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
+  const bandGroupReference = useRef<Group>(null);
+
+  useFrame((_, deltaSeconds) => {
+    if (bandGroupReference.current) {
+      bandGroupReference.current.rotation.y += BAND_ROTATION_RADIANS_PER_SECOND * deltaSeconds;
+    }
+  });
 
   return (
-    <group rotation={[BAND_TILT_X_RADIANS, 0, BAND_TILT_Z_RADIANS]}>
+    <group ref={bandGroupReference} rotation={[BAND_TILT_X_RADIANS, 0, BAND_TILT_Z_RADIANS]}>
       <points frustumCulled={false}>
         <bufferGeometry>
           <bufferAttribute
