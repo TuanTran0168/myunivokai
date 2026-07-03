@@ -7,6 +7,10 @@ import (
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/seed"
 )
 
+// Bumped to 1.1 when the sky section was added (additive change; older configs
+// without sky stay valid and the frontend falls back to built-in sky defaults).
+const sceneConfigSchemaVersion = "1.1"
+
 type WorldConfigBuilder struct{}
 
 type BuildWorldConfigInput struct {
@@ -36,7 +40,7 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 	}
 	shapes := []string{"sphere", "octahedron", "torus", "box"}
 	config := models.WorldSceneConfig{
-		SchemaVersion: "1.0",
+		SchemaVersion: sceneConfigSchemaVersion,
 		SceneName:     input.DNA.SceneName,
 		Archetype:     input.DNA.Archetype,
 		Quote:         input.DNA.Quote,
@@ -69,6 +73,9 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 			BloomIntensity: round(clampFloat((0.3+rng.Float64()*1.1)*moodProfile.BloomMultiplier, minimumBloomIntensity, maximumBloomIntensity)),
 		},
 		HUD: models.HUDConfig{ShowTraitBars: true, ShowLabels: true},
+		// Sky draws from its own seed-derived PRNG stream (see buildSkyConfig),
+		// so adding it did not shift any of the draws above.
+		Sky: buildSkyConfig(input, moodProfile),
 	}
 	for i, planet := range input.DNA.Planets {
 		color := secondary

@@ -1,38 +1,53 @@
 basePath: /api/v1
 definitions:
-  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody:
+  httpx.ErrorBody:
     properties:
       code:
         type: string
       details:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail'
+          $ref: '#/definitions/httpx.ErrorDetail'
         type: array
       message:
         type: string
       requestId:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorDetail:
+  httpx.ErrorDetail:
     properties:
       field:
         type: string
       message:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope:
+  httpx.ErrorEnvelope:
     properties:
       error:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorBody'
+        $ref: '#/definitions/httpx.ErrorBody'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig:
+  models.CameraConfig:
     properties:
       distance:
         type: number
       fov:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig:
+  models.ConstellationConfig:
+    properties:
+      displayCount:
+        type: integer
+      glowMultiplier:
+        type: number
+      lineColor:
+        type: string
+      rotationRadiansPerSecond:
+        type: number
+      seed:
+        type: string
+      starColor:
+        type: string
+    type: object
+  models.CoreConfig:
     properties:
       color:
         type: string
@@ -45,16 +60,16 @@ definitions:
       spinSpeed:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse:
+  models.CreateWorldResponse:
     properties:
       personalityDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA'
+        $ref: '#/definitions/models.PersonalityDNA'
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
+        $ref: '#/definitions/models.WorldVariant'
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World'
+        $ref: '#/definitions/models.World'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet:
+  models.DNAPlanet:
     properties:
       energy:
         type: integer
@@ -67,7 +82,7 @@ definitions:
       type:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature:
+  models.EnergySignature:
     properties:
       intensity:
         type: integer
@@ -76,14 +91,65 @@ definitions:
       secondary:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig:
+  models.HUDConfig:
     properties:
       showLabels:
         type: boolean
       showTraitBars:
         type: boolean
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette:
+  models.MilkyWayConfig:
+    properties:
+      allSkyStarCount:
+        type: integer
+      bandStarCount:
+        type: integer
+      bandTiltXRadians:
+        type: number
+      bandTiltZRadians:
+        type: number
+      coreCloudColors:
+        items:
+          $ref: '#/definitions/models.WeightedColor'
+        type: array
+      coreCloudCount:
+        type: integer
+      coreCloudOpacity:
+        type: number
+      coreStarColors:
+        items:
+          $ref: '#/definitions/models.WeightedColor'
+        type: array
+      coreStarCount:
+        type: integer
+      dustCloudColors:
+        items:
+          $ref: '#/definitions/models.WeightedColor'
+        type: array
+      dustCloudCount:
+        type: integer
+      dustCloudOpacity:
+        type: number
+      heroStarCount:
+        type: integer
+      nebulaCloudColors:
+        items:
+          $ref: '#/definitions/models.WeightedColor'
+        type: array
+      nebulaCloudCount:
+        type: integer
+      nebulaCloudOpacity:
+        type: number
+      rotationRadiansPerSecond:
+        type: number
+      seed:
+        type: string
+      starColors:
+        items:
+          $ref: '#/definitions/models.WeightedColor'
+        type: array
+    type: object
+  models.Palette:
     properties:
       accent:
         type: string
@@ -98,7 +164,7 @@ definitions:
       secondary:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig:
+  models.ParticleConfig:
     properties:
       color:
         type: string
@@ -109,15 +175,15 @@ definitions:
       spread:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA:
+  models.PersonalityDNA:
     properties:
       archetype:
         type: string
       energySignature:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.EnergySignature'
+        $ref: '#/definitions/models.EnergySignature'
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet'
+          $ref: '#/definitions/models.DNAPlanet'
         type: array
       quote:
         type: string
@@ -128,11 +194,11 @@ definitions:
       shortNarrative:
         type: string
       traitScores:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores'
+        $ref: '#/definitions/models.TraitScores'
       visualHints:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints'
+        $ref: '#/definitions/models.VisualHints'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig:
+  models.PlanetSceneConfig:
     properties:
       color:
         type: string
@@ -153,28 +219,28 @@ definitions:
       size:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig:
+  models.PostFXConfig:
     properties:
       bloomIntensity:
         type: number
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA:
+  models.PublicDNA:
     properties:
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.DNAPlanet'
+          $ref: '#/definitions/models.DNAPlanet'
         type: array
       traitScores:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores'
+        $ref: '#/definitions/models.TraitScores'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant:
+  models.PublicVariant:
     properties:
       config:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig'
+        $ref: '#/definitions/models.WorldSceneConfig'
       seed:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld:
+  models.PublicWorld:
     properties:
       archetype:
         type: string
@@ -187,23 +253,30 @@ definitions:
       shortNarrative:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse:
+  models.PublicWorldResponse:
     properties:
       publicDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicDNA'
+        $ref: '#/definitions/models.PublicDNA'
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicVariant'
+        $ref: '#/definitions/models.PublicVariant'
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorld'
+        $ref: '#/definitions/models.PublicWorld'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse:
+  models.PublishResponse:
     properties:
       shareSlug:
         type: string
       shareUrl:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.TraitScores:
+  models.SkyConfig:
+    properties:
+      constellations:
+        $ref: '#/definitions/models.ConstellationConfig'
+      milkyWay:
+        $ref: '#/definitions/models.MilkyWayConfig'
+    type: object
+  models.TraitScores:
     properties:
       creativity:
         type: integer
@@ -216,12 +289,12 @@ definitions:
       focus:
         type: integer
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse:
+  models.VariantResponse:
     properties:
       variant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
+        $ref: '#/definitions/models.WorldVariant'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.VisualHints:
+  models.VisualHints:
     properties:
       coreSymbol:
         type: string
@@ -232,7 +305,14 @@ definitions:
       theme:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.World:
+  models.WeightedColor:
+    properties:
+      color:
+        type: string
+      weight:
+        type: number
+    type: object
+  models.World:
     properties:
       archetype:
         type: string
@@ -259,7 +339,7 @@ definitions:
       visibility:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput:
+  models.WorldInput:
     properties:
       challenge:
         type: string
@@ -286,59 +366,66 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse:
+  models.WorldListResponse:
     properties:
       worlds:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse'
+          $ref: '#/definitions/models.WorldResponse'
         type: array
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse:
+  models.WorldResponse:
     properties:
       personalityDNA:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PersonalityDNA'
+        $ref: '#/definitions/models.PersonalityDNA'
       selectedVariant:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
+        $ref: '#/definitions/models.WorldVariant'
       variants:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant'
+          $ref: '#/definitions/models.WorldVariant'
         type: array
       world:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.World'
+        $ref: '#/definitions/models.World'
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig:
+  models.WorldSceneConfig:
     properties:
       archetype:
         type: string
       camera:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CameraConfig'
+        $ref: '#/definitions/models.CameraConfig'
       core:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CoreConfig'
+        $ref: '#/definitions/models.CoreConfig'
       hud:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.HUDConfig'
+        $ref: '#/definitions/models.HUDConfig'
       palette:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.Palette'
+        $ref: '#/definitions/models.Palette'
       particles:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.ParticleConfig'
+        $ref: '#/definitions/models.ParticleConfig'
       planets:
         items:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PlanetSceneConfig'
+          $ref: '#/definitions/models.PlanetSceneConfig'
         type: array
       postFX:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PostFXConfig'
+        $ref: '#/definitions/models.PostFXConfig'
       quote:
         type: string
       sceneName:
         type: string
       schemaVersion:
         type: string
+      sky:
+        allOf:
+        - $ref: '#/definitions/models.SkyConfig'
+        description: |-
+          Sky was added in schemaVersion 1.1. Pointer + omitempty so configs stored
+          before that keep round-tripping without a sky key; the frontend falls back
+          to its built-in sky defaults when the key is absent.
       theme:
         type: string
     type: object
-  github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldVariant:
+  models.WorldVariant:
     properties:
       config:
-        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldSceneConfig'
+        $ref: '#/definitions/models.WorldSceneConfig'
       createdAt:
         type: string
       id:
@@ -405,15 +492,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublicWorldResponse'
+            $ref: '#/definitions/models.PublicWorldResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Get public universe
       tags:
       - share
@@ -431,15 +518,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldListResponse'
+            $ref: '#/definitions/models.WorldListResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Get universes by ids
       tags:
       - worlds
@@ -452,26 +539,30 @@ paths:
         name: input
         required: true
         schema:
-          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldInput'
+          $ref: '#/definitions/models.WorldInput'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.CreateWorldResponse'
+            $ref: '#/definitions/models.CreateWorldResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Create universe
       tags:
       - worlds
@@ -489,15 +580,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.WorldResponse'
+            $ref: '#/definitions/models.WorldResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Get universe
       tags:
       - worlds
@@ -515,15 +606,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.PublishResponse'
+            $ref: '#/definitions/models.PublishResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Publish universe
       tags:
       - worlds
@@ -541,15 +632,15 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse'
+            $ref: '#/definitions/models.VariantResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Regenerate universe variant
       tags:
       - worlds
@@ -572,15 +663,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_models.VariantResponse'
+            $ref: '#/definitions/models.VariantResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_universe-service_internal_httpx.ErrorEnvelope'
+            $ref: '#/definitions/httpx.ErrorEnvelope'
       summary: Select universe variant
       tags:
       - worlds

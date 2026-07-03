@@ -57,6 +57,49 @@ export type SceneHUDConfig = {
   showLabels?: boolean;
 };
 
+export type WeightedSkyColor = {
+  color?: string;
+  weight?: number;
+};
+
+export type SceneMilkyWayConfig = {
+  seed?: string;
+  allSkyStarCount?: number;
+  bandStarCount?: number;
+  coreStarCount?: number;
+  heroStarCount?: number;
+  nebulaCloudCount?: number;
+  coreCloudCount?: number;
+  dustCloudCount?: number;
+  starColors?: WeightedSkyColor[];
+  coreStarColors?: WeightedSkyColor[];
+  nebulaCloudColors?: WeightedSkyColor[];
+  coreCloudColors?: WeightedSkyColor[];
+  dustCloudColors?: WeightedSkyColor[];
+  nebulaCloudOpacity?: number;
+  coreCloudOpacity?: number;
+  dustCloudOpacity?: number;
+  bandTiltXRadians?: number;
+  bandTiltZRadians?: number;
+  rotationRadiansPerSecond?: number;
+};
+
+export type SceneConstellationConfig = {
+  seed?: string;
+  displayCount?: number;
+  starColor?: string;
+  lineColor?: string;
+  glowMultiplier?: number;
+  rotationRadiansPerSecond?: number;
+};
+
+// Added in schemaVersion 1.1. Absent on worlds generated before it — renderers
+// fall back to their built-in sky defaults.
+export type SceneSkyConfig = {
+  milkyWay?: SceneMilkyWayConfig;
+  constellations?: SceneConstellationConfig;
+};
+
 export type SceneConfig = {
   seed?: string;
   schemaVersion?: string;
@@ -71,6 +114,7 @@ export type SceneConfig = {
   camera?: SceneCameraConfig;
   postFX?: ScenePostFXConfig;
   hud?: SceneHUDConfig;
+  sky?: SceneSkyConfig;
   [key: string]: unknown;
 };
 

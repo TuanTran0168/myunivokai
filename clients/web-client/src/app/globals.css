@@ -303,3 +303,29 @@ textarea {
     animation: none;
   }
 }
+
+/* --- Custom cursor: a small brass compass star -------------------------------
+   The default OS arrow clashes with the observatory chrome. The star's hotspot
+   is its center (12 12 / 14 14), like a crosshair. Interactive elements get a
+   ringed variant instead of the OS hand; text fields keep the functional
+   I-beam. Every rule ends with a native keyword fallback, so an unsupported
+   browser silently falls back to normal cursors. */
+
+body {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M12%202l2.2%207.8L22%2012l-7.8%202.2L12%2022l-2.2-7.8L2%2012l7.8-2.2z'%20fill='%23C9A35B'%20stroke='%231B1402'%20stroke-width='1.2'%20stroke-linejoin='round'/%3E%3Ccircle%20cx='12'%20cy='12'%20r='2'%20fill='%23F2EEE6'/%3E%3C/svg%3E") 12 12, auto;
+}
+
+a,
+button,
+[role="button"],
+label,
+select,
+summary,
+.tappable {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='28'%20height='28'%20viewBox='0%200%2028%2028'%3E%3Ccircle%20cx='14'%20cy='14'%20r='10.5'%20fill='none'%20stroke='%23C9A35B'%20stroke-width='1.5'%20opacity='0.85'/%3E%3Cpath%20d='M14%206.5l1.7%205.8%205.8%201.7-5.8%201.7-1.7%205.8-1.7-5.8-5.8-1.7%205.8-1.7z'%20fill='%23C9A35B'%20stroke='%231B1402'%20stroke-width='1'%20stroke-linejoin='round'/%3E%3Ccircle%20cx='14'%20cy='14'%20r='1.7'%20fill='%23F2EEE6'/%3E%3C/svg%3E") 14 14, pointer;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea {
+  cursor: text;
+}
