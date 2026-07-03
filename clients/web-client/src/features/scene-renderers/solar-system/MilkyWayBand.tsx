@@ -607,7 +607,7 @@ export function MilkyWayBand({ sky }: MilkyWayBandProps) {
     }
   });
 
-  const geometryKey = `${resolvedConfig.seed}:${resolvedConfig.allSkyStarCount}:${resolvedConfig.bandStarCount}:${resolvedConfig.coreStarCount}:${resolvedConfig.nebulaCloudCount}:${resolvedConfig.dustCloudCount}`;
+  const geometryKey = `${resolvedConfig.seed}:${resolvedConfig.allSkyStarCount}:${resolvedConfig.bandStarCount}:${resolvedConfig.coreStarCount}:${resolvedConfig.heroStarCount}:${resolvedConfig.nebulaCloudCount}:${resolvedConfig.coreCloudCount}:${resolvedConfig.dustCloudCount}`;
 
   return (
     <group ref={bandGroupReference} rotation={[resolvedConfig.bandTiltXRadians, 0, resolvedConfig.bandTiltZRadians]}>

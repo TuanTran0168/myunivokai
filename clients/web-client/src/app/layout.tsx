@@ -41,13 +41,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   Gallery
                 </Link>
                 {/* External: the Go service's landing page (origin derived from
-                    NEXT_PUBLIC_API_BASE_URL — never hardcoded). */}
+                    NEXT_PUBLIC_API_BASE_URL — never hardcoded). Hidden on the
+                    narrowest screens so the 57px header never wraps. */}
                 <a
                   href={backendOriginUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Universe Service — backend landing page"
-                  className="font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-secondary"
+                  className="hidden font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-secondary sm:inline"
                 >
                   API
                 </a>

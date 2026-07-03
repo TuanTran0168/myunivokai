@@ -8,7 +8,7 @@
 > diffraction spikes, phân bố cấp sao, màu blackbody, Great Rift, mây fBm
 > domain-warp). Kèm: custom cursor brass và nút API ở header.
 
-Branch: `feat/fe/milkyway-constellations` (tiếp nối round Milky Way).
+Branch: `feat/fe-be/sky-from-database` (off staging sau khi PR #50 merge).
 Status legend: `[ ]` todo · `[x]` done · `[~]` partial/deferred.
 
 ---
@@ -174,17 +174,27 @@ Từng mục — cái gì, vì sao, ở đâu:
 
 ## 5. Checklist thực thi
 
-- [ ] BE: structs `SkyConfig` + `sky_scene_profile.go` (bảng theme/palette/dải số)
-- [ ] BE: `world_config_builder.go` build sky từ PRNG `seed+"-sky"`, bump 1.1
-- [ ] BE: `roundTo(v, digits)`; tests builder; `go vet` + `go test ./...`
-- [ ] Contracts: thêm `sky` vào properties (không required)
-- [ ] FE: types mirror + `buildPreviewSceneConfig` sinh sky + tests
-- [ ] FE: `MilkyWayBand`/`ConstellationField` đọc config + clamp/fallback
-- [ ] FE: PSF v2 + spikes + magnitude + rift + atlas mây warp (photoreal v2)
-- [ ] FE: cursor + nút API header
-- [ ] Gates FE (typecheck/lint/vitest/build) + commit theo cụm
-- [ ] Review workflow đối nghịch trên diff, fix findings
-- [ ] Update file này (status) — người dùng tự push branch
+- [x] BE: structs `SkyConfig` + `sky_scene_profile.go` (bảng theme/palette/dải số)
+- [x] BE: `world_config_builder.go` build sky từ PRNG `seed+"-sky"`, bump 1.1
+- [x] BE: `roundTo(v, digits)`; tests builder; `go vet` + `go test ./...` xanh — commit `d4f8e4d`
+- [x] Contracts: thêm `sky` vào properties (không required)
+- [x] FE: types mirror + `buildPreviewSceneConfig` sinh sky + 5 tests mới (36/36 xanh)
+- [x] FE: `MilkyWayBand`/`ConstellationField` đọc config + clamp/fallback — commit `0c1a709`
+- [x] FE: PSF v2 + spikes + magnitude + rift + atlas mây warp (photoreal v2) — cùng `0c1a709`
+- [x] FE: cursor + nút API header — commit `3080c22`
+- [x] Gates FE (typecheck/lint/vitest/build) xanh đủ
+- [x] Review diff: workflow 5-agent bị đứt vì session limit → self-review tập
+      trung theo đúng 5 hướng (determinism/mirror, backward-compat, shader/GL,
+      Go quality, UX). Findings đã fix: `backendOriginUrl()` không còn throw
+      khi env sai (fallback default thay vì sập root layout); link API ẩn ở
+      màn < sm để giữ contract header 57px; geometryKey MilkyWay bổ sung
+      hero/coreCloud counts; regenerate swagger docs (`swag init`) để API docs
+      hiện `sky`. Đã xác minh không cần fix: fallback seed world cũ giữ nguyên
+      chòm sao + galaxy chung; rift resample deterministic; mip bleed atlas vô
+      hại (viền tile trong suốt); tailwind `disabled:cursor-*` thắng rule
+      cursor mới; counts BE luôn nằm trong clamp FE.
+- [x] Update file này (status) — người dùng tự push branch
+      `feat/fe-be/sky-from-database` và mở PR vào staging.
 
 ## 6. Deferred / phase sau
 
