@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { AdditiveBlending } from "three";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { AdditiveBlending, type Points } from "three";
 import type { SceneConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
+import { getSoftCircleTexture } from "./softCircleTexture";
 
 const DEFAULT_PARTICLE_DESKTOP_COUNT = 900;
 const DEFAULT_PARTICLE_MOBILE_COUNT = 400;
@@ -13,6 +15,9 @@ const PARTICLE_POINT_SIZE = 0.06;
 const PARTICLE_OPACITY = 0.85;
 const MOBILE_VIEWPORT_MAXIMUM_WIDTH = 768;
 const DEFAULT_PARTICLE_COLOR = "#06B6D4";
+// Nearest sky layer, so it drifts the fastest of the three (particles >
+// constellations > Milky Way) for a subtle parallax depth cue.
+const PARTICLE_ROTATION_RADIANS_PER_SECOND = 0.008;
 
 type StarParticleFieldProps = {
   scene?: SceneConfig;
@@ -44,9 +49,17 @@ export function StarParticleField({ scene, seed, fallbackColor }: StarParticleFi
     () => buildParticlePositions(seed, particleCount, particleSpread),
     [seed, particleCount, particleSpread]
   );
+  const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
+  const particlePointsReference = useRef<Points>(null);
+
+  useFrame((_, deltaSeconds) => {
+    if (particlePointsReference.current) {
+      particlePointsReference.current.rotation.y += PARTICLE_ROTATION_RADIANS_PER_SECOND * deltaSeconds;
+    }
+  });
 
   return (
-    <points>
+    <points ref={particlePointsReference} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -56,6 +69,8 @@ export function StarParticleField({ scene, seed, fallbackColor }: StarParticleFi
         />
       </bufferGeometry>
       <pointsMaterial
+        map={softCircleTexture ?? undefined}
+        alphaTest={0.01}
         color={particleColor}
         size={PARTICLE_POINT_SIZE}
         transparent
