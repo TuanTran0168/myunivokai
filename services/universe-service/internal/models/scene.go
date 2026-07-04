@@ -13,6 +13,57 @@ type WorldSceneConfig struct {
 	Camera        CameraConfig        `json:"camera"`
 	PostFX        PostFXConfig        `json:"postFX"`
 	HUD           HUDConfig           `json:"hud"`
+	// Sky was added in schemaVersion 1.1. Pointer + omitempty so configs stored
+	// before that keep round-tripping without a sky key; the frontend falls back
+	// to its built-in sky defaults when the key is absent.
+	Sky *SkyConfig `json:"sky,omitempty"`
+}
+
+// SkyConfig drives the night-sky rendering (procedural Milky Way band and the
+// zodiac constellation figures). Built deterministically by the world config
+// builder and stored with the variant, so the frontend renders the sky purely
+// from data instead of hardcoded constants.
+type SkyConfig struct {
+	MilkyWay       MilkyWayConfig      `json:"milkyWay"`
+	Constellations ConstellationConfig `json:"constellations"`
+}
+
+// WeightedColor is one entry of a weighted color palette. Weights are relative
+// probabilities; they do not need to sum to 1.
+type WeightedColor struct {
+	Color  string  `json:"color"`
+	Weight float64 `json:"weight"`
+}
+
+type MilkyWayConfig struct {
+	Seed                     string          `json:"seed"`
+	AllSkyStarCount          int             `json:"allSkyStarCount"`
+	BandStarCount            int             `json:"bandStarCount"`
+	CoreStarCount            int             `json:"coreStarCount"`
+	HeroStarCount            int             `json:"heroStarCount"`
+	NebulaCloudCount         int             `json:"nebulaCloudCount"`
+	CoreCloudCount           int             `json:"coreCloudCount"`
+	DustCloudCount           int             `json:"dustCloudCount"`
+	StarColors               []WeightedColor `json:"starColors"`
+	CoreStarColors           []WeightedColor `json:"coreStarColors"`
+	NebulaCloudColors        []WeightedColor `json:"nebulaCloudColors"`
+	CoreCloudColors          []WeightedColor `json:"coreCloudColors"`
+	DustCloudColors          []WeightedColor `json:"dustCloudColors"`
+	NebulaCloudOpacity       float64         `json:"nebulaCloudOpacity"`
+	CoreCloudOpacity         float64         `json:"coreCloudOpacity"`
+	DustCloudOpacity         float64         `json:"dustCloudOpacity"`
+	BandTiltXRadians         float64         `json:"bandTiltXRadians"`
+	BandTiltZRadians         float64         `json:"bandTiltZRadians"`
+	RotationRadiansPerSecond float64         `json:"rotationRadiansPerSecond"`
+}
+
+type ConstellationConfig struct {
+	Seed                     string  `json:"seed"`
+	DisplayCount             int     `json:"displayCount"`
+	StarColor                string  `json:"starColor"`
+	LineColor                string  `json:"lineColor"`
+	GlowMultiplier           float64 `json:"glowMultiplier"`
+	RotationRadiansPerSecond float64 `json:"rotationRadiansPerSecond"`
 }
 
 type Palette struct {

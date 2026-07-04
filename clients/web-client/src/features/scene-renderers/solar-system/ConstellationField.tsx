@@ -14,11 +14,14 @@ import { ZODIAC_CONSTELLATIONS } from "./constellationCatalog";
  * still has its own personal sky — but the figures themselves are the
  * recognizable star-map shapes from the catalog, drawn like classic
  * constellation art: big glowing anchor stars, small companion stars, thin
- * connecting lines. Colors follow the world style (theme) and the glow
- * strength follows the mood (via the mood-driven bloom intensity).
+ * connecting lines that stop short of the stars the way star charts draw
+ * them. Everything tunable comes from the scene config's
+ * `sky.constellations` section that the backend stores per world (figure
+ * count, tints, mood glow, drift speed, seed); the theme/bloom fallbacks
+ * below only serve worlds created before schemaVersion 1.1.
  */
 
-const CONSTELLATION_DISPLAY_COUNT = 8;
+const DEFAULT_CONSTELLATION_DISPLAY_COUNT = 8;
 // Just inside the Skybox sphere (radius 60) so stars never clip through it.
 const CELESTIAL_SPHERE_RADIUS = 52;
 // Chord size of one figure's patch on the unit sphere (~24 degrees of sky).
@@ -27,15 +30,20 @@ const CONSTELLATION_PATCH_SIZE = 0.42;
 const POLE_AVOIDANCE_RATIO = 0.7;
 // The figures drift a touch faster than the Milky Way behind them, giving
 // the sky gentle parallax while orbiting.
-const CONSTELLATION_ROTATION_RADIANS_PER_SECOND = 0.005;
+const DEFAULT_CONSTELLATION_ROTATION_RADIANS_PER_SECOND = 0.005;
+const MAXIMUM_ROTATION_RADIANS_PER_SECOND = 0.05;
 // Drawn after the Milky Way's dark dust clouds (render order 1): the figures
 // sit INSIDE the dust sphere, so without this the dust would dim them.
 const CONSTELLATION_RENDER_ORDER = 2;
 
-const MAJOR_STAR_POINT_SIZE = 1.25;
-const MINOR_STAR_POINT_SIZE = 0.6;
+const MAJOR_STAR_POINT_SIZE = 1.1;
+const MINOR_STAR_POINT_SIZE = 0.5;
 const STAR_OPACITY = 0.95;
-const LINE_OPACITY = 0.32;
+const LINE_OPACITY = 0.26;
+// Star charts leave a gap between the connecting line and the star it joins;
+// each segment is shortened by this fraction at both ends.
+const LINE_ENDPOINT_GAP_RATIO = 0.08;
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 // Mood (via bloom intensity) scales the glow; clamped so a reflective world
 // stays readable and an energetic one does not blow out.
 const MINIMUM_MOOD_GLOW_MULTIPLIER = 0.7;
@@ -70,7 +78,7 @@ type ConstellationGeometry = {
 
 const WORLD_UP = new Vector3(0, 1, 0);
 
-function buildConstellationGeometry(seed: string): ConstellationGeometry {
+function buildConstellationGeometry(seed: string, displayCount: number): ConstellationGeometry {
   const random = randomFromSeed(`${seed}-constellations`);
   const majorStarVertices: number[] = [];
   const minorStarVertices: number[] = [];
@@ -82,7 +90,7 @@ function buildConstellationGeometry(seed: string): ConstellationGeometry {
     const swapIndex = Math.floor(random() * (shuffleIndex + 1));
     [figureIndices[shuffleIndex], figureIndices[swapIndex]] = [figureIndices[swapIndex], figureIndices[shuffleIndex]];
   }
-  const chosenFigures = figureIndices.slice(0, CONSTELLATION_DISPLAY_COUNT);
+  const chosenFigures = figureIndices.slice(0, displayCount);
 
   for (const figureIndex of chosenFigures) {
     const figure = ZODIAC_CONSTELLATIONS[figureIndex];
@@ -126,7 +134,10 @@ function buildConstellationGeometry(seed: string): ConstellationGeometry {
     for (const [fromIndex, toIndex] of figure.lineIndexPairs) {
       const fromPoint = starPointsOnSphere[fromIndex];
       const toPoint = starPointsOnSphere[toIndex];
-      lineVertices.push(fromPoint.x, fromPoint.y, fromPoint.z, toPoint.x, toPoint.y, toPoint.z);
+      // Shrink both ends so the line never touches the star glow (chart style).
+      const gappedFrom = new Vector3().lerpVectors(fromPoint, toPoint, LINE_ENDPOINT_GAP_RATIO);
+      const gappedTo = new Vector3().lerpVectors(fromPoint, toPoint, 1 - LINE_ENDPOINT_GAP_RATIO);
+      lineVertices.push(gappedFrom.x, gappedFrom.y, gappedFrom.z, gappedTo.x, gappedTo.y, gappedTo.z);
     }
   }
 
@@ -138,24 +149,57 @@ function buildConstellationGeometry(seed: string): ConstellationGeometry {
 }
 
 export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
+  // Everything below prefers the backend-stored sky.constellations config and
+  // falls back to the theme/bloom-derived defaults for pre-1.1 worlds.
+  const skyConstellations = scene.sky?.constellations;
+  const figuresSeed =
+    typeof skyConstellations?.seed === "string" && skyConstellations.seed.length > 0 ? skyConstellations.seed : seed;
+  const displayCount =
+    typeof skyConstellations?.displayCount === "number" && Number.isFinite(skyConstellations.displayCount)
+      ? Math.min(ZODIAC_CONSTELLATIONS.length, Math.max(0, Math.floor(skyConstellations.displayCount)))
+      : DEFAULT_CONSTELLATION_DISPLAY_COUNT;
+
   const { majorStarPositions, minorStarPositions, linePositions } = useMemo(
-    () => buildConstellationGeometry(seed),
-    [seed]
+    () => buildConstellationGeometry(figuresSeed, displayCount),
+    [figuresSeed, displayCount]
   );
   const softCircleTexture = useMemo(() => getSoftCircleTexture(), []);
   const constellationGroupReference = useRef<Group>(null);
 
-  const tint = THEME_CONSTELLATION_TINTS[scene.theme ?? ""] ?? DEFAULT_CONSTELLATION_TINT;
+  const fallbackTint = THEME_CONSTELLATION_TINTS[scene.theme ?? ""] ?? DEFAULT_CONSTELLATION_TINT;
+  const tint: ConstellationTint = {
+    starColor:
+      typeof skyConstellations?.starColor === "string" && HEX_COLOR_PATTERN.test(skyConstellations.starColor)
+        ? skyConstellations.starColor
+        : fallbackTint.starColor,
+    lineColor:
+      typeof skyConstellations?.lineColor === "string" && HEX_COLOR_PATTERN.test(skyConstellations.lineColor)
+        ? skyConstellations.lineColor
+        : fallbackTint.lineColor
+  };
   const moodGlowMultiplier = Math.min(
     MAXIMUM_MOOD_GLOW_MULTIPLIER,
-    Math.max(MINIMUM_MOOD_GLOW_MULTIPLIER, scene.postFX?.bloomIntensity ?? 1)
+    Math.max(
+      MINIMUM_MOOD_GLOW_MULTIPLIER,
+      typeof skyConstellations?.glowMultiplier === "number" && Number.isFinite(skyConstellations.glowMultiplier)
+        ? skyConstellations.glowMultiplier
+        : scene.postFX?.bloomIntensity ?? 1
+    )
   );
   const starOpacity = Math.min(1, STAR_OPACITY * moodGlowMultiplier);
   const lineOpacity = Math.min(1, LINE_OPACITY * moodGlowMultiplier);
+  const rotationRadiansPerSecond =
+    typeof skyConstellations?.rotationRadiansPerSecond === "number" &&
+    Number.isFinite(skyConstellations.rotationRadiansPerSecond)
+      ? Math.min(
+          MAXIMUM_ROTATION_RADIANS_PER_SECOND,
+          Math.max(-MAXIMUM_ROTATION_RADIANS_PER_SECOND, skyConstellations.rotationRadiansPerSecond)
+        )
+      : DEFAULT_CONSTELLATION_ROTATION_RADIANS_PER_SECOND;
 
   useFrame((_, deltaSeconds) => {
     if (constellationGroupReference.current) {
-      constellationGroupReference.current.rotation.y += CONSTELLATION_ROTATION_RADIANS_PER_SECOND * deltaSeconds;
+      constellationGroupReference.current.rotation.y += rotationRadiansPerSecond * deltaSeconds;
     }
   });
 
@@ -165,7 +209,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           hand-built buffer geometry misjudges these sky-wide shells, so
           orbiting the camera made whole constellations pop in and out. */}
       <points frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
-        <bufferGeometry>
+        <bufferGeometry key={`${figuresSeed}:${displayCount}:major`}>
           <bufferAttribute
             attach="attributes-position"
             count={majorStarPositions.length / 3}
@@ -187,7 +231,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
         />
       </points>
       <points frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
-        <bufferGeometry>
+        <bufferGeometry key={`${figuresSeed}:${displayCount}:minor`}>
           <bufferAttribute
             attach="attributes-position"
             count={minorStarPositions.length / 3}
@@ -209,7 +253,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
         />
       </points>
       <lineSegments frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
-        <bufferGeometry>
+        <bufferGeometry key={`${figuresSeed}:${displayCount}:lines`}>
           <bufferAttribute
             attach="attributes-position"
             count={linePositions.length / 3}

@@ -1,4 +1,12 @@
-import type { PlanetSceneConfig, SceneConfig, ScenePalette, World, WorldVariant } from "./types";
+import type {
+  PlanetSceneConfig,
+  SceneConfig,
+  ScenePalette,
+  SceneSkyConfig,
+  WeightedSkyColor,
+  World,
+  WorldVariant
+} from "./types";
 
 const FALLBACK_PALETTE = ["#8B5CF6", "#06B6D4", "#FACC15", "#44624a", "#101418"];
 const FALLBACK_BACKGROUND_COLOR = "#050816";
@@ -128,7 +136,9 @@ const DEFAULT_PREVIEW_PRIMARY_COLOR = "#8B5CF6";
 const DEFAULT_PREVIEW_SECONDARY_COLOR = "#06B6D4";
 const PREVIEW_ACCENT_COLOR = "#FACC15";
 const PREVIEW_BACKGROUND_COLOR = "#050816";
-const PREVIEW_SCHEMA_VERSION = "1.0";
+// Mirrors sceneConfigSchemaVersion in services/.../world_config_builder.go
+// (1.1 = the sky section exists).
+const PREVIEW_SCHEMA_VERSION = "1.1";
 
 const MINIMUM_PREVIEW_PLANET_COUNT = 3;
 const MAXIMUM_PREVIEW_PLANET_COUNT = 7;
@@ -199,6 +209,218 @@ const MAXIMUM_BLOOM_INTENSITY_CLAMP = 1.8;
 
 export function moodSceneProfile(mood: string): MoodSceneProfile {
   return MOOD_SCENE_PROFILES[mood.trim().toLowerCase()] ?? NEUTRAL_MOOD_SCENE_PROFILE;
+}
+
+// --- Sky section (mirror of services/.../internal/services/sky_scene_profile.go)
+//
+// The backend is the source of truth for the night sky: it stores a `sky`
+// section in every new scene config. The preview must build the same section
+// locally (same tables, same ranges) so the create page shows the sky the
+// generated world will have. Keep the two files in sync when changing values.
+
+const SKY_SEED_SUFFIX = "-sky";
+const MILKY_WAY_SEED_SUFFIX = "-milky-way";
+
+const MINIMUM_ALL_SKY_STAR_COUNT = 4800;
+const ALL_SKY_STAR_COUNT_SPREAD = 801;
+const MINIMUM_BAND_STAR_COUNT = 5200;
+const BAND_STAR_COUNT_SPREAD = 801;
+const MINIMUM_CORE_STAR_COUNT = 2400;
+const CORE_STAR_COUNT_SPREAD = 401;
+const MINIMUM_HERO_STAR_COUNT = 22;
+const HERO_STAR_COUNT_SPREAD = 11;
+
+const MINIMUM_NEBULA_CLOUD_COUNT = 380;
+const NEBULA_CLOUD_COUNT_SPREAD = 81;
+const MINIMUM_CORE_CLOUD_COUNT = 140;
+const CORE_CLOUD_COUNT_SPREAD = 41;
+const MINIMUM_DUST_CLOUD_COUNT = 240;
+const DUST_CLOUD_COUNT_SPREAD = 41;
+
+const BASE_NEBULA_CLOUD_OPACITY = 0.1;
+const MINIMUM_NEBULA_CLOUD_OPACITY = 0.05;
+const MAXIMUM_NEBULA_CLOUD_OPACITY = 0.16;
+const BASE_CORE_CLOUD_OPACITY = 0.12;
+const MINIMUM_CORE_CLOUD_OPACITY = 0.06;
+const MAXIMUM_CORE_CLOUD_OPACITY = 0.2;
+const SKY_DUST_CLOUD_OPACITY = 0.4;
+
+const MINIMUM_BAND_TILT_X_RADIANS = 0.35;
+const BAND_TILT_X_SPREAD_RADIANS = 0.3;
+const MINIMUM_BAND_TILT_Z_RADIANS = 0.2;
+const BAND_TILT_Z_SPREAD_RADIANS = 0.3;
+
+const BASE_MILKY_WAY_ROTATION_RADIANS_PER_SECOND = 0.003;
+const BASE_CONSTELLATION_ROTATION_RADIANS_PER_SECOND = 0.005;
+
+const MINIMUM_CONSTELLATION_DISPLAY_COUNT = 6;
+const CONSTELLATION_DISPLAY_COUNT_SPREAD = 3;
+const MINIMUM_CONSTELLATION_GLOW = 0.7;
+const MAXIMUM_CONSTELLATION_GLOW = 1.3;
+
+const ROTATION_DECIMAL_PLACES = 4;
+
+type SkyThemeProfile = {
+  constellationStarColor: string;
+  constellationLineColor: string;
+  nebulaAccentColor: string;
+};
+
+const DEFAULT_SKY_THEME_PROFILE: SkyThemeProfile = {
+  constellationStarColor: "#F2EEE6",
+  constellationLineColor: "#D9B96E",
+  nebulaAccentColor: "#C9B7D6"
+};
+
+const SKY_THEME_PROFILES: Record<string, SkyThemeProfile> = {
+  "cosmic-galaxy": { constellationStarColor: "#EAF2FF", constellationLineColor: "#8FB6FF", nebulaAccentColor: "#8FA5CE" },
+  nebula: { constellationStarColor: "#F3E8FF", constellationLineColor: "#C084FC", nebulaAccentColor: "#9D7BD8" },
+  crystal: { constellationStarColor: "#EAFBFF", constellationLineColor: "#7DD3FC", nebulaAccentColor: "#7FB8D8" },
+  aurora: { constellationStarColor: "#ECFFF6", constellationLineColor: "#6EE7B7", nebulaAccentColor: "#7FC9A8" },
+  "cyber-orbit": { constellationStarColor: "#E6FDFF", constellationLineColor: "#22D3EE", nebulaAccentColor: "#5FB8C9" }
+};
+
+function skyThemeProfileForTheme(theme: string): SkyThemeProfile {
+  return SKY_THEME_PROFILES[theme] ?? DEFAULT_SKY_THEME_PROFILE;
+}
+
+// Blackbody star colors — the vendian.org spectral-class anchors (O through M).
+const SKY_STAR_COLOR_DISTRIBUTION: WeightedSkyColor[] = [
+  { color: "#9BB0FF", weight: 0.1 },
+  { color: "#AABFFF", weight: 0.18 },
+  { color: "#CAD7FF", weight: 0.22 },
+  { color: "#F8F7FF", weight: 0.2 },
+  { color: "#FFF4EA", weight: 0.15 },
+  { color: "#FFD2A1", weight: 0.1 },
+  { color: "#FFCC6F", weight: 0.05 }
+];
+
+const CORE_STAR_COLOR_DISTRIBUTION: WeightedSkyColor[] = [
+  { color: "#FFF4EA", weight: 0.3 },
+  { color: "#FFD2A1", weight: 0.35 },
+  { color: "#FFCC6F", weight: 0.25 },
+  { color: "#F8F7FF", weight: 0.1 }
+];
+
+function nebulaCloudColorDistribution(themeProfile: SkyThemeProfile): WeightedSkyColor[] {
+  return [
+    { color: "#2A3550", weight: 0.26 },
+    { color: "#8FA5CE", weight: 0.22 },
+    { color: "#E8DCC0", weight: 0.18 },
+    { color: themeProfile.nebulaAccentColor, weight: 0.14 },
+    { color: "#6B4530", weight: 0.12 },
+    { color: "#4A3020", weight: 0.08 }
+  ];
+}
+
+const CORE_CLOUD_COLOR_DISTRIBUTION: WeightedSkyColor[] = [
+  { color: "#F5E3B8", weight: 0.4 },
+  { color: "#E8C79A", weight: 0.3 },
+  { color: "#D9A468", weight: 0.2 },
+  { color: "#B98A58", weight: 0.1 }
+];
+
+const DUST_CLOUD_COLOR_DISTRIBUTION: WeightedSkyColor[] = [
+  { color: "#0D0D12", weight: 0.4 },
+  { color: "#120C08", weight: 0.3 },
+  { color: "#1A1210", weight: 0.3 }
+];
+
+function roundToPrecision(value: number, decimalPlaces: number): number {
+  const scale = 10 ** decimalPlaces;
+  return Math.round(value * scale) / scale;
+}
+
+/**
+ * Builds the preview's sky section from its own seed-derived PRNG stream
+ * (`seed + "-sky"`), matching how the backend derives it — so adding the sky
+ * did not change any of the pre-existing preview draws.
+ */
+export function buildPreviewSkyConfig(seed: string, theme: string, moodProfile: MoodSceneProfile): SceneSkyConfig {
+  const nextSkyRandomValue = randomFromSeed(seed + SKY_SEED_SUFFIX);
+  const themeProfile = skyThemeProfileForTheme(theme);
+
+  // Fixed draw order — reordering these lines changes every preview's sky.
+  const allSkyStarCount = Math.floor(
+    (MINIMUM_ALL_SKY_STAR_COUNT + Math.floor(nextSkyRandomValue() * ALL_SKY_STAR_COUNT_SPREAD)) *
+      moodProfile.particleMultiplier
+  );
+  const bandStarCount = Math.floor(
+    (MINIMUM_BAND_STAR_COUNT + Math.floor(nextSkyRandomValue() * BAND_STAR_COUNT_SPREAD)) *
+      moodProfile.particleMultiplier
+  );
+  const coreStarCount = Math.floor(
+    (MINIMUM_CORE_STAR_COUNT + Math.floor(nextSkyRandomValue() * CORE_STAR_COUNT_SPREAD)) *
+      moodProfile.particleMultiplier
+  );
+  const heroStarCount = MINIMUM_HERO_STAR_COUNT + Math.floor(nextSkyRandomValue() * HERO_STAR_COUNT_SPREAD);
+  const nebulaCloudCount = Math.floor(
+    (MINIMUM_NEBULA_CLOUD_COUNT + Math.floor(nextSkyRandomValue() * NEBULA_CLOUD_COUNT_SPREAD)) *
+      moodProfile.particleMultiplier
+  );
+  const coreCloudCount = Math.floor(
+    (MINIMUM_CORE_CLOUD_COUNT + Math.floor(nextSkyRandomValue() * CORE_CLOUD_COUNT_SPREAD)) *
+      moodProfile.particleMultiplier
+  );
+  const dustCloudCount = MINIMUM_DUST_CLOUD_COUNT + Math.floor(nextSkyRandomValue() * DUST_CLOUD_COUNT_SPREAD);
+  const bandTiltXRadians = roundToTwoDecimals(MINIMUM_BAND_TILT_X_RADIANS + nextSkyRandomValue() * BAND_TILT_X_SPREAD_RADIANS);
+  const bandTiltZRadians = roundToTwoDecimals(MINIMUM_BAND_TILT_Z_RADIANS + nextSkyRandomValue() * BAND_TILT_Z_SPREAD_RADIANS);
+  const constellationDisplayCount =
+    MINIMUM_CONSTELLATION_DISPLAY_COUNT + Math.floor(nextSkyRandomValue() * CONSTELLATION_DISPLAY_COUNT_SPREAD);
+
+  return {
+    milkyWay: {
+      seed: seed + MILKY_WAY_SEED_SUFFIX,
+      allSkyStarCount,
+      bandStarCount,
+      coreStarCount,
+      heroStarCount,
+      nebulaCloudCount,
+      coreCloudCount,
+      dustCloudCount,
+      starColors: SKY_STAR_COLOR_DISTRIBUTION,
+      coreStarColors: CORE_STAR_COLOR_DISTRIBUTION,
+      nebulaCloudColors: nebulaCloudColorDistribution(themeProfile),
+      coreCloudColors: CORE_CLOUD_COLOR_DISTRIBUTION,
+      dustCloudColors: DUST_CLOUD_COLOR_DISTRIBUTION,
+      nebulaCloudOpacity: roundToTwoDecimals(
+        clampNumber(
+          BASE_NEBULA_CLOUD_OPACITY * moodProfile.bloomMultiplier,
+          MINIMUM_NEBULA_CLOUD_OPACITY,
+          MAXIMUM_NEBULA_CLOUD_OPACITY
+        )
+      ),
+      coreCloudOpacity: roundToTwoDecimals(
+        clampNumber(
+          BASE_CORE_CLOUD_OPACITY * moodProfile.bloomMultiplier,
+          MINIMUM_CORE_CLOUD_OPACITY,
+          MAXIMUM_CORE_CLOUD_OPACITY
+        )
+      ),
+      dustCloudOpacity: SKY_DUST_CLOUD_OPACITY,
+      bandTiltXRadians,
+      bandTiltZRadians,
+      rotationRadiansPerSecond: roundToPrecision(
+        BASE_MILKY_WAY_ROTATION_RADIANS_PER_SECOND * moodProfile.motionMultiplier,
+        ROTATION_DECIMAL_PLACES
+      )
+    },
+    constellations: {
+      // Matches the renderers' pre-1.1 fallback (they derive figure layout
+      // from the variant seed), so old worlds keep their constellations.
+      seed,
+      displayCount: constellationDisplayCount,
+      starColor: themeProfile.constellationStarColor,
+      lineColor: themeProfile.constellationLineColor,
+      glowMultiplier: roundToTwoDecimals(
+        clampNumber(moodProfile.bloomMultiplier, MINIMUM_CONSTELLATION_GLOW, MAXIMUM_CONSTELLATION_GLOW)
+      ),
+      rotationRadiansPerSecond: roundToPrecision(
+        BASE_CONSTELLATION_ROTATION_RADIANS_PER_SECOND * moodProfile.motionMultiplier,
+        ROTATION_DECIMAL_PLACES
+      )
+    }
+  };
 }
 
 function roundToTwoDecimals(value: number): number {
@@ -354,6 +576,8 @@ export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
       fov: PREVIEW_CAMERA_FIELD_OF_VIEW
     },
     postFX: { bloomIntensity },
-    hud: { showTraitBars: true, showLabels: true }
+    hud: { showTraitBars: true, showLabels: true },
+    // Own PRNG stream (seed + "-sky"): adding this did not shift the draws above.
+    sky: buildPreviewSkyConfig(seed, input.preferredWorldStyle, moodProfile)
   };
 }

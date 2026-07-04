@@ -2,5 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "WorldSceneConfig",
   "type": "object",
-  "required": ["schemaVersion", "sceneName", "archetype", "quote", "theme", "palette", "core", "planets", "particles", "camera", "postFX", "hud"]
+  "required": ["schemaVersion", "sceneName", "archetype", "quote", "theme", "palette", "core", "planets", "particles", "camera", "postFX", "hud"],
+  "properties": {
+    "sky": {
+      "type": "object",
+      "description": "Night-sky rendering parameters (Milky Way band + constellation figures). Added in schemaVersion 1.1; deliberately NOT required — configs stored before 1.1 have no sky key and renderers fall back to built-in defaults.",
+      "required": ["milkyWay", "constellations"],
+      "properties": {
+        "milkyWay": {
+          "type": "object",
+          "required": [
+            "seed",
+            "allSkyStarCount", "bandStarCount", "coreStarCount", "heroStarCount",
+            "nebulaCloudCount", "coreCloudCount", "dustCloudCount",
+            "starColors", "coreStarColors", "nebulaCloudColors", "coreCloudColors", "dustCloudColors",
+            "nebulaCloudOpacity", "coreCloudOpacity", "dustCloudOpacity",
+            "bandTiltXRadians", "bandTiltZRadians", "rotationRadiansPerSecond"
+          ]
+        },
+        "constellations": {
+          "type": "object",
+          "required": ["seed", "displayCount", "starColor", "lineColor", "glowMultiplier", "rotationRadiansPerSecond"]
+        }
+      }
+    }
+  }
 }

@@ -36,26 +36,43 @@ const STAR_VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-// Core + halo can sum past 1.0 at the very center; the framebuffer clamps
-// per channel, so bright star centers wash toward white while their edges
-// keep the star's tint — exactly how stars over-expose in photographs.
+// Two-component point-spread function, the way stars actually image: a tight
+// gaussian core plus an inverse-square halo (photographed star glow falls off
+// ~1/r^2), windowed so the sprite edge vanishes. Bright layers can also mix in
+// diffraction spikes — the 4+4-point cross flare aperture edges produce — via
+// uSpikeStrength (real photos only show spikes on the very brightest stars).
+// Core + halo can sum past 1.0 at the center; the framebuffer clamps per
+// channel, so bright star centers wash toward white while their edges keep
+// the star's tint — exactly how stars over-expose in photographs.
 const STAR_FRAGMENT_SHADER = /* glsl */ `
   uniform float uTimeSeconds;
   uniform float uGlobalOpacity;
+  uniform float uSpikeStrength;
   varying vec3 vStarColor;
   varying float vTwinklePhase;
 
   void main() {
-    vec2 offsetFromCenter = gl_PointCoord - vec2(0.5);
-    float normalizedDistance = length(offsetFromCenter) * 2.0;
+    vec2 offsetFromCenter = gl_PointCoord * 2.0 - 1.0;
+    float normalizedDistance = length(offsetFromCenter);
     if (normalizedDistance > 1.0) {
       discard;
     }
-    float coreIntensity = smoothstep(0.42, 0.0, normalizedDistance);
-    float haloIntensity = 0.5 * exp(-4.0 * normalizedDistance);
+    float coreIntensity = exp(-normalizedDistance * normalizedDistance * 16.0);
+    float edgeWindow = 1.0 - smoothstep(0.6, 1.0, normalizedDistance);
+    float haloIntensity = (0.03 / (normalizedDistance * normalizedDistance + 0.03)) * edgeWindow;
+    float spikeIntensity = 0.0;
+    if (uSpikeStrength > 0.0) {
+      float straightCross = pow(max(0.0, 1.0 - abs(offsetFromCenter.x * offsetFromCenter.y) * 28.0), 10.0);
+      vec2 diagonalCoord = vec2(
+        offsetFromCenter.x + offsetFromCenter.y,
+        offsetFromCenter.x - offsetFromCenter.y
+      ) * 0.7071;
+      float diagonalCross = pow(max(0.0, 1.0 - abs(diagonalCoord.x * diagonalCoord.y) * 28.0), 10.0);
+      spikeIntensity = (straightCross + 0.3 * diagonalCross) * (1.0 - normalizedDistance) * uSpikeStrength;
+    }
     float twinkle = 0.85 + 0.15 * sin(uTimeSeconds * 1.4 + vTwinklePhase);
-    float intensity = (coreIntensity + haloIntensity) * twinkle * uGlobalOpacity;
-    if (intensity < 0.01) {
+    float intensity = (coreIntensity + 0.6 * haloIntensity + spikeIntensity) * twinkle * uGlobalOpacity;
+    if (intensity < 0.008) {
       discard;
     }
     // Alpha stays 1.0: with additive blending the contribution is rgb * alpha,
@@ -74,12 +91,15 @@ export type StarLayerAttributes = {
 type SizedStarPointsProps = {
   stars: StarLayerAttributes;
   globalOpacity?: number;
+  /** 0 = plain stars; 1 = full diffraction spikes (hero-star layers only). */
+  spikeStrength?: number;
   renderOrder?: number;
   /** Forces the buffer geometry to remount when the star arrays change. */
   geometryKey?: string;
 };
 
 const DEFAULT_GLOBAL_OPACITY = 1;
+const DEFAULT_SPIKE_STRENGTH = 0;
 const DEFAULT_RENDER_ORDER = 0;
 
 /**
@@ -99,6 +119,7 @@ export function hexColorToUnitRgb(hexColor: string): [number, number, number] {
 export function SizedStarPoints({
   stars,
   globalOpacity = DEFAULT_GLOBAL_OPACITY,
+  spikeStrength = DEFAULT_SPIKE_STRENGTH,
   renderOrder = DEFAULT_RENDER_ORDER,
   geometryKey
 }: SizedStarPointsProps) {
@@ -108,7 +129,8 @@ export function SizedStarPoints({
     () => ({
       uPointScale: { value: 1 },
       uTimeSeconds: { value: 0 },
-      uGlobalOpacity: { value: DEFAULT_GLOBAL_OPACITY }
+      uGlobalOpacity: { value: DEFAULT_GLOBAL_OPACITY },
+      uSpikeStrength: { value: DEFAULT_SPIKE_STRENGTH }
     }),
     []
   );
@@ -120,6 +142,7 @@ export function SizedStarPoints({
     uniforms.uPointScale.value = (state.size.height * state.gl.getPixelRatio()) / 2;
     uniforms.uTimeSeconds.value = state.clock.elapsedTime;
     uniforms.uGlobalOpacity.value = globalOpacity;
+    uniforms.uSpikeStrength.value = spikeStrength;
   });
 
   return (

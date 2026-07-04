@@ -189,3 +189,57 @@ describe("randomFromSeed", () => {
     expect(firstSequence).not.toEqual(otherSequence);
   });
 });
+
+describe("preview sky section (mirror of the backend sky builder)", () => {
+  const skyInputFor = (overrides: Partial<PreviewSceneInput> = {}): PreviewSceneInput => ({
+    nickname: "Neo",
+    interests: ["Technology", "Design", "AI"],
+    traits: ["curious", "builder", "focused"],
+    mood: "focused",
+    preferredWorldStyle: "cosmic-galaxy",
+    favoriteColors: ["#8B5CF6", "#06B6D4"],
+    ...overrides
+  });
+
+  it("is present, deterministic and carries derived seeds", () => {
+    const first = buildPreviewSceneConfig(skyInputFor());
+    const second = buildPreviewSceneConfig(skyInputFor());
+    expect(first.sky).toBeDefined();
+    expect(first.sky).toEqual(second.sky);
+    expect(first.sky?.milkyWay?.seed).toBe(`${first.seed}-milky-way`);
+    expect(first.sky?.constellations?.seed).toBe(first.seed);
+  });
+
+  it("recolors the constellations and nebula accent per world style", () => {
+    const cosmic = buildPreviewSceneConfig(skyInputFor({ preferredWorldStyle: "cosmic-galaxy" }));
+    const nebula = buildPreviewSceneConfig(skyInputFor({ preferredWorldStyle: "nebula" }));
+    expect(cosmic.sky?.constellations?.lineColor).not.toBe(nebula.sky?.constellations?.lineColor);
+    expect(cosmic.sky?.milkyWay?.nebulaCloudColors?.[3]?.color).not.toBe(
+      nebula.sky?.milkyWay?.nebulaCloudColors?.[3]?.color
+    );
+  });
+
+  it("scales sky density and glow with the mood", () => {
+    const dreamy = buildPreviewSceneConfig(skyInputFor({ mood: "dreamy" }));
+    const reflective = buildPreviewSceneConfig(skyInputFor({ mood: "reflective" }));
+    expect(dreamy.sky?.milkyWay?.bandStarCount ?? 0).toBeGreaterThan(reflective.sky?.milkyWay?.bandStarCount ?? 0);
+    expect(dreamy.sky?.constellations?.glowMultiplier ?? 0).toBeGreaterThan(
+      reflective.sky?.constellations?.glowMultiplier ?? 0
+    );
+  });
+
+  it("keeps rotation speeds above zero after rounding", () => {
+    const scene = buildPreviewSceneConfig(skyInputFor({ mood: "reflective" }));
+    expect(scene.sky?.milkyWay?.rotationRadiansPerSecond ?? 0).toBeGreaterThan(0);
+    expect(scene.sky?.constellations?.rotationRadiansPerSecond ?? 0).toBeGreaterThan(0);
+  });
+
+  it("did not shift the pre-sky draws (own PRNG stream)", () => {
+    // The sky is drawn from `${seed}-sky`; the first planet's numbers must be
+    // identical to what the pre-sky builder produced for the same inputs.
+    const scene = buildPreviewSceneConfig(skyInputFor());
+    const independentRandom = randomFromSeed(scene.seed ?? "");
+    const expectedFirstPlanetSize = Math.round((0.45 + independentRandom() * 0.8) * 100) / 100;
+    expect(scene.planets?.[0]?.size).toBe(expectedFirstPlanetSize);
+  });
+});
