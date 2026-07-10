@@ -6,6 +6,8 @@ import { backgroundColorFromScene, planetsFromScene, paletteFromScene } from "@/
 import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
+import { AsteroidBelt } from "./AsteroidBelt";
+import { Comet } from "./Comet";
 import { ConstellationField } from "./ConstellationField";
 import { MilkyWayBand } from "./MilkyWayBand";
 import { OrbitPath } from "./OrbitPath";
@@ -92,6 +94,8 @@ export function SolarSystemRenderer({
       <MilkyWayBand sky={scene.sky?.milkyWay} />
       <ConstellationField seed={seed} scene={scene} />
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
+      <AsteroidBelt scene={scene} seed={seed} />
+      <Comet scene={scene} seed={seed} />
       <Sun coreConfig={scene.core} />
       {planets.map((planet, planetIndex) => {
         const identityKey = planetIdentityKey(planet, planetIndex);
