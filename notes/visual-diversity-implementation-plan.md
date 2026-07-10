@@ -13,8 +13,8 @@
 ## Trạng thái
 
 | Round | Branch | Bậc | Trạng thái |
-|---|---|---|---|
-| R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **ĐANG LÀM** |
+| --- | --- | --- | --- |
+| R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **CODE XONG** (`689c484`, gates xanh) — chờ owner duyệt mắt + merge |
 | R2 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | Chờ owner mở lại scope BE |
 | R3 — Moons + seeded rings | `feat/fe/procedural-moons-and-rings` | 3 | Chưa bắt đầu |
 | R4 — Texture pool expansion | `feat/fe/texture-pool-expansion` | 2 | Chưa bắt đầu |
