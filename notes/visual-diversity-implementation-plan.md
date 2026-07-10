@@ -9,22 +9,32 @@
 > 1 PR vào `staging`. Claude code + commit local + 4 gates xanh → owner tự
 > push, tự check bằng mắt, tự merge → owner nói "tiếp tục" thì mới sang round
 > kế. Không code gối đầu round.
+>
+> **Thứ tự đã chốt với owner (2026-07-11)**: round FE-only đi trước, round
+> cần BE dồn về cuối. Lý do: các round FE-only áp dụng HỒI TỐ — world cũ tự
+> có feature mới vì mọi thứ rút từ seed lúc render; round BE thì chỉ world
+> tạo SAU khi merge mới có section schema 1.2 trong DB. Đánh đổi chấp nhận:
+> càng để round BE muộn, càng tích thêm world "thế hệ cũ" render bằng
+> fallback (nhìn y như hiện tại, không hỏng gì).
 
 ## Trạng thái
 
 | Round | Branch | Bậc | Trạng thái |
 | --- | --- | --- | --- |
-| R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **CODE XONG** (`689c484`, gates xanh) — chờ owner duyệt mắt + merge |
-| R2 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | Chờ owner mở lại scope BE |
-| R3 — Moons + seeded rings | `feat/fe/procedural-moons-and-rings` | 3 | Chưa bắt đầu |
-| R4 — Texture pool expansion | `feat/fe/texture-pool-expansion` | 2 | Chưa bắt đầu |
-| R5 — Rare sky events | `feat/fe/rare-sky-events` | 4 | Chưa bắt đầu |
+| R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **ĐÃ MERGE** (PR #57) |
+| R2 — Moons + seeded rings | `feat/fe/procedural-moons-and-rings` | 3 | Chưa bắt đầu |
+| R3 — Texture pool expansion | `feat/fe/texture-pool-expansion` | 2 | Chưa bắt đầu |
+| R4 — Rare sky events | `feat/fe/rare-sky-events` | 4 | Chưa bắt đầu |
+| R5 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | Cuối — chờ owner mở scope BE |
 
-Thứ tự thực thi: R1 → (R2 nếu BE đã mở, không thì R3) → R3 → R4 → R5.
+Thứ tự thực thi: R1 → R2 → R3 → R4 → R5. Các round KHÔNG phụ thuộc nhau về
+kỹ thuật (stream PRNG riêng cho từng feature, file gần như không chạm chung)
+— thứ tự này thuần túy là quyết định FE-trước-BE-sau của owner, đổi được nếu
+owner mở scope BE sớm hơn.
 Bậc 5 (scene family mới) KHÔNG thuộc chuỗi này — đi theo roadmap
 [vision/README.md](vision/README.md), chặn bởi duyệt D1–D5.
 
-## R1 — Procedural gas giants (`feat/fe/procedural-gas-giants`)
+## R1 — Procedural gas giants (`feat/fe/procedural-gas-giants`) — ĐÃ MERGE
 
 Mục tiêu: một số hành tinh nhận bề mặt khí quyển dải mây SINH THEO SEED —
 không world nào giống world nào — thay vì rút mãi từ pool 8 texture ảnh thật.
@@ -61,10 +71,55 @@ Definition of done: 4 gates xanh; cùng seed → cùng hành tinh gas giant vớ
 cùng hoa văn; world cũ đổi hình ở các hành tinh được gán vai (chấp nhận —
 đây là feature thị giác FE, không phải data DB); owner duyệt bằng mắt.
 
-## R2 — Scene diversity config, schema 1.2 (`feat/fe-be/scene-diversity-config`)
+## R2 — Moons + seeded rings (`feat/fe/procedural-moons-and-rings`)
 
-**Chặn bởi: owner xác nhận mở lại scope BE.** Làm y tiền lệ round
-sky-from-database (schema 1.1, xem `notes/sky-db-and-realism-plan.md`).
+1. Mặt trăng: 0–3 moon procedural cho hành tinh lớn — icosphere + crater
+   noise (tái dùng `seededNoise3d`), group lồng trong planet anchor (pattern
+   axial-tilt/spin sẵn có), stream `seed+"-moons-"+planetIndex`.
+2. Moon KHÔNG ghi vào `PlanetPositionTracker` (không phải DNA object,
+   không click-focus), tắt raycast.
+3. Vành đai seeded cho hành tinh bất kỳ: xác suất seeded, texture vành 1D
+   procedural theo palette (CanvasTexture nhỏ), dùng lại
+   `buildRadialRingGeometry` (đã fix UV radial ở round visual-quality).
+4. Cẩn trọng: hành tinh vai Saturn ĐÃ có ring texture ảnh — luật gán không
+   được chồng ring procedural lên ring ảnh.
+
+DoD: gates xanh; determinism; owner duyệt mắt.
+
+## R3 — Texture pool expansion (`feat/fe/texture-pool-expansion`)
+
+1. Tải bộ texture Solar System Scope chưa dùng (moon, ceres, eris, makemake,
+   haumea…) — license CC BY 4.0, resize offline về 2K (script PowerShell
+   System.Drawing như round trước), cập nhật
+   `public/textures/solar-system/ATTRIBUTION.md`.
+2. Thêm entry catalog → pool 8 thành 15+; seed rút không lặp.
+3. Luật tint theo palette: `material.color` nhân màu — CHỈ cho hành tinh vai
+   fiction, không tint Earth/hành tinh nhận diện cao.
+4. Kiểm tổng payload: hiện ~27MB, trần đề xuất ~40MB trước khi bắt buộc làm
+   quality tiers.
+
+DoD: gates xanh; payload trong trần; ATTRIBUTION đủ.
+
+## R4 — Rare sky events (`feat/fe/rare-sky-events`)
+
+1. Stream `seed+"-rare-features"` + bảng xác suất là hằng số đặt tên
+   (RARE_FEATURE_PROBABILITIES).
+2. Feature đầu tiên: mưa sao băng định kỳ (~5%) — particle streak tái dùng
+   `SizedStarPoints`; binary sun (~3%) — sun thứ hai nhỏ quay quanh trọng
+   tâm (cẩn trọng: pointLight thứ hai + bloom).
+3. **Nhãn bắt buộc**: HUD/share page hiển thị tên feature hiếm user "trúng"
+   — không nhãn thì feature hiếm vô nghĩa.
+4. Nếu cần cross-surface tuyệt đối (BE biết world có binary sun để ghi vào
+   share metadata) → promote flag vào schema 1.2, gộp vào R5 ngay sau đó.
+
+DoD: gates xanh; xác suất kiểm bằng test trên 1000 seed cố định (đếm tần
+suất trong khoảng cho phép); owner duyệt mắt.
+
+## R5 — Scene diversity config, schema 1.2 (`feat/fe-be/scene-diversity-config`)
+
+**Round duy nhất đụng BE — chặn bởi: owner xác nhận mở lại scope BE.**
+Làm y tiền lệ round sky-from-database (schema 1.1, xem
+`notes/sky-db-and-realism-plan.md`).
 
 1. BE models: section `belt`, `comets`, `sun` + promote `postFX` grade —
    pointer + `omitempty`.
@@ -80,53 +135,11 @@ sky-from-database (schema 1.1, xem `notes/sky-db-and-realism-plan.md`).
    nhiệt độ + cường độ HDR), `PostEffects` (grade từ config thay bảng theme).
 6. FE preview mirror: mở rộng `buildPreviewSkyConfig` pattern → preview khớp
    world thật (mirror-pair discipline).
+7. Nếu R4 đã cần promote flag rare-feature (binary sun…) vào schema thì gộp
+   luôn vào round này.
 
 DoD: gates BE (test + build) + 4 gates FE xanh; world cũ pixel-y-hệt
 (fallback đúng); world mới tạo có section 1.2 trong DB.
-
-## R3 — Moons + seeded rings (`feat/fe/procedural-moons-and-rings`)
-
-1. Mặt trăng: 0–3 moon procedural cho hành tinh lớn — icosphere + crater
-   noise (tái dùng `seededNoise3d`), group lồng trong planet anchor (pattern
-   axial-tilt/spin sẵn có), stream `seed+"-moons-"+planetIndex`.
-2. Moon KHÔNG ghi vào `PlanetPositionTracker` (không phải DNA object,
-   không click-focus), tắt raycast.
-3. Vành đai seeded cho hành tinh bất kỳ: xác suất seeded, texture vành 1D
-   procedural theo palette (CanvasTexture nhỏ), dùng lại
-   `buildRadialRingGeometry` (đã fix UV radial ở round visual-quality).
-4. Cẩn trọng: hành tinh vai Saturn ĐÃ có ring texture ảnh — luật gán không
-   được chồng ring procedural lên ring ảnh.
-
-DoD: gates xanh; determinism; owner duyệt mắt.
-
-## R4 — Texture pool expansion (`feat/fe/texture-pool-expansion`)
-
-1. Tải bộ texture Solar System Scope chưa dùng (moon, ceres, eris, makemake,
-   haumea…) — license CC BY 4.0, resize offline về 2K (script PowerShell
-   System.Drawing như round trước), cập nhật
-   `public/textures/solar-system/ATTRIBUTION.md`.
-2. Thêm entry catalog → pool 8 thành 15+; seed rút không lặp.
-3. Luật tint theo palette: `material.color` nhân màu — CHỈ cho hành tinh vai
-   fiction, không tint Earth/hành tinh nhận diện cao.
-4. Kiểm tổng payload: hiện ~27MB, trần đề xuất ~40MB trước khi bắt buộc làm
-   quality tiers.
-
-DoD: gates xanh; payload trong trần; ATTRIBUTION đủ.
-
-## R5 — Rare sky events (`feat/fe/rare-sky-events`)
-
-1. Stream `seed+"-rare-features"` + bảng xác suất là hằng số đặt tên
-   (RARE_FEATURE_PROBABILITIES).
-2. Feature đầu tiên: mưa sao băng định kỳ (~5%) — particle streak tái dùng
-   `SizedStarPoints`; binary sun (~3%) — sun thứ hai nhỏ quay quanh trọng
-   tâm (cẩn trọng: pointLight thứ hai + bloom).
-3. **Nhãn bắt buộc**: HUD/share page hiển thị tên feature hiếm user "trúng"
-   — không nhãn thì feature hiếm vô nghĩa.
-4. Nếu sau này cần cross-surface tuyệt đối (BE biết world có binary sun để
-   ghi vào share metadata) → promote flag vào schema, làm ở round BE kế.
-
-DoD: gates xanh; xác suất kiểm bằng test trên 1000 seed cố định (đếm tần
-suất trong khoảng cho phép); owner duyệt mắt.
 
 ## Guardrails chung (áp cho mọi round)
 
