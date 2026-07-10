@@ -13,6 +13,7 @@ in their own folder.
 | [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | GitHub Actions CI gate for every PR | Before refactor work |
 | [fe/source-overview.md](fe/source-overview.md) | How the FE source works (Next.js): routes, data flow, state | When working in `clients/web-client` |
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | three.js principles, scene renderer architecture, customization | Before touching any 3D code |
+| [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md) | How the universe is drawn from models: 4 model layers, texture/GLB pipelines, determinism rules, asset checklist | Before adding any 3D asset or visual feature |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | FE production upgrade plan (8 branches, in order) | When doing FE refactor work |
 | [be/source-overview.md](be/source-overview.md) | How the BE source works (Go API): layers, AI providers, determinism | When working in `services/universe-service` |
 | [be/refactor-plan.md](be/refactor-plan.md) | BE production upgrade plan (8 branches, in order) | When doing BE refactor work |
