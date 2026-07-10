@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { randomFromSeed } from "@/lib/scene";
 import { backgroundColorFromScene, planetsFromScene, paletteFromScene } from "@/lib/scene";
 import { planetIdentityKey } from "../planetIdentity";
@@ -11,6 +11,8 @@ import { Comet } from "./Comet";
 import { ConstellationField } from "./ConstellationField";
 import { MilkyWayBand } from "./MilkyWayBand";
 import { OrbitPath } from "./OrbitPath";
+import { OrbitingSpacecraft } from "./OrbitingSpacecraft";
+import { SpaceEnvironment } from "./SpaceEnvironment";
 import { Skybox } from "./Skybox";
 import { SolarPlanet, orbitRadiusForPlanet } from "./SolarPlanet";
 import { Sun } from "./Sun";
@@ -96,6 +98,11 @@ export function SolarSystemRenderer({
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
       <AsteroidBelt scene={scene} seed={seed} />
       <Comet scene={scene} seed={seed} />
+      <SpaceEnvironment />
+      {/* Load in its own boundary so the world never waits for the satellite. */}
+      <Suspense fallback={null}>
+        <OrbitingSpacecraft scene={scene} seed={seed} />
+      </Suspense>
       <Sun coreConfig={scene.core} />
       {planets.map((planet, planetIndex) => {
         const identityKey = planetIdentityKey(planet, planetIndex);

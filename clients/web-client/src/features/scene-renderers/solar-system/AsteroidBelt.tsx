@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Clone, useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { Color, IcosahedronGeometry, Object3D, type Group, type InstancedMesh } from "three";
+import { Box3, Color, IcosahedronGeometry, Object3D, Vector3, type Group, type InstancedMesh } from "three";
 import type { SceneConfig } from "@/lib/types";
 import { planetsFromScene, randomFromSeed } from "@/lib/scene";
 import { createSeededNoise3d, fractalNoise3d } from "../shared/seededNoise3d";
 import { orbitRadiusForPlanet } from "./SolarPlanet";
+import { BENNU_MODEL_URL, BENNU_TARGET_SIZE } from "./spacecraftCatalog";
 
 /**
  * A procedural asteroid belt just outside the outermost personality planet.
@@ -40,10 +42,63 @@ const ASTEROID_BRIGHTNESS_VARIATION = 0.35;
 // Matches the default orbit layout in SolarPlanet for worlds without explicit radii.
 const FIRST_PLANET_ORBIT_RADIUS = 3.2;
 
+const BENNU_TUMBLE_RADIANS_PER_SECOND = 0.08;
+const BENNU_ROCK_COLOR = "#5C544B";
+
 type AsteroidBeltProps = {
   scene: SceneConfig;
   seed: string;
 };
+
+/**
+ * The belt's named hero rock: NASA's radar shape model of asteroid Bennu
+ * (real silhouette, public domain), parked at a seeded spot on the belt ring
+ * inside the rotating group so it drifts with the swarm.
+ */
+function BennuHeroRock({ seed, beltRadius }: { seed: string; beltRadius: number }) {
+  const gltf = useGLTF(BENNU_MODEL_URL);
+  const normalizedScale = useMemo(() => {
+    const boundingBox = new Box3().setFromObject(gltf.scene);
+    const size = new Vector3();
+    boundingBox.getSize(size);
+    const largestDimension = Math.max(size.x, size.y, size.z);
+    return largestDimension > 0 ? BENNU_TARGET_SIZE / largestDimension : 1;
+  }, [gltf]);
+  const beltAngle = useMemo(() => randomFromSeed(`${seed}-bennu`)() * Math.PI * 2, [seed]);
+  const rockReference = useRef<Group>(null);
+  const rockColor = useMemo(() => new Color(BENNU_ROCK_COLOR), []);
+
+  useEffect(() => {
+    rockReference.current?.traverse((object) => {
+      object.raycast = () => null;
+      // The NASA shape model ships without materials; tint whatever standard
+      // material Clone gave it toward dark regolith.
+      const mesh = object as { material?: { color?: Color } };
+      if (mesh.material?.color) {
+        mesh.material.color.copy(rockColor);
+      }
+    });
+  }, [gltf, rockColor]);
+
+  useFrame((_, deltaSeconds) => {
+    if (rockReference.current) {
+      rockReference.current.rotation.y += BENNU_TUMBLE_RADIANS_PER_SECOND * deltaSeconds;
+      rockReference.current.rotation.x += BENNU_TUMBLE_RADIANS_PER_SECOND * 0.4 * deltaSeconds;
+    }
+  });
+
+  return (
+    <group
+      ref={rockReference}
+      position={[Math.cos(beltAngle) * beltRadius, 0, Math.sin(beltAngle) * beltRadius]}
+      scale={normalizedScale}
+    >
+      <Clone object={gltf.scene} />
+    </group>
+  );
+}
+
+useGLTF.preload(BENNU_MODEL_URL);
 
 function buildRockGeometry(seed: string, variantIndex: number): IcosahedronGeometry {
   const geometry = new IcosahedronGeometry(1, ROCK_ICOSPHERE_DETAIL);
@@ -157,6 +212,9 @@ export function AsteroidBelt({ scene, seed }: AsteroidBeltProps) {
           <meshStandardMaterial roughness={0.95} metalness={0.05} />
         </instancedMesh>
       ))}
+      <Suspense fallback={null}>
+        <BennuHeroRock seed={seed} beltRadius={beltRadius} />
+      </Suspense>
     </group>
   );
 }
