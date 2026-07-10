@@ -248,6 +248,7 @@ export function SolarPlanet({
             opacity={HIGHLIGHT_GLOW_OPACITY}
             blending={AdditiveBlending}
             depthWrite={false}
+            fog={false}
           />
         </mesh>
       ) : null}

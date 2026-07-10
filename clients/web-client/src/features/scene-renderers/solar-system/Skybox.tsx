@@ -37,6 +37,7 @@ export function Skybox() {
         side={BackSide}
         depthWrite={false}
         toneMapped={false}
+        fog={false}
       />
     </mesh>
   );

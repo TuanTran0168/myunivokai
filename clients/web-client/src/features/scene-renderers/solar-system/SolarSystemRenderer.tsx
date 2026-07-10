@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { randomFromSeed } from "@/lib/scene";
-import { planetsFromScene, paletteFromScene } from "@/lib/scene";
+import { backgroundColorFromScene, planetsFromScene, paletteFromScene } from "@/lib/scene";
 import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
@@ -14,6 +14,16 @@ import { SolarPlanet, orbitRadiusForPlanet } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
 const AMBIENT_LIGHT_INTENSITY = 0.18;
+// Key/fill/rim rig: the sun's point light is the key; a hemisphere fill
+// (palette-tinted "space bounce") lifts planet night sides out of pure black;
+// a cool rim directional from behind-above separates silhouettes from the
+// sky. Analytic lights are effectively free.
+const HEMISPHERE_FILL_INTENSITY = 0.14;
+const RIM_LIGHT_INTENSITY = 0.35;
+const RIM_LIGHT_POSITION: [number, number, number] = [-14, 10, -16];
+// Very light exponential depth haze tinted to the mood background — distant
+// orbits recede instead of floating in void. Sky layers are fog-exempt.
+const DEPTH_FOG_DENSITY = 0.012;
 // Headroom for orbital tilt. Kept high so the world-style contrast below is
 // clearly visible (a steeply scattered nebula vs flat, precise cyber rings),
 // not a few near-identical degrees.
@@ -63,6 +73,7 @@ export function SolarSystemRenderer({
 }: SceneRendererProps) {
   const palette = paletteFromScene(scene);
   const planets = planetsFromScene(scene);
+  const backgroundColor = backgroundColorFromScene(scene);
   const showPlanetLabels = scene.hud?.showLabels !== false;
 
   const orbitInclinationMultiplier = orbitInclinationMultiplierForTheme(scene.theme);
@@ -73,7 +84,10 @@ export function SolarSystemRenderer({
 
   return (
     <>
+      <fogExp2 attach="fog" args={[backgroundColor, DEPTH_FOG_DENSITY]} />
       <ambientLight intensity={AMBIENT_LIGHT_INTENSITY} />
+      <hemisphereLight args={[palette[1], backgroundColor, HEMISPHERE_FILL_INTENSITY]} />
+      <directionalLight position={RIM_LIGHT_POSITION} color={palette[2] ?? palette[1]} intensity={RIM_LIGHT_INTENSITY} />
       <Skybox />
       <MilkyWayBand sky={scene.sky?.milkyWay} />
       <ConstellationField seed={seed} scene={scene} />

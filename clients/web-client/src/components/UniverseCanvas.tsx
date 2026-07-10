@@ -2,6 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useRef, useState } from "react";
+import { AgXToneMapping } from "three";
 import type { Vector3 } from "three";
 import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
 import { backgroundColorFromScene, planetsFromScene, CANONICAL_FALLBACK_SEED } from "@/lib/scene";
@@ -82,7 +83,10 @@ export function UniverseCanvas({
           fov: cameraFieldOfView
         }}
         dpr={devicePixelRatioRange}
-        gl={{ preserveDrawingBuffer, powerPreference: "high-performance" }}
+        // AgX rolls hot highlights off more gracefully than the default ACES
+        // (no neon clipping on lit planets); sky layers opt out via
+        // toneMapped={false} and are unaffected.
+        gl={{ preserveDrawingBuffer, powerPreference: "high-performance", toneMapping: AgXToneMapping }}
         onPointerMissed={() => onSelectPlanet?.(null)}
       >
         <color attach="background" args={[backgroundColor]} />
@@ -96,7 +100,7 @@ export function UniverseCanvas({
               onHoverPlanet={setHoveredPlanet}
               onSelectPlanet={onSelectPlanet}
             />
-            <PostEffects postFX={scene?.postFX} />
+            <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
           </Suspense>
           <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
         </PlanetPositionTrackerContext.Provider>
