@@ -10,7 +10,10 @@ import { usePlanetPositionTracker } from "../shared/PlanetPositionTracker";
 import { applyColorTextureQuality, applyDataTextureQuality } from "../shared/textureQuality";
 import { buildGasGiantRecipe } from "./gasGiantRecipe";
 import { getGasGiantSurfaceTexture } from "./gasGiantTexture";
+import { buildPlanetRingRecipe } from "./planetRingRecipe";
+import { getPlanetRingTexture } from "./planetRingTexture";
 import { planetTextureEntryForIndex } from "./planetTextureCatalog";
+import { ProceduralMoons } from "./ProceduralMoons";
 
 const DEFAULT_PLANET_SIZE = 0.6;
 const PLANET_SIZE_MULTIPLIER = 0.78;
@@ -89,6 +92,17 @@ type SolarPlanetProps = {
    * gas-giant surface (see gasGiantRecipe.ts). Null keeps the catalog look.
    */
   proceduralGasGiantSeed?: string | null;
+  /**
+   * When set, this planet grows a seeded moon system (see moonRecipe.ts).
+   * The recipe itself may still roll zero moons.
+   */
+  moonSystemSeed?: string | null;
+  /**
+   * When set, this planet wears a seed-baked radial ring (see
+   * planetRingRecipe.ts). The renderer never sets this on planets that
+   * already carry the catalog photo ring.
+   */
+  proceduralRingSeed?: string | null;
   onHoverChange: (planet: PlanetSceneConfig | null) => void;
   onSelect?: (planet: PlanetSceneConfig | null) => void;
 };
@@ -107,6 +121,8 @@ export function SolarPlanet({
   isHovered,
   showLabel,
   proceduralGasGiantSeed,
+  moonSystemSeed,
+  proceduralRingSeed,
   onHoverChange,
   onSelect
 }: SolarPlanetProps) {
@@ -161,12 +177,34 @@ export function SolarPlanet({
   }, [proceduralSurfaceTexture, gl]);
   const isProceduralGasGiant = Boolean(proceduralSurfaceTexture);
 
+  // Seed-baked radial ring strip, cached like the gas giant surface. Null on
+  // the server or when the role is not assigned.
+  const proceduralRingRecipe = useMemo(
+    () => (proceduralRingSeed ? buildPlanetRingRecipe(proceduralRingSeed, highlightColor) : null),
+    [proceduralRingSeed, highlightColor]
+  );
+  const proceduralRingTexture = useMemo(
+    () =>
+      proceduralRingSeed && proceduralRingRecipe
+        ? getPlanetRingTexture(`${proceduralRingSeed}|${highlightColor}`, proceduralRingRecipe)
+        : null,
+    [proceduralRingSeed, proceduralRingRecipe, highlightColor]
+  );
+  useMemo(() => {
+    if (proceduralRingTexture) {
+      applyColorTextureQuality(proceduralRingTexture, gl);
+    }
+  }, [proceduralRingTexture, gl]);
+
   const orbitRadius = orbitRadiusForPlanet(planet, planetIndex);
   const orbitSpeed = planet.orbitSpeed ?? DEFAULT_PLANET_ORBIT_SPEED;
   const orbitPhase = planet.phase ?? defaultPhaseForPlanet(planetIndex, planetCount);
   const planetSize = renderedPlanetSize(planet);
   const isHighlighted = isHovered || isSelected;
   const hasRing = Boolean(textureEntry.ringTextureUrl);
+  // The photo ring (Saturn role) always wins; the renderer never assigns both,
+  // this re-check is local belt-and-suspenders.
+  const hasProceduralRing = !hasRing && Boolean(proceduralRingTexture);
 
   const ringGeometry = useMemo(
     () =>
@@ -181,6 +219,22 @@ export function SolarPlanet({
       ringGeometry?.dispose();
     };
   }, [ringGeometry]);
+
+  const proceduralRingGeometry = useMemo(
+    () =>
+      hasProceduralRing && proceduralRingRecipe
+        ? buildRadialRingGeometry(
+            planetSize * proceduralRingRecipe.innerRadiusMultiplier,
+            planetSize * proceduralRingRecipe.outerRadiusMultiplier
+          )
+        : null,
+    [hasProceduralRing, proceduralRingRecipe, planetSize]
+  );
+  useEffect(() => {
+    return () => {
+      proceduralRingGeometry?.dispose();
+    };
+  }, [proceduralRingGeometry]);
 
   useEffect(() => {
     planetPositionTracker.set(identityKey, trackedWorldPosition);
@@ -272,6 +326,23 @@ export function SolarPlanet({
           <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={ringGeometry}>
             <meshBasicMaterial map={ringTexture} transparent opacity={RING_OPACITY} side={DoubleSide} />
           </mesh>
+        ) : null}
+        {hasProceduralRing && proceduralRingGeometry && proceduralRingRecipe ? (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={proceduralRingGeometry} raycast={() => null}>
+            <meshBasicMaterial
+              map={proceduralRingTexture}
+              transparent
+              opacity={proceduralRingRecipe.opacity}
+              side={DoubleSide}
+            />
+          </mesh>
+        ) : null}
+        {moonSystemSeed ? (
+          <ProceduralMoons
+            moonSystemSeed={moonSystemSeed}
+            planetRenderedSize={planetSize}
+            parentPlanetHasRing={hasRing || hasProceduralRing}
+          />
         ) : null}
       </group>
       {isHighlighted ? (

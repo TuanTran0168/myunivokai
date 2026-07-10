@@ -15,6 +15,7 @@ import { OrbitPath } from "./OrbitPath";
 import { OrbitingSpacecraft } from "./OrbitingSpacecraft";
 import { SpaceEnvironment } from "./SpaceEnvironment";
 import { Skybox } from "./Skybox";
+import { planetTextureEntryForIndex } from "./planetTextureCatalog";
 import { SolarPlanet, orbitRadiusForPlanet, renderedPlanetSize } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
@@ -85,6 +86,37 @@ function buildProceduralGasGiantSeeds(seed: string, planets: PlanetSceneConfig[]
   });
 }
 
+// Procedural moons: any planet big enough to read as a major planet grows a
+// seeded moon system (the recipe itself may still roll zero moons). The
+// threshold sits below the gas giant one, so mid-size rocky planets qualify.
+const MOON_ELIGIBLE_MINIMUM_RENDERED_PLANET_SIZE = 0.5;
+
+function buildMoonSystemSeeds(seed: string, planets: PlanetSceneConfig[]): (string | null)[] {
+  return planets.map((planet, planetIndex) => {
+    if (renderedPlanetSize(planet) < MOON_ELIGIBLE_MINIMUM_RENDERED_PLANET_SIZE) {
+      return null;
+    }
+    return `${seed}-moons-${planetIndex}`;
+  });
+}
+
+// Seeded procedural rings: any planet may roll one, EXCEPT the Saturn role,
+// which already wears the catalog photo ring.
+const PROCEDURAL_RING_ASSIGNMENT_PROBABILITY = 0.22;
+
+function buildProceduralRingSeeds(seed: string, planets: PlanetSceneConfig[]): (string | null)[] {
+  return planets.map((planet, planetIndex) => {
+    if (planetTextureEntryForIndex(planetIndex).ringTextureUrl) {
+      return null;
+    }
+    const random = randomFromSeed(`${seed}-procedural-ring-${planetIndex}`);
+    if (random() >= PROCEDURAL_RING_ASSIGNMENT_PROBABILITY) {
+      return null;
+    }
+    return `${seed}-procedural-ring-${planetIndex}`;
+  });
+}
+
 /**
  * Solar-system style scene: a glowing textured sun in the center, personality
  * planets with real planetary surface textures on slightly inclined orbits, a
@@ -109,6 +141,8 @@ export function SolarSystemRenderer({
     [seed, planets.length, orbitInclinationMultiplier]
   );
   const proceduralGasGiantSeeds = useMemo(() => buildProceduralGasGiantSeeds(seed, planets), [seed, planets]);
+  const moonSystemSeeds = useMemo(() => buildMoonSystemSeeds(seed, planets), [seed, planets]);
+  const proceduralRingSeeds = useMemo(() => buildProceduralRingSeeds(seed, planets), [seed, planets]);
 
   return (
     <>
@@ -149,6 +183,8 @@ export function SolarSystemRenderer({
               isHovered={isHovered}
               showLabel={showPlanetLabels}
               proceduralGasGiantSeed={proceduralGasGiantSeeds[planetIndex] ?? null}
+              moonSystemSeed={moonSystemSeeds[planetIndex] ?? null}
+              proceduralRingSeed={proceduralRingSeeds[planetIndex] ?? null}
               onHoverChange={onHoverPlanet}
               onSelect={onSelectPlanet}
             />
