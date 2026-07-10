@@ -2,6 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useRef, useState } from "react";
+import { AgXToneMapping } from "three";
 import type { Vector3 } from "three";
 import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
 import { backgroundColorFromScene, planetsFromScene, CANONICAL_FALLBACK_SEED } from "@/lib/scene";
@@ -18,7 +19,10 @@ export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 const DEFAULT_CAMERA_DISTANCE = 9;
 const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
 const CAMERA_HEIGHT_RATIO = 0.42;
-const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 1.8];
+// Render at native device resolution (the old 1.8 cap under-sampled every
+// HiDPI display — a uniform blur). Quality-first scope: weak devices are
+// explicitly out of scope for now.
+const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 3];
 
 type UniverseCanvasProps = {
   scene?: SceneConfig;
@@ -79,7 +83,10 @@ export function UniverseCanvas({
           fov: cameraFieldOfView
         }}
         dpr={devicePixelRatioRange}
-        gl={{ preserveDrawingBuffer }}
+        // AgX rolls hot highlights off more gracefully than the default ACES
+        // (no neon clipping on lit planets); sky layers opt out via
+        // toneMapped={false} and are unaffected.
+        gl={{ preserveDrawingBuffer, powerPreference: "high-performance", toneMapping: AgXToneMapping }}
         onPointerMissed={() => onSelectPlanet?.(null)}
       >
         <color attach="background" args={[backgroundColor]} />
@@ -93,7 +100,7 @@ export function UniverseCanvas({
               onHoverPlanet={setHoveredPlanet}
               onSelectPlanet={onSelectPlanet}
             />
-            <PostEffects postFX={scene?.postFX} />
+            <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
           </Suspense>
           <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
         </PlanetPositionTrackerContext.Provider>
