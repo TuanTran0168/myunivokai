@@ -151,11 +151,26 @@ scratchpad session):
 - **Comet**: nucleus icosphere tối (albedo ~0.04) + đuôi bụi cong (Bezier,
   ấm) + đuôi ion thẳng xanh — tái dùng nguyên shader SizedStarPoints/mây.
 
-### Thứ tự làm (FE-only)
+### Thứ tự làm (FE-only) — ĐÃ THỰC THI, branch `feat/fe/universe-visual-quality`
 
-S1 → S2 → grade pass (Đợt 1 ở trên, bỏ phần gating mobile) → S4 belt/comet →
-S3 hero models. Ước lượng: S1+S2 ~1 ngày, grade pass ~1–2 ngày, S4 ~1–2 ngày,
-S3 ~2–3 ngày (gồm pipeline GLB).
+- [x] S1 fix độ nét — commit `c903777` (sRGB colorSpace, anisotropy max,
+      DPR [1,3], **fix bug UV vành Saturn**, segments 96×64, MSAA pin 8,
+      skybox multiplier retune 2.2→3.0)
+- [x] S2 texture 8K/4K + Earth night/clouds/normal/gloss-ocean — `031b600`
+      (payload ~5MB → ~25MB, ATTRIBUTION cập nhật adaptations)
+- [x] Grade pass — `6224ee4` (vignette + grain + CA, grade theo theme,
+      hemisphere fill + rim light, fogExp2 theo mood bg — các lớp trời
+      fog-exempt, AgX tone mapping, selective bloom threshold 0.85 + sun
+      HDR ×1.5)
+- [x] S4 belt + comet procedural — `3ab1480` (seededNoise3d, 1100 instance
+      power-law, đuôi bụi cong + đuôi ion xanh anti-sunward)
+- [x] S3 NASA models — `7b898e2` (Hubble/JWST/Cassini/Voyager meshopt
+      ~1.78MB, seed chọn 1 chiếc bay quanh hành tinh năng lượng cao nhất;
+      Bennu vào vành đai; Lightformer IBL no-CDN)
+
+Gates: typecheck + lint + 36 tests + build xanh sau từng commit. Người dùng
+tự push branch + mở PR vào staging. Tinh chỉnh thị giác (multiplier skybox,
+grade, mật độ belt) chờ feedback nhìn thực tế.
 
 ## Kit tham khảo cho family sau (đều CC0, cùng bộ 3 tác giả → đồng tông)
 - Nature: Kenney Nature Kit (330), Quaternius Ultimate Nature / Stylized
