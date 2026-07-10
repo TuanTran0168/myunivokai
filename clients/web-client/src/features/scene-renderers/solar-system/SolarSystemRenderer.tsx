@@ -15,7 +15,7 @@ import { OrbitPath } from "./OrbitPath";
 import { OrbitingSpacecraft } from "./OrbitingSpacecraft";
 import { SpaceEnvironment } from "./SpaceEnvironment";
 import { Skybox } from "./Skybox";
-import { planetTextureEntryForIndex } from "./planetTextureCatalog";
+import { buildPlanetTextureAssignment, planetTextureEntryForIndex } from "./planetTextureCatalog";
 import { SolarPlanet, orbitRadiusForPlanet, renderedPlanetSize } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
@@ -104,9 +104,14 @@ function buildMoonSystemSeeds(seed: string, planets: PlanetSceneConfig[]): (stri
 // which already wears the catalog photo ring.
 const PROCEDURAL_RING_ASSIGNMENT_PROBABILITY = 0.22;
 
-function buildProceduralRingSeeds(seed: string, planets: PlanetSceneConfig[]): (string | null)[] {
+function buildProceduralRingSeeds(
+  seed: string,
+  planets: PlanetSceneConfig[],
+  planetTextureAssignment: number[]
+): (string | null)[] {
   return planets.map((planet, planetIndex) => {
-    if (planetTextureEntryForIndex(planetIndex).ringTextureUrl) {
+    const textureCatalogIndex = planetTextureAssignment[planetIndex] ?? planetIndex;
+    if (planetTextureEntryForIndex(textureCatalogIndex).ringTextureUrl) {
       return null;
     }
     const random = randomFromSeed(`${seed}-procedural-ring-${planetIndex}`);
@@ -142,7 +147,14 @@ export function SolarSystemRenderer({
   );
   const proceduralGasGiantSeeds = useMemo(() => buildProceduralGasGiantSeeds(seed, planets), [seed, planets]);
   const moonSystemSeeds = useMemo(() => buildMoonSystemSeeds(seed, planets), [seed, planets]);
-  const proceduralRingSeeds = useMemo(() => buildProceduralRingSeeds(seed, planets), [seed, planets]);
+  const planetTextureAssignment = useMemo(
+    () => buildPlanetTextureAssignment(seed, planets.length),
+    [seed, planets.length]
+  );
+  const proceduralRingSeeds = useMemo(
+    () => buildProceduralRingSeeds(seed, planets, planetTextureAssignment),
+    [seed, planets, planetTextureAssignment]
+  );
 
   return (
     <>
@@ -182,6 +194,7 @@ export function SolarSystemRenderer({
               isSelected={isSelected}
               isHovered={isHovered}
               showLabel={showPlanetLabels}
+              textureCatalogIndex={planetTextureAssignment[planetIndex] ?? planetIndex}
               proceduralGasGiantSeed={proceduralGasGiantSeeds[planetIndex] ?? null}
               moonSystemSeed={moonSystemSeeds[planetIndex] ?? null}
               proceduralRingSeed={proceduralRingSeeds[planetIndex] ?? null}

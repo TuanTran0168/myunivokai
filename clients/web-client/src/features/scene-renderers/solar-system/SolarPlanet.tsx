@@ -43,6 +43,20 @@ const CLOUD_ROTATION_SPEED_MULTIPLIER = 1.35;
 const DEFAULT_SURFACE_ROUGHNESS = 0.92;
 // Gas giants are cloud tops: fully diffuse, no terrain or city maps apply.
 const GAS_GIANT_SURFACE_ROUGHNESS = 1;
+// Fiction-role surfaces are tinted by multiplying material.color with the
+// planet's DNA color washed toward white — strong enough to read as "this
+// planet's color", weak enough that the texture detail survives.
+const PALETTE_TINT_WHITE_BLEND_FRACTION = 0.55;
+const NEUTRAL_TINT_COLOR = "#FFFFFF";
+
+function blendHexColorTowardWhite(hexColor: string, whiteFraction: number): string {
+  const normalized = hexColor.replace("#", "");
+  const blendedChannels = [0, 2, 4].map((hexOffset) => {
+    const channel = parseInt(normalized.slice(hexOffset, hexOffset + 2), 16);
+    return Math.round(channel + (255 - channel) * whiteFraction);
+  });
+  return `#${blendedChannels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
 
 /**
  * RingGeometry's stock UVs are PLANAR (a flat projection of the disc), but the
@@ -88,6 +102,12 @@ type SolarPlanetProps = {
   isHovered: boolean;
   showLabel: boolean;
   /**
+   * Index into PLANET_TEXTURE_CATALOG from the world's seeded assignment
+   * (see buildPlanetTextureAssignment). Falls back to catalog order by
+   * planet index when absent.
+   */
+  textureCatalogIndex?: number;
+  /**
    * When set, this planet trades its photo texture for a seed-baked banded
    * gas-giant surface (see gasGiantRecipe.ts). Null keeps the catalog look.
    */
@@ -120,6 +140,7 @@ export function SolarPlanet({
   isSelected,
   isHovered,
   showLabel,
+  textureCatalogIndex,
   proceduralGasGiantSeed,
   moonSystemSeed,
   proceduralRingSeed,
@@ -133,7 +154,7 @@ export function SolarPlanet({
   const trackedWorldPosition = useMemo(() => new Vector3(), []);
 
   const gl = useThree((state) => state.gl);
-  const textureEntry = planetTextureEntryForIndex(planetIndex);
+  const textureEntry = planetTextureEntryForIndex(textureCatalogIndex ?? planetIndex);
   // Optional maps fall back to the surface URL (hooks must run unconditionally);
   // the fallback loads from cache and is simply not passed to the material.
   const surfaceTexture = useLoader(TextureLoader, textureEntry.textureUrl);
@@ -269,6 +290,12 @@ export function SolarPlanet({
   const hasRoughnessMap = Boolean(textureEntry.roughnessMapTextureUrl) && !isProceduralGasGiant;
   const hasNormalMap = Boolean(textureEntry.normalMapTextureUrl) && !isProceduralGasGiant;
   const hasCloudShell = Boolean(textureEntry.cloudsTextureUrl) && !isProceduralGasGiant;
+  // A procedural gas giant already derives its bands from the DNA color, so
+  // the extra tint only applies to the photo texture path.
+  const surfaceTintColor =
+    textureEntry.allowsPaletteTint && !isProceduralGasGiant
+      ? blendHexColorTowardWhite(highlightColor, PALETTE_TINT_WHITE_BLEND_FRACTION)
+      : NEUTRAL_TINT_COLOR;
 
   return (
     <group ref={orbitAnchorReference}>
@@ -291,6 +318,7 @@ export function SolarPlanet({
           <sphereGeometry args={[planetSize, PLANET_SPHERE_WIDTH_SEGMENTS, PLANET_SPHERE_HEIGHT_SEGMENTS]} />
           <meshStandardMaterial
             map={proceduralSurfaceTexture ?? surfaceTexture}
+            color={surfaceTintColor}
             normalMap={hasNormalMap ? normalMapTexture : undefined}
             roughnessMap={hasRoughnessMap ? roughnessMapTexture : undefined}
             roughness={

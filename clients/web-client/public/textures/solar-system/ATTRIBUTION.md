@@ -14,3 +14,9 @@ Adaptations made here (permitted by CC BY 4.0):
 - `2k_earth_roughness_map.png` is the source specular TIF converted to PNG and
   INVERTED (specular water mask -> roughness map: oceans smooth, land rough).
 - Uranus and Neptune remain 2K — the source offers no higher resolution.
+- `2k_moon.jpg` is the source 8K map downscaled to 2048x1024 (JPEG q85).
+- `2k_ceres_fictional.jpg`, `2k_eris_fictional.jpg`, `2k_makemake_fictional.jpg`,
+  `2k_haumea_fictional.jpg` and `2k_venus_atmosphere.jpg` are the source 2K
+  downloads, unmodified. The four dwarf-planet maps are labeled "fictional"
+  by Solar System Scope (artistic impressions, not imagery); in-app they may
+  additionally be tinted toward the planet's palette color at render time.
