@@ -7,7 +7,7 @@ import { AdditiveBlending, DoubleSide, RingGeometry, TextureLoader, Vector3 } fr
 import type { Group, Mesh } from "three";
 import type { PlanetSceneConfig } from "@/lib/types";
 import { usePlanetPositionTracker } from "../shared/PlanetPositionTracker";
-import { applyColorTextureQuality } from "../shared/textureQuality";
+import { applyColorTextureQuality, applyDataTextureQuality } from "../shared/textureQuality";
 import { planetTextureEntryForIndex } from "./planetTextureCatalog";
 
 const DEFAULT_PLANET_SIZE = 0.6;
@@ -28,6 +28,14 @@ const DEFAULT_HIGHLIGHT_COLOR = "#8B5CF6";
 const PLANET_SPHERE_WIDTH_SEGMENTS = 96;
 const PLANET_SPHERE_HEIGHT_SEGMENTS = 64;
 const RING_THETA_SEGMENTS = 128;
+// Earth-like extras: the night-lights map glows through the emissive channel
+// (the map is black outside cities, so the day side barely notices), and the
+// cloud layer sits on a slightly larger shell drifting past the surface.
+const NIGHT_LIGHTS_EMISSIVE_INTENSITY = 0.75;
+const CLOUD_SHELL_RADIUS_MULTIPLIER = 1.02;
+const CLOUD_SHELL_OPACITY = 0.85;
+const CLOUD_ROTATION_SPEED_MULTIPLIER = 1.35;
+const DEFAULT_SURFACE_ROUGHNESS = 0.92;
 
 /**
  * RingGeometry's stock UVs are PLANAR (a flat projection of the disc), but the
@@ -94,20 +102,36 @@ export function SolarPlanet({
 }: SolarPlanetProps) {
   const orbitAnchorReference = useRef<Group>(null);
   const planetMeshReference = useRef<Mesh>(null);
+  const cloudShellReference = useRef<Mesh>(null);
   const planetPositionTracker = usePlanetPositionTracker();
   const trackedWorldPosition = useMemo(() => new Vector3(), []);
 
   const gl = useThree((state) => state.gl);
   const textureEntry = planetTextureEntryForIndex(planetIndex);
+  // Optional maps fall back to the surface URL (hooks must run unconditionally);
+  // the fallback loads from cache and is simply not passed to the material.
   const surfaceTexture = useLoader(TextureLoader, textureEntry.textureUrl);
-  const ringTexture = useLoader(
-    TextureLoader,
-    textureEntry.ringTextureUrl ?? textureEntry.textureUrl
-  );
+  const ringTexture = useLoader(TextureLoader, textureEntry.ringTextureUrl ?? textureEntry.textureUrl);
+  const nightLightsTexture = useLoader(TextureLoader, textureEntry.nightLightsTextureUrl ?? textureEntry.textureUrl);
+  const cloudsTexture = useLoader(TextureLoader, textureEntry.cloudsTextureUrl ?? textureEntry.textureUrl);
+  const normalMapTexture = useLoader(TextureLoader, textureEntry.normalMapTextureUrl ?? textureEntry.textureUrl);
+  const roughnessMapTexture = useLoader(TextureLoader, textureEntry.roughnessMapTextureUrl ?? textureEntry.textureUrl);
   useMemo(() => {
     applyColorTextureQuality(surfaceTexture, gl);
     applyColorTextureQuality(ringTexture, gl);
-  }, [surfaceTexture, ringTexture, gl]);
+    if (textureEntry.nightLightsTextureUrl) {
+      applyColorTextureQuality(nightLightsTexture, gl);
+    }
+    if (textureEntry.cloudsTextureUrl) {
+      applyDataTextureQuality(cloudsTexture, gl);
+    }
+    if (textureEntry.normalMapTextureUrl) {
+      applyDataTextureQuality(normalMapTexture, gl);
+    }
+    if (textureEntry.roughnessMapTextureUrl) {
+      applyDataTextureQuality(roughnessMapTexture, gl);
+    }
+  }, [surfaceTexture, ringTexture, nightLightsTexture, cloudsTexture, normalMapTexture, roughnessMapTexture, textureEntry, gl]);
 
   const orbitRadius = orbitRadiusForPlanet(planet, planetIndex);
   const orbitSpeed = planet.orbitSpeed ?? DEFAULT_PLANET_ORBIT_SPEED;
@@ -150,7 +174,14 @@ export function SolarPlanet({
     if (planetMeshReference.current) {
       planetMeshReference.current.rotation.y += PLANET_SELF_ROTATION_SPEED * deltaTimeSeconds;
     }
+    if (cloudShellReference.current) {
+      cloudShellReference.current.rotation.y +=
+        PLANET_SELF_ROTATION_SPEED * CLOUD_ROTATION_SPEED_MULTIPLIER * deltaTimeSeconds;
+    }
   });
+
+  const hasNightLights = Boolean(textureEntry.nightLightsTextureUrl);
+  const hasRoughnessMap = Boolean(textureEntry.roughnessMapTextureUrl);
 
   return (
     <group ref={orbitAnchorReference}>
@@ -171,8 +202,37 @@ export function SolarPlanet({
           }}
         >
           <sphereGeometry args={[planetSize, PLANET_SPHERE_WIDTH_SEGMENTS, PLANET_SPHERE_HEIGHT_SEGMENTS]} />
-          <meshStandardMaterial map={surfaceTexture} roughness={0.92} metalness={0} />
+          <meshStandardMaterial
+            map={surfaceTexture}
+            normalMap={textureEntry.normalMapTextureUrl ? normalMapTexture : undefined}
+            roughnessMap={hasRoughnessMap ? roughnessMapTexture : undefined}
+            roughness={hasRoughnessMap ? 1 : DEFAULT_SURFACE_ROUGHNESS}
+            metalness={0}
+            emissive={hasNightLights ? "#FFFFFF" : "#000000"}
+            emissiveMap={hasNightLights ? nightLightsTexture : undefined}
+            emissiveIntensity={hasNightLights ? NIGHT_LIGHTS_EMISSIVE_INTENSITY : 0}
+          />
         </mesh>
+        {textureEntry.cloudsTextureUrl ? (
+          <mesh ref={cloudShellReference}>
+            <sphereGeometry
+              args={[
+                planetSize * CLOUD_SHELL_RADIUS_MULTIPLIER,
+                PLANET_SPHERE_WIDTH_SEGMENTS,
+                PLANET_SPHERE_HEIGHT_SEGMENTS
+              ]}
+            />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              alphaMap={cloudsTexture}
+              transparent
+              opacity={CLOUD_SHELL_OPACITY}
+              depthWrite={false}
+              roughness={1}
+              metalness={0}
+            />
+          </mesh>
+        ) : null}
         {hasRing && ringGeometry ? (
           <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={ringGeometry}>
             <meshBasicMaterial map={ringTexture} transparent opacity={RING_OPACITY} side={DoubleSide} />
