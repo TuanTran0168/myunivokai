@@ -1,10 +1,11 @@
 "use client";
 
-import { useFrame, useLoader } from "@react-three/fiber";
-import { useRef } from "react";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
 import { AdditiveBlending, TextureLoader } from "three";
 import type { Mesh } from "three";
 import type { SceneCoreConfig } from "@/lib/types";
+import { applyColorTextureQuality } from "../shared/textureQuality";
 import { SUN_TEXTURE_URL } from "./planetTextureCatalog";
 
 const DEFAULT_SUN_SCALE = 1.1;
@@ -27,7 +28,9 @@ type SunProps = {
  */
 export function Sun({ coreConfig }: SunProps) {
   const sunMeshReference = useRef<Mesh>(null);
+  const gl = useThree((state) => state.gl);
   const sunTexture = useLoader(TextureLoader, SUN_TEXTURE_URL);
+  useMemo(() => applyColorTextureQuality(sunTexture, gl), [sunTexture, gl]);
   const sunScale = (coreConfig?.scale ?? DEFAULT_SUN_SCALE) * SUN_SCALE_MULTIPLIER;
   const sunSpinSpeed = coreConfig?.spinSpeed ?? DEFAULT_SUN_SPIN_SPEED;
 
@@ -41,7 +44,7 @@ export function Sun({ coreConfig }: SunProps) {
   return (
     <group>
       <mesh ref={sunMeshReference} scale={sunScale}>
-        <sphereGeometry args={[1, 48, 32]} />
+        <sphereGeometry args={[1, 96, 64]} />
         <meshBasicMaterial map={sunTexture} toneMapped={false} />
       </mesh>
       <mesh scale={sunScale * SUN_GLOW_SCALE_MULTIPLIER}>

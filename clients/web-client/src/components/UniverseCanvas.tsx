@@ -18,7 +18,10 @@ export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 const DEFAULT_CAMERA_DISTANCE = 9;
 const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
 const CAMERA_HEIGHT_RATIO = 0.42;
-const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 1.8];
+// Render at native device resolution (the old 1.8 cap under-sampled every
+// HiDPI display — a uniform blur). Quality-first scope: weak devices are
+// explicitly out of scope for now.
+const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 3];
 
 type UniverseCanvasProps = {
   scene?: SceneConfig;
@@ -79,7 +82,7 @@ export function UniverseCanvas({
           fov: cameraFieldOfView
         }}
         dpr={devicePixelRatioRange}
-        gl={{ preserveDrawingBuffer }}
+        gl={{ preserveDrawingBuffer, powerPreference: "high-performance" }}
         onPointerMissed={() => onSelectPlanet?.(null)}
       >
         <color attach="background" args={[backgroundColor]} />

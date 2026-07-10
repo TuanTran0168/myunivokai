@@ -1,12 +1,13 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { AdditiveBlending, DoubleSide, TextureLoader, Vector3 } from "three";
+import { AdditiveBlending, DoubleSide, RingGeometry, TextureLoader, Vector3 } from "three";
 import type { Group, Mesh } from "three";
 import type { PlanetSceneConfig } from "@/lib/types";
 import { usePlanetPositionTracker } from "../shared/PlanetPositionTracker";
+import { applyColorTextureQuality } from "../shared/textureQuality";
 import { planetTextureEntryForIndex } from "./planetTextureCatalog";
 
 const DEFAULT_PLANET_SIZE = 0.6;
@@ -23,6 +24,30 @@ const RING_OPACITY = 0.85;
 const PLANET_LABEL_VERTICAL_OFFSET = 0.55;
 const PLANET_LABEL_DISTANCE_FACTOR = 9;
 const DEFAULT_HIGHLIGHT_COLOR = "#8B5CF6";
+// High enough that the silhouette stays round when the camera flies in close.
+const PLANET_SPHERE_WIDTH_SEGMENTS = 96;
+const PLANET_SPHERE_HEIGHT_SEGMENTS = 64;
+const RING_THETA_SEGMENTS = 128;
+
+/**
+ * RingGeometry's stock UVs are PLANAR (a flat projection of the disc), but the
+ * Saturn ring texture is a RADIAL strip: one row of pixels meant to sweep from
+ * the inner to the outer edge. Remapping U to the radial fraction makes the
+ * strip actually draw the ring bands.
+ */
+function buildRadialRingGeometry(innerRadius: number, outerRadius: number): RingGeometry {
+  const geometry = new RingGeometry(innerRadius, outerRadius, RING_THETA_SEGMENTS);
+  const positionAttribute = geometry.attributes.position;
+  const uvAttribute = geometry.attributes.uv;
+  for (let vertexIndex = 0; vertexIndex < positionAttribute.count; vertexIndex += 1) {
+    const x = positionAttribute.getX(vertexIndex);
+    const y = positionAttribute.getY(vertexIndex);
+    const radialFraction = (Math.hypot(x, y) - innerRadius) / (outerRadius - innerRadius);
+    uvAttribute.setXY(vertexIndex, radialFraction, 0.5);
+  }
+  uvAttribute.needsUpdate = true;
+  return geometry;
+}
 
 export function defaultPhaseForPlanet(planetIndex: number, planetCount: number): number {
   if (planetCount <= 0) {
@@ -72,12 +97,17 @@ export function SolarPlanet({
   const planetPositionTracker = usePlanetPositionTracker();
   const trackedWorldPosition = useMemo(() => new Vector3(), []);
 
+  const gl = useThree((state) => state.gl);
   const textureEntry = planetTextureEntryForIndex(planetIndex);
   const surfaceTexture = useLoader(TextureLoader, textureEntry.textureUrl);
   const ringTexture = useLoader(
     TextureLoader,
     textureEntry.ringTextureUrl ?? textureEntry.textureUrl
   );
+  useMemo(() => {
+    applyColorTextureQuality(surfaceTexture, gl);
+    applyColorTextureQuality(ringTexture, gl);
+  }, [surfaceTexture, ringTexture, gl]);
 
   const orbitRadius = orbitRadiusForPlanet(planet, planetIndex);
   const orbitSpeed = planet.orbitSpeed ?? DEFAULT_PLANET_ORBIT_SPEED;
@@ -86,6 +116,20 @@ export function SolarPlanet({
   const highlightColor = planet.color ?? DEFAULT_HIGHLIGHT_COLOR;
   const isHighlighted = isHovered || isSelected;
   const hasRing = Boolean(textureEntry.ringTextureUrl);
+
+  const ringGeometry = useMemo(
+    () =>
+      hasRing
+        ? buildRadialRingGeometry(planetSize * RING_INNER_RADIUS_MULTIPLIER, planetSize * RING_OUTER_RADIUS_MULTIPLIER)
+        : null,
+    [hasRing, planetSize]
+  );
+  useEffect(() => {
+    // Geometry passed as a prop (not JSX-created) is not auto-disposed by R3F.
+    return () => {
+      ringGeometry?.dispose();
+    };
+  }, [ringGeometry]);
 
   useEffect(() => {
     planetPositionTracker.set(identityKey, trackedWorldPosition);
@@ -126,14 +170,11 @@ export function SolarPlanet({
             onSelect?.(planet);
           }}
         >
-          <sphereGeometry args={[planetSize, 40, 28]} />
+          <sphereGeometry args={[planetSize, PLANET_SPHERE_WIDTH_SEGMENTS, PLANET_SPHERE_HEIGHT_SEGMENTS]} />
           <meshStandardMaterial map={surfaceTexture} roughness={0.92} metalness={0} />
         </mesh>
-        {hasRing ? (
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry
-              args={[planetSize * RING_INNER_RADIUS_MULTIPLIER, planetSize * RING_OUTER_RADIUS_MULTIPLIER, 96]}
-            />
+        {hasRing && ringGeometry ? (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={ringGeometry}>
             <meshBasicMaterial map={ringTexture} transparent opacity={RING_OPACITY} side={DoubleSide} />
           </mesh>
         ) : null}
