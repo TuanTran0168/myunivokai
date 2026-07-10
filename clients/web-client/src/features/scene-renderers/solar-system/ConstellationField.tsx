@@ -228,6 +228,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           depthWrite={false}
           blending={AdditiveBlending}
           toneMapped={false}
+          fog={false}
         />
       </points>
       <points frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
@@ -250,6 +251,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           depthWrite={false}
           blending={AdditiveBlending}
           toneMapped={false}
+          fog={false}
         />
       </points>
       <lineSegments frustumCulled={false} renderOrder={CONSTELLATION_RENDER_ORDER}>
@@ -268,6 +270,7 @@ export function ConstellationField({ seed, scene }: ConstellationFieldProps) {
           depthWrite={false}
           blending={AdditiveBlending}
           toneMapped={false}
+          fog={false}
         />
       </lineSegments>
     </group>
