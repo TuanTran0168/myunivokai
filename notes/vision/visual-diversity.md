@@ -135,6 +135,9 @@ trong monolith.
 
 ## Thứ tự đề xuất
 
+> Bản break-task chi tiết theo round/branch (kèm trạng thái thực thi) nằm ở
+> [../visual-diversity-implementation-plan.md](../visual-diversity-implementation-plan.md).
+
 1. **Bậc 1 + promote postFX** gộp 1 round schema 1.2 (BE quay lại scope khi
    user cho phép) — rẻ nhất, mở khoá "world tĩnh lặng khác world hỗn loạn".
 2. **Bậc 3 gas giant + moons** — FE-only, 0 payload, ăn ngay vào cảm giác

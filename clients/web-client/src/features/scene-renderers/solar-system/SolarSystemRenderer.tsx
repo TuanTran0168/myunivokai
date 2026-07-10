@@ -3,6 +3,7 @@
 import { Suspense, useMemo } from "react";
 import { randomFromSeed } from "@/lib/scene";
 import { backgroundColorFromScene, planetsFromScene, paletteFromScene } from "@/lib/scene";
+import type { PlanetSceneConfig } from "@/lib/types";
 import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
@@ -14,7 +15,7 @@ import { OrbitPath } from "./OrbitPath";
 import { OrbitingSpacecraft } from "./OrbitingSpacecraft";
 import { SpaceEnvironment } from "./SpaceEnvironment";
 import { Skybox } from "./Skybox";
-import { SolarPlanet, orbitRadiusForPlanet } from "./SolarPlanet";
+import { SolarPlanet, orbitRadiusForPlanet, renderedPlanetSize } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
 const AMBIENT_LIGHT_INTENSITY = 0.18;
@@ -62,6 +63,28 @@ function buildOrbitInclinations(seed: string, planetCount: number, inclinationMu
   );
 }
 
+// Procedural gas giants: planets big enough to read as giants get a seeded
+// chance to trade their shared photo texture for a one-of-a-kind banded
+// surface baked from this world's seed (see gasGiantRecipe.ts). Rendered
+// sizes span ~0.35-0.98, so the threshold selects roughly the upper half.
+const GAS_GIANT_MINIMUM_RENDERED_PLANET_SIZE = 0.58;
+const GAS_GIANT_ASSIGNMENT_PROBABILITY = 0.5;
+
+function buildProceduralGasGiantSeeds(seed: string, planets: PlanetSceneConfig[]): (string | null)[] {
+  return planets.map((planet, planetIndex) => {
+    if (renderedPlanetSize(planet) < GAS_GIANT_MINIMUM_RENDERED_PLANET_SIZE) {
+      return null;
+    }
+    // One stream per planet index: adding/removing planets or future features
+    // never shifts another planet's roll.
+    const random = randomFromSeed(`${seed}-gas-giant-role-${planetIndex}`);
+    if (random() >= GAS_GIANT_ASSIGNMENT_PROBABILITY) {
+      return null;
+    }
+    return `${seed}-gas-giant-${planetIndex}`;
+  });
+}
+
 /**
  * Solar-system style scene: a glowing textured sun in the center, personality
  * planets with real planetary surface textures on slightly inclined orbits, a
@@ -85,6 +108,7 @@ export function SolarSystemRenderer({
     () => buildOrbitInclinations(seed, planets.length, orbitInclinationMultiplier),
     [seed, planets.length, orbitInclinationMultiplier]
   );
+  const proceduralGasGiantSeeds = useMemo(() => buildProceduralGasGiantSeeds(seed, planets), [seed, planets]);
 
   return (
     <>
@@ -124,6 +148,7 @@ export function SolarSystemRenderer({
               isSelected={isSelected}
               isHovered={isHovered}
               showLabel={showPlanetLabels}
+              proceduralGasGiantSeed={proceduralGasGiantSeeds[planetIndex] ?? null}
               onHoverChange={onHoverPlanet}
               onSelect={onSelectPlanet}
             />

@@ -8,6 +8,8 @@ import type { Group, Mesh } from "three";
 import type { PlanetSceneConfig } from "@/lib/types";
 import { usePlanetPositionTracker } from "../shared/PlanetPositionTracker";
 import { applyColorTextureQuality, applyDataTextureQuality } from "../shared/textureQuality";
+import { buildGasGiantRecipe } from "./gasGiantRecipe";
+import { getGasGiantSurfaceTexture } from "./gasGiantTexture";
 import { planetTextureEntryForIndex } from "./planetTextureCatalog";
 
 const DEFAULT_PLANET_SIZE = 0.6;
@@ -36,6 +38,8 @@ const CLOUD_SHELL_RADIUS_MULTIPLIER = 1.02;
 const CLOUD_SHELL_OPACITY = 0.85;
 const CLOUD_ROTATION_SPEED_MULTIPLIER = 1.35;
 const DEFAULT_SURFACE_ROUGHNESS = 0.92;
+// Gas giants are cloud tops: fully diffuse, no terrain or city maps apply.
+const GAS_GIANT_SURFACE_ROUGHNESS = 1;
 
 /**
  * RingGeometry's stock UVs are PLANAR (a flat projection of the disc), but the
@@ -80,6 +84,11 @@ type SolarPlanetProps = {
   isSelected: boolean;
   isHovered: boolean;
   showLabel: boolean;
+  /**
+   * When set, this planet trades its photo texture for a seed-baked banded
+   * gas-giant surface (see gasGiantRecipe.ts). Null keeps the catalog look.
+   */
+  proceduralGasGiantSeed?: string | null;
   onHoverChange: (planet: PlanetSceneConfig | null) => void;
   onSelect?: (planet: PlanetSceneConfig | null) => void;
 };
@@ -97,6 +106,7 @@ export function SolarPlanet({
   isSelected,
   isHovered,
   showLabel,
+  proceduralGasGiantSeed,
   onHoverChange,
   onSelect
 }: SolarPlanetProps) {
@@ -133,11 +143,28 @@ export function SolarPlanet({
     }
   }, [surfaceTexture, ringTexture, nightLightsTexture, cloudsTexture, normalMapTexture, roughnessMapTexture, textureEntry, gl]);
 
+  const highlightColor = planet.color ?? DEFAULT_HIGHLIGHT_COLOR;
+
+  // Seed-baked banded surface; the bake is cached by seed so this only pays
+  // once per (world, planet). Null on the server or when the role is not set.
+  const proceduralSurfaceTexture = useMemo(() => {
+    if (!proceduralGasGiantSeed) {
+      return null;
+    }
+    const gasGiantRecipe = buildGasGiantRecipe(proceduralGasGiantSeed, highlightColor);
+    return getGasGiantSurfaceTexture(`${proceduralGasGiantSeed}|${highlightColor}`, gasGiantRecipe);
+  }, [proceduralGasGiantSeed, highlightColor]);
+  useMemo(() => {
+    if (proceduralSurfaceTexture) {
+      applyColorTextureQuality(proceduralSurfaceTexture, gl);
+    }
+  }, [proceduralSurfaceTexture, gl]);
+  const isProceduralGasGiant = Boolean(proceduralSurfaceTexture);
+
   const orbitRadius = orbitRadiusForPlanet(planet, planetIndex);
   const orbitSpeed = planet.orbitSpeed ?? DEFAULT_PLANET_ORBIT_SPEED;
   const orbitPhase = planet.phase ?? defaultPhaseForPlanet(planetIndex, planetCount);
   const planetSize = renderedPlanetSize(planet);
-  const highlightColor = planet.color ?? DEFAULT_HIGHLIGHT_COLOR;
   const isHighlighted = isHovered || isSelected;
   const hasRing = Boolean(textureEntry.ringTextureUrl);
 
@@ -180,8 +207,14 @@ export function SolarPlanet({
     }
   });
 
-  const hasNightLights = Boolean(textureEntry.nightLightsTextureUrl);
-  const hasRoughnessMap = Boolean(textureEntry.roughnessMapTextureUrl);
+  // A procedural gas giant is all atmosphere: the catalog's terrain-specific
+  // extras (city lights, terrain normals, ocean gloss, cloud shell) would
+  // contradict the banded surface, so they switch off together. The photo
+  // ring (Saturn role) stays — rings suit any giant.
+  const hasNightLights = Boolean(textureEntry.nightLightsTextureUrl) && !isProceduralGasGiant;
+  const hasRoughnessMap = Boolean(textureEntry.roughnessMapTextureUrl) && !isProceduralGasGiant;
+  const hasNormalMap = Boolean(textureEntry.normalMapTextureUrl) && !isProceduralGasGiant;
+  const hasCloudShell = Boolean(textureEntry.cloudsTextureUrl) && !isProceduralGasGiant;
 
   return (
     <group ref={orbitAnchorReference}>
@@ -203,17 +236,19 @@ export function SolarPlanet({
         >
           <sphereGeometry args={[planetSize, PLANET_SPHERE_WIDTH_SEGMENTS, PLANET_SPHERE_HEIGHT_SEGMENTS]} />
           <meshStandardMaterial
-            map={surfaceTexture}
-            normalMap={textureEntry.normalMapTextureUrl ? normalMapTexture : undefined}
+            map={proceduralSurfaceTexture ?? surfaceTexture}
+            normalMap={hasNormalMap ? normalMapTexture : undefined}
             roughnessMap={hasRoughnessMap ? roughnessMapTexture : undefined}
-            roughness={hasRoughnessMap ? 1 : DEFAULT_SURFACE_ROUGHNESS}
+            roughness={
+              isProceduralGasGiant ? GAS_GIANT_SURFACE_ROUGHNESS : hasRoughnessMap ? 1 : DEFAULT_SURFACE_ROUGHNESS
+            }
             metalness={0}
             emissive={hasNightLights ? "#FFFFFF" : "#000000"}
             emissiveMap={hasNightLights ? nightLightsTexture : undefined}
             emissiveIntensity={hasNightLights ? NIGHT_LIGHTS_EMISSIVE_INTENSITY : 0}
           />
         </mesh>
-        {textureEntry.cloudsTextureUrl ? (
+        {hasCloudShell ? (
           <mesh ref={cloudShellReference}>
             <sphereGeometry
               args={[
