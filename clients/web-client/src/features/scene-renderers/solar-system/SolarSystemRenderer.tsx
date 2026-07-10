@@ -8,7 +8,10 @@ import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
 import { AsteroidBelt } from "./AsteroidBelt";
+import { BinarySun } from "./BinarySun";
 import { Comet } from "./Comet";
+import { MeteorShower } from "./MeteorShower";
+import { hasRareFeature, resolveRareFeatures } from "./rareFeatures";
 import { ConstellationField } from "./ConstellationField";
 import { MilkyWayBand } from "./MilkyWayBand";
 import { OrbitPath } from "./OrbitPath";
@@ -155,6 +158,7 @@ export function SolarSystemRenderer({
     () => buildProceduralRingSeeds(seed, planets, planetTextureAssignment),
     [seed, planets, planetTextureAssignment]
   );
+  const rareFeatures = useMemo(() => resolveRareFeatures(seed), [seed]);
 
   return (
     <>
@@ -166,6 +170,7 @@ export function SolarSystemRenderer({
       <MilkyWayBand sky={scene.sky?.milkyWay} />
       <ConstellationField seed={seed} scene={scene} />
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
+      {hasRareFeature(rareFeatures, "meteor-shower") ? <MeteorShower seed={seed} tailColorHex={palette[1]} /> : null}
       <AsteroidBelt scene={scene} seed={seed} />
       <Comet scene={scene} seed={seed} />
       <SpaceEnvironment />
@@ -174,6 +179,7 @@ export function SolarSystemRenderer({
         <OrbitingSpacecraft scene={scene} seed={seed} />
       </Suspense>
       <Sun coreConfig={scene.core} />
+      {hasRareFeature(rareFeatures, "binary-sun") ? <BinarySun seed={seed} coreConfig={scene.core} /> : null}
       {planets.map((planet, planetIndex) => {
         const identityKey = planetIdentityKey(planet, planetIndex);
         const isSelected = identityKey === selectedPlanetKey;
