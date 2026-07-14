@@ -8,6 +8,7 @@ import type { PlanetSceneConfig, ShareWorld } from "@/lib/types";
 import { planetsFromScene, sceneFromVariant } from "@/lib/scene";
 import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
+import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { StatusMessage } from "@/components/StatusMessage";
 
 type ShareWorldViewProps = {
@@ -88,6 +89,7 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
               {world.archetype ? (
                 <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-brass">{world.archetype}</p>
               ) : null}
+              <RareFeatureBadge scene={scene} />
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {world.title || "Shared universe"}
               </h1>

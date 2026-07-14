@@ -11,6 +11,7 @@ import { planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene
 import type { PlanetSceneConfig, World, WorldVariant } from "@/lib/types";
 import { StatusMessage } from "@/components/StatusMessage";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
+import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { VariantList } from "@/components/VariantList";
 
@@ -192,6 +193,7 @@ export default function WorldPage({ params }: PageProps) {
               {activeScene.archetype ? (
                 <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-brass">{activeScene.archetype}</p>
               ) : null}
+              <RareFeatureBadge scene={activeScene} />
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
                 {activeScene.sceneName || world.title || "Untitled universe"}
               </h1>

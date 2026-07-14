@@ -13,6 +13,7 @@ below — approve those five and step 1a of the roadmap can start immediately.
 | [frontend-plan.md](frontend-plan.md) | sceneType-first lazy renderer registry, type unions, mirror discipline, create-form evolution |
 | [deployment.md](deployment.md) | Render multi-service blueprint, the free-tier trap, CI, observability |
 | [contracts-and-roadmap.md](contracts-and-roadmap.md) | Schema versioning rules, phased roadmap with triggers, risk table |
+| [visual-diversity.md](visual-diversity.md) | Direction for more visual diversity: 5-tier ladder (data knobs → catalogs → procedural → rare features → new families), guardrails, suggested order |
 
 ## The idea
 
