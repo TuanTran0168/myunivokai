@@ -21,6 +21,11 @@ describe("PLANET_TEXTURE_CATALOG", () => {
       }
     }
   });
+
+  it("keeps the earth-like role out of the procedural ring lottery", () => {
+    const earthLikeEntry = PLANET_TEXTURE_CATALOG.find((entry) => entry.planetStyleName === "earth-like");
+    expect(earthLikeEntry?.excludeFromProceduralRing).toBe(true);
+  });
 });
 
 describe("planetTextureEntryForIndex", () => {

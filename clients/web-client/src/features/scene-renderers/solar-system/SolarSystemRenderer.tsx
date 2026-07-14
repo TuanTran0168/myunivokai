@@ -114,7 +114,8 @@ function buildPlanetRoleAssignments(seed: string, planets: PlanetSceneConfig[]):
       planetSize >= MOON_ELIGIBLE_MINIMUM_RENDERED_PLANET_SIZE ? `${seed}-moons-${planetIndex}` : null;
 
     let proceduralRingSeed: string | null = null;
-    if (!planetTextureEntryForIndex(textureCatalogIndex).ringTextureUrl) {
+    const textureEntry = planetTextureEntryForIndex(textureCatalogIndex);
+    if (!textureEntry.ringTextureUrl && !textureEntry.excludeFromProceduralRing) {
       const ringRandom = randomFromSeed(`${seed}-procedural-ring-${planetIndex}`);
       if (ringRandom() < PROCEDURAL_RING_ASSIGNMENT_PROBABILITY) {
         proceduralRingSeed = `${seed}-procedural-ring-${planetIndex}`;

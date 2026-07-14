@@ -127,8 +127,14 @@ Quyết định kỹ thuật khi triển khai (commit `c1dc14a`):
   style cho đến khi dùng hết pool. World cũ đổi texture (chấp nhận, tiền lệ
   R1).
 - Tint: entry có cờ `allowsPaletteTint` (chỉ 4 dwarf fictional) nhân
-  `material.color` = DNA color pha 55% trắng; Earth/moon/hành tinh nhận diện
-  cao không tint.
+  `material.color` = DNA color pha 72% trắng (55% ban đầu bị owner chê "nhìn
+  giả" — tint đậm biến texture thành bi phấn màu); Earth/moon/hành tinh nhận
+  diện cao không tint.
+- Feedback mắt của owner (2026-07-14), fix trong commit polish: (1) Earth
+  loại khỏi lottery ring procedural (cờ `excludeFromProceduralRing` — Earth
+  đeo vành nhìn như lỗi render); (2) belt chỉnh về tỉ lệ thật: đá nhỏ hơn
+  (max 0.08 vs 0.13), tối hơn (albedo thấp, `#655B4F`), power 2.6 nghiêng
+  về đá vụn, dải tãi rộng hơn (sigma 0.75), 1400 instance.
 
 1. Tải bộ texture Solar System Scope chưa dùng (moon, ceres, eris, makemake,
    haumea…) — license CC BY 4.0, resize offline về 2K (script PowerShell

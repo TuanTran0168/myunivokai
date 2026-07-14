@@ -49,9 +49,9 @@ const DEFAULT_SURFACE_ROUGHNESS = 0.92;
 // Gas giants are cloud tops: fully diffuse, no terrain or city maps apply.
 const GAS_GIANT_SURFACE_ROUGHNESS = 1;
 // Fiction-role surfaces are tinted by multiplying material.color with the
-// planet's DNA color washed toward white — strong enough to read as "this
-// planet's color", weak enough that the texture detail survives.
-const PALETTE_TINT_WHITE_BLEND_FRACTION = 0.55;
+// planet's DNA color washed toward white. Kept subtle: at stronger tints the
+// dwarf maps read as chalky color-cast balls instead of photographed rock.
+const PALETTE_TINT_WHITE_BLEND_FRACTION = 0.72;
 const NEUTRAL_TINT_COLOR = "#FFFFFF";
 
 function blendHexColorTowardWhite(hexColor: string, whiteFraction: number): string {

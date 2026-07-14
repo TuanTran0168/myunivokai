@@ -23,6 +23,12 @@ export type PlanetTextureCatalogEntry = {
    * their identity.
    */
   allowsPaletteTint?: boolean;
+  /**
+   * Planets whose real-world identity is instantly recognizable (Earth): the
+   * seeded role pass never dresses them with a procedural ring — a ringed
+   * Earth reads as a rendering mistake, not variety.
+   */
+  excludeFromProceduralRing?: boolean;
   axialTiltRadians: number;
 };
 
@@ -40,6 +46,7 @@ export const PLANET_TEXTURE_CATALOG: PlanetTextureCatalogEntry[] = [
     cloudsTextureUrl: `${SOLAR_SYSTEM_TEXTURE_BASE_PATH}/4k_earth_clouds.jpg`,
     normalMapTextureUrl: `${SOLAR_SYSTEM_TEXTURE_BASE_PATH}/2k_earth_normal_map.png`,
     roughnessMapTextureUrl: `${SOLAR_SYSTEM_TEXTURE_BASE_PATH}/2k_earth_roughness_map.png`,
+    excludeFromProceduralRing: true,
     axialTiltRadians: 0.41
   },
   {
