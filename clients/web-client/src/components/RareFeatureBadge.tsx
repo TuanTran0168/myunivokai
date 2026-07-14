@@ -1,15 +1,14 @@
 import { Sparkles } from "lucide-react";
 import type { SceneConfig } from "@/lib/types";
-import { CANONICAL_FALLBACK_SEED, planetsFromScene } from "@/lib/scene";
-import { resolveRareFeatures } from "@/features/scene-renderers/solar-system/rareFeatures";
+import { resolveRareFeaturesForScene } from "@/features/scene-renderers/solar-system/rareFeatures";
 
 /**
  * Names the rare celestial event(s) this world rolled (meteor shower, binary
  * suns, ...). Rare features are a pure seed lottery — without a label nobody
  * would know they hit one — so the world page and the share page both show
- * this badge. The seed derivation mirrors UniverseCanvas exactly, so the
- * badge always matches what the renderer actually draws. Renders nothing for
- * worlds without planets (fallback renderer) or without a winning roll.
+ * this badge. Seed derivation and planet gating live in
+ * resolveRareFeaturesForScene, shared with the renderer side, so the badge
+ * always matches what the canvas actually draws.
  */
 
 type RareFeatureBadgeProps = {
@@ -17,11 +16,7 @@ type RareFeatureBadgeProps = {
 };
 
 export function RareFeatureBadge({ scene }: RareFeatureBadgeProps) {
-  if (!scene || planetsFromScene(scene).length === 0) {
-    return null;
-  }
-  const worldSeed = String(scene.seed ?? CANONICAL_FALLBACK_SEED);
-  const rareFeatures = resolveRareFeatures(worldSeed);
+  const rareFeatures = resolveRareFeaturesForScene(scene);
   if (rareFeatures.length === 0) {
     return null;
   }

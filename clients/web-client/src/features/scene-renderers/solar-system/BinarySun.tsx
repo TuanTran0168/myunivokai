@@ -8,6 +8,7 @@ import type { SceneCoreConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import { applyColorTextureQuality } from "../shared/textureQuality";
 import { SUN_TEXTURE_URL } from "./planetTextureCatalog";
+import { DEFAULT_SUN_SCALE, SUN_SCALE_MULTIPLIER } from "./Sun";
 
 /**
  * Rare-feature: a red-dwarf companion star orbiting the primary sun inside
@@ -17,11 +18,11 @@ import { SUN_TEXTURE_URL } from "./planetTextureCatalog";
  * light so the primary stays the scene's key light.
  */
 
-// Mirrors Sun.tsx so the companion scales with the same core config.
-const DEFAULT_SUN_SCALE = 1.1;
-const SUN_SCALE_MULTIPLIER = 1.45;
-
 const COMPANION_SCALE_RATIO = 0.34;
+const COMPANION_SPHERE_WIDTH_SEGMENTS = 64;
+const COMPANION_SPHERE_HEIGHT_SEGMENTS = 48;
+const COMPANION_GLOW_SPHERE_WIDTH_SEGMENTS = 32;
+const COMPANION_GLOW_SPHERE_HEIGHT_SEGMENTS = 24;
 // Inside the first planet orbit (3.2), outside the primary sun's glow shell.
 const COMPANION_ORBIT_RADIUS = 2.4;
 const COMPANION_ORBIT_RADIANS_PER_SECOND = 0.16;
@@ -77,11 +78,11 @@ export function BinarySun({ seed, coreConfig }: BinarySunProps) {
   return (
     <group ref={companionAnchorReference}>
       <mesh ref={companionMeshReference} scale={companionScale} raycast={() => null}>
-        <sphereGeometry args={[1, 64, 48]} />
+        <sphereGeometry args={[1, COMPANION_SPHERE_WIDTH_SEGMENTS, COMPANION_SPHERE_HEIGHT_SEGMENTS]} />
         <meshBasicMaterial map={sunTexture} color={surfaceHdrTint} toneMapped={false} fog={false} />
       </mesh>
       <mesh scale={companionScale * COMPANION_GLOW_SCALE_MULTIPLIER} raycast={() => null}>
-        <sphereGeometry args={[1, 32, 24]} />
+        <sphereGeometry args={[1, COMPANION_GLOW_SPHERE_WIDTH_SEGMENTS, COMPANION_GLOW_SPHERE_HEIGHT_SEGMENTS]} />
         <meshBasicMaterial
           color={COMPANION_GLOW_COLOR}
           transparent

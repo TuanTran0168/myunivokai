@@ -29,6 +29,11 @@ const RING_OPACITY = 0.85;
 const PLANET_LABEL_VERTICAL_OFFSET = 0.55;
 const PLANET_LABEL_DISTANCE_FACTOR = 9;
 const DEFAULT_HIGHLIGHT_COLOR = "#8B5CF6";
+// The DNA color feeds hex PARSERS (gas giant recipe, ring recipe, tint
+// blending), not just three.js color props — anything that isn't exactly
+// #RRGGBB would parse to NaN channels and bake black surfaces, so other CSS
+// color forms fall back to the default instead.
+const SIX_DIGIT_HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 // High enough that the silhouette stays round when the camera flies in close.
 const PLANET_SPHERE_WIDTH_SEGMENTS = 96;
 const PLANET_SPHERE_HEIGHT_SEGMENTS = 64;
@@ -180,7 +185,8 @@ export function SolarPlanet({
     }
   }, [surfaceTexture, ringTexture, nightLightsTexture, cloudsTexture, normalMapTexture, roughnessMapTexture, textureEntry, gl]);
 
-  const highlightColor = planet.color ?? DEFAULT_HIGHLIGHT_COLOR;
+  const highlightColor =
+    planet.color && SIX_DIGIT_HEX_COLOR_PATTERN.test(planet.color) ? planet.color : DEFAULT_HIGHLIGHT_COLOR;
 
   // Seed-baked banded surface; the bake is cached by seed so this only pays
   // once per (world, planet). Null on the server or when the role is not set.
@@ -369,7 +375,13 @@ export function SolarPlanet({
           <ProceduralMoons
             moonSystemSeed={moonSystemSeed}
             planetRenderedSize={planetSize}
-            parentPlanetHasRing={hasRing || hasProceduralRing}
+            parentRingOuterRadiusMultiplier={
+              hasRing
+                ? RING_OUTER_RADIUS_MULTIPLIER
+                : hasProceduralRing && proceduralRingRecipe
+                  ? proceduralRingRecipe.outerRadiusMultiplier
+                  : null
+            }
           />
         ) : null}
       </group>

@@ -1,4 +1,5 @@
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from "three";
+import { hexColorToRgbTriple, smoothstep } from "../shared/proceduralTextureMath";
 import { createSeededNoise3d, fractalNoise3d, type Noise3dSource } from "../shared/seededNoise3d";
 import type { GasGiantRecipe } from "./gasGiantRecipe";
 
@@ -41,22 +42,6 @@ const POLAR_HOOD_END_FRACTION = 0.5;
 // Worlds hold at most a handful of gas giants; keep a small LRU-ish cache so
 // revisiting a world reuses its bakes without hoarding GPU memory forever.
 const TEXTURE_CACHE_ENTRY_LIMIT = 12;
-
-type RgbTriple = [number, number, number];
-
-function smoothstep(edgeStart: number, edgeEnd: number, value: number): number {
-  const normalized = Math.min(1, Math.max(0, (value - edgeStart) / (edgeEnd - edgeStart)));
-  return normalized * normalized * (3 - 2 * normalized);
-}
-
-function hexColorToRgbTriple(hexColor: string): RgbTriple {
-  const normalized = hexColor.replace("#", "");
-  return [
-    parseInt(normalized.slice(0, 2), 16),
-    parseInt(normalized.slice(2, 4), 16),
-    parseInt(normalized.slice(4, 6), 16)
-  ];
-}
 
 /**
  * fBm evaluated on a coarse (longitude, latitude) grid over the cylinder

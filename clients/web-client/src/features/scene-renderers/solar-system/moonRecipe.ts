@@ -15,15 +15,16 @@ import { hslToHexColor } from "./gasGiantRecipe";
 export const MOON_MAXIMUM_COUNT = 3;
 // Cumulative probability thresholds for rolling 0 / 1 / 2 / 3 moons: an
 // eligible planet keeps a 30% chance of staying moonless.
-export const MOON_COUNT_CUMULATIVE_THRESHOLDS = [0.3, 0.65, 0.88, 1] as const;
+const MOON_COUNT_CUMULATIVE_THRESHOLDS = [0.3, 0.65, 0.88, 1] as const;
 
 // Moon diameter as a fraction of the parent planet's rendered size.
 const MOON_MINIMUM_SIZE_RATIO = 0.12;
 const MOON_SIZE_RATIO_RANGE = 0.1;
 
 // First moon orbit sits well clear of the planet surface; each further moon
-// steps outward so orbits never overlap.
-const MOON_FIRST_ORBIT_RADIUS_RATIO_MINIMUM = 1.7;
+// steps outward so orbits never overlap. The minimum is exported so the
+// renderer can compute how far a ringed planet must shift its moon system.
+export const MOON_FIRST_ORBIT_RADIUS_RATIO_MINIMUM = 1.7;
 const MOON_FIRST_ORBIT_RADIUS_RATIO_RANGE = 0.5;
 const MOON_ORBIT_RADIUS_RATIO_STEP_MINIMUM = 0.55;
 const MOON_ORBIT_RADIUS_RATIO_STEP_RANGE = 0.35;

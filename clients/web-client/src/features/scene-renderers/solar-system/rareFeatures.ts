@@ -1,4 +1,5 @@
-import { randomFromSeed } from "@/lib/scene";
+import { CANONICAL_FALLBACK_SEED, planetsFromScene, randomFromSeed } from "@/lib/scene";
+import type { SceneConfig } from "@/lib/types";
 
 /**
  * Seeded rare celestial events — the world lottery. Each feature rolls on its
@@ -25,18 +26,28 @@ export const RARE_FEATURE_PROBABILITIES: RareFeatureDefinition[] = [
   { key: "binary-sun", displayName: "Binary Suns", probability: 0.03 }
 ];
 
-export type RareFeature = {
-  key: RareFeatureKey;
-  displayName: string;
-};
-
-export function resolveRareFeatures(seed: string): RareFeature[] {
+export function resolveRareFeatures(seed: string): RareFeatureDefinition[] {
   return RARE_FEATURE_PROBABILITIES.filter((definition) => {
     const random = randomFromSeed(`${seed}-rare-feature-${definition.key}`);
     return random() < definition.probability;
-  }).map((definition) => ({ key: definition.key, displayName: definition.displayName }));
+  });
 }
 
-export function hasRareFeature(rareFeatures: RareFeature[], key: RareFeatureKey): boolean {
+/**
+ * Scene-level resolution for HUD consumers (RareFeatureBadge): derives the
+ * seed EXACTLY the way UniverseCanvas does, and returns nothing for worlds
+ * without planets (those render the fallback renderer, which draws no rare
+ * features). Today every planet-bearing theme resolves to
+ * SolarSystemRenderer; when a second scene family joins the registry, this
+ * helper is the single place to gate rare features by renderer.
+ */
+export function resolveRareFeaturesForScene(scene?: SceneConfig): RareFeatureDefinition[] {
+  if (!scene || planetsFromScene(scene).length === 0) {
+    return [];
+  }
+  return resolveRareFeatures(String(scene.seed ?? CANONICAL_FALLBACK_SEED));
+}
+
+export function hasRareFeature(rareFeatures: RareFeatureDefinition[], key: RareFeatureKey): boolean {
   return rareFeatures.some((feature) => feature.key === key);
 }

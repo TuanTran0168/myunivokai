@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { IcosahedronGeometry } from "three";
 import type { Group } from "three";
+import { smoothstep } from "../shared/proceduralTextureMath";
 import { createSeededNoise3d, fractalNoise3d } from "../shared/seededNoise3d";
-import { buildMoonSystemRecipe, type MoonRecipe } from "./moonRecipe";
+import { MOON_FIRST_ORBIT_RADIUS_RATIO_MINIMUM, buildMoonSystemRecipe, type MoonRecipe } from "./moonRecipe";
 
 /**
  * Seeded moons for one planet. Each moon is an icosphere displaced by fBm
@@ -19,7 +20,9 @@ import { buildMoonSystemRecipe, type MoonRecipe } from "./moonRecipe";
  * label, raycasting off.
  */
 
-const MOON_ICOSPHERE_DETAIL = 3;
+// Detail 2 (~960 vertices) is plenty for moons a fraction of the (already
+// small) planet size, and keeps the per-vertex crater loop cheap at mount.
+const MOON_ICOSPHERE_DETAIL = 2;
 const MOON_SURFACE_NOISE_FREQUENCY = 2.6;
 const MOON_SURFACE_NOISE_OCTAVE_COUNT = 4;
 const MOON_SURFACE_ROUGHNESS = 1;
@@ -33,15 +36,11 @@ const CRATER_RIM_PEAK_FRACTION = 1;
 const CRATER_RIM_FADE_END_FRACTION = 1.25;
 const CRATER_RIM_HEIGHT_RATIO = 0.35;
 
-// When the parent planet wears a ring (photo or procedural; ring outer edges
-// sit at ~2.2-2.3x planet size), the whole moon system shifts outward so no
-// moon plows through the ring plane.
-const RINGED_PLANET_ORBIT_RADIUS_RATIO_OFFSET = 0.8;
-
-function smoothstep(edgeStart: number, edgeEnd: number, value: number): number {
-  const normalized = Math.min(1, Math.max(0, (value - edgeStart) / (edgeEnd - edgeStart)));
-  return normalized * normalized * (3 - 2 * normalized);
-}
+// When the parent planet wears a ring, the whole moon system shifts outward
+// so even the innermost moon's inner edge clears the ring's ACTUAL outer
+// radius. The margin covers the largest possible moon radius (sizeRatio max
+// 0.22) plus visual breathing room.
+const MOON_RING_CLEARANCE_MARGIN_RATIO = 0.35;
 
 function buildMoonGeometry(moonRecipe: MoonRecipe, moonRadius: number): IcosahedronGeometry {
   const geometry = new IcosahedronGeometry(moonRadius, MOON_ICOSPHERE_DETAIL);
@@ -96,10 +95,18 @@ function buildMoonGeometry(moonRecipe: MoonRecipe, moonRadius: number): Icosahed
 type ProceduralMoonsProps = {
   moonSystemSeed: string;
   planetRenderedSize: number;
-  parentPlanetHasRing: boolean;
+  /**
+   * Outer radius of the parent planet's ring in multiples of the planet's
+   * rendered size (photo or procedural), or null when the planet is ringless.
+   */
+  parentRingOuterRadiusMultiplier: number | null;
 };
 
-export function ProceduralMoons({ moonSystemSeed, planetRenderedSize, parentPlanetHasRing }: ProceduralMoonsProps) {
+export function ProceduralMoons({
+  moonSystemSeed,
+  planetRenderedSize,
+  parentRingOuterRadiusMultiplier
+}: ProceduralMoonsProps) {
   const moonSystemRecipe = useMemo(() => buildMoonSystemRecipe(moonSystemSeed), [moonSystemSeed]);
   const moonGeometries = useMemo(
     () => moonSystemRecipe.moons.map((moon) => buildMoonGeometry(moon, moon.sizeRatio * planetRenderedSize)),
@@ -131,12 +138,18 @@ export function ProceduralMoons({ moonSystemSeed, planetRenderedSize, parentPlan
     return null;
   }
 
+  const ringClearanceRatioOffset =
+    parentRingOuterRadiusMultiplier === null
+      ? 0
+      : Math.max(
+          0,
+          parentRingOuterRadiusMultiplier + MOON_RING_CLEARANCE_MARGIN_RATIO - MOON_FIRST_ORBIT_RADIUS_RATIO_MINIMUM
+        );
+
   return (
     <>
       {moonSystemRecipe.moons.map((moon, moonIndex) => {
-        const orbitRadius =
-          (moon.orbitRadiusRatio + (parentPlanetHasRing ? RINGED_PLANET_ORBIT_RADIUS_RATIO_OFFSET : 0)) *
-          planetRenderedSize;
+        const orbitRadius = (moon.orbitRadiusRatio + ringClearanceRatioOffset) * planetRenderedSize;
         return (
           <group key={moon.surfaceNoiseSeed} rotation={[moon.orbitInclinationRadians, 0, 0]}>
             <group

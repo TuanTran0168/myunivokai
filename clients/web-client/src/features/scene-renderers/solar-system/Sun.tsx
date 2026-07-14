@@ -8,8 +8,9 @@ import type { SceneCoreConfig } from "@/lib/types";
 import { applyColorTextureQuality } from "../shared/textureQuality";
 import { SUN_TEXTURE_URL } from "./planetTextureCatalog";
 
-const DEFAULT_SUN_SCALE = 1.1;
-const SUN_SCALE_MULTIPLIER = 1.45;
+// Exported so BinarySun scales its companion star from the same core config.
+export const DEFAULT_SUN_SCALE = 1.1;
+export const SUN_SCALE_MULTIPLIER = 1.45;
 const DEFAULT_SUN_SPIN_SPEED = 0.05;
 const SUN_LIGHT_INTENSITY = 38;
 const SUN_LIGHT_DECAY = 1.6;
