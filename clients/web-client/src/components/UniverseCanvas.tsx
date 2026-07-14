@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Suspense, useRef, useState } from "react";
 import { AgXToneMapping } from "three";
 import type { Vector3 } from "three";
@@ -23,6 +23,22 @@ const CAMERA_HEIGHT_RATIO = 0.42;
 // HiDPI display — a uniform blur). Quality-first scope: weak devices are
 // explicitly out of scope for now.
 const CANVAS_DEVICE_PIXEL_RATIO_RANGE: [number, number] = [1, 3];
+
+/**
+ * Mounts inside the scene's Suspense boundary, so its first rendered frame
+ * means "textures resolved and pixels are on screen" — the moment the canvas
+ * may fade in over the loading veil.
+ */
+function SceneReadySignal({ onSceneReady }: { onSceneReady: () => void }) {
+  const hasSignaledReference = useRef(false);
+  useFrame(() => {
+    if (!hasSignaledReference.current) {
+      hasSignaledReference.current = true;
+      onSceneReady();
+    }
+  });
+  return null;
+}
 
 type UniverseCanvasProps = {
   scene?: SceneConfig;
@@ -54,6 +70,10 @@ export function UniverseCanvas({
 }: UniverseCanvasProps) {
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
+  // Readiness is DERIVED from the remount key instead of reset in an effect:
+  // the same render that swaps the canvas already sees isSceneReady=false,
+  // so the veil covers the swap without a single black frame leaking through.
+  const [lastReadyCanvasKey, setLastReadyCanvasKey] = useState<string | null>(null);
 
   const seed = String(scene?.seed ?? CANONICAL_FALLBACK_SEED);
   const backgroundColor = backgroundColorFromScene(scene);
@@ -71,40 +91,68 @@ export function UniverseCanvas({
       )
     : null;
 
+  const canvasRemountKey = `${seed}-${cameraDistance}-${cameraFieldOfView}`;
+  const isSceneReady = lastReadyCanvasKey === canvasRemountKey;
+
   return (
     <div
       className={`relative h-full min-h-[320px] overflow-hidden ${className ?? ""}`}
       style={{ backgroundColor, cursor: hoveredPlanet ? "pointer" : "grab" }}
     >
-      <Canvas
-        key={`${seed}-${cameraDistance}-${cameraFieldOfView}`}
-        camera={{
-          position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
-          fov: cameraFieldOfView
-        }}
-        dpr={devicePixelRatioRange}
-        // AgX rolls hot highlights off more gracefully than the default ACES
-        // (no neon clipping on lit planets); sky layers opt out via
-        // toneMapped={false} and are unaffected.
-        gl={{ preserveDrawingBuffer, powerPreference: "high-performance", toneMapping: AgXToneMapping }}
-        onPointerMissed={() => onSelectPlanet?.(null)}
+      <div
+        className={`h-full w-full transition-opacity duration-700 ease-out ${
+          isSceneReady ? "opacity-100" : "opacity-0"
+        }`}
       >
-        <color attach="background" args={[backgroundColor]} />
-        <PlanetPositionTrackerContext.Provider value={planetPositionTrackerReference.current}>
-          <Suspense fallback={<CanvasLoader />}>
-            <SceneRenderer
-              scene={scene ?? {}}
-              seed={seed}
-              selectedPlanetKey={selectedPlanetKey ?? null}
-              hoveredPlanetKey={hoveredPlanetKey}
-              onHoverPlanet={setHoveredPlanet}
-              onSelectPlanet={onSelectPlanet}
-            />
-            <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
-          </Suspense>
-          <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
-        </PlanetPositionTrackerContext.Provider>
-      </Canvas>
+        <Canvas
+          key={canvasRemountKey}
+          camera={{
+            position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
+            fov: cameraFieldOfView
+          }}
+          dpr={devicePixelRatioRange}
+          // AgX rolls hot highlights off more gracefully than the default ACES
+          // (no neon clipping on lit planets); sky layers opt out via
+          // toneMapped={false} and are unaffected.
+          gl={{ preserveDrawingBuffer, powerPreference: "high-performance", toneMapping: AgXToneMapping }}
+          onPointerMissed={() => onSelectPlanet?.(null)}
+        >
+          <color attach="background" args={[backgroundColor]} />
+          <PlanetPositionTrackerContext.Provider value={planetPositionTrackerReference.current}>
+            <Suspense fallback={<CanvasLoader />}>
+              <SceneRenderer
+                scene={scene ?? {}}
+                seed={seed}
+                selectedPlanetKey={selectedPlanetKey ?? null}
+                hoveredPlanetKey={hoveredPlanetKey}
+                onHoverPlanet={setHoveredPlanet}
+                onSelectPlanet={onSelectPlanet}
+              />
+              <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
+              <SceneReadySignal onSceneReady={() => setLastReadyCanvasKey(canvasRemountKey)} />
+            </Suspense>
+            <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
+          </PlanetPositionTrackerContext.Provider>
+        </Canvas>
+      </div>
+      {/* Loading veil: option toggles change the preview seed, which remounts
+          the whole canvas — the veil turns that swap into an intentional
+          crossfade (armillary-style counter-spinning brass rings) instead of
+          a black flash. */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 z-10 grid place-items-center transition-opacity duration-500 ${
+          isSceneReady ? "opacity-0" : "opacity-100"
+        }`}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <span className="relative h-12 w-12">
+            <span className="absolute inset-0 animate-spin rounded-full border border-white/10 border-t-brass" />
+            <span className="absolute inset-2 animate-spin rounded-full border border-white/10 border-b-brass [animation-direction:reverse] [animation-duration:1.6s]" />
+          </span>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/60">Rendering universe</p>
+        </div>
+      </div>
       {hoveredPlanet ? (
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 max-w-xs rounded-lg border border-white/15 bg-surface-low/85 px-3 py-2 backdrop-blur">
           <p className="text-sm font-semibold text-on-surface">{hoveredPlanet.name ?? "Unknown planet"}</p>
