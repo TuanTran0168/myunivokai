@@ -10,7 +10,10 @@ import { usePlanetPositionTracker } from "../shared/PlanetPositionTracker";
 import { applyColorTextureQuality, applyDataTextureQuality } from "../shared/textureQuality";
 import { buildGasGiantRecipe } from "./gasGiantRecipe";
 import { getGasGiantSurfaceTexture } from "./gasGiantTexture";
+import { buildPlanetRingRecipe } from "./planetRingRecipe";
+import { getPlanetRingTexture } from "./planetRingTexture";
 import { planetTextureEntryForIndex } from "./planetTextureCatalog";
+import { ProceduralMoons } from "./ProceduralMoons";
 
 const DEFAULT_PLANET_SIZE = 0.6;
 const PLANET_SIZE_MULTIPLIER = 0.78;
@@ -26,6 +29,11 @@ const RING_OPACITY = 0.85;
 const PLANET_LABEL_VERTICAL_OFFSET = 0.55;
 const PLANET_LABEL_DISTANCE_FACTOR = 9;
 const DEFAULT_HIGHLIGHT_COLOR = "#8B5CF6";
+// The DNA color feeds hex PARSERS (gas giant recipe, ring recipe, tint
+// blending), not just three.js color props — anything that isn't exactly
+// #RRGGBB would parse to NaN channels and bake black surfaces, so other CSS
+// color forms fall back to the default instead.
+const SIX_DIGIT_HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 // High enough that the silhouette stays round when the camera flies in close.
 const PLANET_SPHERE_WIDTH_SEGMENTS = 96;
 const PLANET_SPHERE_HEIGHT_SEGMENTS = 64;
@@ -40,6 +48,20 @@ const CLOUD_ROTATION_SPEED_MULTIPLIER = 1.35;
 const DEFAULT_SURFACE_ROUGHNESS = 0.92;
 // Gas giants are cloud tops: fully diffuse, no terrain or city maps apply.
 const GAS_GIANT_SURFACE_ROUGHNESS = 1;
+// Fiction-role surfaces are tinted by multiplying material.color with the
+// planet's DNA color washed toward white. Kept subtle: at stronger tints the
+// dwarf maps read as chalky color-cast balls instead of photographed rock.
+const PALETTE_TINT_WHITE_BLEND_FRACTION = 0.72;
+const NEUTRAL_TINT_COLOR = "#FFFFFF";
+
+function blendHexColorTowardWhite(hexColor: string, whiteFraction: number): string {
+  const normalized = hexColor.replace("#", "");
+  const blendedChannels = [0, 2, 4].map((hexOffset) => {
+    const channel = parseInt(normalized.slice(hexOffset, hexOffset + 2), 16);
+    return Math.round(channel + (255 - channel) * whiteFraction);
+  });
+  return `#${blendedChannels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
 
 /**
  * RingGeometry's stock UVs are PLANAR (a flat projection of the disc), but the
@@ -85,10 +107,27 @@ type SolarPlanetProps = {
   isHovered: boolean;
   showLabel: boolean;
   /**
+   * Index into PLANET_TEXTURE_CATALOG from the world's seeded assignment
+   * (see buildPlanetTextureAssignment). Falls back to catalog order by
+   * planet index when absent.
+   */
+  textureCatalogIndex?: number;
+  /**
    * When set, this planet trades its photo texture for a seed-baked banded
    * gas-giant surface (see gasGiantRecipe.ts). Null keeps the catalog look.
    */
   proceduralGasGiantSeed?: string | null;
+  /**
+   * When set, this planet grows a seeded moon system (see moonRecipe.ts).
+   * The recipe itself may still roll zero moons.
+   */
+  moonSystemSeed?: string | null;
+  /**
+   * When set, this planet wears a seed-baked radial ring (see
+   * planetRingRecipe.ts). The renderer never sets this on planets that
+   * already carry the catalog photo ring.
+   */
+  proceduralRingSeed?: string | null;
   onHoverChange: (planet: PlanetSceneConfig | null) => void;
   onSelect?: (planet: PlanetSceneConfig | null) => void;
 };
@@ -106,7 +145,10 @@ export function SolarPlanet({
   isSelected,
   isHovered,
   showLabel,
+  textureCatalogIndex,
   proceduralGasGiantSeed,
+  moonSystemSeed,
+  proceduralRingSeed,
   onHoverChange,
   onSelect
 }: SolarPlanetProps) {
@@ -117,7 +159,7 @@ export function SolarPlanet({
   const trackedWorldPosition = useMemo(() => new Vector3(), []);
 
   const gl = useThree((state) => state.gl);
-  const textureEntry = planetTextureEntryForIndex(planetIndex);
+  const textureEntry = planetTextureEntryForIndex(textureCatalogIndex ?? planetIndex);
   // Optional maps fall back to the surface URL (hooks must run unconditionally);
   // the fallback loads from cache and is simply not passed to the material.
   const surfaceTexture = useLoader(TextureLoader, textureEntry.textureUrl);
@@ -143,7 +185,8 @@ export function SolarPlanet({
     }
   }, [surfaceTexture, ringTexture, nightLightsTexture, cloudsTexture, normalMapTexture, roughnessMapTexture, textureEntry, gl]);
 
-  const highlightColor = planet.color ?? DEFAULT_HIGHLIGHT_COLOR;
+  const highlightColor =
+    planet.color && SIX_DIGIT_HEX_COLOR_PATTERN.test(planet.color) ? planet.color : DEFAULT_HIGHLIGHT_COLOR;
 
   // Seed-baked banded surface; the bake is cached by seed so this only pays
   // once per (world, planet). Null on the server or when the role is not set.
@@ -161,12 +204,34 @@ export function SolarPlanet({
   }, [proceduralSurfaceTexture, gl]);
   const isProceduralGasGiant = Boolean(proceduralSurfaceTexture);
 
+  // Seed-baked radial ring strip, cached like the gas giant surface. Null on
+  // the server or when the role is not assigned.
+  const proceduralRingRecipe = useMemo(
+    () => (proceduralRingSeed ? buildPlanetRingRecipe(proceduralRingSeed, highlightColor) : null),
+    [proceduralRingSeed, highlightColor]
+  );
+  const proceduralRingTexture = useMemo(
+    () =>
+      proceduralRingSeed && proceduralRingRecipe
+        ? getPlanetRingTexture(`${proceduralRingSeed}|${highlightColor}`, proceduralRingRecipe)
+        : null,
+    [proceduralRingSeed, proceduralRingRecipe, highlightColor]
+  );
+  useMemo(() => {
+    if (proceduralRingTexture) {
+      applyColorTextureQuality(proceduralRingTexture, gl);
+    }
+  }, [proceduralRingTexture, gl]);
+
   const orbitRadius = orbitRadiusForPlanet(planet, planetIndex);
   const orbitSpeed = planet.orbitSpeed ?? DEFAULT_PLANET_ORBIT_SPEED;
   const orbitPhase = planet.phase ?? defaultPhaseForPlanet(planetIndex, planetCount);
   const planetSize = renderedPlanetSize(planet);
   const isHighlighted = isHovered || isSelected;
   const hasRing = Boolean(textureEntry.ringTextureUrl);
+  // The photo ring (Saturn role) always wins; the renderer never assigns both,
+  // this re-check is local belt-and-suspenders.
+  const hasProceduralRing = !hasRing && Boolean(proceduralRingTexture);
 
   const ringGeometry = useMemo(
     () =>
@@ -181,6 +246,22 @@ export function SolarPlanet({
       ringGeometry?.dispose();
     };
   }, [ringGeometry]);
+
+  const proceduralRingGeometry = useMemo(
+    () =>
+      hasProceduralRing && proceduralRingRecipe
+        ? buildRadialRingGeometry(
+            planetSize * proceduralRingRecipe.innerRadiusMultiplier,
+            planetSize * proceduralRingRecipe.outerRadiusMultiplier
+          )
+        : null,
+    [hasProceduralRing, proceduralRingRecipe, planetSize]
+  );
+  useEffect(() => {
+    return () => {
+      proceduralRingGeometry?.dispose();
+    };
+  }, [proceduralRingGeometry]);
 
   useEffect(() => {
     planetPositionTracker.set(identityKey, trackedWorldPosition);
@@ -215,6 +296,12 @@ export function SolarPlanet({
   const hasRoughnessMap = Boolean(textureEntry.roughnessMapTextureUrl) && !isProceduralGasGiant;
   const hasNormalMap = Boolean(textureEntry.normalMapTextureUrl) && !isProceduralGasGiant;
   const hasCloudShell = Boolean(textureEntry.cloudsTextureUrl) && !isProceduralGasGiant;
+  // A procedural gas giant already derives its bands from the DNA color, so
+  // the extra tint only applies to the photo texture path.
+  const surfaceTintColor =
+    textureEntry.allowsPaletteTint && !isProceduralGasGiant
+      ? blendHexColorTowardWhite(highlightColor, PALETTE_TINT_WHITE_BLEND_FRACTION)
+      : NEUTRAL_TINT_COLOR;
 
   return (
     <group ref={orbitAnchorReference}>
@@ -237,6 +324,7 @@ export function SolarPlanet({
           <sphereGeometry args={[planetSize, PLANET_SPHERE_WIDTH_SEGMENTS, PLANET_SPHERE_HEIGHT_SEGMENTS]} />
           <meshStandardMaterial
             map={proceduralSurfaceTexture ?? surfaceTexture}
+            color={surfaceTintColor}
             normalMap={hasNormalMap ? normalMapTexture : undefined}
             roughnessMap={hasRoughnessMap ? roughnessMapTexture : undefined}
             roughness={
@@ -272,6 +360,29 @@ export function SolarPlanet({
           <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={ringGeometry}>
             <meshBasicMaterial map={ringTexture} transparent opacity={RING_OPACITY} side={DoubleSide} />
           </mesh>
+        ) : null}
+        {hasProceduralRing && proceduralRingGeometry && proceduralRingRecipe ? (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={proceduralRingGeometry} raycast={() => null}>
+            <meshBasicMaterial
+              map={proceduralRingTexture}
+              transparent
+              opacity={proceduralRingRecipe.opacity}
+              side={DoubleSide}
+            />
+          </mesh>
+        ) : null}
+        {moonSystemSeed ? (
+          <ProceduralMoons
+            moonSystemSeed={moonSystemSeed}
+            planetRenderedSize={planetSize}
+            parentRingOuterRadiusMultiplier={
+              hasRing
+                ? RING_OUTER_RADIUS_MULTIPLIER
+                : hasProceduralRing && proceduralRingRecipe
+                  ? proceduralRingRecipe.outerRadiusMultiplier
+                  : null
+            }
+          />
         ) : null}
       </group>
       {isHighlighted ? (

@@ -19,12 +19,17 @@
 
 ## Trạng thái
 
+> **Cập nhật 2026-07-11**: owner quyết định gộp R2+R3+R4 (toàn bộ phần
+> FE-only còn lại) vào MỘT branch duy nhất
+> `feat/fe/visual-diversity-fe-rounds`, mỗi round một commit riêng.
+> Phần R4 liên quan BE (promote flag rare-feature vào schema) vẫn dời sang R5.
+
 | Round | Branch | Bậc | Trạng thái |
 | --- | --- | --- | --- |
 | R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **ĐÃ MERGE** (PR #57) |
-| R2 — Moons + seeded rings | `feat/fe/procedural-moons-and-rings` | 3 | Chưa bắt đầu |
-| R3 — Texture pool expansion | `feat/fe/texture-pool-expansion` | 2 | Chưa bắt đầu |
-| R4 — Rare sky events | `feat/fe/rare-sky-events` | 4 | Chưa bắt đầu |
+| R2 — Moons + seeded rings | `feat/fe/visual-diversity-fe-rounds` | 3 | **CODE XONG** (`f364787`, gates xanh) — chờ owner duyệt mắt |
+| R3 — Texture pool expansion | `feat/fe/visual-diversity-fe-rounds` | 2 | **CODE XONG** (`c1dc14a`, gates xanh) — chờ owner duyệt mắt |
+| R4 — Rare sky events | `feat/fe/visual-diversity-fe-rounds` | 4 | **CODE XONG** (`ba7b716`, gates xanh) — chờ owner duyệt mắt |
 | R5 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | Cuối — chờ owner mở scope BE |
 
 Thứ tự thực thi: R1 → R2 → R3 → R4 → R5. Các round KHÔNG phụ thuộc nhau về
@@ -71,7 +76,30 @@ Definition of done: 4 gates xanh; cùng seed → cùng hành tinh gas giant vớ
 cùng hoa văn; world cũ đổi hình ở các hành tinh được gán vai (chấp nhận —
 đây là feature thị giác FE, không phải data DB); owner duyệt bằng mắt.
 
-## R2 — Moons + seeded rings (`feat/fe/procedural-moons-and-rings`)
+## R2 — Moons + seeded rings (gộp trong `feat/fe/visual-diversity-fe-rounds`)
+
+Quyết định kỹ thuật khi triển khai (commit `f364787`):
+
+- `moonRecipe.ts` (pure, test được) + `ProceduralMoons.tsx` (bake geometry):
+  0–3 moon cho hành tinh size render ≥ 0.5, stream `seed-moons-<index>`;
+  recipe tự roll 30% không moon. Icosphere detail 2 displaced bằng fBm +
+  hố thiên thạch tường minh (bowl + rim, tham số trong recipe). Moon là con
+  của anchor tự quay → tidal lock miễn phí; nằm TRONG nhóm axial-tilt nên
+  nghiêng theo hành tinh.
+- `planetRingRecipe.ts` + `planetRingTexture.ts`: vành 12–24 dải màu
+  desaturate từ DNA color, có khe Cassini (22%/dải), bake strip 256×4 map
+  vào `buildRadialRingGeometry`; xác suất gán 22%, stream
+  `seed-procedural-ring-<index>`, KHÔNG gán chồng vai Saturn (ring ảnh).
+- Moon system dịch ra ngoài theo bán kính NGOÀI THỰC của ring (photo 2.2 /
+  procedural theo recipe) + margin 0.35, nên moon không bao giờ cắt mặt
+  phẳng ring kể cả recipe worst-case.
+- Sau khi code xong đã chạy review 8 góc (line-by-line, removed-behavior,
+  cross-file, reuse, simplification, efficiency, altitude, conventions) bằng
+  agent độc lập; fixes gộp trong commit review-fixes: gộp 4 builder vai
+  thành `buildPlanetRoleAssignments` (1 pass), memo `planets` ổn định,
+  sanitize màu hex DNA, share `smoothstep`/`hexColorToRgbTriple` vào
+  `shared/proceduralTextureMath.ts`, export hằng số scale từ Sun.tsx cho
+  BinarySun, helper `resolveRareFeaturesForScene` chung cho badge.
 
 1. Mặt trăng: 0–3 moon procedural cho hành tinh lớn — icosphere + crater
    noise (tái dùng `seededNoise3d`), group lồng trong planet anchor (pattern
@@ -86,7 +114,27 @@ cùng hoa văn; world cũ đổi hình ở các hành tinh được gán vai (ch
 
 DoD: gates xanh; determinism; owner duyệt mắt.
 
-## R3 — Texture pool expansion (`feat/fe/texture-pool-expansion`)
+## R3 — Texture pool expansion (gộp trong `feat/fe/visual-diversity-fe-rounds`)
+
+Quyết định kỹ thuật khi triển khai (commit `c1dc14a`):
+
+- Thêm 6 texture 2K: moon (8K tải về, downscale System.Drawing q85), ceres/
+  eris/makemake/haumea (bản "fictional" của SSS) + venus atmosphere → pool
+  8 thành 14. ATTRIBUTION.md đã cập nhật. Payload public/ = 31.6MB (< 40MB).
+- "Seed rút không lặp" = `buildPlanetTextureAssignment`: Fisher-Yates shuffle
+  catalog indices theo stream `seed-planet-texture-assignment` → mỗi world
+  gặp pool theo thứ tự riêng (planet 0 không còn luôn là Earth), không lặp
+  style cho đến khi dùng hết pool. World cũ đổi texture (chấp nhận, tiền lệ
+  R1).
+- Tint: entry có cờ `allowsPaletteTint` (chỉ 4 dwarf fictional) nhân
+  `material.color` = DNA color pha 72% trắng (55% ban đầu bị owner chê "nhìn
+  giả" — tint đậm biến texture thành bi phấn màu); Earth/moon/hành tinh nhận
+  diện cao không tint.
+- Feedback mắt của owner (2026-07-14), fix trong commit polish: (1) Earth
+  loại khỏi lottery ring procedural (cờ `excludeFromProceduralRing` — Earth
+  đeo vành nhìn như lỗi render); (2) belt chỉnh về tỉ lệ thật: đá nhỏ hơn
+  (max 0.08 vs 0.13), tối hơn (albedo thấp, `#655B4F`), power 2.6 nghiêng
+  về đá vụn, dải tãi rộng hơn (sigma 0.75), 1400 instance.
 
 1. Tải bộ texture Solar System Scope chưa dùng (moon, ceres, eris, makemake,
    haumea…) — license CC BY 4.0, resize offline về 2K (script PowerShell
@@ -100,7 +148,22 @@ DoD: gates xanh; determinism; owner duyệt mắt.
 
 DoD: gates xanh; payload trong trần; ATTRIBUTION đủ.
 
-## R4 — Rare sky events (`feat/fe/rare-sky-events`)
+## R4 — Rare sky events (gộp trong `feat/fe/visual-diversity-fe-rounds`)
+
+Quyết định kỹ thuật khi triển khai (commit `ba7b716`):
+
+- `rareFeatures.ts`: mỗi feature roll trên stream RIÊNG
+  (`seed-rare-feature-<key>`) thay vì một stream chung như plan gốc — mạnh
+  hơn: thêm/bớt/đổi thứ tự feature không làm lệch roll của feature khác.
+  Test tần suất trên 1000 seed cố định (biên ±3.5σ).
+- `MeteorShower.tsx` (5%): 6 vệt sao băng chu kỳ lệch pha, trail = particle
+  tái dùng star PSF shader (SizedStarPoints), bay theo dây cung trên vòm
+  trời bán kính 48.
+- `BinarySun.tsx` (3%): sao lùn đỏ scale 0.34 quay quanh sun chính bán kính
+  2.4 (trong quỹ đạo hành tinh đầu 3.2), pointLight yếu (10 vs 38) để key
+  light không đổi.
+- `RareFeatureBadge.tsx`: pill brass trên cả world page + share page, derive
+  seed y hệt UniverseCanvas (mirror). UI tiếng Anh theo convention app.
 
 1. Stream `seed+"-rare-features"` + bảng xác suất là hằng số đặt tên
    (RARE_FEATURE_PROBABILITIES).

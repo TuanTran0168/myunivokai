@@ -8,13 +8,17 @@ import { planetIdentityKey } from "../planetIdentity";
 import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
 import { AsteroidBelt } from "./AsteroidBelt";
+import { BinarySun } from "./BinarySun";
 import { Comet } from "./Comet";
+import { MeteorShower } from "./MeteorShower";
+import { hasRareFeature, resolveRareFeatures } from "./rareFeatures";
 import { ConstellationField } from "./ConstellationField";
 import { MilkyWayBand } from "./MilkyWayBand";
 import { OrbitPath } from "./OrbitPath";
 import { OrbitingSpacecraft } from "./OrbitingSpacecraft";
 import { SpaceEnvironment } from "./SpaceEnvironment";
 import { Skybox } from "./Skybox";
+import { buildPlanetTextureAssignment, planetTextureEntryForIndex } from "./planetTextureCatalog";
 import { SolarPlanet, orbitRadiusForPlanet, renderedPlanetSize } from "./SolarPlanet";
 import { Sun } from "./Sun";
 
@@ -69,19 +73,56 @@ function buildOrbitInclinations(seed: string, planetCount: number, inclinationMu
 // sizes span ~0.35-0.98, so the threshold selects roughly the upper half.
 const GAS_GIANT_MINIMUM_RENDERED_PLANET_SIZE = 0.58;
 const GAS_GIANT_ASSIGNMENT_PROBABILITY = 0.5;
+// Procedural moons: any planet big enough to read as a major planet grows a
+// seeded moon system (the recipe itself may still roll zero moons). The
+// threshold sits below the gas giant one, so mid-size rocky planets qualify.
+const MOON_ELIGIBLE_MINIMUM_RENDERED_PLANET_SIZE = 0.5;
+// Seeded procedural rings: any planet may roll one, EXCEPT the Saturn role,
+// which already wears the catalog photo ring.
+const PROCEDURAL_RING_ASSIGNMENT_PROBABILITY = 0.22;
 
-function buildProceduralGasGiantSeeds(seed: string, planets: PlanetSceneConfig[]): (string | null)[] {
+type PlanetRoleAssignment = {
+  textureCatalogIndex: number;
+  proceduralGasGiantSeed: string | null;
+  moonSystemSeed: string | null;
+  proceduralRingSeed: string | null;
+};
+
+/**
+ * All seeded per-planet roles resolved in one pass, so the role rules — and
+ * their interactions, like a procedural ring never landing on the photo-ring
+ * Saturn role — live in one place and SolarPlanet can never receive a
+ * mismatched combination. Each role draws from its own per-planet-index PRNG
+ * stream: adding/removing planets or future features never shifts another
+ * planet's roll.
+ */
+function buildPlanetRoleAssignments(seed: string, planets: PlanetSceneConfig[]): PlanetRoleAssignment[] {
+  const planetTextureAssignment = buildPlanetTextureAssignment(seed, planets.length);
   return planets.map((planet, planetIndex) => {
-    if (renderedPlanetSize(planet) < GAS_GIANT_MINIMUM_RENDERED_PLANET_SIZE) {
-      return null;
+    const planetSize = renderedPlanetSize(planet);
+    const textureCatalogIndex = planetTextureAssignment[planetIndex];
+
+    let proceduralGasGiantSeed: string | null = null;
+    if (planetSize >= GAS_GIANT_MINIMUM_RENDERED_PLANET_SIZE) {
+      const gasGiantRandom = randomFromSeed(`${seed}-gas-giant-role-${planetIndex}`);
+      if (gasGiantRandom() < GAS_GIANT_ASSIGNMENT_PROBABILITY) {
+        proceduralGasGiantSeed = `${seed}-gas-giant-${planetIndex}`;
+      }
     }
-    // One stream per planet index: adding/removing planets or future features
-    // never shifts another planet's roll.
-    const random = randomFromSeed(`${seed}-gas-giant-role-${planetIndex}`);
-    if (random() >= GAS_GIANT_ASSIGNMENT_PROBABILITY) {
-      return null;
+
+    const moonSystemSeed =
+      planetSize >= MOON_ELIGIBLE_MINIMUM_RENDERED_PLANET_SIZE ? `${seed}-moons-${planetIndex}` : null;
+
+    let proceduralRingSeed: string | null = null;
+    const textureEntry = planetTextureEntryForIndex(textureCatalogIndex);
+    if (!textureEntry.ringTextureUrl && !textureEntry.excludeFromProceduralRing) {
+      const ringRandom = randomFromSeed(`${seed}-procedural-ring-${planetIndex}`);
+      if (ringRandom() < PROCEDURAL_RING_ASSIGNMENT_PROBABILITY) {
+        proceduralRingSeed = `${seed}-procedural-ring-${planetIndex}`;
+      }
     }
-    return `${seed}-gas-giant-${planetIndex}`;
+
+    return { textureCatalogIndex, proceduralGasGiantSeed, moonSystemSeed, proceduralRingSeed };
   });
 }
 
@@ -99,7 +140,10 @@ export function SolarSystemRenderer({
   onSelectPlanet
 }: SceneRendererProps) {
   const palette = paletteFromScene(scene);
-  const planets = planetsFromScene(scene);
+  // planetsFromScene filters a fresh array on every call; memoize so the
+  // seeded role assignment below is not rebuilt on every hover/selection
+  // re-render.
+  const planets = useMemo(() => planetsFromScene(scene), [scene]);
   const backgroundColor = backgroundColorFromScene(scene);
   const showPlanetLabels = scene.hud?.showLabels !== false;
 
@@ -108,7 +152,8 @@ export function SolarSystemRenderer({
     () => buildOrbitInclinations(seed, planets.length, orbitInclinationMultiplier),
     [seed, planets.length, orbitInclinationMultiplier]
   );
-  const proceduralGasGiantSeeds = useMemo(() => buildProceduralGasGiantSeeds(seed, planets), [seed, planets]);
+  const planetRoleAssignments = useMemo(() => buildPlanetRoleAssignments(seed, planets), [seed, planets]);
+  const rareFeatures = useMemo(() => resolveRareFeatures(seed), [seed]);
 
   return (
     <>
@@ -120,6 +165,7 @@ export function SolarSystemRenderer({
       <MilkyWayBand sky={scene.sky?.milkyWay} />
       <ConstellationField seed={seed} scene={scene} />
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
+      {hasRareFeature(rareFeatures, "meteor-shower") ? <MeteorShower seed={seed} tailColorHex={palette[1]} /> : null}
       <AsteroidBelt scene={scene} seed={seed} />
       <Comet scene={scene} seed={seed} />
       <SpaceEnvironment />
@@ -128,11 +174,13 @@ export function SolarSystemRenderer({
         <OrbitingSpacecraft scene={scene} seed={seed} />
       </Suspense>
       <Sun coreConfig={scene.core} />
+      {hasRareFeature(rareFeatures, "binary-sun") ? <BinarySun seed={seed} coreConfig={scene.core} /> : null}
       {planets.map((planet, planetIndex) => {
         const identityKey = planetIdentityKey(planet, planetIndex);
         const isSelected = identityKey === selectedPlanetKey;
         const isHovered = identityKey === hoveredPlanetKey;
         const orbitInclination = orbitInclinations[planetIndex] ?? 0;
+        const planetRoleAssignment = planetRoleAssignments[planetIndex];
         return (
           <group key={identityKey} rotation={[orbitInclination, 0, orbitInclination * 0.6]}>
             <OrbitPath
@@ -148,7 +196,10 @@ export function SolarSystemRenderer({
               isSelected={isSelected}
               isHovered={isHovered}
               showLabel={showPlanetLabels}
-              proceduralGasGiantSeed={proceduralGasGiantSeeds[planetIndex] ?? null}
+              textureCatalogIndex={planetRoleAssignment.textureCatalogIndex}
+              proceduralGasGiantSeed={planetRoleAssignment.proceduralGasGiantSeed}
+              moonSystemSeed={planetRoleAssignment.moonSystemSeed}
+              proceduralRingSeed={planetRoleAssignment.proceduralRingSeed}
               onHoverChange={onHoverPlanet}
               onSelect={onSelectPlanet}
             />

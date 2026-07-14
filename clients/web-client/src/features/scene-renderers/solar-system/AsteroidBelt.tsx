@@ -26,18 +26,23 @@ const ROCK_DISPLACEMENT_AMPLITUDE = 0.38;
 // Real asteroids are elongated potatoes, not spheres.
 const ROCK_MAXIMUM_ELONGATION = 0.5;
 
-const ASTEROID_INSTANCE_COUNT = 1100;
+const ASTEROID_INSTANCE_COUNT = 1400;
 const BELT_GAP_BEYOND_LAST_ORBIT = 1.7;
-const BELT_RADIAL_SIGMA = 0.55;
-const BELT_VERTICAL_SIGMA = 0.18;
-const MINIMUM_ASTEROID_SCALE = 0.035;
-const ASTEROID_SCALE_RANGE = 0.095;
-// scale = min + range * u^2: the quadratic bias yields many small, few big.
-const ASTEROID_SCALE_POWER = 2;
+// A wide, diffuse band of mostly tiny rubble reads as a real belt; a narrow
+// rope of boulder-sized rocks reads as popcorn.
+const BELT_RADIAL_SIGMA = 0.75;
+const BELT_VERTICAL_SIGMA = 0.15;
+const MINIMUM_ASTEROID_SCALE = 0.018;
+const ASTEROID_SCALE_RANGE = 0.062;
+// scale = min + range * u^power: the bias yields many small, few big. Real
+// belt statistics are even steeper, but below this the big rocks vanish.
+const ASTEROID_SCALE_POWER = 2.6;
 const BELT_ROTATION_RADIANS_PER_SECOND = 0.008;
 const BELT_TILT_RADIANS: [number, number, number] = [0.05, 0, 0.03];
-const ASTEROID_BASE_COLOR = "#8A7F72";
-const ASTEROID_BRIGHTNESS_VARIATION = 0.35;
+// Asteroids are among the darkest bodies in the solar system (albedo well
+// under 0.2); a light base color made the belt read as bright popcorn.
+const ASTEROID_BASE_COLOR = "#655B4F";
+const ASTEROID_BRIGHTNESS_VARIATION = 0.45;
 
 // Matches the default orbit layout in SolarPlanet for worlds without explicit radii.
 const FIRST_PLANET_ORBIT_RADIUS = 3.2;
