@@ -1,8 +1,11 @@
 # Vision — Myunivokai as a multi-scene platform
 
-Status: detailed proposal (2026-07-03), written against the current codebase.
-Owner approval is tracked by the [decision points](#decision-points-for-approval)
-below — approve those five and step 1a of the roadmap can start immediately.
+Status: **approved with amendments** (owner, 2026-07-16). The original
+decision points below were approved, and the owner additionally decided the
+vision becomes **microservices immediately** — starting with the nature
+family as a full peer service (same mechanism as universe-service, different
+DNA). See [Owner decisions (2026-07-16)](#owner-decisions-2026-07-16) and the
+detailed [nature-service-plan.md](nature-service-plan.md).
 
 ## Documents in this folder
 
@@ -14,6 +17,7 @@ below — approve those five and step 1a of the roadmap can start immediately.
 | [deployment.md](deployment.md) | Render multi-service blueprint, the free-tier trap, CI, observability |
 | [contracts-and-roadmap.md](contracts-and-roadmap.md) | Schema versioning rules, phased roadmap with triggers, risk table |
 | [visual-diversity.md](visual-diversity.md) | Direction for more visual diversity: 5-tier ladder (data knobs → catalogs → procedural → rare features → new families), guardrails, suggested order |
+| [nature-service-plan.md](nature-service-plan.md) | **The active track.** `nature-service` — a full peer of universe-service (same mechanism, forest DNA): forest with wind, four seasons, weather, wildlife; config contract, asset strategy, rounds N1–N5 / F1–F5 |
 
 ## The idea
 
@@ -95,9 +99,12 @@ Phase transitions have explicit triggers (see
 
 ## What NOT to do yet
 
-- **Do not split services before a second family exists in code.** Phase 1's
-  registry comes first; premature microservices multiply cold starts,
-  deploys, and env management on the free tier for zero user value.
+- ~~**Do not split services before a second family exists in code.**~~
+  **Superseded 2026-07-16** (owner decision): the second family is born as its
+  own full peer service (`nature-service`), accepting the free-tier cold-start
+  tradeoff consciously — see [nature-service-plan.md](nature-service-plan.md)
+  section 4. The guardrail still applies to any *third* family: it joins
+  nature-service (D4), it does not get its own deploy.
 - **Do not put AI calls inside scene services.** AI stays in the
   world-service DNA step only — that is the cost-control and determinism
   boundary.
@@ -113,3 +120,23 @@ Phase transitions have explicit triggers (see
 | D3 | Gateway: world-service stays the facade until auth-service; then hand-rolled Go gateway | **facade now, Go gateway at Phase 3** |
 | D4 | Forest/mountain/river/lake = one `scene-nature-service` with themes, not four services | **one nature service** |
 | D5 | Phase 2 ships with an embedded/remote per-family flag so extraction is reversible on the free tier | **yes** |
+
+## Owner decisions (2026-07-16)
+
+Recorded from the owner's direction, in two messages: (1) "the vision must
+become microservices immediately"; forest scenery service; Go backend first;
+gateway later; FE gets a universe/forest picker. (2) **Architecture
+correction:** `nature-service` is a **full peer** of universe-service — same
+mechanism (AI DNA → seeded builder → store → share), only the DNA layer
+differs (landmarks instead of planets); universe-service is not modified at
+all; no gateway and no FE work yet — just build the service. Full detail in
+[nature-service-plan.md](nature-service-plan.md) section 1.
+
+| # | Decision |
+| --- | --- |
+| D1 | **Deferred:** `scene_type` on world_variants is moot while each service owns its own worlds; revisit when a gateway or cross-service "portrait series" becomes real. |
+| D2–D4 | Approved: Go for all scene services; gateway stays a Phase-3 item; forest/mountain/lake share the one `nature-service`. |
+| D5 | **Obsolete:** with peer services there is no remote compose call to fall back from; rollback = don't deploy the nature service. |
+| D6 | **Microservices immediately, as peers:** nature-service clones the universe-service mechanism end-to-end and never lives in the monolith. |
+| D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../3d-development-limitations.md)), all assets self-hosted. |
+| D8 | Backend first: rounds N1–N5 before the frontend forest renderer (F1–F5). |
