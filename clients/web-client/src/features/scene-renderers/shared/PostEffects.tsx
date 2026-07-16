@@ -11,7 +11,8 @@ import {
 } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 import { Vector2 } from "three";
-import type { ScenePostFXConfig } from "@/lib/types";
+import type { ScenePostFXConfig, ScenePostFXGradeConfig } from "@/lib/types";
+import { sceneGradeForTheme, type SceneGrade } from "@/lib/scene";
 
 const DEFAULT_BLOOM_INTENSITY = 0.8;
 // Selective bloom by luminance: with the composer's HDR (half-float) buffer,
@@ -33,28 +34,35 @@ const FILM_GRAIN_OPACITY = 0.06;
 const CHROMATIC_ABERRATION_OFFSET = new Vector2(0.0005, 0.001);
 const CHROMATIC_ABERRATION_MODULATION_OFFSET = 0.15;
 
+// Grade channels arrive from stored data (schemaVersion 1.2); clamp magnitudes
+// so a corrupt value can tint the frame, never destroy it.
+const MAXIMUM_GRADE_HUE_MAGNITUDE_RADIANS = Math.PI;
+const MAXIMUM_GRADE_SATURATION_MAGNITUDE = 1;
+const MAXIMUM_GRADE_BRIGHTNESS_MAGNITUDE = 0.5;
+const MAXIMUM_GRADE_CONTRAST_MAGNITUDE = 1;
+
+function resolveGradeChannel(value: number | undefined, fallback: number, maximumMagnitude: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(maximumMagnitude, Math.max(-maximumMagnitude, value));
+}
+
 /**
- * Per-world-style color grade. One entry per theme so switching the style
- * changes the whole frame's character (not just object tints) — the "art
- * direction in a box" knob. Values are deliberately subtle; the identity of
- * each theme should read as a mood, not a filter.
+ * Clamp + fallback resolution of the stored postFX grade (promoted into scene
+ * data in schemaVersion 1.2). Worlds stored before 1.2 have no grade key and
+ * resolve to the per-theme grade table in lib/scene.ts — the same values the
+ * grade used to be hardcoded with, so old worlds keep grading identically.
  */
-type SceneGrade = {
-  hueRadians: number;
-  saturation: number;
-  brightness: number;
-  contrast: number;
-};
-
-const DEFAULT_SCENE_GRADE: SceneGrade = { hueRadians: 0, saturation: 0.05, brightness: 0, contrast: 0.05 };
-
-const THEME_SCENE_GRADES: Record<string, SceneGrade> = {
-  "cosmic-galaxy": { hueRadians: 0, saturation: 0.06, brightness: 0, contrast: 0.06 },
-  nebula: { hueRadians: 0, saturation: 0.12, brightness: 0.01, contrast: 0.05 },
-  crystal: { hueRadians: 0, saturation: -0.04, brightness: 0.02, contrast: 0.09 },
-  aurora: { hueRadians: 0, saturation: 0.09, brightness: 0, contrast: 0.06 },
-  "cyber-orbit": { hueRadians: 0, saturation: 0.14, brightness: 0, contrast: 0.1 }
-};
+function resolveSceneGrade(gradeConfig: ScenePostFXGradeConfig | undefined, theme: string | undefined): SceneGrade {
+  const themeGrade = sceneGradeForTheme(theme);
+  return {
+    hueRadians: resolveGradeChannel(gradeConfig?.hueRadians, themeGrade.hueRadians, MAXIMUM_GRADE_HUE_MAGNITUDE_RADIANS),
+    saturation: resolveGradeChannel(gradeConfig?.saturation, themeGrade.saturation, MAXIMUM_GRADE_SATURATION_MAGNITUDE),
+    brightness: resolveGradeChannel(gradeConfig?.brightness, themeGrade.brightness, MAXIMUM_GRADE_BRIGHTNESS_MAGNITUDE),
+    contrast: resolveGradeChannel(gradeConfig?.contrast, themeGrade.contrast, MAXIMUM_GRADE_CONTRAST_MAGNITUDE)
+  };
+}
 
 type PostEffectsProps = {
   postFX?: ScenePostFXConfig;
@@ -63,7 +71,7 @@ type PostEffectsProps = {
 
 export function PostEffects({ postFX, theme }: PostEffectsProps) {
   const bloomIntensity = postFX?.bloomIntensity ?? DEFAULT_BLOOM_INTENSITY;
-  const grade = THEME_SCENE_GRADES[theme ?? ""] ?? DEFAULT_SCENE_GRADE;
+  const grade = resolveSceneGrade(postFX?.grade, theme);
 
   return (
     <EffectComposer multisampling={COMPOSER_MULTISAMPLING}>

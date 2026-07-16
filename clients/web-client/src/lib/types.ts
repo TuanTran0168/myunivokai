@@ -48,8 +48,18 @@ export type SceneCameraConfig = {
   fov?: number;
 };
 
+// Added in schemaVersion 1.2 (promoted from the per-theme grade table).
+// Absent on worlds generated before it — PostEffects falls back to the table.
+export type ScenePostFXGradeConfig = {
+  hueRadians?: number;
+  saturation?: number;
+  brightness?: number;
+  contrast?: number;
+};
+
 export type ScenePostFXConfig = {
   bloomIntensity?: number;
+  grade?: ScenePostFXGradeConfig;
 };
 
 export type SceneHUDConfig = {
@@ -100,6 +110,33 @@ export type SceneSkyConfig = {
   constellations?: SceneConstellationConfig;
 };
 
+// Added in schemaVersion 1.2. Absent on worlds generated before it — the
+// AsteroidBelt renderer falls back to its built-in defaults.
+export type SceneBeltConfig = {
+  enabled?: boolean;
+  instanceCount?: number;
+  gapBeyondLastOrbit?: number;
+  rockColor?: string;
+  tiltXRadians?: number;
+  tiltZRadians?: number;
+};
+
+// Added in schemaVersion 1.2. Absent on worlds generated before it — the
+// renderer falls back to a single comet with a neutral tail.
+export type SceneCometsConfig = {
+  count?: number;
+  tailLengthMultiplier?: number;
+};
+
+// Added in schemaVersion 1.2. Absent on worlds generated before it — the Sun
+// renderer falls back to the built-in warm-yellow star.
+export type SceneSunConfig = {
+  surfaceTintColor?: string;
+  glowColor?: string;
+  lightColor?: string;
+  surfaceHdrMultiplier?: number;
+};
+
 export type SceneConfig = {
   seed?: string;
   schemaVersion?: string;
@@ -115,6 +152,9 @@ export type SceneConfig = {
   postFX?: ScenePostFXConfig;
   hud?: SceneHUDConfig;
   sky?: SceneSkyConfig;
+  belt?: SceneBeltConfig;
+  comets?: SceneCometsConfig;
+  sun?: SceneSunConfig;
   [key: string]: unknown;
 };
 

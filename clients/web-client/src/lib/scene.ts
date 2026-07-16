@@ -1,8 +1,11 @@
 import type {
   PlanetSceneConfig,
+  SceneBeltConfig,
+  SceneCometsConfig,
   SceneConfig,
   ScenePalette,
   SceneSkyConfig,
+  SceneSunConfig,
   WeightedSkyColor,
   World,
   WorldVariant
@@ -137,8 +140,8 @@ const DEFAULT_PREVIEW_SECONDARY_COLOR = "#06B6D4";
 const PREVIEW_ACCENT_COLOR = "#FACC15";
 const PREVIEW_BACKGROUND_COLOR = "#050816";
 // Mirrors sceneConfigSchemaVersion in services/.../world_config_builder.go
-// (1.1 = the sky section exists).
-const PREVIEW_SCHEMA_VERSION = "1.1";
+// (1.1 added the sky section; 1.2 added belt/comets/sun and the postFX grade).
+const PREVIEW_SCHEMA_VERSION = "1.2";
 
 const MINIMUM_PREVIEW_PLANET_COUNT = 3;
 const MAXIMUM_PREVIEW_PLANET_COUNT = 7;
@@ -431,6 +434,169 @@ function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+// --- Scene diversity sections (mirror of services/.../internal/services/diversity_scene_profile.go)
+//
+// Added in schemaVersion 1.2: the backend stores belt/comets/sun sections and a
+// postFX grade in every new scene config. The preview builds the same sections
+// locally (same tables, same ranges, same dedicated PRNG streams) so the create
+// page shows the diversity the generated world will have. Keep the two files in
+// sync when changing values here.
+
+const BELT_SEED_SUFFIX = "-belt";
+const COMETS_SEED_SUFFIX = "-comets";
+const SUN_SEED_SUFFIX = "-sun";
+
+const BELT_PRESENCE_PROBABILITY = 0.85;
+const MINIMUM_BELT_INSTANCE_COUNT = 300;
+const BELT_INSTANCE_COUNT_SPREAD = 1501;
+const MAXIMUM_BELT_INSTANCE_COUNT = 2500;
+const MINIMUM_BELT_GAP_BEYOND_LAST_ORBIT = 1.3;
+const BELT_GAP_BEYOND_LAST_ORBIT_SPREAD = 0.9;
+const MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS = 0.12;
+
+// Dark regolith tones; the first entry is the pre-1.2 renderer constant.
+const BELT_ROCK_COLOR_PALETTE = ["#655B4F", "#5C544B", "#4A443C", "#75695A", "#6B5B4E"];
+
+const COMET_COUNT_ZERO_THRESHOLD = 0.2;
+const COMET_COUNT_ONE_THRESHOLD = 0.65;
+const COMET_COUNT_TWO_THRESHOLD = 0.9;
+const MAXIMUM_COMET_COUNT = 3;
+const MINIMUM_COMET_TAIL_MULTIPLIER = 0.7;
+const COMET_TAIL_MULTIPLIER_SPREAD = 0.7;
+
+const MINIMUM_SUN_SURFACE_HDR_MULTIPLIER = 1.35;
+const SUN_SURFACE_HDR_MULTIPLIER_SPREAD = 0.3;
+
+type SunTemperatureClass = {
+  surfaceTintColor: string;
+  glowColor: string;
+  lightColor: string;
+  weight: number;
+};
+
+// Loosely the G/K/F/A stellar classes; the G entry reproduces the pre-1.2 look.
+const SUN_TEMPERATURE_CLASSES: SunTemperatureClass[] = [
+  { surfaceTintColor: "#FFFFFF", glowColor: "#FDB813", lightColor: "#FFF4D6", weight: 0.45 },
+  { surfaceTintColor: "#FFE3C4", glowColor: "#FF9E4A", lightColor: "#FFDDB8", weight: 0.25 },
+  { surfaceTintColor: "#FDFDFF", glowColor: "#FFD86B", lightColor: "#FFF9EC", weight: 0.2 },
+  { surfaceTintColor: "#E9F0FF", glowColor: "#BFD4FF", lightColor: "#EDF3FF", weight: 0.1 }
+];
+
+/**
+ * Per-world-style color grade, formerly hardcoded in PostEffects.tsx and
+ * promoted into scene data in schemaVersion 1.2. This table stays the fallback
+ * for pre-1.2 worlds, so it must keep mirroring postFXGradesByTheme in
+ * diversity_scene_profile.go.
+ */
+export type SceneGrade = {
+  hueRadians: number;
+  saturation: number;
+  brightness: number;
+  contrast: number;
+};
+
+const DEFAULT_SCENE_GRADE: SceneGrade = { hueRadians: 0, saturation: 0.05, brightness: 0, contrast: 0.05 };
+
+const SCENE_GRADES_BY_THEME: Record<string, SceneGrade> = {
+  "cosmic-galaxy": { hueRadians: 0, saturation: 0.06, brightness: 0, contrast: 0.06 },
+  nebula: { hueRadians: 0, saturation: 0.12, brightness: 0.01, contrast: 0.05 },
+  crystal: { hueRadians: 0, saturation: -0.04, brightness: 0.02, contrast: 0.09 },
+  aurora: { hueRadians: 0, saturation: 0.09, brightness: 0, contrast: 0.06 },
+  "cyber-orbit": { hueRadians: 0, saturation: 0.14, brightness: 0, contrast: 0.1 }
+};
+
+export function sceneGradeForTheme(theme?: string): SceneGrade {
+  return SCENE_GRADES_BY_THEME[theme ?? ""] ?? DEFAULT_SCENE_GRADE;
+}
+
+/**
+ * Builds the preview's asteroid belt section from its own PRNG stream
+ * (`seed + "-belt"`). Every draw happens even for a disabled belt so the draw
+ * order is fixed forever, exactly like the backend builder.
+ */
+export function buildPreviewBeltConfig(seed: string, moodProfile: MoodSceneProfile): SceneBeltConfig {
+  const nextBeltRandomValue = randomFromSeed(seed + BELT_SEED_SUFFIX);
+
+  // Fixed draw order — reordering these lines changes every preview's belt.
+  const enabled = nextBeltRandomValue() < BELT_PRESENCE_PROBABILITY;
+  const instanceCount = clampNumber(
+    Math.floor(
+      (MINIMUM_BELT_INSTANCE_COUNT + Math.floor(nextBeltRandomValue() * BELT_INSTANCE_COUNT_SPREAD)) *
+        moodProfile.particleMultiplier
+    ),
+    MINIMUM_BELT_INSTANCE_COUNT,
+    MAXIMUM_BELT_INSTANCE_COUNT
+  );
+  const gapBeyondLastOrbit = roundToTwoDecimals(
+    MINIMUM_BELT_GAP_BEYOND_LAST_ORBIT + nextBeltRandomValue() * BELT_GAP_BEYOND_LAST_ORBIT_SPREAD
+  );
+  const rockColor = BELT_ROCK_COLOR_PALETTE[Math.floor(nextBeltRandomValue() * BELT_ROCK_COLOR_PALETTE.length)];
+  const tiltXRadians = roundToTwoDecimals((nextBeltRandomValue() * 2 - 1) * MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS);
+  const tiltZRadians = roundToTwoDecimals((nextBeltRandomValue() * 2 - 1) * MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS);
+
+  return { enabled, instanceCount, gapBeyondLastOrbit, rockColor, tiltXRadians, tiltZRadians };
+}
+
+function cometCountForRoll(roll: number): number {
+  if (roll < COMET_COUNT_ZERO_THRESHOLD) {
+    return 0;
+  }
+  if (roll < COMET_COUNT_ONE_THRESHOLD) {
+    return 1;
+  }
+  if (roll < COMET_COUNT_TWO_THRESHOLD) {
+    return 2;
+  }
+  return MAXIMUM_COMET_COUNT;
+}
+
+/** Builds the preview's comet section from its own PRNG stream (`seed + "-comets"`). */
+export function buildPreviewCometsConfig(seed: string): SceneCometsConfig {
+  const nextCometsRandomValue = randomFromSeed(seed + COMETS_SEED_SUFFIX);
+
+  // Fixed draw order.
+  const countRoll = nextCometsRandomValue();
+  const tailLengthMultiplier = roundToTwoDecimals(
+    MINIMUM_COMET_TAIL_MULTIPLIER + nextCometsRandomValue() * COMET_TAIL_MULTIPLIER_SPREAD
+  );
+
+  return { count: cometCountForRoll(countRoll), tailLengthMultiplier };
+}
+
+// Resolves a cumulative-weight roll against the temperature class table; the
+// roll is scaled by the total weight so the table need not sum to exactly 1.
+function sunTemperatureClassForRoll(roll: number): SunTemperatureClass {
+  const totalWeight = SUN_TEMPERATURE_CLASSES.reduce((sum, temperatureClass) => sum + temperatureClass.weight, 0);
+  const scaledRoll = roll * totalWeight;
+  let cumulativeWeight = 0;
+  for (const temperatureClass of SUN_TEMPERATURE_CLASSES) {
+    cumulativeWeight += temperatureClass.weight;
+    if (scaledRoll < cumulativeWeight) {
+      return temperatureClass;
+    }
+  }
+  return SUN_TEMPERATURE_CLASSES[SUN_TEMPERATURE_CLASSES.length - 1];
+}
+
+/** Builds the preview's sun section from its own PRNG stream (`seed + "-sun"`). */
+export function buildPreviewSunConfig(seed: string): SceneSunConfig {
+  const nextSunRandomValue = randomFromSeed(seed + SUN_SEED_SUFFIX);
+
+  // Fixed draw order.
+  const classRoll = nextSunRandomValue();
+  const surfaceHdrMultiplier = roundToTwoDecimals(
+    MINIMUM_SUN_SURFACE_HDR_MULTIPLIER + nextSunRandomValue() * SUN_SURFACE_HDR_MULTIPLIER_SPREAD
+  );
+
+  const temperatureClass = sunTemperatureClassForRoll(classRoll);
+  return {
+    surfaceTintColor: temperatureClass.surfaceTintColor,
+    glowColor: temperatureClass.glowColor,
+    lightColor: temperatureClass.lightColor,
+    surfaceHdrMultiplier
+  };
+}
+
 function previewSeedFromInputs(input: PreviewSceneInput): string {
   return [
     "preview",
@@ -575,9 +741,15 @@ export function buildPreviewSceneConfig(input: PreviewSceneInput): SceneConfig {
       distance: cameraDistance,
       fov: PREVIEW_CAMERA_FIELD_OF_VIEW
     },
-    postFX: { bloomIntensity },
+    // The grade is a per-theme table lookup (no PRNG draw), promoted into
+    // scene data in schemaVersion 1.2.
+    postFX: { bloomIntensity, grade: sceneGradeForTheme(input.preferredWorldStyle) },
     hud: { showTraitBars: true, showLabels: true },
-    // Own PRNG stream (seed + "-sky"): adding this did not shift the draws above.
-    sky: buildPreviewSkyConfig(seed, input.preferredWorldStyle, moodProfile)
+    // Own PRNG streams (seed + "-sky"/"-belt"/"-comets"/"-sun"): adding these
+    // did not shift the draws above.
+    sky: buildPreviewSkyConfig(seed, input.preferredWorldStyle, moodProfile),
+    belt: buildPreviewBeltConfig(seed, moodProfile),
+    comets: buildPreviewCometsConfig(seed),
+    sun: buildPreviewSunConfig(seed)
   };
 }

@@ -9,7 +9,7 @@ import type { SceneRendererProps } from "../types";
 import { StarParticleField } from "../shared/StarParticleField";
 import { AsteroidBelt } from "./AsteroidBelt";
 import { BinarySun } from "./BinarySun";
-import { Comet } from "./Comet";
+import { Comet, resolveCometsConfig } from "./Comet";
 import { MeteorShower } from "./MeteorShower";
 import { hasRareFeature, resolveRareFeatures } from "./rareFeatures";
 import { ConstellationField } from "./ConstellationField";
@@ -154,6 +154,7 @@ export function SolarSystemRenderer({
   );
   const planetRoleAssignments = useMemo(() => buildPlanetRoleAssignments(seed, planets), [seed, planets]);
   const rareFeatures = useMemo(() => resolveRareFeatures(seed), [seed]);
+  const cometsConfig = resolveCometsConfig(scene.comets);
 
   return (
     <>
@@ -167,13 +168,24 @@ export function SolarSystemRenderer({
       <StarParticleField scene={scene} seed={seed} fallbackColor={palette[1]} />
       {hasRareFeature(rareFeatures, "meteor-shower") ? <MeteorShower seed={seed} tailColorHex={palette[1]} /> : null}
       <AsteroidBelt scene={scene} seed={seed} />
-      <Comet scene={scene} seed={seed} />
+      {/* Comet population from the stored 1.2 section; pre-1.2 worlds resolve
+          to the single legacy comet. */}
+      {Array.from({ length: cometsConfig.count }, (_, cometIndex) => (
+        <Comet
+          // eslint-disable-next-line react/no-array-index-key -- the index IS the comet's identity (it picks the PRNG stream)
+          key={`${seed}-comet-${cometIndex}`}
+          scene={scene}
+          seed={seed}
+          cometIndex={cometIndex}
+          tailLengthMultiplier={cometsConfig.tailLengthMultiplier}
+        />
+      ))}
       <SpaceEnvironment />
       {/* Load in its own boundary so the world never waits for the satellite. */}
       <Suspense fallback={null}>
         <OrbitingSpacecraft scene={scene} seed={seed} />
       </Suspense>
-      <Sun coreConfig={scene.core} />
+      <Sun coreConfig={scene.core} sun={scene.sun} />
       {hasRareFeature(rareFeatures, "binary-sun") ? <BinarySun seed={seed} coreConfig={scene.core} /> : null}
       {planets.map((planet, planetIndex) => {
         const identityKey = planetIdentityKey(planet, planetIndex);
