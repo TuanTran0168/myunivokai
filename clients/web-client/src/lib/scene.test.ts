@@ -2,12 +2,16 @@ import { describe, it, expect } from "vitest";
 import {
   CANONICAL_FALLBACK_SEED,
   backgroundColorFromScene,
+  buildPreviewBeltConfig,
+  buildPreviewCometsConfig,
   buildPreviewSceneConfig,
+  buildPreviewSunConfig,
   moodSceneProfile,
   planetsFromScene,
   randomFromSeed,
   resolveVariantSeed,
   sceneFromVariant,
+  sceneGradeForTheme,
   type PreviewSceneInput
 } from "./scene";
 import type { WorldVariant } from "./types";
@@ -238,6 +242,123 @@ describe("preview sky section (mirror of the backend sky builder)", () => {
     // The sky is drawn from `${seed}-sky`; the first planet's numbers must be
     // identical to what the pre-sky builder produced for the same inputs.
     const scene = buildPreviewSceneConfig(skyInputFor());
+    const independentRandom = randomFromSeed(scene.seed ?? "");
+    const expectedFirstPlanetSize = Math.round((0.45 + independentRandom() * 0.8) * 100) / 100;
+    expect(scene.planets?.[0]?.size).toBe(expectedFirstPlanetSize);
+  });
+});
+
+describe("preview diversity sections (mirror of the backend diversity builder, schema 1.2)", () => {
+  const diversityInputFor = (overrides: Partial<PreviewSceneInput> = {}): PreviewSceneInput => ({
+    nickname: "Neo",
+    interests: ["Technology", "Design", "AI"],
+    traits: ["curious", "builder", "focused"],
+    mood: "focused",
+    preferredWorldStyle: "cosmic-galaxy",
+    favoriteColors: ["#8B5CF6", "#06B6D4"],
+    ...overrides
+  });
+
+  // Mirror literals from diversity_scene_profile.go — the point of these tests
+  // is to pin the mirrored ranges, so they are asserted as values, not consts.
+  const BELT_ROCK_COLORS = ["#655B4F", "#5C544B", "#4A443C", "#75695A", "#6B5B4E"];
+  const SUN_SURFACE_TINTS = ["#FFFFFF", "#FFE3C4", "#FDFDFF", "#E9F0FF"];
+
+  it("stamps schema 1.2 and carries all diversity sections, deterministically", () => {
+    const first = buildPreviewSceneConfig(diversityInputFor());
+    const second = buildPreviewSceneConfig(diversityInputFor());
+    expect(first.schemaVersion).toBe("1.2");
+    expect(first.belt).toBeDefined();
+    expect(first.comets).toBeDefined();
+    expect(first.sun).toBeDefined();
+    expect(first.postFX?.grade).toBeDefined();
+    expect(first.belt).toEqual(second.belt);
+    expect(first.comets).toEqual(second.comets);
+    expect(first.sun).toEqual(second.sun);
+  });
+
+  it("wires the sections from the seed-derived builders (mirror-pair guard)", () => {
+    const scene = buildPreviewSceneConfig(diversityInputFor());
+    const seed = scene.seed ?? "";
+    const profile = moodSceneProfile("focused");
+    expect(scene.belt).toEqual(buildPreviewBeltConfig(seed, profile));
+    expect(scene.comets).toEqual(buildPreviewCometsConfig(seed));
+    expect(scene.sun).toEqual(buildPreviewSunConfig(seed));
+  });
+
+  it("keeps every belt draw inside the mirrored bounds and rolls both presence outcomes", () => {
+    const profile = moodSceneProfile("focused");
+    let enabledSeen = false;
+    let disabledSeen = false;
+    for (let seedIndex = 0; seedIndex < 80; seedIndex += 1) {
+      const belt = buildPreviewBeltConfig(`belt-bounds-${seedIndex}`, profile);
+      if (belt.enabled) {
+        enabledSeen = true;
+      } else {
+        disabledSeen = true;
+      }
+      expect(belt.instanceCount).toBeGreaterThanOrEqual(300);
+      expect(belt.instanceCount).toBeLessThanOrEqual(2500);
+      expect(belt.gapBeyondLastOrbit).toBeGreaterThanOrEqual(1.3);
+      expect(belt.gapBeyondLastOrbit).toBeLessThanOrEqual(2.2);
+      expect(BELT_ROCK_COLORS).toContain(belt.rockColor);
+      expect(Math.abs(belt.tiltXRadians ?? 0)).toBeLessThanOrEqual(0.12);
+      expect(Math.abs(belt.tiltZRadians ?? 0)).toBeLessThanOrEqual(0.12);
+    }
+    expect(enabledSeen).toBe(true);
+    expect(disabledSeen).toBe(true);
+  });
+
+  it("scales the belt density with the mood particle multiplier", () => {
+    const dreamy = buildPreviewBeltConfig("belt-mood-seed", moodSceneProfile("dreamy"));
+    const reflective = buildPreviewBeltConfig("belt-mood-seed", moodSceneProfile("reflective"));
+    expect(dreamy.instanceCount ?? 0).toBeGreaterThan(reflective.instanceCount ?? 0);
+  });
+
+  it("rolls every comet count from 0 to 3 within the mirrored tail bounds", () => {
+    const countsSeen = new Set<number>();
+    for (let seedIndex = 0; seedIndex < 200; seedIndex += 1) {
+      const comets = buildPreviewCometsConfig(`comets-bounds-${seedIndex}`);
+      expect(comets.count).toBeGreaterThanOrEqual(0);
+      expect(comets.count).toBeLessThanOrEqual(3);
+      expect(comets.tailLengthMultiplier).toBeGreaterThanOrEqual(0.7);
+      expect(comets.tailLengthMultiplier).toBeLessThanOrEqual(1.4);
+      countsSeen.add(comets.count ?? 0);
+    }
+    expect(countsSeen).toEqual(new Set([0, 1, 2, 3]));
+  });
+
+  it("draws the sun from the temperature class table within HDR bounds", () => {
+    const tintsSeen = new Set<string>();
+    for (let seedIndex = 0; seedIndex < 200; seedIndex += 1) {
+      const sun = buildPreviewSunConfig(`sun-bounds-${seedIndex}`);
+      expect(SUN_SURFACE_TINTS).toContain(sun.surfaceTintColor);
+      expect(sun.surfaceHdrMultiplier).toBeGreaterThanOrEqual(1.35);
+      expect(sun.surfaceHdrMultiplier).toBeLessThanOrEqual(1.65);
+      tintsSeen.add(sun.surfaceTintColor ?? "");
+    }
+    expect(tintsSeen.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it("promotes the per-theme grade into postFX unchanged", () => {
+    const cosmic = buildPreviewSceneConfig(diversityInputFor({ preferredWorldStyle: "cosmic-galaxy" }));
+    const cyber = buildPreviewSceneConfig(diversityInputFor({ preferredWorldStyle: "cyber-orbit" }));
+    expect(cosmic.postFX?.grade).toEqual(sceneGradeForTheme("cosmic-galaxy"));
+    expect(cyber.postFX?.grade).toEqual(sceneGradeForTheme("cyber-orbit"));
+    expect(cosmic.postFX?.grade).not.toEqual(cyber.postFX?.grade);
+    expect(sceneGradeForTheme("not-a-theme")).toEqual({
+      hueRadians: 0,
+      saturation: 0.05,
+      brightness: 0,
+      contrast: 0.05
+    });
+  });
+
+  it("did not shift the pre-diversity draws (own PRNG streams)", () => {
+    // Belt/comets/sun draw from `${seed}-belt/-comets/-sun`; the main-stream
+    // numbers (first planet) and the sky must stay reproducible exactly as
+    // before the sections were added.
+    const scene = buildPreviewSceneConfig(diversityInputFor());
     const independentRandom = randomFromSeed(scene.seed ?? "");
     const expectedFirstPlanetSize = Math.round((0.45 + independentRandom() * 0.8) * 100) / 100;
     expect(scene.planets?.[0]?.size).toBe(expectedFirstPlanetSize);

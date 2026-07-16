@@ -29,8 +29,8 @@
 | R1 — Procedural gas giants | `feat/fe/procedural-gas-giants` | 3 | **ĐÃ MERGE** (PR #57) |
 | R2 — Moons + seeded rings | `feat/fe/visual-diversity-fe-rounds` | 3 | **CODE XONG** (`f364787`, gates xanh) — chờ owner duyệt mắt |
 | R3 — Texture pool expansion | `feat/fe/visual-diversity-fe-rounds` | 2 | **CODE XONG** (`c1dc14a`, gates xanh) — chờ owner duyệt mắt |
-| R4 — Rare sky events | `feat/fe/visual-diversity-fe-rounds` | 4 | **CODE XONG** (`ba7b716`, gates xanh) — chờ owner duyệt mắt |
-| R5 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | Cuối — chờ owner mở scope BE |
+| R4 — Rare sky events | `feat/fe/visual-diversity-fe-rounds` | 4 | **ĐÃ MERGE** (PR #59) |
+| R5 — Scene diversity config (schema 1.2) | `feat/fe-be/scene-diversity-config` | 1 | **CODE XONG** (BE `4d58ef6` + FE `3b88d9f`, gates xanh) — chờ owner duyệt |
 
 Thứ tự thực thi: R1 → R2 → R3 → R4 → R5. Các round KHÔNG phụ thuộc nhau về
 kỹ thuật (stream PRNG riêng cho từng feature, file gần như không chạm chung)
@@ -180,9 +180,52 @@ suất trong khoảng cho phép); owner duyệt mắt.
 
 ## R5 — Scene diversity config, schema 1.2 (`feat/fe-be/scene-diversity-config`)
 
-**Round duy nhất đụng BE — chặn bởi: owner xác nhận mở lại scope BE.**
+**Round duy nhất đụng BE — owner mở scope BE 2026-07-16.**
 Làm y tiền lệ round sky-from-database (schema 1.1, xem
 `notes/sky-db-and-realism-plan.md`).
+
+Quyết định kỹ thuật khi triển khai (BE `4d58ef6`, FE `3b88d9f`):
+
+- **KHÔNG cần DDL migration**: scene config nằm trong cột JSONB
+  `world_variants.config` — thêm section chỉ là thay đổi payload JSON. Row cũ
+  (schema 1.0/1.1) không bị đụng tới nhờ pointer + `omitempty`; đọc row cũ và
+  serialize lại cũng KHÔNG inject key mới. Migration library đã có sẵn từ đầu
+  (`pressly/goose/v3`, runner `internal/db/migrations.go`, Render chạy
+  `/app/migrate` trước khi start API khi `RUN_MIGRATIONS_ON_START=true`) —
+  round này không thêm file migration nào.
+- **BE builder mới** `internal/services/diversity_scene_profile.go` (mirror
+  FE: `clients/web-client/src/lib/scene.ts`): section `belt` (presence 85%,
+  density 300–2500 scale theo mood particle multiplier, gap 1.3–2.2, 5 màu
+  regolith tối, tilt ±0.12), `comets` (count 0–3 weighted 20/45/25/10, tail
+  multiplier 0.7–1.4), `sun` (4 lớp nhiệt độ G/K/F/A weighted 45/25/20/10,
+  HDR 1.35–1.65; lớp G tái tạo đúng hằng số pre-1.2), promote `postFX.grade`
+  (bảng theme y hệt PostEffects cũ, KHÔNG PRNG — world 1.2 grade y hệt world
+  cũ cùng theme). Stream riêng `seed+"-belt"/"-comets"/"-sun"` — draw order
+  của mọi field cũ (kể cả sky) không xê dịch; test isolation guard trong
+  `diversity_scene_profile_test.go`.
+- **FE resolver theo tiền lệ MilkyWayBand** (clamp + fallback per-field, đặt
+  trong file renderer): `resolveBeltConfig` (AsteroidBelt — enabled:false trả
+  null cả belt lẫn Bennu qua wrapper component để không phạm luật hooks),
+  `resolveCometsConfig` (export từ Comet.tsx, SolarSystemRenderer mount N
+  comet), `resolveSunConfig` (Sun.tsx), `resolveSceneGrade` (PostEffects —
+  bảng theme chuyển về `lib/scene.ts` export `sceneGradeForTheme` để cả
+  preview lẫn fallback dùng chung một nguồn). MỌI fallback = đúng hằng số
+  pre-1.2 → world cũ pixel-y-hệt.
+- **Comet nhiều con**: comet index 0 giữ NGUYÊN tên stream cũ
+  (`seed-comet-orbit/-nucleus/-dust-tail/-ion-tail`) và đúng 1 lần rút ở
+  stream orbit → world cũ (fallback count=1) giữ nguyên sao chổi; comet 1–2
+  bay xa hơn (+1.2/bậc) với mặt phẳng quỹ đạo rút từ stream riêng theo index.
+  Tail multiplier nằm trong geometryKey vì nó đổi mảng particle.
+- **Sun tint**: `new Color(surfaceTintColor).multiplyScalar(hdrMultiplier)` —
+  default trắng ×1.5 ≡ `Color(1.5,1.5,1.5)` cũ từng bit. BinarySun (sao lùn
+  đỏ rare event) không đổi.
+- **Promote flag rare-feature vào schema: QUYẾT ĐỊNH BỎ** — chưa có nhu cầu
+  cross-surface thật (badge + canvas đã derive chung qua
+  `resolveRareFeaturesForScene`); BE muốn biết thì phải port xorshift FE sang
+  Go, thêm một mirror-pair nữa không đáng. Mở lại khi share metadata cần.
+- Contract `contracts/schemas/world-scene-config.schema.json` thêm
+  belt/comets/sun/postFX.grade (đều NOT required); swagger regen
+  (`swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal`).
 
 1. BE models: section `belt`, `comets`, `sun` + promote `postFX` grade —
    pointer + `omitempty`.

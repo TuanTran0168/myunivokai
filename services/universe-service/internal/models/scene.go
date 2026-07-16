@@ -17,6 +17,52 @@ type WorldSceneConfig struct {
 	// before that keep round-tripping without a sky key; the frontend falls back
 	// to its built-in sky defaults when the key is absent.
 	Sky *SkyConfig `json:"sky,omitempty"`
+	// Belt, Comets and Sun were added in schemaVersion 1.2 (the scene diversity
+	// round). Pointer + omitempty like Sky: configs stored before 1.2 have no
+	// keys and the frontend renders its built-in defaults, so old worlds keep
+	// looking exactly as they did.
+	Belt   *BeltConfig   `json:"belt,omitempty"`
+	Comets *CometsConfig `json:"comets,omitempty"`
+	Sun    *SunConfig    `json:"sun,omitempty"`
+}
+
+// BeltConfig drives the procedural asteroid belt outside the outermost planet.
+// Added in schemaVersion 1.2. All draws happen even when Enabled is false so
+// the PRNG draw order stays fixed.
+type BeltConfig struct {
+	Enabled            bool    `json:"enabled"`
+	InstanceCount      int     `json:"instanceCount"`
+	GapBeyondLastOrbit float64 `json:"gapBeyondLastOrbit"`
+	RockColor          string  `json:"rockColor"`
+	TiltXRadians       float64 `json:"tiltXRadians"`
+	TiltZRadians       float64 `json:"tiltZRadians"`
+}
+
+// CometsConfig drives the seeded comet population. Added in schemaVersion 1.2.
+// Worlds stored before it fall back to a single comet with a neutral tail.
+type CometsConfig struct {
+	Count                int     `json:"count"`
+	TailLengthMultiplier float64 `json:"tailLengthMultiplier"`
+}
+
+// SunConfig recolors the central star by stellar temperature class and sets its
+// HDR surface intensity. Added in schemaVersion 1.2.
+type SunConfig struct {
+	SurfaceTintColor     string  `json:"surfaceTintColor"`
+	GlowColor            string  `json:"glowColor"`
+	LightColor           string  `json:"lightColor"`
+	SurfaceHdrMultiplier float64 `json:"surfaceHdrMultiplier"`
+}
+
+// PostFXGradeConfig is the per-world color grade (hue/saturation/brightness/
+// contrast), promoted from the frontend's per-theme table into stored data in
+// schemaVersion 1.2 so the grade becomes a per-world knob instead of a
+// hardcoded lookup.
+type PostFXGradeConfig struct {
+	HueRadians float64 `json:"hueRadians"`
+	Saturation float64 `json:"saturation"`
+	Brightness float64 `json:"brightness"`
+	Contrast   float64 `json:"contrast"`
 }
 
 // SkyConfig drives the night-sky rendering (procedural Milky Way band and the
@@ -108,6 +154,9 @@ type CameraConfig struct {
 
 type PostFXConfig struct {
 	BloomIntensity float64 `json:"bloomIntensity"`
+	// Grade was added in schemaVersion 1.2. Pointer + omitempty; the frontend
+	// falls back to its per-theme grade table when the key is absent.
+	Grade *PostFXGradeConfig `json:"grade,omitempty"`
 }
 
 type HUDConfig struct {

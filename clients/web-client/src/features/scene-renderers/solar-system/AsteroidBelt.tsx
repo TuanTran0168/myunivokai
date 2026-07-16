@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Clone, useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { Box3, Color, IcosahedronGeometry, Object3D, Vector3, type Group, type InstancedMesh } from "three";
-import type { SceneConfig } from "@/lib/types";
+import type { SceneBeltConfig, SceneConfig } from "@/lib/types";
 import { planetsFromScene, randomFromSeed } from "@/lib/scene";
 import { createSeededNoise3d, fractalNoise3d } from "../shared/seededNoise3d";
 import { orbitRadiusForPlanet } from "./SolarPlanet";
@@ -26,8 +26,15 @@ const ROCK_DISPLACEMENT_AMPLITUDE = 0.38;
 // Real asteroids are elongated potatoes, not spheres.
 const ROCK_MAXIMUM_ELONGATION = 0.5;
 
-const ASTEROID_INSTANCE_COUNT = 1400;
-const BELT_GAP_BEYOND_LAST_ORBIT = 1.7;
+// Defaults double as the exact pre-1.2 belt (worlds stored before
+// schemaVersion 1.2 carry no belt section and must keep rendering
+// byte-identically), and as the per-field fallbacks when a stored value is
+// missing or out of range.
+const DEFAULT_ASTEROID_INSTANCE_COUNT = 1400;
+const MAXIMUM_ASTEROID_INSTANCE_COUNT = 2500;
+const DEFAULT_BELT_GAP_BEYOND_LAST_ORBIT = 1.7;
+const MINIMUM_BELT_GAP_BEYOND_LAST_ORBIT = 0.5;
+const MAXIMUM_BELT_GAP_BEYOND_LAST_ORBIT = 5;
 // A wide, diffuse band of mostly tiny rubble reads as a real belt; a narrow
 // rope of boulder-sized rocks reads as popcorn.
 const BELT_RADIAL_SIGMA = 0.75;
@@ -38,11 +45,15 @@ const ASTEROID_SCALE_RANGE = 0.062;
 // belt statistics are even steeper, but below this the big rocks vanish.
 const ASTEROID_SCALE_POWER = 2.6;
 const BELT_ROTATION_RADIANS_PER_SECOND = 0.008;
-const BELT_TILT_RADIANS: [number, number, number] = [0.05, 0, 0.03];
+const DEFAULT_BELT_TILT_X_RADIANS = 0.05;
+const DEFAULT_BELT_TILT_Z_RADIANS = 0.03;
+const MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS = 0.3;
 // Asteroids are among the darkest bodies in the solar system (albedo well
 // under 0.2); a light base color made the belt read as bright popcorn.
-const ASTEROID_BASE_COLOR = "#655B4F";
+const DEFAULT_ASTEROID_BASE_COLOR = "#655B4F";
 const ASTEROID_BRIGHTNESS_VARIATION = 0.45;
+
+const SIX_DIGIT_HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 // Matches the default orbit layout in SolarPlanet for worlds without explicit radii.
 const FIRST_PLANET_ORBIT_RADIUS = 3.2;
@@ -54,6 +65,62 @@ type AsteroidBeltProps = {
   scene: SceneConfig;
   seed: string;
 };
+
+type ResolvedBeltConfig = {
+  enabled: boolean;
+  instanceCount: number;
+  gapBeyondLastOrbit: number;
+  rockColor: string;
+  tiltXRadians: number;
+  tiltZRadians: number;
+};
+
+function clampNumber(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function resolveBoundedNumber(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return clampNumber(value, minimum, maximum);
+}
+
+/**
+ * Clamp + fallback resolution of the stored belt section (schemaVersion 1.2).
+ * Worlds stored before 1.2 have no belt key: every fallback equals the pre-1.2
+ * constant, so they keep rendering byte-identically.
+ */
+function resolveBeltConfig(belt: SceneBeltConfig | undefined): ResolvedBeltConfig {
+  return {
+    enabled: typeof belt?.enabled === "boolean" ? belt.enabled : true,
+    instanceCount: Math.floor(
+      resolveBoundedNumber(belt?.instanceCount, DEFAULT_ASTEROID_INSTANCE_COUNT, 1, MAXIMUM_ASTEROID_INSTANCE_COUNT)
+    ),
+    gapBeyondLastOrbit: resolveBoundedNumber(
+      belt?.gapBeyondLastOrbit,
+      DEFAULT_BELT_GAP_BEYOND_LAST_ORBIT,
+      MINIMUM_BELT_GAP_BEYOND_LAST_ORBIT,
+      MAXIMUM_BELT_GAP_BEYOND_LAST_ORBIT
+    ),
+    rockColor:
+      typeof belt?.rockColor === "string" && SIX_DIGIT_HEX_COLOR_PATTERN.test(belt.rockColor)
+        ? belt.rockColor
+        : DEFAULT_ASTEROID_BASE_COLOR,
+    tiltXRadians: resolveBoundedNumber(
+      belt?.tiltXRadians,
+      DEFAULT_BELT_TILT_X_RADIANS,
+      -MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS,
+      MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS
+    ),
+    tiltZRadians: resolveBoundedNumber(
+      belt?.tiltZRadians,
+      DEFAULT_BELT_TILT_Z_RADIANS,
+      -MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS,
+      MAXIMUM_BELT_TILT_MAGNITUDE_RADIANS
+    )
+  };
+}
 
 /**
  * The belt's named hero rock: NASA's radar shape model of asteroid Bennu
@@ -133,13 +200,30 @@ function gaussianSample(random: () => number): number {
   return Math.sqrt(-2 * Math.log(uniformA)) * Math.cos(2 * Math.PI * uniformB);
 }
 
+/**
+ * Resolves the stored belt section before any hook runs, so a world that
+ * rolled "no belt" (schemaVersion 1.2, enabled: false) can skip the whole
+ * subtree — including the Bennu hero rock, which belongs to the belt.
+ */
 export function AsteroidBelt({ scene, seed }: AsteroidBeltProps) {
+  const beltConfig = resolveBeltConfig(scene.belt);
+  if (!beltConfig.enabled) {
+    return null;
+  }
+  return <SeededAsteroidBelt scene={scene} seed={seed} beltConfig={beltConfig} />;
+}
+
+type SeededAsteroidBeltProps = AsteroidBeltProps & {
+  beltConfig: ResolvedBeltConfig;
+};
+
+function SeededAsteroidBelt({ scene, seed, beltConfig }: SeededAsteroidBeltProps) {
   const planets = planetsFromScene(scene);
   const outermostOrbitRadius = planets.reduce(
     (maximumRadius, planet, planetIndex) => Math.max(maximumRadius, orbitRadiusForPlanet(planet, planetIndex)),
     FIRST_PLANET_ORBIT_RADIUS
   );
-  const beltRadius = outermostOrbitRadius + BELT_GAP_BEYOND_LAST_ORBIT;
+  const beltRadius = outermostOrbitRadius + beltConfig.gapBeyondLastOrbit;
 
   const rockGeometries = useMemo(
     () =>
@@ -155,13 +239,14 @@ export function AsteroidBelt({ scene, seed }: AsteroidBeltProps) {
   const instancedMeshReferences = useRef<(InstancedMesh | null)[]>([]);
   const beltGroupReference = useRef<Group>(null);
 
-  // Seeded placement, written once per (seed, beltRadius) into the instance buffers.
+  // Seeded placement, written once per (seed, beltRadius, belt config) into
+  // the instance buffers.
   useEffect(() => {
     const random = randomFromSeed(`${seed}-asteroid-belt`);
     const placementProxy = new Object3D();
     const instanceColor = new Color();
-    const baseColor = new Color(ASTEROID_BASE_COLOR);
-    const instancesPerVariant = Math.floor(ASTEROID_INSTANCE_COUNT / ROCK_GEOMETRY_VARIANT_COUNT);
+    const baseColor = new Color(beltConfig.rockColor);
+    const instancesPerVariant = Math.floor(beltConfig.instanceCount / ROCK_GEOMETRY_VARIANT_COUNT);
     for (let variantIndex = 0; variantIndex < ROCK_GEOMETRY_VARIANT_COUNT; variantIndex += 1) {
       const instancedMesh = instancedMeshReferences.current[variantIndex];
       if (!instancedMesh) {
@@ -190,7 +275,7 @@ export function AsteroidBelt({ scene, seed }: AsteroidBeltProps) {
         instancedMesh.instanceColor.needsUpdate = true;
       }
     }
-  }, [seed, beltRadius, rockGeometries]);
+  }, [seed, beltRadius, rockGeometries, beltConfig.instanceCount, beltConfig.rockColor]);
 
   useFrame((_, deltaSeconds) => {
     if (beltGroupReference.current) {
@@ -198,14 +283,14 @@ export function AsteroidBelt({ scene, seed }: AsteroidBeltProps) {
     }
   });
 
-  const instancesPerVariant = Math.floor(ASTEROID_INSTANCE_COUNT / ROCK_GEOMETRY_VARIANT_COUNT);
+  const instancesPerVariant = Math.floor(beltConfig.instanceCount / ROCK_GEOMETRY_VARIANT_COUNT);
 
   return (
-    <group ref={beltGroupReference} rotation={BELT_TILT_RADIANS}>
+    <group ref={beltGroupReference} rotation={[beltConfig.tiltXRadians, 0, beltConfig.tiltZRadians]}>
       {rockGeometries.map((geometry, variantIndex) => (
         <instancedMesh
           // eslint-disable-next-line react/no-array-index-key -- variants are stable, index IS the identity
-          key={`${seed}-belt-variant-${variantIndex}`}
+          key={`${seed}-belt-variant-${variantIndex}-${beltConfig.instanceCount}`}
           ref={(instancedMesh) => {
             instancedMeshReferences.current[variantIndex] = instancedMesh;
           }}

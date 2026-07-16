@@ -7,9 +7,10 @@ import (
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/seed"
 )
 
-// Bumped to 1.1 when the sky section was added (additive change; older configs
-// without sky stay valid and the frontend falls back to built-in sky defaults).
-const sceneConfigSchemaVersion = "1.1"
+// 1.1 added the sky section; 1.2 added the scene diversity sections (belt,
+// comets, sun, postFX grade). Both bumps are additive: older configs without
+// the new keys stay valid and the frontend falls back to built-in defaults.
+const sceneConfigSchemaVersion = "1.2"
 
 type WorldConfigBuilder struct{}
 
@@ -71,11 +72,18 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 		},
 		PostFX: models.PostFXConfig{
 			BloomIntensity: round(clampFloat((0.3+rng.Float64()*1.1)*moodProfile.BloomMultiplier, minimumBloomIntensity, maximumBloomIntensity)),
+			// The grade is a per-theme table lookup (no PRNG draw), promoted
+			// into stored data in schemaVersion 1.2.
+			Grade: buildPostFXGradeConfig(input.DNA.VisualHints.Theme),
 		},
 		HUD: models.HUDConfig{ShowTraitBars: true, ShowLabels: true},
-		// Sky draws from its own seed-derived PRNG stream (see buildSkyConfig),
-		// so adding it did not shift any of the draws above.
-		Sky: buildSkyConfig(input, moodProfile),
+		// Sky, belt, comets and sun each draw from their own seed-derived PRNG
+		// stream (see buildSkyConfig / diversity_scene_profile.go), so adding
+		// them did not shift any of the draws above.
+		Sky:    buildSkyConfig(input, moodProfile),
+		Belt:   buildBeltConfig(input, moodProfile),
+		Comets: buildCometsConfig(input),
+		Sun:    buildSunConfig(input),
 	}
 	for i, planet := range input.DNA.Planets {
 		color := secondary
