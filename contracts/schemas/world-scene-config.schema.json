@@ -4,6 +4,32 @@
   "type": "object",
   "required": ["schemaVersion", "sceneName", "archetype", "quote", "theme", "palette", "core", "planets", "particles", "camera", "postFX", "hud"],
   "properties": {
+    "postFX": {
+      "type": "object",
+      "required": ["bloomIntensity"],
+      "properties": {
+        "grade": {
+          "type": "object",
+          "description": "Per-world color grade (hue/saturation/brightness/contrast), promoted from the frontend's per-theme table in schemaVersion 1.2. Deliberately NOT required — configs stored before 1.2 have no grade key and renderers fall back to the built-in theme grade table.",
+          "required": ["hueRadians", "saturation", "brightness", "contrast"]
+        }
+      }
+    },
+    "belt": {
+      "type": "object",
+      "description": "Procedural asteroid belt parameters (presence, density, distance, rock color, plane tilt). Added in schemaVersion 1.2; deliberately NOT required — configs stored before 1.2 have no belt key and renderers fall back to built-in defaults.",
+      "required": ["enabled", "instanceCount", "gapBeyondLastOrbit", "rockColor", "tiltXRadians", "tiltZRadians"]
+    },
+    "comets": {
+      "type": "object",
+      "description": "Seeded comet population (count 0-3 and tail length multiplier). Added in schemaVersion 1.2; deliberately NOT required — configs stored before 1.2 have no comets key and renderers fall back to a single comet with a neutral tail.",
+      "required": ["count", "tailLengthMultiplier"]
+    },
+    "sun": {
+      "type": "object",
+      "description": "Central star temperature class (surface tint, glow and light colors) plus HDR surface intensity. Added in schemaVersion 1.2; deliberately NOT required — configs stored before 1.2 have no sun key and renderers fall back to the built-in warm-yellow star.",
+      "required": ["surfaceTintColor", "glowColor", "lightColor", "surfaceHdrMultiplier"]
+    },
     "sky": {
       "type": "object",
       "description": "Night-sky rendering parameters (Milky Way band + constellation figures). Added in schemaVersion 1.1; deliberately NOT required — configs stored before 1.1 have no sky key and renderers fall back to built-in defaults.",
