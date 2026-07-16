@@ -8,8 +8,12 @@ v1 "stateless composer" draft** after the owner clarified the architecture:
 > giống nhau, chỉ khác DNA thôi. Chưa có API gateway và FE đâu, cứ build
 > services thôi."
 
-Status: **approved direction, in build**. This document is the working context
-for every future session on this track — it is deliberately self-contained.
+Status: **BE rounds shipped, awaiting deploy**. N1 merged (PR #63, commit
+`22aca0b`); vision docs merged (PR #62); N2 (own database + Render deploy
+files) and N3 (contract schema + golden fixtures) live on branch
+`feat/be/nature-service-be-rounds` — one branch for all remaining BE work, per
+owner request. This document is the working context for every future session
+on this track — it is deliberately self-contained.
 
 ---
 
@@ -32,10 +36,18 @@ for every future session on this track — it is deliberately self-contained.
 - **Độ đẹp ưu tiên #1:** model GLB CC0 trên mạng (Quaternius/Kenney/Poly
   Haven), tự host, nén Draco; HDRI lighting, golden-hour bias, grade màu theo
   mùa.
-- **Thứ tự:** N1 build cả pipeline trên memory store (đang làm) → N2 DB riêng
-  (Neon database riêng + goose migrations + deploy Render) → N3 contract JSON +
-  golden fixtures + swagger → N4 AI thật (Gemini/OpenAI port) → N5 curate
-  asset. FE (F1–F5) sau khi service đứng vững.
+- **Database (quyết định 2026-07-17):** owner không có kinh phí cho nhiều
+  Neon instance → dùng **chung Neon project hiện tại**, tạo thêm **một logical
+  database** bên trong (`myunivokai_nature`) — **0 đồng**, 1 click trên
+  dashboard. Cùng compute/storage quota nhưng connection string riêng, bảng
+  riêng, goose version table riêng → một migration lỗi của nature **không thể**
+  chạm vào data universe đang chạy prod. KHÔNG dùng chung bảng/schema với
+  universe.
+- **Thứ tự:** N1 pipeline trên memory store (**xong**, PR #63) → N2 DB riêng +
+  goose + deploy files (**xong**, branch `feat/be/nature-service-be-rounds`) →
+  N3 contract JSON + golden fixtures (**xong**, cùng branch; swagger dời sang
+  round polish sau) → N4 AI thật (dời lại — owner: "cứ random như universe
+  service") → N5 curate asset. FE (F1–F5) sau khi service đứng vững.
 
 ---
 
@@ -45,6 +57,7 @@ for every future session on this track — it is deliberately self-contained.
 | --- | --- |
 | 2026-07-16 (1) | Microservices immediately; forest scenery is the second family; Go backend first; beauty-first CC0 assets; gateway stays far-future. |
 | 2026-07-16 (2) | **Architecture correction:** `nature-service` (not `scene-nature-service`) is a **full peer** of universe-service — same mechanism end-to-end (AI DNA → seeded builder → store → share), only the DNA layer differs. NOT a stateless compose endpoint; universe-service is not modified at all. No gateway and no FE work yet. |
+| 2026-07-17 (3) | **One branch for all BE work** (`feat/be/nature-service-be-rounds`), pushed before any FE work. **Database:** no budget for extra Neon instances → share the existing Neon project and create a second **logical database** (`myunivokai_nature`) inside it — zero cost, own connection string/tables/goose state, zero blast radius into the production universe data. Never share tables or a schema with universe-service. |
 
 Consequences vs. the old D1–D5 decision set:
 
@@ -286,10 +299,10 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 
 | Round | Branch | Content | Done when |
 | --- | --- | --- | --- |
-| **N1** (in build) | `feat/be/nature-service-scaffold` | The whole pipeline on the memory store: config/middleware/handlers + NatureDNA + mock provider + orchestrator + forest profile & builder + worlds/variants/share API + tests + CI job. No deploy yet (memory store must not reach production — same guard as universe). | Gates green; `curl` end-to-end locally: create → get → regenerate → select → publish → share |
-| **N2** | `feat/be/nature-db-and-deploy` | Own Neon database (same project, separate database + connection string), goose migrations (worlds, world_variants, ai_generations — same DDL shapes), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry, deploy | Deployed on Render; created forest world survives restart; universe untouched |
-| **N3** | `feat/be/nature-contract-and-docs` | `contracts/scenes/forest.schema.json`, golden fixtures in testdata, swagger (swag init parity), service README | Fixtures validate against the schema; swagger gated off in production |
-| **N4** | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
+| **N1** ✅ | `feat/be/nature-service-scaffold` (merged, PR #63, `22aca0b`) | The whole pipeline on the memory store: config/middleware/handlers + NatureDNA + mock provider + orchestrator + forest profile & builder + worlds/variants/share API + tests + CI job | Gates green; smoke-tested end-to-end locally |
+| **N2** ✅ | `feat/be/nature-service-be-rounds` | Own **logical** Neon database (second database inside the existing Neon project — zero cost, owner decision 2026-07-17), goose migrations (worlds/world_variants/ai_generations, `nature_dna` column), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry | Gates green. Deploy checklist: create database `myunivokai_nature` in the Neon dashboard → apply render.yaml (new service `myunivokai-nature`) → paste DATABASE_URL/DATABASE_DIRECT_URL (dbname `myunivokai_nature`) + API_ALLOWED_ORIGINS + PUBLIC_WEB_URL → verify `/api/v1/healthz`, create a world, restart, world survives |
+| **N3** ✅ (partial) | `feat/be/nature-service-be-rounds` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`). Swagger parity deferred to a later polish round | Golden test green; a byte-diff for an existing seed fails CI |
+| **N4** (deferred) | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys. Deferred — owner: "cứ random như universe service" (universe prod also runs mock today) | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
 | **N5** | `feat/fe/nature-asset-pipeline` | Download/optimize/self-host GLB + HDRI + textures; ATTRIBUTION.md; finalize the key catalog; budget audit | Every catalog key resolves to a file within budget; licenses recorded |
 | **F1–F5** | (after BE) | FE: sceneType registry → ForestRenderer MVP (terrain/trees/wind/HDRI/landmark POIs) → seasons+weather+particles → wildlife → preview mirror + create-form family picker calling nature-service's base URL | Standard FE gates per round |
 | **G** | (unchanged) | api-gateway per [api-gateway.md](api-gateway.md): path-prefix routing to both services | Trigger unchanged: auth-service or when one public origin matters |
