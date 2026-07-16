@@ -1,6 +1,8 @@
 // Package config mirrors universe-service's config loader, trimmed to what
-// nature-service needs today: no database settings until the persistence
-// round, and no real AI provider keys until the real-AI round.
+// nature-service needs today: no real AI provider keys until the real-AI
+// round. DATABASE_URL must point to nature-service's OWN logical database —
+// a second database inside the same Neon project as universe-service (zero
+// extra cost), never the universe database itself.
 package config
 
 import (
@@ -13,17 +15,26 @@ import (
 )
 
 type Config struct {
-	AppEnv             string
-	AppName            string
-	PublicWebURL       string
-	PublicAPIURL       string
-	APIHost            string
-	APIPort            string
-	AllowedOrigins     []string
-	AIProvider         string
-	AIFallbackProvider string
-	AIEnableFallback   bool
-	AITimeout          time.Duration
+	AppEnv            string
+	AppName           string
+	PublicWebURL      string
+	PublicAPIURL      string
+	APIHost           string
+	APIPort           string
+	AllowedOrigins    []string
+	DatabaseURL       string
+	DatabaseDirectURL string
+	// Pool sizing. Neon's pooler prefers short-lived connections, so the
+	// lifetime defaults stay conservative — and the compute endpoint is shared
+	// with universe-service (same Neon project), so stay modest.
+	DatabaseMaxConns        int
+	DatabaseMinConns        int
+	DatabaseMaxConnLifetime time.Duration
+	DatabaseMaxConnIdleTime time.Duration
+	AIProvider              string
+	AIFallbackProvider      string
+	AIEnableFallback        bool
+	AITimeout               time.Duration
 	// AITotalBudget caps one whole DNA generation (all repair retries and the
 	// fallback provider combined); AITimeout caps each individual call.
 	AITotalBudget   time.Duration
@@ -58,12 +69,18 @@ func Load() Config {
 		// API_PORT wins locally; PORT is the platform-injected port on
 		// Render/Heroku-style hosts, so an unconfigured deploy still binds
 		// where the platform routes traffic.
-		APIPort:            getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
-		AllowedOrigins:     split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
-		AIProvider:         get("AI_PROVIDER", "mock"),
-		AIFallbackProvider: get("AI_FALLBACK_PROVIDER", "mock"),
-		AIEnableFallback:   getBool("AI_ENABLE_FALLBACK", true),
-		AITimeout:          time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
+		APIPort:                 getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
+		AllowedOrigins:          split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
+		DatabaseURL:             get("DATABASE_URL", ""),
+		DatabaseDirectURL:       get("DATABASE_DIRECT_URL", ""),
+		DatabaseMaxConns:        getInt("DATABASE_MAX_CONNS", 10),
+		DatabaseMinConns:        getInt("DATABASE_MIN_CONNS", 0),
+		DatabaseMaxConnLifetime: getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
+		DatabaseMaxConnIdleTime: getDuration("DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
+		AIProvider:              get("AI_PROVIDER", "mock"),
+		AIFallbackProvider:      get("AI_FALLBACK_PROVIDER", "mock"),
+		AIEnableFallback:        getBool("AI_ENABLE_FALLBACK", true),
+		AITimeout:               time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
 		// 0 means "derive from AI_TIMEOUT_SECONDS"; resolved right below so
 		// every consumer (orchestrator, server write timeout) sees one value.
 		AITotalBudget:   getDuration("AI_TOTAL_BUDGET", 0),

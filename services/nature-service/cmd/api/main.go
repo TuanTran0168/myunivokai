@@ -10,6 +10,7 @@ import (
 
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/aifactory"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/config"
+	"github.com/myunivokai/myunivokai/services/nature-service/internal/db"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/handlers"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/repositories"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/services"
@@ -21,14 +22,27 @@ import (
 func main() {
 	zerolog.TimeFieldFormat = time.RFC3339
 	cfg := config.Load()
-	// Persistence lands in the next round (own Neon database + goose
-	// migrations, mirroring universe-service). Until then the in-memory store
-	// must never reach production: every forest world would vanish on restart
-	// while readiness stays green.
-	if cfg.IsProduction() {
-		log.Fatal().Msg("nature-service has no database yet; refusing to start with the in-memory store in production")
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("connect database")
 	}
-	store := repositories.NewMemoryStore()
+	if pool != nil {
+		defer pool.Close()
+	}
+	var store repositories.Store
+	if pool == nil {
+		// In production a silent in-memory fallback would mean every forest
+		// world vanishes on restart/scale with readiness still green — fail
+		// fast so the misconfiguration is caught at deploy time instead.
+		if cfg.IsProduction() {
+			log.Fatal().Msg("DATABASE_URL must be set in production; refusing to start with the in-memory store")
+		}
+		log.Warn().Msg("DATABASE_URL is empty; using in-memory store")
+		store = repositories.NewMemoryStore()
+	} else {
+		store = repositories.NewPostgresStore(pool)
+	}
 	orchestrator, err := aifactory.NewOrchestratorFromConfig(cfg, validation.ValidateNatureDNA)
 	if err != nil {
 		log.Fatal().Err(err).Msg("configure ai")
