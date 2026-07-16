@@ -33,6 +33,25 @@ jobs:
       - name: Test
         run: go test ./...
 
+  nature-service-checks:
+    name: Nature service (go vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/nature-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/nature-service/go.mod
+          cache-dependency-path: services/nature-service/go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
   frontend-checks:
     name: Frontend (typecheck + lint + test + build)
     runs-on: ubuntu-latest

@@ -26,11 +26,21 @@ Part of the [vision folder](README.md).
 | 2 | `feat/be/extract-scene-services` | Extract city+nature into services, compose contract, embedded/remote flag, blueprint entries | Prod works in remote mode; rollback = flip env to embedded |
 | 3 | `feat/be/api-gateway` | Go gateway (see [api-gateway.md](api-gateway.md)), middleware moves up, services shed CORS/rate-limit | One public origin; statusz aggregates; FE needs zero changes |
 
+> **Amended 2026-07-16 (owner decision):** the nature family does not follow
+> this table at all — it is born as `nature-service`, a **full peer** of
+> universe-service (same mechanism, forest DNA), per the rounds **N1–N5 /
+> F1–F5** in [nature-service-plan.md](nature-service-plan.md). Rows 1a/1c/1d/2
+> (registry, monolith families, extraction) apply only to families that would
+> start inside universe-service; row 3 (gateway) keeps its trigger unchanged
+> and will route by path prefix across the two peer services.
+
 ## Phase triggers (approve as policy)
 
 - **Enter Phase 2** only when BOTH: two+ families live in the monolith AND
   (a family's deploy cadence conflicts with world-service, or compose load is
-  measurable). Not before.
+  measurable). Not before. *(Amended 2026-07-16: the nature family is a peer
+  service by owner decision — this trigger now governs only families that
+  start in the monolith.)*
 - **Enter Phase 3** when auth-service (or any second public service) is real.
 - **Rust port** of a scene service only on the trigger in the
   [backend plan](backend-plan.md): p95 compose > 50 ms or baked binary assets.
