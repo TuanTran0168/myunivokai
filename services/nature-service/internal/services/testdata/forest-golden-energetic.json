@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "1.0",
+  "sceneType": "forest",
+  "sceneName": "The Amberfall Sanctuary",
+  "archetype": "Grove Keeper",
+  "quote": "I tend what matters and let the rest fall.",
+  "theme": "aurora",
+  "palette": {
+    "background": "#0B120D",
+    "primary": "#8B5CF6",
+    "secondary": "#06B6D4",
+    "accent": "#FACC15",
+    "gradient": [
+      "#8B5CF6",
+      "#06B6D4",
+      "#FACC15"
+    ]
+  },
+  "season": {
+    "kind": "spring",
+    "blendTowardKind": "summer",
+    "blendAmount": 0.29,
+    "foliageColors": [
+      "#89C97C",
+      "#B7DFA1",
+      "#F7C9DD"
+    ],
+    "groundKind": "grass"
+  },
+  "lighting": {
+    "timeOfDay": "goldenHour",
+    "sunElevationRadians": 0.38,
+    "sunAzimuthRadians": 4.19,
+    "sunColor": "#FFD9A0",
+    "ambientColor": "#8A93A8",
+    "hdriKey": "nature-hdri-golden-hour",
+    "exposure": 1,
+    "fogColor": "#BCC9B4",
+    "fogDensity": 0.023
+  },
+  "terrain": {
+    "placementSeed": "NAT-GOLDEN-ENERGETIC-forest-terrain-scatter",
+    "clearingRadius": 9.37,
+    "treelineRadius": 39.35,
+    "hillAmplitude": 1.57,
+    "hillFrequency": 0.066,
+    "pathEnabled": true,
+    "rockCount": 8,
+    "grassTuftCountDesktop": 860,
+    "grassTuftCountMobile": 301
+  },
+  "trees": {
+    "placementSeed": "NAT-GOLDEN-ENERGETIC-forest-tree-placement",
+    "countDesktop": 164,
+    "countMobile": 65,
+    "speciesMix": [
+      {
+        "modelKey": "tree-oak",
+        "weight": 0.45
+      },
+      {
+        "modelKey": "tree-birch",
+        "weight": 0.3
+      },
+      {
+        "modelKey": "tree-blossom",
+        "weight": 0.25
+      }
+    ],
+    "scaleMin": 0.86,
+    "scaleMax": 1.47,
+    "foliageTintStrength": 0.69,
+    "windStrength": 0.51,
+    "windDirectionRadians": 3.03,
+    "windGustFrequency": 0.44
+  },
+  "weather": {
+    "kind": "clear",
+    "intensity": 0.83,
+    "cloudCoverage": 0.13,
+    "rainDropCountDesktop": 0,
+    "rainDropCountMobile": 0,
+    "snowflakeCountDesktop": 0,
+    "snowflakeCountMobile": 0
+  },
+  "wildlife": {
+    "groundAnimals": [
+      {
+        "modelKey": "animal-deer",
+        "count": 2,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-0",
+        "walkSpeed": 0.35,
+        "scale": 1.1
+      },
+      {
+        "modelKey": "animal-rabbit",
+        "count": 2,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-1",
+        "walkSpeed": 0.35,
+        "scale": 1.07
+      },
+      {
+        "modelKey": "animal-fox",
+        "count": 2,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-2",
+        "walkSpeed": 0.45,
+        "scale": 1.07
+      }
+    ],
+    "birdFlocks": [
+      {
+        "modelKey": "bird-forest",
+        "birdCount": 7,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-birds-0",
+        "altitudeMin": 12.69,
+        "altitudeMax": 20.97,
+        "flightSpeed": 0.62,
+        "pattern": "crossing"
+      },
+      {
+        "modelKey": "bird-forest",
+        "birdCount": 4,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-birds-1",
+        "altitudeMin": 14.03,
+        "altitudeMax": 21.8,
+        "flightSpeed": 0.74,
+        "pattern": "circling"
+      }
+    ]
+  },
+  "ambientParticles": {
+    "fallingLeafCount": 0,
+    "blossomPetalCount": 174,
+    "fireflyCount": 0,
+    "snowDustCount": 0
+  },
+  "landmarks": [
+    {
+      "key": "landmark-1",
+      "name": "Landmark 1",
+      "meaning": "A meaningful place in the forest.",
+      "kind": "heartTree",
+      "angleRadians": 0.03,
+      "radiusFromCenter": 8.08,
+      "accentColor": "#06B6D4",
+      "energy": 60
+    },
+    {
+      "key": "landmark-2",
+      "name": "Landmark 2",
+      "meaning": "A meaningful place in the forest.",
+      "kind": "fallenLog",
+      "angleRadians": 1.55,
+      "radiusFromCenter": 8.03,
+      "accentColor": "#FACC15",
+      "energy": 65
+    },
+    {
+      "key": "landmark-3",
+      "name": "Landmark 3",
+      "meaning": "A meaningful place in the forest.",
+      "kind": "pond",
+      "angleRadians": 3.22,
+      "radiusFromCenter": 7.29,
+      "accentColor": "#8B5CF6",
+      "energy": 70
+    },
+    {
+      "key": "landmark-4",
+      "name": "Landmark 4",
+      "meaning": "A meaningful place in the forest.",
+      "kind": "flowerPatch",
+      "angleRadians": 4.47,
+      "radiusFromCenter": 6.96,
+      "accentColor": "#06B6D4",
+      "energy": 75
+    }
+  ],
+  "camera": {
+    "distance": 15.89,
+    "fov": 50
+  },
+  "postFX": {
+    "bloomIntensity": 0.64,
+    "grade": {
+      "hueRadians": 0.01,
+      "saturation": 0.1,
+      "brightness": 0.03,
+      "contrast": 0.04
+    }
+  },
+  "hud": {
+    "showTraitBars": true,
+    "showLabels": true
+  },
+  "assets": {
+    "catalogVersion": "nature-1",
+    "modelKeys": [
+      "tree-oak",
+      "tree-birch",
+      "tree-blossom",
+      "rock-mossy",
+      "animal-deer",
+      "animal-rabbit",
+      "animal-fox",
+      "bird-forest",
+      "landmark-heart-tree",
+      "landmark-fallen-log",
+      "landmark-pond",
+      "landmark-flower-patch"
+    ],
+    "hdriKey": "nature-hdri-golden-hour"
+  }
+}

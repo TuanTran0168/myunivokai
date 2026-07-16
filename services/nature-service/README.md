@@ -16,9 +16,27 @@ seed-derived PRNG streams inside named-constant bounds — same seed, same
 forest, and regenerating a variant never calls AI.
 
 Plan and roadmap: `notes/vision/nature-service-plan.md` (rounds N1–N5).
-This is round **N1**: the whole pipeline on an in-memory store. Persistence
-(own Neon database + goose migrations) and the Render deploy are round N2 —
-until then the service refuses to start with `APP_ENV=production`.
+Rounds N1–N3 are code-complete: the whole pipeline, persistence (goose
+migrations + postgres store), Render deploy files, the contract schema
+(`contracts/scenes/forest-scene-config.schema.json`) and golden fixtures.
+Without `DATABASE_URL` the service runs on an in-memory store (development
+only — production start is refused, same guard as universe-service).
+
+## Database (zero extra cost)
+
+nature-service owns its own **logical database inside the same Neon project**
+as universe-service — creating a second database costs nothing and keeps the
+production universe data completely out of this service's blast radius:
+
+1. Neon dashboard → the existing project → Databases → create
+   `myunivokai_nature`.
+2. Set `DATABASE_URL` (pooled) and `DATABASE_DIRECT_URL` (direct) with dbname
+   `myunivokai_nature`, `sslmode=require`.
+3. Migrations run via `go run ./cmd/migrate` locally, or automatically on
+   Render with `RUN_MIGRATIONS_ON_START=true` (see `Dockerfile.render`).
+
+Never point these URLs at the universe database — the init migration would
+fail immediately (its tables already exist there), by design.
 
 ## Run locally
 

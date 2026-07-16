@@ -40,3 +40,38 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+
+  # nature-service: the forest world API, a full peer of myunivokai-api.
+  # Its DATABASE_URL/DATABASE_DIRECT_URL must point at nature-service's OWN
+  # logical database (e.g. myunivokai_nature) created inside the SAME Neon
+  # project as the universe database — a second database costs nothing and
+  # keeps the deployed universe data out of this service's blast radius.
+  - type: web
+    name: myunivokai-nature
+    runtime: docker
+    rootDir: services/nature-service
+    dockerfilePath: ./Dockerfile.render
+    plan: free
+    healthCheckPath: /api/v1/healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      # mock is the only wired provider until the real-AI round.
+      - key: AI_PROVIDER
+        value: mock
+      - key: AI_FALLBACK_PROVIDER
+        value: mock
+      # Neon POOLED url (runtime) and DIRECT url (migrations) of the dedicated
+      # nature database, sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: API_ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false

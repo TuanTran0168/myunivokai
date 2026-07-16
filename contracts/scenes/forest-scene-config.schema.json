@@ -1,0 +1,246 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://myunivokai.com/contracts/scenes/forest-scene-config.schema.json",
+  "title": "ForestSceneConfig",
+  "description": "Scene contract for the forest family, produced by nature-service (sceneType 'forest', schemaVersion '1.0'). Renderers are keyed by (sceneType, schemaVersion). Only semantic and hero placements are stored; mass scatter (trees, grass, particles, paths) is derived frontend-side from the placement/path seeds embedded here. Golden fixtures in services/nature-service/internal/services/testdata are the executable form of this contract.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sceneType",
+    "sceneName",
+    "archetype",
+    "quote",
+    "theme",
+    "palette",
+    "season",
+    "lighting",
+    "terrain",
+    "trees",
+    "weather",
+    "wildlife",
+    "ambientParticles",
+    "landmarks",
+    "camera",
+    "postFX",
+    "hud",
+    "assets"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "sceneType": { "const": "forest" },
+    "sceneName": { "type": "string" },
+    "archetype": { "type": "string" },
+    "quote": { "type": "string" },
+    "theme": { "type": "string" },
+    "palette": {
+      "type": "object",
+      "required": ["background", "primary", "secondary", "accent", "gradient"],
+      "properties": {
+        "background": { "$ref": "#/definitions/hexColor" },
+        "primary": { "$ref": "#/definitions/hexColor" },
+        "secondary": { "$ref": "#/definitions/hexColor" },
+        "accent": { "$ref": "#/definitions/hexColor" },
+        "gradient": { "type": "array", "items": { "$ref": "#/definitions/hexColor" } }
+      }
+    },
+    "season": {
+      "type": "object",
+      "description": "blendTowardKind/blendAmount model the transitional season (giao mua): the renderer lerps tint, ground and particle counts toward the adjacent season by blendAmount.",
+      "required": ["kind", "foliageColors", "groundKind"],
+      "properties": {
+        "kind": { "enum": ["spring", "summer", "autumn", "winter"] },
+        "blendTowardKind": { "enum": ["spring", "summer", "autumn", "winter"] },
+        "blendAmount": { "type": "number", "minimum": 0.2, "maximum": 0.6 },
+        "foliageColors": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/definitions/hexColor" } },
+        "groundKind": { "enum": ["grass", "leafLitter", "snow"] }
+      }
+    },
+    "lighting": {
+      "type": "object",
+      "required": ["timeOfDay", "sunElevationRadians", "sunAzimuthRadians", "sunColor", "ambientColor", "hdriKey", "exposure", "fogColor", "fogDensity"],
+      "properties": {
+        "timeOfDay": { "enum": ["day", "goldenHour", "dusk"] },
+        "sunElevationRadians": { "type": "number", "minimum": 0.12, "maximum": 1.1 },
+        "sunAzimuthRadians": { "type": "number", "minimum": 0, "maximum": 6.29 },
+        "sunColor": { "$ref": "#/definitions/hexColor" },
+        "ambientColor": { "$ref": "#/definitions/hexColor" },
+        "hdriKey": { "type": "string" },
+        "exposure": { "type": "number", "minimum": 0.95, "maximum": 1.15 },
+        "fogColor": { "$ref": "#/definitions/hexColor" },
+        "fogDensity": { "type": "number", "minimum": 0, "maximum": 0.028 }
+      }
+    },
+    "terrain": {
+      "type": "object",
+      "required": ["placementSeed", "clearingRadius", "treelineRadius", "hillAmplitude", "hillFrequency", "pathEnabled", "rockCount", "grassTuftCountDesktop", "grassTuftCountMobile"],
+      "properties": {
+        "placementSeed": { "type": "string" },
+        "clearingRadius": { "type": "number", "minimum": 8, "maximum": 11 },
+        "treelineRadius": { "type": "number", "minimum": 33, "maximum": 46.5 },
+        "hillAmplitude": { "type": "number", "minimum": 0.8, "maximum": 2.2 },
+        "hillFrequency": { "type": "number", "minimum": 0.03, "maximum": 0.07 },
+        "pathEnabled": { "type": "boolean" },
+        "rockCount": { "type": "integer", "minimum": 8, "maximum": 19 },
+        "grassTuftCountDesktop": { "type": "integer", "minimum": 600, "maximum": 1200 },
+        "grassTuftCountMobile": { "type": "integer", "minimum": 0, "maximum": 1200 }
+      }
+    },
+    "trees": {
+      "type": "object",
+      "required": ["placementSeed", "countDesktop", "countMobile", "speciesMix", "scaleMin", "scaleMax", "foliageTintStrength", "windStrength", "windDirectionRadians", "windGustFrequency"],
+      "properties": {
+        "placementSeed": { "type": "string" },
+        "countDesktop": { "type": "integer", "minimum": 120, "maximum": 320 },
+        "countMobile": { "type": "integer", "minimum": 0, "maximum": 320 },
+        "speciesMix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["modelKey", "weight"],
+            "properties": {
+              "modelKey": { "enum": ["tree-birch", "tree-oak", "tree-pine", "tree-pine-snow", "tree-dead", "tree-blossom"] },
+              "weight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "scaleMin": { "type": "number", "minimum": 0.75, "maximum": 0.9 },
+        "scaleMax": { "type": "number", "minimum": 1.3, "maximum": 1.6 },
+        "foliageTintStrength": { "type": "number", "minimum": 0.5, "maximum": 0.85 },
+        "windStrength": { "type": "number", "minimum": 0.1, "maximum": 1 },
+        "windDirectionRadians": { "type": "number", "minimum": 0, "maximum": 6.29 },
+        "windGustFrequency": { "type": "number", "minimum": 0.2, "maximum": 0.5 }
+      }
+    },
+    "weather": {
+      "type": "object",
+      "description": "Snow only appears in winter; rain never does. Particle counts are zero unless kind matches.",
+      "required": ["kind", "intensity", "cloudCoverage", "rainDropCountDesktop", "rainDropCountMobile", "snowflakeCountDesktop", "snowflakeCountMobile"],
+      "properties": {
+        "kind": { "enum": ["clear", "sunRays", "overcast", "rain", "snow"] },
+        "intensity": { "type": "number", "minimum": 0.3, "maximum": 0.9 },
+        "cloudCoverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rainDropCountDesktop": { "type": "integer", "minimum": 0, "maximum": 6600 },
+        "rainDropCountMobile": { "type": "integer", "minimum": 0, "maximum": 2000 },
+        "snowflakeCountDesktop": { "type": "integer", "minimum": 0, "maximum": 3750 },
+        "snowflakeCountMobile": { "type": "integer", "minimum": 0, "maximum": 1200 }
+      }
+    },
+    "wildlife": {
+      "type": "object",
+      "required": ["groundAnimals", "birdFlocks"],
+      "properties": {
+        "groundAnimals": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["modelKey", "count", "pathSeed", "walkSpeed", "scale"],
+            "properties": {
+              "modelKey": { "enum": ["animal-deer", "animal-fox", "animal-rabbit", "animal-boar", "animal-wolf"] },
+              "count": { "type": "integer", "minimum": 1, "maximum": 2 },
+              "pathSeed": { "type": "string" },
+              "walkSpeed": { "type": "number", "minimum": 0.35, "maximum": 0.75 },
+              "scale": { "type": "number", "minimum": 0.85, "maximum": 1.1 }
+            }
+          }
+        },
+        "birdFlocks": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["modelKey", "birdCount", "pathSeed", "altitudeMin", "altitudeMax", "flightSpeed", "pattern"],
+            "properties": {
+              "modelKey": { "const": "bird-forest" },
+              "birdCount": { "type": "integer", "minimum": 3, "maximum": 7 },
+              "pathSeed": { "type": "string" },
+              "altitudeMin": { "type": "number", "minimum": 12, "maximum": 18 },
+              "altitudeMax": { "type": "number", "minimum": 16, "maximum": 28 },
+              "flightSpeed": { "type": "number", "minimum": 0.4, "maximum": 0.8 },
+              "pattern": { "enum": ["circling", "crossing"] }
+            }
+          }
+        }
+      }
+    },
+    "ambientParticles": {
+      "type": "object",
+      "description": "At most one seasonal system is non-zero: falling leaves in autumn, blossom petals in spring, fireflies on summer dusks, snow dust in winter (weather snowfall is separate).",
+      "required": ["fallingLeafCount", "blossomPetalCount", "fireflyCount", "snowDustCount"],
+      "properties": {
+        "fallingLeafCount": { "type": "integer", "minimum": 0, "maximum": 360 },
+        "blossomPetalCount": { "type": "integer", "minimum": 0, "maximum": 240 },
+        "fireflyCount": { "type": "integer", "minimum": 0, "maximum": 80 },
+        "snowDustCount": { "type": "integer", "minimum": 0, "maximum": 200 }
+      }
+    },
+    "landmarks": {
+      "type": "array",
+      "description": "One per Nature DNA landmark — the clickable POI layer. The first is always the heart tree. Placement is polar around the clearing center.",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["key", "name", "meaning", "kind", "angleRadians", "radiusFromCenter", "accentColor", "energy"],
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "meaning": { "type": "string" },
+          "kind": { "enum": ["heartTree", "standingStone", "pond", "flowerPatch", "fallenLog", "lanternShrine"] },
+          "angleRadians": { "type": "number", "minimum": -0.3, "maximum": 6.6 },
+          "radiusFromCenter": { "type": "number", "minimum": 4.3, "maximum": 10 },
+          "accentColor": { "$ref": "#/definitions/hexColor" },
+          "energy": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "required": ["distance", "fov"],
+      "properties": {
+        "distance": { "type": "number", "minimum": 14, "maximum": 20 },
+        "fov": { "const": 50 }
+      }
+    },
+    "postFX": {
+      "type": "object",
+      "required": ["bloomIntensity", "grade"],
+      "properties": {
+        "bloomIntensity": { "type": "number", "minimum": 0.2, "maximum": 1.2 },
+        "grade": {
+          "type": "object",
+          "description": "Per-season color grade (table lookup, no PRNG draw).",
+          "required": ["hueRadians", "saturation", "brightness", "contrast"],
+          "properties": {
+            "hueRadians": { "type": "number" },
+            "saturation": { "type": "number" },
+            "brightness": { "type": "number" },
+            "contrast": { "type": "number" }
+          }
+        }
+      }
+    },
+    "hud": {
+      "type": "object",
+      "required": ["showTraitBars", "showLabels"],
+      "properties": {
+        "showTraitBars": { "type": "boolean" },
+        "showLabels": { "type": "boolean" }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "Every GLB key the config references, in first-use order, plus the catalog version that resolves them. The frontend asset catalog (asset round) must provide a self-hosted file per key.",
+      "required": ["catalogVersion", "modelKeys", "hdriKey"],
+      "properties": {
+        "catalogVersion": { "const": "nature-1" },
+        "modelKeys": { "type": "array", "items": { "type": "string" } },
+        "hdriKey": { "enum": ["nature-hdri-day", "nature-hdri-golden-hour", "nature-hdri-dusk"] }
+      }
+    }
+  },
+  "definitions": {
+    "hexColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+  }
+}
