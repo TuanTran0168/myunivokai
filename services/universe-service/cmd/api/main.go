@@ -27,6 +27,9 @@ import (
 func main() {
 	zerolog.TimeFieldFormat = time.RFC3339
 	cfg := config.Load()
+	if err := cfg.ValidateProductionGatewayAccess(); err != nil {
+		log.Fatal().Err(err).Msg("validate gateway access")
+	}
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, cfg)
 	if err != nil {

@@ -6,6 +6,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -15,15 +16,15 @@ import (
 )
 
 type Config struct {
-	AppEnv            string
-	AppName           string
-	PublicWebURL      string
-	PublicAPIURL      string
-	APIHost           string
-	APIPort           string
-	AllowedOrigins    []string
-	DatabaseURL       string
-	DatabaseDirectURL string
+	AppEnv              string
+	AppName             string
+	PublicWebURL        string
+	PublicAPIURL        string
+	APIHost             string
+	APIPort             string
+	GatewaySharedSecret string
+	DatabaseURL         string
+	DatabaseDirectURL   string
 	// Pool sizing. Neon's pooler prefers short-lived connections, so the
 	// lifetime defaults stay conservative — and the compute endpoint is shared
 	// with universe-service (same Neon project), so stay modest.
@@ -40,19 +41,14 @@ type Config struct {
 	AITotalBudget   time.Duration
 	AIMaxRetries    int
 	AIPromptVersion string
-	RateLimitRPS    float64
-	RateLimitBurst  int
-	// TrustProxyHeaders declares that a trusted reverse proxy (Render, a load
-	// balancer) sits in front of the API and appends the real client address
-	// to X-Forwarded-For. Only then may rate limiting key on that header.
-	TrustProxyHeaders bool
-	ShareSlugLength   int
+	ShareSlugLength int
 }
 
 // defaultAITotalBudgetMultiplier derives the whole-generation budget from the
 // per-call timeout when AI_TOTAL_BUDGET is unset: enough for a primary call, a
 // repair retry, and the fallback, while staying under the server write timeout.
 const defaultAITotalBudgetMultiplier = 3
+const minimumGatewaySharedSecretLength = 32
 
 // defaultAPIPort deliberately differs from universe-service's 8080 so both
 // services can run side by side on one developer machine.
@@ -70,7 +66,7 @@ func Load() Config {
 		// Render/Heroku-style hosts, so an unconfigured deploy still binds
 		// where the platform routes traffic.
 		APIPort:                 getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
-		AllowedOrigins:          split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
+		GatewaySharedSecret:     strings.TrimSpace(os.Getenv("GATEWAY_SHARED_SECRET")),
 		DatabaseURL:             get("DATABASE_URL", ""),
 		DatabaseDirectURL:       get("DATABASE_DIRECT_URL", ""),
 		DatabaseMaxConns:        getInt("DATABASE_MAX_CONNS", 10),
@@ -86,12 +82,7 @@ func Load() Config {
 		AITotalBudget:   getDuration("AI_TOTAL_BUDGET", 0),
 		AIMaxRetries:    getInt("AI_MAX_RETRIES", 2),
 		AIPromptVersion: get("AI_PROMPT_VERSION", "forest-dna-v1"),
-		RateLimitRPS:    getFloat("RATE_LIMIT_RPS", 2),
-		// Burst must comfortably exceed one screen's legitimate fan-out; 20
-		// keeps abuse protection while never starving a single user's load.
-		RateLimitBurst:    getInt("RATE_LIMIT_BURST", 20),
-		TrustProxyHeaders: getBool("TRUST_PROXY", false),
-		ShareSlugLength:   getInt("SHARE_SLUG_LENGTH", 10),
+		ShareSlugLength: getInt("SHARE_SLUG_LENGTH", 10),
 	}
 	if cfg.AITotalBudget <= 0 {
 		cfg.AITotalBudget = defaultAITotalBudgetMultiplier * cfg.AITimeout
@@ -127,6 +118,15 @@ func (c Config) Addr() string {
 func (c Config) IsProduction() bool {
 	normalized := strings.ToLower(strings.TrimSpace(c.AppEnv))
 	return normalized == "production" || normalized == "prod"
+}
+
+// ValidateProductionGatewayAccess prevents a public production service from
+// starting with business routes that callers could use to bypass the gateway.
+func (c Config) ValidateProductionGatewayAccess() error {
+	if c.IsProduction() && len(c.GatewaySharedSecret) < minimumGatewaySharedSecretLength {
+		return fmt.Errorf("GATEWAY_SHARED_SECRET must contain at least %d characters in production", minimumGatewaySharedSecretLength)
+	}
+	return nil
 }
 
 func envAliases(appEnv string) []string {
@@ -195,29 +195,10 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 	return value
 }
 
-func getFloat(key string, fallback float64) float64 {
-	value, err := strconv.ParseFloat(get(key, ""), 64)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
 func getBool(key string, fallback bool) bool {
 	value := strings.ToLower(get(key, ""))
 	if value == "" {
 		return fallback
 	}
 	return value == "1" || value == "true" || value == "yes"
-}
-
-func split(value string) []string {
-	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
 }

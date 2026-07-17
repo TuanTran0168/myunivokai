@@ -1,5 +1,9 @@
 # BE Production Refactor Plan — services/universe-service
 
+> Historical universe-service refactor sequence. Its completed per-IP limiter
+> moved to `services/api-gateway` when Nature became the second public service.
+> See `notes/be/source-overview.md` for current middleware ownership.
+
 Goal: end the MVP phase. Each item is **one branch + one separate PR**, done in
 the order below (earlier items are the foundation of later ones). Every branch
 must pass `go test ./...` + `go vet ./...` and include tests for what it changes.

@@ -1,83 +1,112 @@
-# Deployment plan — from two deploys to a service fleet
+# Deployment — gateway plus two peer APIs
 
-Part of the [vision folder](README.md).
+Status: `render.yaml` describes the architecture currently present in source.
+The web client remains on Vercel and the databases remain on Neon.
 
-## Phase 1 — nothing changes (that is the point)
+## Service fleet
 
-Vercel (web) + one Render service + Neon, exactly as deployed today. New
-families are new Go packages and new FE folders inside the same two deploys.
+| Render service | Root | Public responsibility |
+| --- | --- | --- |
+| `myunivokai-gateway` | `services/api-gateway` | The only browser-facing API origin |
+| `myunivokai-api` | `services/universe-service` | Universe domain; direct business routes require gateway key |
+| `myunivokai-nature` | `services/nature-service` | Nature domain; direct business routes require gateway key |
 
-## Phase 2 on Render — multi-service blueprint
+All three are Docker web services. The two world APIs each own a logical Neon
+database, migrations, worlds, variants, AI logs, and shares. There is no
+cross-service database access.
 
-`render.yaml` grows one entry per scene service:
+## Why the upstreams still have public URLs
 
-```yaml
-  - type: web
-    name: myunivokai-scene-nature
-    runtime: docker
-    rootDir: services/scene-nature-service
-    dockerfilePath: ./Dockerfile.render
-    plan: free                      # see the free-tier trap below
-    healthCheckPath: /internal/v1/healthz
-    envVars:
-      - key: INTERNAL_API_KEY
-        sync: false                 # same value pasted into world-service
+The current Blueprint uses Render free web services. Free services cannot
+receive private-network requests, so the gateway must call their public HTTPS
+URLs. The `GATEWAY_SHARED_SECRET` boundary prevents public callers from using
+business routes directly. A paid move can convert upstreams to private
+services later; no public API contract needs to change.
+
+The shared value is created once by the Blueprint environment group
+`myunivokai-gateway-secrets` with `generateValue: true` and linked to all three
+services. Never create three independent secret values.
+
+## Required Render values
+
+Gateway:
+
+```txt
+API_ALLOWED_ORIGINS=https://myunivokai.vercel.app
+UNIVERSE_SERVICE_URL=https://<universe-service-host>
+NATURE_SERVICE_URL=https://<nature-service-host>
 ```
 
-- world-service gains `SCENE_NATURE_SERVICE_URL`, `SCENE_CITY_SERVICE_URL`,
-  `INTERNAL_API_KEY`.
-- **Render free tier has no private services** — every free service gets a
-  public URL. Until we pay for private networking, internal endpoints are
-  protected by the `X-Internal-Key` shared secret (checked in middleware,
-  401 otherwise) and by not being in the public OpenAPI. This is honest
-  screening, not real network isolation — acceptable for compose endpoints
-  that hold no secrets and mutate nothing.
-- Database: **only world-service** has `DATABASE_URL` and runs migrations.
-  Scene services have no state — their entire config is the internal key.
+Universe service:
 
-## The free-tier trap (read before approving Phase 2)
+```txt
+DATABASE_URL=<universe pooled Neon URL>
+DATABASE_DIRECT_URL=<universe direct Neon URL>
+PUBLIC_WEB_URL=https://myunivokai.vercel.app
+```
 
-Each free Render service sleeps independently after ~15 min. A cold visitor
-then pays: world-service wake (~50 s) + scene service wake (~50 s) =
-**up to ~100 s** for the first world creation. Mitigations, in order of
-preference:
+Nature service:
 
-1. **Stay in Phase 1 until traffic exists** (this plan's default posture).
-2. One `starter` instance ($7/mo) for world-service only; scene services stay
-   free (they are only hit after world-service is already awake, and compose
-   retries + the 503 taxonomy make a cold scene service a "try again", not a
-   bug).
-3. Consolidation escape hatch (decision D5): because composers are plain Go
-   packages, world-service can always link a family in-process behind the
-   same Registry interface (`SCENE_CITY_MODE=embedded` vs `remote`). We can
-   extract AND un-extract per family with an env flag — this de-risks the
-   whole phase.
+```txt
+DATABASE_URL=<nature pooled Neon URL using its own logical database>
+DATABASE_DIRECT_URL=<nature direct Neon URL using its own logical database>
+PUBLIC_WEB_URL=https://myunivokai.vercel.app
+```
+
+The Blueprint defaults both AI providers to mock. Nature only wires mock today;
+its Gemini/OpenAI port remains N4 work.
+
+Important Blueprint behavior: when updating an existing Blueprint, Render does
+not populate newly added `sync: false` variables. Add the three gateway values
+in the dashboard before/while syncing this change. The generated environment
+group is managed by the Blueprint.
+
+## Rollout order
+
+1. Confirm both database URL pairs point at their own logical database.
+2. Add the gateway's three `sync: false` values in Render.
+3. Sync `render.yaml`; verify the generated secret group is linked to all three
+   services.
+4. Wait for direct upstream liveness:
+   `/api/v1/healthz` must return 200 on Universe and Nature.
+5. Verify direct `/api/v1/readyz` and `/api/v1/worlds` return 401 without
+   `X-Gateway-Key`.
+6. Verify gateway `/api/v1/healthz` returns 200 and `/api/v1/statusz` reports
+   both services ready.
+7. Smoke create/get/regenerate/publish/share through both public prefixes.
+8. Set Vercel `NEXT_PUBLIC_API_BASE_URL` to
+   `https://<gateway-host>/api/universe` and redeploy without build cache.
+
+The current frontend is Universe-only, so it uses the Universe prefix. The
+Nature prefix is ready for the later frontend family picker.
+
+## Health and observability
+
+- gateway `/api/v1/healthz`: process only;
+- gateway `/api/v1/statusz`: concurrent upstream readiness, 503 if either is
+  unavailable;
+- upstream `/api/v1/healthz`: process only, public for Render;
+- upstream `/api/v1/readyz`: database readiness, gateway credential required;
+- one safe `X-Request-Id` is logged at the gateway and propagated end to end;
+- gateway logs client IP, method, path, status, and duration without logging
+  secrets or business bodies.
+
+## Free-tier behavior
+
+Each service can sleep independently. A cold gateway request can wake the
+gateway and then an upstream, so first-request latency can be material. The
+120-second create timeout is aligned with the existing AI generation budget;
+short reads and shares use lower timeouts. Circuit breaking prevents a dead
+upstream from consuming connection slots indefinitely, but it does not hide a
+cold start.
+
+Render documents the free plan as unsuitable for formal production workloads.
+For a paid production move, upgrade the gateway first; then consider private
+upstreams so the shared header becomes defense in depth instead of the primary
+network boundary.
 
 ## CI
 
-GitHub Actions gets per-service jobs gated by path filters so a
-scene-service PR runs only its own vet/test/build:
-
-```yaml
-on:
-  pull_request:
-    paths: ["services/scene-nature-service/**"]
-```
-
-Frontend job unchanged (typecheck + lint + vitest + build, already in CI).
-
-## Observability
-
-- `X-Request-Id` propagated end-to-end (FE → world → scene) — already issued
-  today; scene services log it via the same zerolog setup.
-- Each service: `/healthz` (liveness) + `/readyz`; the gateway's `/statusz`
-  (Phase 3) aggregates readyz of all upstreams for one-glance ops.
-- Compose latency logged per call with `scene_type`, so the Rust trigger in
-  the [backend plan](backend-plan.md) is a query, not a guess.
-
-## Platform alternatives (noted, not chosen)
-
-Render stays the default. If Phase 2 lands and private networking or CPU
-pricing starts to hurt: Fly.io offers free private networking between
-machines and per-second billing (good for bursty Rust composers); Railway is
-comparable to Render. Re-evaluate only with real traffic numbers.
+Every PR runs verify, vet, test, and build for all three Go modules. Frontend
+typecheck, lint, test, and build continue independently. No path filters are
+used, matching the repository's existing all-jobs policy.

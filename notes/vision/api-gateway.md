@@ -1,70 +1,136 @@
-# API gateway — detailed design (Phase 3)
+# API Gateway — implemented production design
 
-Part of the [vision folder](README.md).
+Status: implemented on `feat/be/api-gateway` for the two peer services that
+exist in source: `universe-service` and `nature-service`. User authentication
+is deliberately absent because there is no auth-service or identity contract.
 
-## What the gateway owns (and services stop owning)
+## Public contract
 
-| Concern | Today (in universe-service) | With gateway |
-| --- | --- | --- |
-| Public origin & routing | n/a (one service) | single URL, path-based routing table |
-| CORS | `go-chi/cors` in router | gateway only; services drop it |
-| Rate limiting | per-IP token bucket + TRUST_PROXY | gateway only (one bucket per client across ALL services) |
-| Request ID | issued in middleware | issued at gateway, propagated via `X-Request-Id` |
-| Auth (future auth-service) | none | verify JWT once, forward identity as trusted headers |
-| Retries/timeouts/circuit breaking | ad-hoc per client | uniform per-route policy |
-| Response caching | none | share endpoints (`/share/*`) get short public cache |
+Both upstreams expose the same direct `/api/v1/*` route shapes, so the gateway
+uses a family prefix and rewrites only the path:
 
-## Options compared
+| Gateway path | Upstream |
+| --- | --- |
+| `/api/universe/*` | `UNIVERSE_SERVICE_URL/api/v1/*` |
+| `/api/nature/*` | `NATURE_SERVICE_URL/api/v1/*` |
+| `/api/v1/healthz` | Gateway liveness; no dependency call |
+| `/api/v1/statusz` | Concurrent `/api/v1/readyz` checks for both upstreams |
+| `/` | Machine-readable route index |
 
-| Option | Effort | Fit |
-| --- | --- | --- |
-| A. World-service stays the facade | zero | Right answer until auth-service exists — Phase 2 default. |
-| B. Hand-rolled Go gateway (chi + `httputil.ReverseProxy`) | ~200 focused lines | **Recommended for Phase 3.** Same language/idioms as everything else; the existing RequestID/RateLimit/CORS middleware moves there almost verbatim; full control over the error taxonomy. |
-| C. Traefik / Caddy / Nginx as a Render service | config, not code | Viable, but a second tech to operate, and Render has no managed gateway to lean on. |
-| D. Kong / KrakenD / Envoy | heavy | Overkill at this scale; revisit only with 10+ services or a platform team. |
+The gateway never parses domain JSON and never chooses DNA, seeds, scene
+values, variants, or storage. Query strings and response bodies pass through.
 
-## Design of the Go gateway (option B)
+## Middleware and request verification
+
+Global order in `internal/handlers/router.go`:
+
+```txt
+RequestContext -> Recover -> Logging -> SecurityHeaders -> CORS -> route
+```
+
+`statusz` and both proxy route groups then share one per-client token bucket.
+Proxy routes additionally apply the request-body limit before forwarding.
+Liveness is not rate limited so a traffic burst cannot make the platform probe
+restart a healthy gateway.
+
+Implemented checks:
+
+- safe inbound `X-Request-Id` values are propagated; unsafe/missing values are
+  replaced with `req_<uuid>`;
+- with `TRUST_PROXY=true`, the first valid `X-Forwarded-For` address supplied
+  by Render is the client bucket key; otherwise `RemoteAddr` is used;
+- CORS allows only configured origins, `GET`/`POST`/`OPTIONS`, and the headers
+  already used by the clients;
+- request bodies are capped at 65,536 bytes, matching both world handlers;
+- the gateway deletes client forwarding headers and `X-Gateway-Key`, then
+  writes sanitized values itself;
+- security response headers forbid framing, sniffing, and referrer leakage;
+- all gateway errors use the same `{ "error": { code, message, requestId } }`
+  envelope as the world services.
+
+There is one in-memory rate-limit bucket per client across both services. The
+default is 2 requests/second with burst 20 and is tunable through
+`RATE_LIMIT_RPS` / `RATE_LIMIT_BURST`. A 429 includes `Retry-After: 1`.
+
+## Upstream access boundary
+
+Render free web services cannot receive private-network traffic, so both
+upstreams retain public hostnames. To prevent callers bypassing gateway CORS
+and rate limiting:
+
+1. Render generates one 256-bit `GATEWAY_SHARED_SECRET` in the
+   `myunivokai-gateway-secrets` environment group.
+2. The gateway overwrites `X-Gateway-Key` with that value on every upstream
+   request.
+3. Universe and Nature compare the header in constant time for readiness and
+   every business/share route, then remove it before the handler runs.
+4. Production startup fails when the shared secret is missing or shorter than
+   32 characters.
+
+The upstream root and `/api/v1/healthz` remain public so Render can perform a
+liveness probe. Empty secret is permitted only outside production to preserve
+standalone local development.
+
+This credential proves “request came through our gateway.” It is not user
+authentication and must never be treated as a JWT or user identity.
+
+## Route policies
+
+| Request | Timeout | Cache |
+| --- | ---: | --- |
+| `POST */worlds` | 120s | none |
+| `GET */share/*` | 5s | successful 200 only, public, 60s |
+| Other proxied routes | 15s | none |
+| Each `statusz` readiness check | 5s | none |
+
+The share cache is process-local and bounded to 1,000 entries by default. It
+never caches a response carrying `Set-Cookie`, never caches errors, and has a
+1 MiB per-response ceiling. `X-Cache` reports `HIT` or `MISS`.
+
+Automatic retries are intentionally not used: mutations are not generally
+idempotent, and retrying create/regenerate/publish could duplicate state. The
+client receives an explicit error and decides whether to retry.
+
+## Failure handling and circuit breaker
+
+Each upstream has an independent transport circuit breaker:
+
+- transport failure -> 502 `UPSTREAM_UNREACHABLE`;
+- route deadline -> 504 `UPSTREAM_TIMEOUT`;
+- after 3 consecutive transport failures, the circuit opens for 30s;
+- open circuit -> 503 `UPSTREAM_CIRCUIT_OPEN` + `Retry-After`;
+- after cooldown, exactly one half-open probe is admitted; transport success
+  closes the circuit.
+
+HTTP responses from the upstream, including its 4xx/5xx domain errors, prove
+the transport works and pass through unchanged. Only network/timeout failures
+count against the circuit.
+
+## Production validation and deploy
+
+`api-gateway` refuses `APP_ENV=production` unless:
+
+- both upstream URLs are absolute HTTPS URLs without embedded credentials;
+- `TRUST_PROXY=true`;
+- the allowed-origin list is non-empty and contains no wildcard;
+- the shared secret is at least 32 characters;
+- timeout, rate, cache, and circuit values are positive.
+
+The concrete env surface is documented in
+`services/api-gateway/.env.example`; the Render rollout and smoke checklist are
+in [deployment.md](deployment.md).
+
+## Source map
 
 ```txt
 services/api-gateway/
   cmd/gateway/main.go
-  internal/routing/table.go       # path prefix -> upstream, per-route policy
-  internal/middleware/            # RequestID, Logging, RateLimit, CORS (moved)
-  internal/proxy/reverse_proxy.go # httputil.ReverseProxy + error mapping
+  internal/config/          env loading + production validation
+  internal/handlers/        router, liveness, aggregate status
+  internal/httpx/           request context + response envelope
+  internal/middleware/      request id/IP, logging, recovery, CORS-adjacent security, rate/body limits
+  internal/proxy/           reverse proxy, header sanitation, share cache, circuit breaker
+  internal/routing/         family prefixes + timeout policy
+  Dockerfile
+  docker-compose-local.yml
 ```
-
-Routing table — config, not code (env or a small YAML):
-
-```txt
-/api/v1/worlds*       -> WORLD_SERVICE_URL      timeout 120s (create waits on AI)
-/api/v1/share/*       -> WORLD_SERVICE_URL      timeout 5s, cache 60s public
-/api/v1/auth/*        -> AUTH_SERVICE_URL       timeout 5s
-/api/v1/healthz       -> gateway itself (liveness)
-/api/v1/statusz       -> fan-out readyz of all upstreams (aggregate health)
-/                     -> landing page (moves from universe-service)
-```
-
-Middleware order (identical semantics to today's router, one level up):
-
-```txt
-RequestID -> Logging -> RateLimit(TRUST_PROXY-aware) -> CORS -> per-route timeout -> ReverseProxy
-```
-
-Rules that keep it honest:
-
-- Gateway **appends** itself to `X-Forwarded-For` and forwards the client IP;
-  scene/world services set `TRUST_PROXY=true` and trust exactly one hop more.
-- Upstream transport failure → 502 `UPSTREAM_UNREACHABLE`; upstream timeout →
-  504 `UPSTREAM_TIMEOUT`; both logged with `request_id` — same envelope shape
-  as `httpx.WriteError`, so the FE error path needs no change.
-- Circuit breaker per upstream (simple: trip after N consecutive transport
-  failures, half-open probe after cooldown) so one dead scene service cannot
-  hold connection slots for everything else.
-- The gateway does NOT parse business payloads — it never becomes the place
-  where domain logic hides.
-
-## When to build it
-
-Trigger (decision D3): the gateway is built **when auth-service lands** or
-when a second PUBLIC service exists. Until then, world-service-as-facade
-provides the same public surface with zero extra hops or deploys.

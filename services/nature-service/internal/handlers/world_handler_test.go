@@ -25,9 +25,6 @@ func newTestRouter(t *testing.T) http.Handler {
 		AppEnv:          "test",
 		AppName:         "Myunivokai Nature",
 		PublicWebURL:    "http://localhost:3000",
-		AllowedOrigins:  []string{"http://localhost:3000"},
-		RateLimitRPS:    1000,
-		RateLimitBurst:  1000,
 		ShareSlugLength: 10,
 	}
 	store := repositories.NewMemoryStore()
@@ -72,6 +69,60 @@ func TestHealthzEndpoint(t *testing.T) {
 	response := performRequest(t, router, http.MethodGet, "/api/v1/healthz", nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("healthz = %d, want 200", response.Code)
+	}
+}
+
+func TestRouterRequiresGatewayCredentialForProtectedRoutes(t *testing.T) {
+	const sharedSecret = "test-shared-secret"
+	cfg := config.Config{
+		AppEnv:              "test",
+		GatewaySharedSecret: sharedSecret,
+		ShareSlugLength:     10,
+	}
+	store := repositories.NewMemoryStore()
+	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)
+	worldService := services.NewWorldService(cfg, store, orchestrator, services.NewForestConfigBuilder())
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(cfg))
+
+	healthResponse := performRequest(t, router, http.MethodGet, "/api/v1/healthz", nil)
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("public health status = %d, want 200", healthResponse.Code)
+	}
+	unauthorizedResponse := performRequest(t, router, http.MethodGet, "/api/v1/readyz", nil)
+	if unauthorizedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("uncredentialed readiness status = %d, want 401", unauthorizedResponse.Code)
+	}
+	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil)
+	authorizedRequest.Header.Set("X-Gateway-Key", sharedSecret)
+	authorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authorizedResponse, authorizedRequest)
+	if authorizedResponse.Code != http.StatusOK {
+		t.Fatalf("credentialed readiness status = %d, want 200", authorizedResponse.Code)
+	}
+}
+
+func TestSwaggerAvailabilityFollowsEnvironment(t *testing.T) {
+	productionConfig := config.Config{
+		AppEnv: "production",
+	}
+	store := repositories.NewMemoryStore()
+	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)
+	worldService := services.NewWorldService(productionConfig, store, orchestrator, services.NewForestConfigBuilder())
+	productionRouter := NewRouter(productionConfig, NewHealthHandler(productionConfig, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(productionConfig))
+
+	productionResponse := httptest.NewRecorder()
+	productionRouter.ServeHTTP(productionResponse, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if productionResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected swagger to be hidden in production, got %d", productionResponse.Code)
+	}
+
+	developmentConfig := productionConfig
+	developmentConfig.AppEnv = "development"
+	developmentRouter := NewRouter(developmentConfig, NewHealthHandler(developmentConfig, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(developmentConfig))
+	developmentResponse := httptest.NewRecorder()
+	developmentRouter.ServeHTTP(developmentResponse, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if developmentResponse.Code != http.StatusOK {
+		t.Fatalf("expected swagger outside production, got %d", developmentResponse.Code)
 	}
 }
 

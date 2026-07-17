@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/myunivokai/myunivokai/services/nature-service/docs"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/aifactory"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/db"
@@ -19,9 +20,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// @title Myunivokai Nature API
+// @version 0.1.0
+// @description Backend API for Myunivokai personal forest generation.
+// @BasePath /api/v1
 func main() {
 	zerolog.TimeFieldFormat = time.RFC3339
 	cfg := config.Load()
+	if err := cfg.ValidateProductionGatewayAccess(); err != nil {
+		log.Fatal().Err(err).Msg("validate gateway access")
+	}
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, cfg)
 	if err != nil {

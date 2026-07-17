@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/middleware"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -15,15 +14,6 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recover)
 	r.Use(middleware.Logging)
-	r.Use(middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.TrustProxyHeaders))
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   cfg.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-Id"},
-		ExposedHeaders:   []string{"X-Request-Id"},
-		AllowCredentials: false,
-		MaxAge:           300,
-	}))
 
 	// A human-friendly welcome at the bare service URL (Render health probes
 	// also HEAD this path). API consumers live under /api/v1.
@@ -32,14 +22,17 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", health.Handle)
-		r.Get("/readyz", health.HandleReadiness)
-		r.Post("/worlds", worlds.Create)
-		r.Get("/worlds", worlds.GetBatch)
-		r.Get("/worlds/{worldId}", worlds.Get)
-		r.Post("/worlds/{worldId}/variants", worlds.RegenerateVariant)
-		r.Post("/worlds/{worldId}/variants/{variantId}/select", worlds.SelectVariant)
-		r.Post("/worlds/{worldId}/publish", worlds.Publish)
-		r.Get("/share/worlds/{shareSlug}", share.GetWorld)
+		r.Group(func(protectedRouter chi.Router) {
+			protectedRouter.Use(middleware.GatewayAuthentication(cfg.GatewaySharedSecret))
+			protectedRouter.Get("/readyz", health.HandleReadiness)
+			protectedRouter.Post("/worlds", worlds.Create)
+			protectedRouter.Get("/worlds", worlds.GetBatch)
+			protectedRouter.Get("/worlds/{worldId}", worlds.Get)
+			protectedRouter.Post("/worlds/{worldId}/variants", worlds.RegenerateVariant)
+			protectedRouter.Post("/worlds/{worldId}/variants/{variantId}/select", worlds.SelectVariant)
+			protectedRouter.Post("/worlds/{worldId}/publish", worlds.Publish)
+			protectedRouter.Get("/share/worlds/{shareSlug}", share.GetWorld)
+		})
 	})
 	// Swagger UI documents internal endpoints; expose it outside production only.
 	if !cfg.IsProduction() {
