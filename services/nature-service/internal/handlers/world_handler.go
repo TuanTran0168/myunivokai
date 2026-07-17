@@ -51,6 +51,17 @@ func requireUUIDPathParameter(w http.ResponseWriter, r *http.Request, parameterN
 
 // Create generates a personal forest world: input → Nature DNA (AI, mock by
 // default) → deterministic forest config → stored world with variant 1.
+// @Summary Create forest world
+// @Tags worlds
+// @Accept json
+// @Produce json
+// @Param input body models.WorldInput true "World input"
+// @Success 201 {object} models.CreateWorldResponse
+// @Failure 400 {object} httpx.ErrorEnvelope
+// @Failure 502 {object} httpx.ErrorEnvelope
+// @Failure 503 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds [post]
 func (h *WorldHandler) Create(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maximumRequestBodyBytes)
 	decoder := json.NewDecoder(r.Body)
@@ -79,6 +90,14 @@ func (h *WorldHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns a private forest world by ID.
+// @Summary Get forest world
+// @Tags worlds
+// @Produce json
+// @Param worldId path string true "World ID"
+// @Success 200 {object} models.WorldResponse
+// @Failure 404 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds/{worldId} [get]
 func (h *WorldHandler) Get(w http.ResponseWriter, r *http.Request) {
 	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
 	if !ok {
@@ -95,6 +114,14 @@ func (h *WorldHandler) Get(w http.ResponseWriter, r *http.Request) {
 // GetBatch returns multiple private worlds in one request. Unknown or
 // malformed ids are omitted from the result instead of failing the batch, so
 // the caller maps requested ids against returned worlds to detect gaps.
+// @Summary Get forest worlds by ids
+// @Tags worlds
+// @Produce json
+// @Param ids query string true "Comma-separated world IDs (max 50)"
+// @Success 200 {object} models.WorldListResponse
+// @Failure 400 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds [get]
 func (h *WorldHandler) GetBatch(w http.ResponseWriter, r *http.Request) {
 	rawIDs := r.URL.Query().Get("ids")
 	if strings.TrimSpace(rawIDs) == "" {
@@ -137,6 +164,14 @@ func parseBatchWorldIDs(rawIDs string) []string {
 
 // RegenerateVariant creates a new visual variant without calling AI — a new
 // seed re-rolls season, weather, wind and wildlife over the same DNA.
+// @Summary Regenerate forest variant
+// @Tags worlds
+// @Produce json
+// @Param worldId path string true "World ID"
+// @Success 201 {object} models.VariantResponse
+// @Failure 404 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds/{worldId}/variants [post]
 func (h *WorldHandler) RegenerateVariant(w http.ResponseWriter, r *http.Request) {
 	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
 	if !ok {
@@ -151,6 +186,15 @@ func (h *WorldHandler) RegenerateVariant(w http.ResponseWriter, r *http.Request)
 }
 
 // SelectVariant marks a variant as selected.
+// @Summary Select forest variant
+// @Tags worlds
+// @Produce json
+// @Param worldId path string true "World ID"
+// @Param variantId path string true "Variant ID"
+// @Success 200 {object} models.VariantResponse
+// @Failure 404 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds/{worldId}/variants/{variantId}/select [post]
 func (h *WorldHandler) SelectVariant(w http.ResponseWriter, r *http.Request) {
 	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
 	if !ok {
@@ -169,6 +213,14 @@ func (h *WorldHandler) SelectVariant(w http.ResponseWriter, r *http.Request) {
 }
 
 // Publish makes a world public and returns its share link.
+// @Summary Publish forest world
+// @Tags worlds
+// @Produce json
+// @Param worldId path string true "World ID"
+// @Success 200 {object} models.PublishResponse
+// @Failure 404 {object} httpx.ErrorEnvelope
+// @Failure 500 {object} httpx.ErrorEnvelope
+// @Router /worlds/{worldId}/publish [post]
 func (h *WorldHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	worldID, ok := requireUUIDPathParameter(w, r, "worldId")
 	if !ok {

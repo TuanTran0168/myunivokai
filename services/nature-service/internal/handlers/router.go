@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 // NewRouter mirrors universe-service's router: same middleware order, same
@@ -43,5 +44,10 @@ func NewRouter(cfg config.Config, health *HealthHandler, worlds *WorldHandler, s
 		r.Post("/worlds/{worldId}/publish", worlds.Publish)
 		r.Get("/share/worlds/{shareSlug}", share.GetWorld)
 	})
+	// Swagger documents the public nature API for local development without
+	// exposing implementation details or an extra route in production.
+	if !cfg.IsProduction() {
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
+	}
 	return r
 }

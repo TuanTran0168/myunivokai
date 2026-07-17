@@ -10,10 +10,10 @@ v1 "stateless composer" draft** after the owner clarified the architecture:
 
 Status: **BE rounds shipped, awaiting deploy**. N1 merged (PR #63, commit
 `22aca0b`); vision docs merged (PR #62); N2 (own database + Render deploy
-files) and N3 (contract schema + golden fixtures) live on branch
-`feat/be/nature-service-be-rounds` — one branch for all remaining BE work, per
-owner request. This document is the working context for every future session
-on this track — it is deliberately self-contained.
+files) and the contract/golden-fixture part of N3 merged through PR #64.
+Swagger and local Docker parity were completed together on
+`feat/be/nature-service-dev-parity`. This document is the working context for
+every future session on this track — it is deliberately self-contained.
 
 ---
 
@@ -45,8 +45,9 @@ on this track — it is deliberately self-contained.
   universe.
 - **Thứ tự:** N1 pipeline trên memory store (**xong**, PR #63) → N2 DB riêng +
   goose + deploy files (**xong**, branch `feat/be/nature-service-be-rounds`) →
-  N3 contract JSON + golden fixtures (**xong**, cùng branch; swagger dời sang
-  round polish sau) → N4 AI thật (dời lại — owner: "cứ random như universe
+  N3 contract JSON + golden fixtures + Swagger (**xong**; Swagger và local
+  Docker parity nằm trong `feat/be/nature-service-dev-parity`) → N4 AI thật
+  (dời lại — owner: "cứ random như universe
   service") → N5 curate asset. FE (F1–F5) sau khi service đứng vững.
 
 ---
@@ -260,7 +261,11 @@ services/nature-service/
     forest_config_builder.go          # the deterministic builder (streams above)
     world_service.go                  # create/get/batch/regenerate/select/publish/share — same flow as universe
   internal/handlers/                  # router, world_handler, share_handler, health_handler, landing (JSON)
-  Dockerfile                          # parity with universe; Dockerfile.render + entrypoint land in N2
+  docs/                               # generated Swagger docs; UI is development-only
+  Dockerfile                          # local image used by docker-compose-local.yml
+  docker-compose-local.yml            # Postgres + migration + API on ports 5433/8081
+  .dockerignore                       # keeps env files and build artifacts out of the context
+  Dockerfile.render                   # Render image; entrypoint optionally runs migrations
   go.mod
 ```
 
@@ -301,7 +306,7 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 | --- | --- | --- | --- |
 | **N1** ✅ | `feat/be/nature-service-scaffold` (merged, PR #63, `22aca0b`) | The whole pipeline on the memory store: config/middleware/handlers + NatureDNA + mock provider + orchestrator + forest profile & builder + worlds/variants/share API + tests + CI job | Gates green; smoke-tested end-to-end locally |
 | **N2** ✅ | `feat/be/nature-service-be-rounds` | Own **logical** Neon database (second database inside the existing Neon project — zero cost, owner decision 2026-07-17), goose migrations (worlds/world_variants/ai_generations, `nature_dna` column), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry | Gates green. Deploy checklist: create database `myunivokai_nature` in the Neon dashboard → apply render.yaml (new service `myunivokai-nature`) → paste DATABASE_URL/DATABASE_DIRECT_URL (dbname `myunivokai_nature`) + API_ALLOWED_ORIGINS + PUBLIC_WEB_URL → verify `/api/v1/healthz`, create a world, restart, world survives |
-| **N3** ✅ (partial) | `feat/be/nature-service-be-rounds` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`). Swagger parity deferred to a later polish round | Golden test green; a byte-diff for an existing seed fails CI |
+| **N3** ✅ | `feat/be/nature-service-be-rounds` + `feat/be/nature-service-dev-parity` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`) + generated Swagger docs/UI outside production. The parity branch also adds the local Postgres → migration → API Docker stack. | Golden test green; a byte-diff for an existing seed fails CI; Swagger is hidden in production; local Docker smoke survives an API restart. |
 | **N4** (deferred) | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys. Deferred — owner: "cứ random như universe service" (universe prod also runs mock today) | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
 | **N5** | `feat/fe/nature-asset-pipeline` | Download/optimize/self-host GLB + HDRI + textures; ATTRIBUTION.md; finalize the key catalog; budget audit | Every catalog key resolves to a file within budget; licenses recorded |
 | **F1–F5** | (after BE) | FE: sceneType registry → ForestRenderer MVP (terrain/trees/wind/HDRI/landmark POIs) → seasons+weather+particles → wildlife → preview mirror + create-form family picker calling nature-service's base URL | Standard FE gates per round |
