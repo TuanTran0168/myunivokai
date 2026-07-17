@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
-import { Color, Float32BufferAttribute, MeshStandardMaterial, PlaneGeometry, Vector3 } from "three";
-import type { ForestSeasonConfig, ForestTerrainConfig } from "@/lib/types";
+import { Color, Float32BufferAttribute, Matrix4, MeshStandardMaterial, PlaneGeometry, Quaternion, Vector3 } from "three";
+import type { ForestSeasonConfig, ForestTerrainConfig, ForestTreesConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import {
   blendedFoliageColors,
@@ -53,9 +54,15 @@ const MOBILE_VIEWPORT_MAXIMUM_WIDTH = 768;
 type ForestTerrainProps = {
   terrain?: ForestTerrainConfig;
   season?: ForestSeasonConfig;
+  /** Wind (under trees in the config) also ripples the grass layer. */
+  trees?: ForestTreesConfig;
   terrainHeightSampler: TerrainHeightSampler;
   pathLateralDistanceSampler: PathLateralDistanceSampler;
 };
+
+// Grass wind ripple.
+const GRASS_SWAY_BASE_RADIANS = 0.14;
+const GRASS_SWAY_GUST_FREQUENCY_TO_RADIANS = Math.PI * 2;
 
 function isMobileViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth < MOBILE_VIEWPORT_MAXIMUM_WIDTH;
@@ -66,7 +73,7 @@ function isMobileViewport(): boolean {
  * flattened clearing, seeded dirt path), plus instanced rocks and grass
  * tufts scattered from the terrain placement seed.
  */
-export function ForestTerrain({ terrain, season, terrainHeightSampler, pathLateralDistanceSampler }: ForestTerrainProps) {
+export function ForestTerrain({ terrain, season, trees, terrainHeightSampler, pathLateralDistanceSampler }: ForestTerrainProps) {
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const placementSeed = terrain?.placementSeed ?? "forest-terrain";
@@ -197,11 +204,15 @@ export function ForestTerrain({ terrain, season, terrainHeightSampler, pathLater
         foliageColor: grassColor
       });
     }
-    return grassVariants.flatMap((variant, variantIndex) =>
-      transformsPerVariant[variantIndex].length > 0
-        ? buildStaticInstancedMeshes(variant, transformsPerVariant[variantIndex], { castShadow: false })
-        : []
-    );
+    return grassVariants
+      .map((variant, variantIndex) => ({
+        instancedMeshes:
+          transformsPerVariant[variantIndex].length > 0
+            ? buildStaticInstancedMeshes(variant, transformsPerVariant[variantIndex], { castShadow: false })
+            : [],
+        transforms: transformsPerVariant[variantIndex]
+      }))
+      .filter((bucket) => bucket.instancedMeshes.length > 0);
   }, [
     groundKind,
     loadedGrassModels,
@@ -214,15 +225,58 @@ export function ForestTerrain({ terrain, season, terrainHeightSampler, pathLater
     treelineRadius
   ]);
 
+  // Wind ripple over the grass: each tuft pivots at its base with a phase
+  // derived from its position, so gusts read as waves rolling across the
+  // meadow instead of synchronized wobble.
+  const windStrength = trees?.windStrength ?? 0.35;
+  const windDirectionRadians = trees?.windDirectionRadians ?? 0;
+  const windGustFrequency = trees?.windGustFrequency ?? 0.3;
+  const elapsedSecondsRef = useRef(0);
+  useFrame((_, deltaTimeSeconds) => {
+    elapsedSecondsRef.current += deltaTimeSeconds;
+    const elapsedSeconds = elapsedSecondsRef.current;
+    const gustAngularFrequency = windGustFrequency * GRASS_SWAY_GUST_FREQUENCY_TO_RADIANS;
+    const tiltAxis = new Vector3(-Math.sin(windDirectionRadians), 0, Math.cos(windDirectionRadians));
+    const windDirectionX = Math.cos(windDirectionRadians);
+    const windDirectionZ = Math.sin(windDirectionRadians);
+    const matrix = new Matrix4();
+    const yawQuaternion = new Quaternion();
+    const tiltQuaternion = new Quaternion();
+    const combinedQuaternion = new Quaternion();
+    const yAxis = new Vector3(0, 1, 0);
+    const scaleVector = new Vector3();
+    for (const bucket of grassInstancedMeshes) {
+      bucket.transforms.forEach((transform, instanceIndex) => {
+        // Position-based phase: the gust wave travels along the wind.
+        const travelPhase = (transform.position.x * windDirectionX + transform.position.z * windDirectionZ) * 0.35;
+        const tiltRadians =
+          Math.sin(elapsedSeconds * gustAngularFrequency - travelPhase) * windStrength * GRASS_SWAY_BASE_RADIANS;
+        yawQuaternion.setFromAxisAngle(yAxis, transform.yawRadians);
+        tiltQuaternion.setFromAxisAngle(tiltAxis, tiltRadians);
+        combinedQuaternion.copy(tiltQuaternion).multiply(yawQuaternion);
+        scaleVector.setScalar(transform.scale);
+        matrix.compose(transform.position, combinedQuaternion, scaleVector);
+        for (const instancedMesh of bucket.instancedMeshes) {
+          instancedMesh.setMatrixAt(instanceIndex, matrix);
+        }
+      });
+      for (const instancedMesh of bucket.instancedMeshes) {
+        instancedMesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+  });
+
   return (
     <group>
       <mesh geometry={groundMesh.geometry} material={groundMesh.material} receiveShadow />
       {rockInstancedMeshes.map((mesh, meshIndex) => (
         <primitive key={`rock-${meshIndex}`} object={mesh} />
       ))}
-      {grassInstancedMeshes.map((mesh, meshIndex) => (
-        <primitive key={`grass-${meshIndex}`} object={mesh} />
-      ))}
+      {grassInstancedMeshes.flatMap((bucket, bucketIndex) =>
+        bucket.instancedMeshes.map((mesh, meshIndex) => (
+          <primitive key={`grass-${bucketIndex}-${meshIndex}`} object={mesh} />
+        ))
+      )}
     </group>
   );
 }

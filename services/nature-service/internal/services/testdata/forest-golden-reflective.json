@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "sceneType": "forest",
   "sceneName": "The Amberfall Sanctuary",
   "archetype": "Grove Keeper",
@@ -84,7 +84,7 @@
   "wildlife": {
     "groundAnimals": [
       {
-        "modelKey": "animal-boar",
+        "modelKey": "animal-bear",
         "count": 1,
         "pathSeed": "NAT-GOLDEN-REFLECTIVE-forest-animal-0",
         "walkSpeed": 0.51,
@@ -185,7 +185,7 @@
       "tree-oak",
       "tree-dead",
       "rock-mossy",
-      "animal-boar",
+      "animal-bear",
       "bird-forest",
       "landmark-heart-tree",
       "landmark-flower-patch",

@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
+import { Environment } from "@react-three/drei";
 import type { SceneRendererProps } from "@/features/scene-renderers/types";
 import { pointsOfInterestFromScene } from "@/lib/scene";
 import { createPathLateralDistanceSampler, createTerrainHeightSampler, treelineRadiusFromTerrain } from "./forestMath";
+import { natureHdriUrlForKey } from "./forestModels";
 import { ForestAmbientParticles } from "./ForestAmbientParticles";
 import { ForestGroundDecor } from "./ForestGroundDecor";
 import { ForestLandmarks } from "./ForestLandmarks";
@@ -28,9 +30,12 @@ const SUN_INTENSITY_MULTIPLIERS_BY_WEATHER_KIND: Record<string, number> = {
   rain: 0.4,
   snow: 0.55
 };
-const HEMISPHERE_LIGHT_INTENSITY = 0.55;
-const AMBIENT_LIGHT_INTENSITY = 0.25;
+// With HDRI image-based lighting in place, the analytic fill lights only
+// support it (the HDRI carries most of the ambient character).
+const HEMISPHERE_LIGHT_INTENSITY = 0.3;
+const AMBIENT_LIGHT_INTENSITY = 0.12;
 const HEMISPHERE_GROUND_COLOR = "#3D3327";
+const ENVIRONMENT_LIGHTING_INTENSITY = 0.85;
 
 const SHADOW_MAP_SIZE = 2048;
 const SHADOW_CAMERA_MARGIN = 8;
@@ -75,6 +80,11 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
     <group>
       <fogExp2 attach="fog" args={[fogColor, fogDensity]} />
 
+      {/* Image-based environment lighting: a self-hosted Poly Haven pure-sky
+          HDRI per time of day (config lighting.hdriKey). Lighting only — the
+          procedural sky dome stays the visible background. */}
+      <Environment files={natureHdriUrlForKey(lighting?.hdriKey)} environmentIntensity={ENVIRONMENT_LIGHTING_INTENSITY} />
+
       <hemisphereLight
         args={[lighting?.ambientColor ?? "#9DB4C8", HEMISPHERE_GROUND_COLOR, HEMISPHERE_LIGHT_INTENSITY]}
       />
@@ -99,6 +109,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
       <ForestTerrain
         terrain={terrain}
         season={season}
+        trees={trees}
         terrainHeightSampler={terrainHeightSampler}
         pathLateralDistanceSampler={pathLateralDistanceSampler}
       />
@@ -115,14 +126,27 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrainHeightSampler={terrainHeightSampler}
         pathLateralDistanceSampler={pathLateralDistanceSampler}
       />
-      <ForestWeatherEffects weather={weather} lighting={lighting} terrain={terrain} placementSeed={placementSeed} />
+      <ForestWeatherEffects
+        weather={weather}
+        lighting={lighting}
+        terrain={terrain}
+        trees={trees}
+        placementSeed={placementSeed}
+      />
       <ForestAmbientParticles
         ambientParticles={ambientParticles}
         season={season}
         terrain={terrain}
         placementSeed={placementSeed}
       />
-      <ForestWildlife wildlife={wildlife} terrain={terrain} terrainHeightSampler={terrainHeightSampler} />
+      <ForestWildlife
+        wildlife={wildlife}
+        terrain={terrain}
+        terrainHeightSampler={terrainHeightSampler}
+        selectedPlanetKey={selectedPlanetKey}
+        onHoverPlanet={onHoverPlanet}
+        onSelectPlanet={onSelectPlanet}
+      />
       <ForestLandmarks
         landmarks={scene.landmarks}
         pointsOfInterest={pointsOfInterest}

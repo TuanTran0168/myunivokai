@@ -32,6 +32,7 @@ unmodified. CC0 requires no attribution; CC-BY credits are listed as required.
 | animal-deer.glb | <https://poly.pizza/m/T6Cs7tmMHJ> |
 | animal-fox.glb | <https://poly.pizza/m/Bc97C66HKi> |
 | animal-wolf.glb | <https://poly.pizza/m/P1gU3Qkr9r> |
+| animal-stag.glb | <https://poly.pizza/m/tQdzbZ1Cmw> |
 | landmark-heart-tree.glb | <https://poly.pizza/m/9aWlx82xUf> |
 | landmark-standing-stone.glb | <https://poly.pizza/m/ZKvgpQwJiY> |
 | landmark-fallen-log.glb | <https://poly.pizza/m/nwsYvcI0bC> |
@@ -53,4 +54,16 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 | tree-blossom-2.glb | "Tree" by konta johanna via Poly Pizza | <https://poly.pizza/m/bk19zLgwVAW> |
 | animal-boar.glb | "Boar" by Poly by Google via Poly Pizza | <https://poly.pizza/m/57fSWum6F1P> |
 | animal-rabbit.glb | "Rabbit" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/lEJ3d1gMLC> |
+| animal-bear.glb | "Bear" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/kLLBpmcw0w> |
+| animal-squirrel.glb | "Squirrel" by Poly by Google via Poly Pizza | <https://poly.pizza/m/caxos24uWC9> |
 | bird-forest.glb | "Bird" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/F3km1zKccq> |
+
+## HDRIs — Poly Haven, CC0
+
+1k pure-sky `.hdr` environments under `hdri/`, from [Poly Haven](https://polyhaven.com) (CC0):
+
+| File | Source asset |
+| --- | --- |
+| nature-hdri-day.hdr | `kloofendal_48d_partly_cloudy_puresky` |
+| nature-hdri-golden-hour.hdr | `industrial_sunset_puresky` |
+| nature-hdri-dusk.hdr | `evening_road_01_puresky` |

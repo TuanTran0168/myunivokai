@@ -12,7 +12,10 @@ import (
 // what this builder emits for an existing seed is a breaking change and must
 // bump the schema version.
 const (
-	forestSchemaVersion = "1.0"
+	// 1.1 (2026-07-18): wider ground-animal species pools (stag, bear,
+	// squirrel) — the species draw shifted for existing seeds, so the version
+	// bumped and the golden fixtures were regenerated deliberately.
+	forestSchemaVersion = "1.1"
 	forestSceneType     = "forest"
 )
 

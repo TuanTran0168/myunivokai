@@ -24,11 +24,21 @@ const familyOptions: { label: string; value: WorldFamily; description: string; I
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
+// Same four mood VALUES for every family (the backend contract keys off
+// them); only the label/swatch changes so the card reads in the family's own
+// language — universe moods are cosmic, forest moods are seasonal (each label
+// names the season that mood leans toward in the forest builder).
 const moodOptions = [
   { label: "Cybernetic", value: "focused", swatch: "#3b82f6" },
   { label: "Nebula", value: "dreamy", swatch: "#a855f7" },
   { label: "Solar", value: "energetic", swatch: "#eab308" },
   { label: "Void", value: "reflective", swatch: "#ef4444" }
+];
+const natureMoodOptions = [
+  { label: "Frostwood", value: "focused", swatch: "#93C5FD" },
+  { label: "Blossom", value: "dreamy", swatch: "#F9A8D4" },
+  { label: "Summer Meadow", value: "energetic", swatch: "#4ADE80" },
+  { label: "Amber Autumn", value: "reflective", swatch: "#F59E0B" }
 ];
 const styleOptions = [
   { label: "Cosmic", value: "cosmic-galaxy", swatch: "#8B5CF6" },
@@ -390,9 +400,11 @@ export default function HomePage() {
               </label>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-brass">Atmospheric Mood</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">
+                  {worldFamily === "nature" ? "Forest Mood" : "Atmospheric Mood"}
+                </span>
                 <div className="grid grid-cols-2 gap-3">
-                  {moodOptions.map((option) => {
+                  {(worldFamily === "nature" ? natureMoodOptions : moodOptions).map((option) => {
                     const selected = mood === option.value;
                     return (
                       <button
@@ -421,7 +433,10 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="grid gap-3">
+              {/* World Style only shapes universe visuals (sky/orbit themes);
+                  the forest's look comes from mood/season, so the section
+                  hides for nature (the stored theme keeps its default). */}
+              <div className={worldFamily === "nature" ? "hidden" : "grid gap-3"}>
                 <span className="font-mono text-xs uppercase tracking-widest text-brass">World Style</span>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {styleOptions.map((option) => {

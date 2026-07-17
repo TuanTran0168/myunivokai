@@ -32,7 +32,9 @@ import {
 // the backend output; the preview seed starts with "preview|" and never
 // collides with a stored NAT- seed.
 
-export const FOREST_PREVIEW_SCHEMA_VERSION = "1.0";
+// 1.1 (2026-07-18): wider ground-animal species pools (stag, bear, squirrel)
+// — mirrors the same bump in forest_config_builder.go.
+export const FOREST_PREVIEW_SCHEMA_VERSION = "1.1";
 
 // Season kinds, in canonical order. The order is part of the contract: the
 // mood season-weight vectors index into it, and the "giao mùa" transition
@@ -85,6 +87,9 @@ export const MODEL_KEY_ANIMAL_FOX = "animal-fox";
 export const MODEL_KEY_ANIMAL_RABBIT = "animal-rabbit";
 export const MODEL_KEY_ANIMAL_BOAR = "animal-boar";
 export const MODEL_KEY_ANIMAL_WOLF = "animal-wolf";
+export const MODEL_KEY_ANIMAL_STAG = "animal-stag";
+export const MODEL_KEY_ANIMAL_BEAR = "animal-bear";
+export const MODEL_KEY_ANIMAL_SQUIRREL = "animal-squirrel";
 export const MODEL_KEY_BIRD_FOREST = "bird-forest";
 export const MODEL_KEY_ROCK_MOSSY = "rock-mossy";
 
@@ -259,11 +264,26 @@ const TREE_COUNT_MULTIPLIERS_BY_SEASON: Record<string, number> = {
   [FOREST_SEASON_WINTER]: 0.85
 };
 
+// Widened in schema 1.1 — keep in exact order-sync with
+// forest_scene_profile.go (the species draw indexes into this list).
 const GROUND_ANIMAL_SPECIES_BY_SEASON: Record<string, string[]> = {
-  [FOREST_SEASON_SPRING]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_RABBIT, MODEL_KEY_ANIMAL_FOX],
-  [FOREST_SEASON_SUMMER]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_FOX, MODEL_KEY_ANIMAL_BOAR, MODEL_KEY_ANIMAL_RABBIT],
-  [FOREST_SEASON_AUTUMN]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_FOX, MODEL_KEY_ANIMAL_BOAR],
-  [FOREST_SEASON_WINTER]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_WOLF, MODEL_KEY_ANIMAL_FOX]
+  [FOREST_SEASON_SPRING]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_RABBIT, MODEL_KEY_ANIMAL_FOX, MODEL_KEY_ANIMAL_SQUIRREL],
+  [FOREST_SEASON_SUMMER]: [
+    MODEL_KEY_ANIMAL_DEER,
+    MODEL_KEY_ANIMAL_FOX,
+    MODEL_KEY_ANIMAL_BOAR,
+    MODEL_KEY_ANIMAL_RABBIT,
+    MODEL_KEY_ANIMAL_BEAR,
+    MODEL_KEY_ANIMAL_SQUIRREL
+  ],
+  [FOREST_SEASON_AUTUMN]: [
+    MODEL_KEY_ANIMAL_DEER,
+    MODEL_KEY_ANIMAL_FOX,
+    MODEL_KEY_ANIMAL_BOAR,
+    MODEL_KEY_ANIMAL_STAG,
+    MODEL_KEY_ANIMAL_BEAR
+  ],
+  [FOREST_SEASON_WINTER]: [MODEL_KEY_ANIMAL_DEER, MODEL_KEY_ANIMAL_WOLF, MODEL_KEY_ANIMAL_FOX, MODEL_KEY_ANIMAL_STAG]
 };
 
 // Base active slot counts before the mood wildlife multiplier; fractional so

@@ -75,11 +75,14 @@ const (
 	ModelKeyTreePineSnow = "tree-pine-snow"
 	ModelKeyTreeDead     = "tree-dead"
 	ModelKeyTreeBlossom  = "tree-blossom"
-	ModelKeyAnimalDeer   = "animal-deer"
-	ModelKeyAnimalFox    = "animal-fox"
-	ModelKeyAnimalRabbit = "animal-rabbit"
-	ModelKeyAnimalBoar   = "animal-boar"
-	ModelKeyAnimalWolf   = "animal-wolf"
+	ModelKeyAnimalDeer     = "animal-deer"
+	ModelKeyAnimalFox      = "animal-fox"
+	ModelKeyAnimalRabbit   = "animal-rabbit"
+	ModelKeyAnimalBoar     = "animal-boar"
+	ModelKeyAnimalWolf     = "animal-wolf"
+	ModelKeyAnimalStag     = "animal-stag"
+	ModelKeyAnimalBear     = "animal-bear"
+	ModelKeyAnimalSquirrel = "animal-squirrel"
 	ModelKeyBirdForest   = "bird-forest"
 	ModelKeyRockMossy    = "rock-mossy"
 )
@@ -266,11 +269,15 @@ var treeCountMultipliersBySeason = map[string]float64{
 	SeasonWinter: 0.85,
 }
 
+// Widened in schema 1.1 ("đa dạng động vật hơn"): stag joins the cold
+// seasons, bears roam summer/autumn, squirrels the warm ones. Reordering or
+// extending a season's list shifts the species draw for existing seeds — that
+// is exactly why 1.1 bumped the schema version and regenerated the goldens.
 var groundAnimalSpeciesBySeason = map[string][]string{
-	SeasonSpring: {ModelKeyAnimalDeer, ModelKeyAnimalRabbit, ModelKeyAnimalFox},
-	SeasonSummer: {ModelKeyAnimalDeer, ModelKeyAnimalFox, ModelKeyAnimalBoar, ModelKeyAnimalRabbit},
-	SeasonAutumn: {ModelKeyAnimalDeer, ModelKeyAnimalFox, ModelKeyAnimalBoar},
-	SeasonWinter: {ModelKeyAnimalDeer, ModelKeyAnimalWolf, ModelKeyAnimalFox},
+	SeasonSpring: {ModelKeyAnimalDeer, ModelKeyAnimalRabbit, ModelKeyAnimalFox, ModelKeyAnimalSquirrel},
+	SeasonSummer: {ModelKeyAnimalDeer, ModelKeyAnimalFox, ModelKeyAnimalBoar, ModelKeyAnimalRabbit, ModelKeyAnimalBear, ModelKeyAnimalSquirrel},
+	SeasonAutumn: {ModelKeyAnimalDeer, ModelKeyAnimalFox, ModelKeyAnimalBoar, ModelKeyAnimalStag, ModelKeyAnimalBear},
+	SeasonWinter: {ModelKeyAnimalDeer, ModelKeyAnimalWolf, ModelKeyAnimalFox, ModelKeyAnimalStag},
 }
 
 // Base active slot counts before the mood wildlife multiplier; fractional so

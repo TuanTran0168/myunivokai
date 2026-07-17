@@ -1,14 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { SkeletonUtils } from "three-stdlib";
 import { Group, Vector3 } from "three";
-import type { ForestBirdFlockConfig, ForestGroundAnimalConfig, ForestTerrainConfig, ForestWildlifeConfig } from "@/lib/types";
+import type {
+  ForestBirdFlockConfig,
+  ForestGroundAnimalConfig,
+  ForestTerrainConfig,
+  ForestWildlifeConfig,
+  PlanetSceneConfig
+} from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { usePlanetPositionTracker } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 import { clearingRadiusFromTerrain, treelineRadiusFromTerrain, type TerrainHeightSampler } from "./forestMath";
-import { ANIMAL_MODEL_CATALOG, BIRD_MODEL_DEFINITION, natureModelUrl, normalizationForObject } from "./forestModels";
+import {
+  ANIMAL_DISPLAY_NAMES,
+  ANIMAL_MODEL_CATALOG,
+  BIRD_MODEL_DEFINITION,
+  natureModelUrl,
+  normalizationForObject
+} from "./forestModels";
 
 // Real animals: Quaternius' animated GLB pack (deer/fox/wolf play their Walk
 // clip) plus static CC models for boar/rabbit/bird, which fall back to a
@@ -32,7 +46,15 @@ type ForestWildlifeProps = {
   wildlife?: ForestWildlifeConfig;
   terrain?: ForestTerrainConfig;
   terrainHeightSampler: TerrainHeightSampler;
+  // Animals join the interactive POI layer: hover shows the species tooltip,
+  // click makes the camera follow the wandering animal.
+  selectedPlanetKey: string | null;
+  onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
+  onSelectPlanet?: (pointOfInterest: PlanetSceneConfig | null) => void;
 };
+
+const ANIMAL_HIT_SPHERE_RADIUS_MULTIPLIER = 1.4;
+const ANIMAL_CAMERA_FOCUS_HEIGHT = 0.9;
 
 type AnimalModelProps = {
   modelKey: string;
@@ -99,13 +121,40 @@ type GroundAnimalProps = {
   clearingRadius: number;
   treelineRadius: number;
   terrainHeightSampler: TerrainHeightSampler;
+  pointOfInterest: PlanetSceneConfig;
+  isSelected: boolean;
+  onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
+  onSelectPlanet?: (pointOfInterest: PlanetSceneConfig | null) => void;
 };
 
 /** One animal wandering back and forth between two seeded waypoints. */
-function GroundAnimal({ animalConfig, individualIndex, clearingRadius, treelineRadius, terrainHeightSampler }: GroundAnimalProps) {
+function GroundAnimal({
+  animalConfig,
+  individualIndex,
+  clearingRadius,
+  treelineRadius,
+  terrainHeightSampler,
+  pointOfInterest,
+  isSelected,
+  onHoverPlanet,
+  onSelectPlanet
+}: GroundAnimalProps) {
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const isPausedRef = useRef(false);
+  const planetPositionTracker = usePlanetPositionTracker();
+  const trackedPositionRef = useRef(new Vector3());
+  const identityKey = planetIdentityKey(pointOfInterest, individualIndex);
+
+  // Register the LIVE position vector once; the camera rig reads this map
+  // every frame, so a selected animal is followed as it wanders.
+  useEffect(() => {
+    planetPositionTracker.set(identityKey, trackedPositionRef.current);
+    const trackerReference = planetPositionTracker;
+    return () => {
+      trackerReference.delete(identityKey);
+    };
+  }, [identityKey, planetPositionTracker]);
 
   const modelKey = animalConfig.modelKey ?? "animal-deer";
   const definition = ANIMAL_MODEL_CATALOG[modelKey] ?? ANIMAL_MODEL_CATALOG["animal-deer"];
@@ -156,11 +205,43 @@ function GroundAnimal({ animalConfig, individualIndex, clearingRadius, treelineR
       (waypointB.x - waypointA.x) * headingSign,
       (waypointB.z - waypointA.z) * headingSign
     );
+    trackedPositionRef.current.set(
+      group.position.x,
+      group.position.y + ANIMAL_CAMERA_FOCUS_HEIGHT * animalScale,
+      group.position.z
+    );
   });
+
+  function handlePointerOver(event: ThreeEvent<PointerEvent>) {
+    event.stopPropagation();
+    onHoverPlanet(pointOfInterest);
+  }
+
+  function handlePointerOut(event: ThreeEvent<PointerEvent>) {
+    event.stopPropagation();
+    onHoverPlanet(null);
+  }
+
+  function handleClick(event: ThreeEvent<MouseEvent>) {
+    event.stopPropagation();
+    onSelectPlanet?.(isSelected ? null : pointOfInterest);
+  }
+
+  const hitSphereRadius = definition.targetHeight * ANIMAL_HIT_SPHERE_RADIUS_MULTIPLIER;
 
   return (
     <group ref={groupRef} scale={animalScale}>
       <AnimalModel modelKey={modelKey} walkSpeed={walkSpeed} isPausedRef={isPausedRef} />
+      {/* Invisible, forgiving hit target around the body. */}
+      <mesh
+        visible={false}
+        position={[0, definition.targetHeight * 0.5, 0]}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
+      >
+        <sphereGeometry args={[hitSphereRadius, 8, 6]} />
+      </mesh>
     </group>
   );
 }
@@ -261,23 +342,45 @@ function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
  * bird flocks circling or crossing overhead. Path seeds come from the config
  * (one stream per slot), so the same forest always moves the same way.
  */
-export function ForestWildlife({ wildlife, terrain, terrainHeightSampler }: ForestWildlifeProps) {
+export function ForestWildlife({
+  wildlife,
+  terrain,
+  terrainHeightSampler,
+  selectedPlanetKey,
+  onHoverPlanet,
+  onSelectPlanet
+}: ForestWildlifeProps) {
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
 
   return (
     <group>
       {(wildlife?.groundAnimals ?? []).map((animalConfig, slotIndex) =>
-        Array.from({ length: animalConfig.count ?? 1 }, (_, individualIndex) => (
-          <GroundAnimal
-            key={`${animalConfig.modelKey ?? "animal"}-${slotIndex}-${individualIndex}`}
-            animalConfig={animalConfig}
-            individualIndex={individualIndex}
-            clearingRadius={clearingRadius}
-            treelineRadius={treelineRadius}
-            terrainHeightSampler={terrainHeightSampler}
-          />
-        ))
+        Array.from({ length: animalConfig.count ?? 1 }, (_, individualIndex) => {
+          const displayName = ANIMAL_DISPLAY_NAMES[animalConfig.modelKey ?? ""] ?? "Animal";
+          // Same PlanetSceneConfig adapter shape landmarks use, so the hover
+          // tooltip and camera focus work without any new plumbing.
+          const pointOfInterest: PlanetSceneConfig = {
+            key: `${animalConfig.pathSeed ?? "forest-animal"}-poi-${individualIndex}`,
+            name: displayName,
+            meaning: `A ${displayName.toLowerCase()} wandering this forest.`
+          };
+          const identityKey = planetIdentityKey(pointOfInterest, individualIndex);
+          return (
+            <GroundAnimal
+              key={`${animalConfig.modelKey ?? "animal"}-${slotIndex}-${individualIndex}`}
+              animalConfig={animalConfig}
+              individualIndex={individualIndex}
+              clearingRadius={clearingRadius}
+              treelineRadius={treelineRadius}
+              terrainHeightSampler={terrainHeightSampler}
+              pointOfInterest={pointOfInterest}
+              isSelected={identityKey === selectedPlanetKey}
+              onHoverPlanet={onHoverPlanet}
+              onSelectPlanet={onSelectPlanet}
+            />
+          );
+        })
       )}
       {(wildlife?.birdFlocks ?? []).map((flockConfig, flockIndex) =>
         Array.from({ length: flockConfig.birdCount ?? 3 }, (_, birdIndex) => (

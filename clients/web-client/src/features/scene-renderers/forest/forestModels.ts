@@ -83,10 +83,40 @@ export const ANIMAL_MODEL_CATALOG: Record<string, AnimalModelDefinition> = {
   "animal-fox": { fileName: "animal-fox.glb", targetHeight: 0.8, walkClipName: "Walk" },
   "animal-wolf": { fileName: "animal-wolf.glb", targetHeight: 1.1, walkClipName: "Walk" },
   "animal-boar": { fileName: "animal-boar.glb", targetHeight: 0.9, walkClipName: "" },
-  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "" }
+  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "" },
+  // Schema 1.1 additions ("đa dạng động vật hơn").
+  "animal-stag": { fileName: "animal-stag.glb", targetHeight: 2.0, walkClipName: "Walk" },
+  "animal-bear": { fileName: "animal-bear.glb", targetHeight: 1.5, walkClipName: "" },
+  "animal-squirrel": { fileName: "animal-squirrel.glb", targetHeight: 0.35, walkClipName: "" }
+};
+
+// Hover/detail display names for the interactive wildlife layer.
+export const ANIMAL_DISPLAY_NAMES: Record<string, string> = {
+  "animal-deer": "Deer",
+  "animal-fox": "Fox",
+  "animal-wolf": "Wolf",
+  "animal-boar": "Boar",
+  "animal-rabbit": "Rabbit",
+  "animal-stag": "Stag",
+  "animal-bear": "Bear",
+  "animal-squirrel": "Squirrel"
 };
 
 export const BIRD_MODEL_DEFINITION: ForestModelDefinition = { fileName: "bird-forest.glb", targetHeight: 0.35 };
+
+// Poly Haven CC0 pure-sky HDRIs (1k .hdr), self-hosted — image-based
+// environment lighting keyed by the config's lighting.hdriKey.
+export const NATURE_HDRI_BASE_PATH = "/assets/nature/hdri/";
+export const HDRI_FILES_BY_KEY: Record<string, string> = {
+  "nature-hdri-day": "nature-hdri-day.hdr",
+  "nature-hdri-golden-hour": "nature-hdri-golden-hour.hdr",
+  "nature-hdri-dusk": "nature-hdri-dusk.hdr"
+};
+
+export function natureHdriUrlForKey(hdriKey?: string): string {
+  const fileName = HDRI_FILES_BY_KEY[hdriKey ?? ""] ?? HDRI_FILES_BY_KEY["nature-hdri-day"];
+  return NATURE_HDRI_BASE_PATH + fileName;
+}
 
 export const LANDMARK_MODEL_CATALOG: Record<string, ForestModelDefinition> = {
   heartTree: { fileName: "landmark-heart-tree.glb", targetHeight: 9.0 },

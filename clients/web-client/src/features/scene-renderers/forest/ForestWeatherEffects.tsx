@@ -9,10 +9,15 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Group,
-  Points,
-  PointsMaterial
+  InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  PointsMaterial,
+  Quaternion,
+  Vector3
 } from "three";
-import type { ForestLightingConfig, ForestTerrainConfig, ForestWeatherConfig } from "@/lib/types";
+import type { ForestLightingConfig, ForestTerrainConfig, ForestTreesConfig, ForestWeatherConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import { getSoftCircleTexture } from "@/features/scene-renderers/shared/softCircleTexture";
 import { clampValue, treelineRadiusFromTerrain } from "./forestMath";
@@ -38,16 +43,23 @@ const CLOUD_SUNNY_COLOR = "#FFFFFF";
 const CLOUD_OVERCAST_COLOR = "#8E99A8";
 
 const PRECIPITATION_CEILING = 24;
-const RAIN_FALL_SPEED_BASE = 15;
+
+// Rain renders as instanced streak quads aligned with the fall velocity —
+// points read as dots, streaks read as rain.
+const RAIN_STREAK_WIDTH = 0.03;
+const RAIN_STREAK_LENGTH = 0.55;
+const RAIN_FALL_SPEED_BASE = 16;
 const RAIN_FALL_SPEED_PER_INTENSITY = 10;
-const RAIN_POINT_SIZE = 0.07;
-const RAIN_COLOR = "#A9BFD4";
-const RAIN_OPACITY = 0.55;
+const RAIN_COLOR = "#AFC6DB";
+const RAIN_OPACITY = 0.42;
+// Horizontal wind carry as a fraction of fall speed at windStrength 1.
+const RAIN_WIND_CARRY_RATIO = 0.35;
 
 const SNOW_FALL_SPEED_BASE = 1.4;
 const SNOW_FALL_SPEED_PER_INTENSITY = 1.6;
 const SNOW_SWAY_AMPLITUDE = 0.9;
 const SNOW_SWAY_FREQUENCY = 0.7;
+const SNOW_WIND_CARRY_UNITS_PER_SECOND = 1.6;
 const SNOW_POINT_SIZE = 0.14;
 const SNOW_COLOR = "#F4F8FC";
 const SNOW_OPACITY = 0.9;
@@ -62,6 +74,8 @@ type ForestWeatherEffectsProps = {
   weather?: ForestWeatherConfig;
   lighting?: ForestLightingConfig;
   terrain?: ForestTerrainConfig;
+  /** Wind lives under trees in the config; precipitation leans with it. */
+  trees?: ForestTreesConfig;
   placementSeed: string;
 };
 
@@ -69,89 +83,179 @@ function isMobileViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth < MOBILE_VIEWPORT_MAXIMUM_WIDTH;
 }
 
-type PrecipitationLayerProps = {
-  particleCount: number;
+/** Wraps a coordinate into [-areaRadius, areaRadius] (wind blows drops out). */
+function wrapIntoArea(value: number, areaRadius: number): number {
+  if (value > areaRadius) {
+    return value - areaRadius * 2;
+  }
+  if (value < -areaRadius) {
+    return value + areaRadius * 2;
+  }
+  return value;
+}
+
+type RainStreaksLayerProps = {
+  streakCount: number;
   areaRadius: number;
   seed: string;
-  kind: "rain" | "snow";
   intensity: number;
+  windDirectionRadians: number;
+  windStrength: number;
 };
 
-/**
- * One falling-particle system (rain or snow). Positions live in a plain
- * Float32 buffer mutated per frame — thousands of drops stay one draw call.
- */
-function PrecipitationLayer({ particleCount, areaRadius, seed, kind, intensity }: PrecipitationLayerProps) {
-  const pointsRef = useRef<Points>(null);
+/** Instanced rain streaks: one InstancedMesh, tilted into the wind. */
+function RainStreaksLayer({ streakCount, areaRadius, seed, intensity, windDirectionRadians, windStrength }: RainStreaksLayerProps) {
+  const positionsRef = useRef<Float32Array | null>(null);
+
+  const fallSpeed = RAIN_FALL_SPEED_BASE + intensity * RAIN_FALL_SPEED_PER_INTENSITY;
+  const windCarrySpeed = fallSpeed * RAIN_WIND_CARRY_RATIO * windStrength;
+  const windDirectionX = Math.cos(windDirectionRadians);
+  const windDirectionZ = Math.sin(windDirectionRadians);
+
+  const { instancedMesh, streakOrientation } = useMemo(() => {
+    const geometry = new PlaneGeometry(RAIN_STREAK_WIDTH, RAIN_STREAK_LENGTH);
+    const material = new MeshBasicMaterial({
+      color: new Color(RAIN_COLOR),
+      transparent: true,
+      opacity: RAIN_OPACITY,
+      side: DoubleSide,
+      depthWrite: false,
+      fog: true
+    });
+    const mesh = new InstancedMesh(geometry, material, streakCount);
+    const nextRandomValue = randomFromSeed(seed);
+    const positions = new Float32Array(streakCount * 3);
+    for (let streakIndex = 0; streakIndex < streakCount; streakIndex += 1) {
+      const angle = nextRandomValue() * Math.PI * 2;
+      const radius = Math.sqrt(nextRandomValue()) * areaRadius;
+      positions[streakIndex * 3] = Math.cos(angle) * radius;
+      positions[streakIndex * 3 + 1] = nextRandomValue() * PRECIPITATION_CEILING;
+      positions[streakIndex * 3 + 2] = Math.sin(angle) * radius;
+    }
+    positionsRef.current = positions;
+    // All streaks share one orientation: local +Y aligned with the fall
+    // velocity (down plus the wind carry).
+    const velocityDirection = new Vector3(
+      windDirectionX * windCarrySpeed,
+      -fallSpeed,
+      windDirectionZ * windCarrySpeed
+    ).normalize();
+    const orientation = new Quaternion().setFromUnitVectors(new Vector3(0, -1, 0), velocityDirection);
+    return { instancedMesh: mesh, streakOrientation: orientation };
+  }, [areaRadius, fallSpeed, seed, streakCount, windCarrySpeed, windDirectionX, windDirectionZ]);
+
+  useFrame((_, deltaTimeSeconds) => {
+    const positions = positionsRef.current;
+    if (!positions) {
+      return;
+    }
+    const matrix = new Matrix4();
+    const scale = new Vector3(1, 1, 1);
+    const position = new Vector3();
+    for (let streakIndex = 0; streakIndex < streakCount; streakIndex += 1) {
+      let x = positions[streakIndex * 3] + windDirectionX * windCarrySpeed * deltaTimeSeconds;
+      let y = positions[streakIndex * 3 + 1] - fallSpeed * deltaTimeSeconds;
+      let z = positions[streakIndex * 3 + 2] + windDirectionZ * windCarrySpeed * deltaTimeSeconds;
+      if (y < 0) {
+        y += PRECIPITATION_CEILING;
+      }
+      x = wrapIntoArea(x, areaRadius);
+      z = wrapIntoArea(z, areaRadius);
+      positions[streakIndex * 3] = x;
+      positions[streakIndex * 3 + 1] = y;
+      positions[streakIndex * 3 + 2] = z;
+      position.set(x, y, z);
+      matrix.compose(position, streakOrientation, scale);
+      instancedMesh.setMatrixAt(streakIndex, matrix);
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+  });
+
+  return <primitive object={instancedMesh} />;
+}
+
+type SnowfallLayerProps = {
+  flakeCount: number;
+  areaRadius: number;
+  seed: string;
+  intensity: number;
+  windDirectionRadians: number;
+  windStrength: number;
+};
+
+/** Points snowfall: slow fall, sinus sway, carried sideways by the wind. */
+function SnowfallLayer({ flakeCount, areaRadius, seed, intensity, windDirectionRadians, windStrength }: SnowfallLayerProps) {
   const elapsedSecondsRef = useRef(0);
 
   const { geometry, material, swayPhases } = useMemo(() => {
     const nextRandomValue = randomFromSeed(seed);
-    const positions = new Float32Array(particleCount * 3);
-    const phases = new Float32Array(particleCount);
-    for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
+    const positions = new Float32Array(flakeCount * 3);
+    const phases = new Float32Array(flakeCount);
+    for (let flakeIndex = 0; flakeIndex < flakeCount; flakeIndex += 1) {
       const angle = nextRandomValue() * Math.PI * 2;
       const radius = Math.sqrt(nextRandomValue()) * areaRadius;
-      positions[particleIndex * 3] = Math.cos(angle) * radius;
-      positions[particleIndex * 3 + 1] = nextRandomValue() * PRECIPITATION_CEILING;
-      positions[particleIndex * 3 + 2] = Math.sin(angle) * radius;
-      phases[particleIndex] = nextRandomValue() * Math.PI * 2;
+      positions[flakeIndex * 3] = Math.cos(angle) * radius;
+      positions[flakeIndex * 3 + 1] = nextRandomValue() * PRECIPITATION_CEILING;
+      positions[flakeIndex * 3 + 2] = Math.sin(angle) * radius;
+      phases[flakeIndex] = nextRandomValue() * Math.PI * 2;
     }
     const bufferGeometry = new BufferGeometry();
     bufferGeometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
     const pointsMaterial = new PointsMaterial({
-      color: new Color(kind === "rain" ? RAIN_COLOR : SNOW_COLOR),
-      size: kind === "rain" ? RAIN_POINT_SIZE : SNOW_POINT_SIZE,
+      color: new Color(SNOW_COLOR),
+      size: SNOW_POINT_SIZE,
       transparent: true,
-      opacity: kind === "rain" ? RAIN_OPACITY : SNOW_OPACITY,
+      opacity: SNOW_OPACITY,
       map: getSoftCircleTexture() ?? undefined,
       depthWrite: false,
       sizeAttenuation: true
     });
     return { geometry: bufferGeometry, material: pointsMaterial, swayPhases: phases };
-  }, [areaRadius, kind, particleCount, seed]);
+  }, [areaRadius, flakeCount, seed]);
 
   useFrame((_, deltaTimeSeconds) => {
     elapsedSecondsRef.current += deltaTimeSeconds;
     const elapsedSeconds = elapsedSecondsRef.current;
     const positionAttribute = geometry.getAttribute("position");
-    const fallSpeed =
-      kind === "rain"
-        ? RAIN_FALL_SPEED_BASE + intensity * RAIN_FALL_SPEED_PER_INTENSITY
-        : SNOW_FALL_SPEED_BASE + intensity * SNOW_FALL_SPEED_PER_INTENSITY;
-    for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
-      let particleY = positionAttribute.getY(particleIndex) - fallSpeed * deltaTimeSeconds;
-      if (particleY < 0) {
-        particleY += PRECIPITATION_CEILING;
+    const fallSpeed = SNOW_FALL_SPEED_BASE + intensity * SNOW_FALL_SPEED_PER_INTENSITY;
+    const windCarryX = Math.cos(windDirectionRadians) * SNOW_WIND_CARRY_UNITS_PER_SECOND * windStrength;
+    const windCarryZ = Math.sin(windDirectionRadians) * SNOW_WIND_CARRY_UNITS_PER_SECOND * windStrength;
+    for (let flakeIndex = 0; flakeIndex < flakeCount; flakeIndex += 1) {
+      let flakeY = positionAttribute.getY(flakeIndex) - fallSpeed * deltaTimeSeconds;
+      if (flakeY < 0) {
+        flakeY += PRECIPITATION_CEILING;
       }
-      positionAttribute.setY(particleIndex, particleY);
-      if (kind === "snow") {
-        // Snow drifts sideways as it falls; rain drops dead straight.
-        const swayPhase = swayPhases[particleIndex];
-        const baseX = positionAttribute.getX(particleIndex);
-        positionAttribute.setX(
-          particleIndex,
-          baseX + Math.sin(elapsedSeconds * SNOW_SWAY_FREQUENCY + swayPhase) * SNOW_SWAY_AMPLITUDE * deltaTimeSeconds
-        );
-      }
+      positionAttribute.setY(flakeIndex, flakeY);
+      const swayPhase = swayPhases[flakeIndex];
+      const swayStep = Math.sin(elapsedSeconds * SNOW_SWAY_FREQUENCY + swayPhase) * SNOW_SWAY_AMPLITUDE * deltaTimeSeconds;
+      positionAttribute.setX(
+        flakeIndex,
+        wrapIntoArea(positionAttribute.getX(flakeIndex) + swayStep + windCarryX * deltaTimeSeconds, areaRadius)
+      );
+      positionAttribute.setZ(
+        flakeIndex,
+        wrapIntoArea(positionAttribute.getZ(flakeIndex) + windCarryZ * deltaTimeSeconds, areaRadius)
+      );
     }
     positionAttribute.needsUpdate = true;
   });
 
-  return <points ref={pointsRef} geometry={geometry} material={material} />;
+  return <points geometry={geometry} material={material} />;
 }
 
 /**
- * The weather layer: drifting cloud sprites scaled by coverage, rain or snow
- * particle systems gated by the weather kind (counts straight from config),
- * and additive light shafts for sunRays.
+ * The weather layer: drifting cloud sprites scaled by coverage, wind-carried
+ * rain streaks or snowfall gated by the weather kind (counts straight from
+ * config), and additive light shafts for sunRays.
  */
-export function ForestWeatherEffects({ weather, lighting, terrain, placementSeed }: ForestWeatherEffectsProps) {
+export function ForestWeatherEffects({ weather, lighting, terrain, trees, placementSeed }: ForestWeatherEffectsProps) {
   const cloudGroupRef = useRef<Group>(null);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const weatherKind = weather?.kind ?? "clear";
   const intensity = clampValue(weather?.intensity ?? 0.5, 0, 1);
   const cloudCoverage = clampValue(weather?.cloudCoverage ?? 0.15, 0, 1);
+  const windDirectionRadians = trees?.windDirectionRadians ?? 0;
+  const windStrength = clampValue(trees?.windStrength ?? 0.35, 0, 1);
 
   const cloudSprites = useMemo(() => {
     const cloudCount = MINIMUM_CLOUD_SPRITE_COUNT + Math.round(cloudCoverage * CLOUD_SPRITE_COUNT_PER_COVERAGE);
@@ -223,22 +327,24 @@ export function ForestWeatherEffects({ weather, lighting, terrain, placementSeed
       ) : null}
 
       {weatherKind === "rain" && rainDropCount > 0 ? (
-        <PrecipitationLayer
-          particleCount={rainDropCount}
+        <RainStreaksLayer
+          streakCount={rainDropCount}
           areaRadius={treelineRadius}
           seed={placementSeed + RAIN_SCATTER_SEED_SUFFIX}
-          kind="rain"
           intensity={intensity}
+          windDirectionRadians={windDirectionRadians}
+          windStrength={windStrength}
         />
       ) : null}
 
       {weatherKind === "snow" && snowflakeCount > 0 ? (
-        <PrecipitationLayer
-          particleCount={snowflakeCount}
+        <SnowfallLayer
+          flakeCount={snowflakeCount}
           areaRadius={treelineRadius}
           seed={placementSeed + SNOW_SCATTER_SEED_SUFFIX}
-          kind="snow"
           intensity={intensity}
+          windDirectionRadians={windDirectionRadians}
+          windStrength={windStrength}
         />
       ) : null}
 
