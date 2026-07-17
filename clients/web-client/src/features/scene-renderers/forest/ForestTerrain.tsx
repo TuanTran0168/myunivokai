@@ -1,30 +1,27 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  Color,
-  ConeGeometry,
-  DodecahedronGeometry,
-  Float32BufferAttribute,
-  InstancedMesh,
-  Matrix4,
-  MeshStandardMaterial,
-  PlaneGeometry,
-  Quaternion,
-  Vector3
-} from "three";
+import { useGLTF } from "@react-three/drei";
+import { Color, Float32BufferAttribute, MeshStandardMaterial, PlaneGeometry, Vector3 } from "three";
 import type { ForestSeasonConfig, ForestTerrainConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import {
   blendedFoliageColors,
   blendedGroundColor,
   clearingRadiusFromTerrain,
-  mixHexColors,
   smoothstepValue,
   treelineRadiusFromTerrain,
   type PathLateralDistanceSampler,
   type TerrainHeightSampler
 } from "./forestMath";
+import {
+  buildStaticInstancedMeshes,
+  extractInstancedModelVariants,
+  GRASS_MODEL_DEFINITIONS,
+  natureModelUrl,
+  ROCK_MODEL_DEFINITIONS,
+  type StaticInstanceTransform
+} from "./forestModels";
 
 const GROUND_SEGMENTS_PER_SIDE = 128;
 // The ground extends past the treeline so the horizon never shows a raw mesh
@@ -41,14 +38,10 @@ const DIRT_PATH_COLOR = "#71543A";
 const PATH_HALF_WIDTH = 1.4;
 const PATH_EDGE_FEATHER = 0.9;
 
-const MINIMUM_ROCK_SCALE = 0.28;
-const ROCK_SCALE_RANGE = 0.75;
-const ROCK_COLOR = "#7D8577";
-const ROCK_MOSS_TINT = "#5B7A4A";
-const ROCK_SINK_DEPTH = 0.12;
+const MINIMUM_ROCK_SCALE = 0.5;
+const ROCK_SCALE_RANGE = 1.3;
+const ROCK_SINK_DEPTH = 0.08;
 
-const GRASS_TUFT_HEIGHT = 0.42;
-const GRASS_TUFT_RADIUS = 0.055;
 const MINIMUM_GRASS_SCALE = 0.6;
 const GRASS_SCALE_RANGE = 0.8;
 // Snow buries most tufts; a few dry stalks keep the ground from reading flat.
@@ -125,86 +118,93 @@ export function ForestTerrain({ terrain, season, terrainHeightSampler, pathLater
     return { geometry, material };
   }, [clearingRadius, groundKind, pathLateralDistanceSampler, placementSeed, season, terrainHeightSampler, treelineRadius]);
 
-  const rockInstancedMesh = useMemo(() => {
+  // Real mossy rocks (Quaternius MegaKit), instanced across the seeded
+  // scatter. Draw order per rock: angle, radius, scale, yaw, variant pick.
+  const rockModelUrls = useMemo(() => ROCK_MODEL_DEFINITIONS.map((definition) => natureModelUrl(definition)), []);
+  const loadedRockModels = useGLTF(rockModelUrls);
+  const rockInstancedMeshes = useMemo(() => {
+    const rockVariants = loadedRockModels.flatMap((gltf, definitionIndex) =>
+      gltf?.scene ? extractInstancedModelVariants(gltf.scene, ROCK_MODEL_DEFINITIONS[definitionIndex].targetHeight) : []
+    );
+    if (rockVariants.length === 0) {
+      return [];
+    }
     const rockCount = terrain?.rockCount ?? 12;
-    const geometry = new DodecahedronGeometry(1, 0);
-    const material = new MeshStandardMaterial({
-      color: mixHexColors(ROCK_COLOR, ROCK_MOSS_TINT, groundKind === "grass" ? 0.35 : 0.1),
-      flatShading: true,
-      roughness: 0.95
-    });
-    const mesh = new InstancedMesh(geometry, material, rockCount);
     const nextRandomValue = randomFromSeed(placementSeed + ROCK_SCATTER_SEED_SUFFIX);
-    const matrix = new Matrix4();
-    const rotation = new Quaternion();
-    const scale = new Vector3();
-    const position = new Vector3();
+    const transformsPerVariant: StaticInstanceTransform[][] = rockVariants.map(() => []);
     for (let rockIndex = 0; rockIndex < rockCount; rockIndex += 1) {
       const angle = nextRandomValue() * Math.PI * 2;
       const radius = clearingRadius * 1.05 + nextRandomValue() * (treelineRadius - clearingRadius * 1.05);
       const rockScale = MINIMUM_ROCK_SCALE + nextRandomValue() * ROCK_SCALE_RANGE;
-      const yaw = nextRandomValue() * Math.PI * 2;
-      position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
-      position.y = terrainHeightSampler(position.x, position.z) + rockScale * (0.5 - ROCK_SINK_DEPTH);
-      rotation.setFromAxisAngle(new Vector3(0, 1, 0), yaw);
-      scale.set(rockScale, rockScale * 0.8, rockScale);
-      matrix.compose(position, rotation, scale);
-      mesh.setMatrixAt(rockIndex, matrix);
+      const yawRadians = nextRandomValue() * Math.PI * 2;
+      const variantIndex = Math.floor(nextRandomValue() * rockVariants.length);
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      transformsPerVariant[variantIndex].push({
+        position: new Vector3(x, terrainHeightSampler(x, z) - rockScale * ROCK_SINK_DEPTH, z),
+        yawRadians,
+        scale: rockScale
+      });
     }
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    return mesh;
-  }, [clearingRadius, groundKind, placementSeed, terrain?.rockCount, terrainHeightSampler, treelineRadius]);
+    return rockVariants.flatMap((variant, variantIndex) =>
+      transformsPerVariant[variantIndex].length > 0
+        ? buildStaticInstancedMeshes(variant, transformsPerVariant[variantIndex], { receiveShadow: true })
+        : []
+    );
+  }, [clearingRadius, loadedRockModels, placementSeed, terrain?.rockCount, terrainHeightSampler, treelineRadius]);
 
-  const grassInstancedMesh = useMemo(() => {
+  // Real grass tufts, seasonal color per instance. Draw order per tuft:
+  // angle, radius, scale, yaw, variant pick.
+  const grassModelUrls = useMemo(() => GRASS_MODEL_DEFINITIONS.map((definition) => natureModelUrl(definition)), []);
+  const loadedGrassModels = useGLTF(grassModelUrls);
+  const grassInstancedMeshes = useMemo(() => {
+    const grassVariants = loadedGrassModels.flatMap((gltf, definitionIndex) =>
+      gltf?.scene ? extractInstancedModelVariants(gltf.scene, GRASS_MODEL_DEFINITIONS[definitionIndex].targetHeight) : []
+    );
+    if (grassVariants.length === 0) {
+      return [];
+    }
     const configuredCount = isMobileViewport()
       ? terrain?.grassTuftCountMobile ?? 300
       : terrain?.grassTuftCountDesktop ?? 800;
     const grassCount = groundKind === "snow" ? Math.floor(configuredCount * SNOW_GRASS_TUFT_FRACTION) : configuredCount;
     if (grassCount <= 0) {
-      return null;
+      return [];
     }
-    const geometry = new ConeGeometry(GRASS_TUFT_RADIUS, GRASS_TUFT_HEIGHT, 5);
-    // Cones pivot at their center; shift up so instances sit on the ground.
-    geometry.translate(0, GRASS_TUFT_HEIGHT / 2, 0);
     const foliageColors = blendedFoliageColors(season);
     const grassColor =
       groundKind === "snow"
         ? new Color(SNOW_GRASS_COLOR)
         : blendedGroundColor(season).lerp(foliageColors[1] ?? foliageColors[0], 0.5);
-    const material = new MeshStandardMaterial({ color: grassColor, flatShading: true, roughness: 1 });
-    const mesh = new InstancedMesh(geometry, material, grassCount);
     const nextRandomValue = randomFromSeed(placementSeed + GRASS_SCATTER_SEED_SUFFIX);
-    const matrix = new Matrix4();
-    const rotation = new Quaternion();
-    const scale = new Vector3();
-    const position = new Vector3();
-    const yAxis = new Vector3(0, 1, 0);
+    const transformsPerVariant: StaticInstanceTransform[][] = grassVariants.map(() => []);
     for (let grassIndex = 0; grassIndex < grassCount; grassIndex += 1) {
       const angle = nextRandomValue() * Math.PI * 2;
       // sqrt keeps the area density uniform instead of clustering the center.
       const radius = Math.sqrt(nextRandomValue()) * treelineRadius;
       const tuftScale = MINIMUM_GRASS_SCALE + nextRandomValue() * GRASS_SCALE_RANGE;
-      const yaw = nextRandomValue() * Math.PI * 2;
-      position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
-      const pathLateralDistance = pathLateralDistanceSampler(position.x, position.z);
-      if (pathLateralDistance < PATH_HALF_WIDTH) {
-        // Bare dirt on the path itself; the tuft slot is simply left empty
-        // (a zero-scale instance) so the draw order stays fixed.
-        scale.setScalar(0.0001);
-      } else {
-        scale.set(tuftScale, tuftScale, tuftScale);
-      }
-      position.y = terrainHeightSampler(position.x, position.z);
-      rotation.setFromAxisAngle(yAxis, yaw);
-      matrix.compose(position, rotation, scale);
-      mesh.setMatrixAt(grassIndex, matrix);
+      const yawRadians = nextRandomValue() * Math.PI * 2;
+      const variantIndex = Math.floor(nextRandomValue() * grassVariants.length);
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      // Bare dirt on the path itself; the tuft slot stays drawn (fixed draw
+      // order) but renders at zero scale.
+      const isOnPath = pathLateralDistanceSampler(x, z) < PATH_HALF_WIDTH;
+      transformsPerVariant[variantIndex].push({
+        position: new Vector3(x, terrainHeightSampler(x, z), z),
+        yawRadians,
+        scale: isOnPath ? 0.0001 : tuftScale,
+        foliageColor: grassColor
+      });
     }
-    mesh.instanceMatrix.needsUpdate = true;
-    return mesh;
+    return grassVariants.flatMap((variant, variantIndex) =>
+      transformsPerVariant[variantIndex].length > 0
+        ? buildStaticInstancedMeshes(variant, transformsPerVariant[variantIndex], { castShadow: false })
+        : []
+    );
   }, [
     groundKind,
+    loadedGrassModels,
     pathLateralDistanceSampler,
     placementSeed,
     season,
@@ -217,8 +217,12 @@ export function ForestTerrain({ terrain, season, terrainHeightSampler, pathLater
   return (
     <group>
       <mesh geometry={groundMesh.geometry} material={groundMesh.material} receiveShadow />
-      <primitive object={rockInstancedMesh} />
-      {grassInstancedMesh ? <primitive object={grassInstancedMesh} /> : null}
+      {rockInstancedMeshes.map((mesh, meshIndex) => (
+        <primitive key={`rock-${meshIndex}`} object={mesh} />
+      ))}
+      {grassInstancedMeshes.map((mesh, meshIndex) => (
+        <primitive key={`grass-${meshIndex}`} object={mesh} />
+      ))}
     </group>
   );
 }

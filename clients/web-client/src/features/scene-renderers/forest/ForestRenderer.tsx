@@ -5,6 +5,7 @@ import type { SceneRendererProps } from "@/features/scene-renderers/types";
 import { pointsOfInterestFromScene } from "@/lib/scene";
 import { createPathLateralDistanceSampler, createTerrainHeightSampler, treelineRadiusFromTerrain } from "./forestMath";
 import { ForestAmbientParticles } from "./ForestAmbientParticles";
+import { ForestGroundDecor } from "./ForestGroundDecor";
 import { ForestLandmarks } from "./ForestLandmarks";
 import { ForestSkyDome, sunDirectionFromLighting } from "./ForestSkyDome";
 import { ForestTerrain } from "./ForestTerrain";
@@ -103,6 +104,12 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
       />
       <ForestTrees
         trees={trees}
+        terrain={terrain}
+        season={season}
+        terrainHeightSampler={terrainHeightSampler}
+        pathLateralDistanceSampler={pathLateralDistanceSampler}
+      />
+      <ForestGroundDecor
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}

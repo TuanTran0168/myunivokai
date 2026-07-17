@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { AdditiveBlending, Color, Vector3 } from "three";
+import { useGLTF } from "@react-three/drei";
+import { AdditiveBlending, Color, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { ForestLandmarkConfig, PlanetSceneConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
@@ -9,6 +10,7 @@ import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { usePlanetPositionTracker } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 import { getSoftCircleTexture } from "@/features/scene-renderers/shared/softCircleTexture";
 import { mixHexColors, type TerrainHeightSampler } from "./forestMath";
+import { LANDMARK_MODEL_CATALOG, natureModelUrl, normalizationForObject } from "./forestModels";
 
 // The clickable POI layer — one hero object per Nature DNA landmark, the
 // forest's counterpart of planets. Hover feeds the canvas tooltip, click
@@ -23,16 +25,15 @@ const SELECTION_RING_SELECTED_OPACITY = 0.95;
 const LANDMARK_GLOW_SCALE = 4.5;
 const LANDMARK_GLOW_OPACITY = 0.28;
 
-const HEART_TREE_TRUNK_HEIGHT = 3.1;
-const HEART_TREE_CANOPY_RADIUS = 1.9;
-const STANDING_STONE_HEIGHT = 2.3;
 const POND_RADIUS = 1.7;
-const FALLEN_LOG_LENGTH = 2.7;
-const FLOWER_PATCH_FLOWER_COUNT = 12;
-const FLOWER_PATCH_RADIUS = 1.3;
-const LANTERN_POST_HEIGHT = 1.5;
+const LANTERN_LIGHT_HEIGHT = 1.6;
 
-const FLOWER_SCATTER_SEED_SUFFIX = "-flowers";
+// How strongly the landmark's accent color tints the model's foliage and
+// flower materials — the personalization layer over the stock CC0 model.
+const FOLIAGE_ACCENT_TINT = 0.45;
+const FOLIAGE_ACCENT_EMISSIVE_INTENSITY = 0.22;
+const FLOWER_ACCENT_EMISSIVE_INTENSITY = 0.4;
+const ACCENT_TINT_MATERIAL_NAME_PATTERN = /leaf|leaves|flower|green/i;
 
 type ForestLandmarkProps = {
   landmark: ForestLandmarkConfig;
@@ -45,154 +46,95 @@ type ForestLandmarkProps = {
   onSelectPlanet?: (pointOfInterest: PlanetSceneConfig | null) => void;
 };
 
+type LandmarkModelShapeProps = {
+  landmarkKind: string;
+  accentColor: string;
+  yawRadians: number;
+};
+
+/**
+ * A real GLB hero prop (Quaternius/Kay Lousberg CC0 models), normalized to
+ * its catalog height, with foliage/flower materials tinted and lit by the
+ * landmark's accent color — the personalization layer over the stock model.
+ */
+function LandmarkModelShape({ landmarkKind, accentColor, yawRadians }: LandmarkModelShapeProps) {
+  const definition = LANDMARK_MODEL_CATALOG[landmarkKind] ?? LANDMARK_MODEL_CATALOG.heartTree;
+  const gltf = useGLTF(natureModelUrl(definition));
+
+  const preparedScene = useMemo(() => {
+    const cloned = gltf.scene.clone(true);
+    const accent = new Color(accentColor);
+    cloned.traverse((object) => {
+      const mesh = object as Mesh;
+      if (!mesh.isMesh) {
+        return;
+      }
+      mesh.castShadow = true;
+      const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      if (material && ACCENT_TINT_MATERIAL_NAME_PATTERN.test(material.name ?? "")) {
+        const tintedMaterial = (material as MeshStandardMaterial).clone();
+        tintedMaterial.color = tintedMaterial.color.clone().lerp(accent, FOLIAGE_ACCENT_TINT);
+        tintedMaterial.emissive = accent.clone();
+        tintedMaterial.emissiveIntensity = /flower/i.test(material.name ?? "")
+          ? FLOWER_ACCENT_EMISSIVE_INTENSITY
+          : FOLIAGE_ACCENT_EMISSIVE_INTENSITY;
+        mesh.material = tintedMaterial;
+      }
+    });
+    return cloned;
+  }, [accentColor, gltf.scene]);
+
+  const { scale, footOffsetY } = useMemo(
+    () => normalizationForObject(gltf.scene, definition.targetHeight),
+    [definition.targetHeight, gltf.scene]
+  );
+
+  return (
+    <group rotation={[0, yawRadians, 0]}>
+      <group position={[0, footOffsetY, 0]} scale={scale}>
+        <primitive object={preparedScene} />
+      </group>
+      {landmarkKind === "lanternShrine" ? (
+        <pointLight position={[0, LANTERN_LIGHT_HEIGHT, 0]} color={accentColor} intensity={2.6} distance={9} decay={2} />
+      ) : null}
+    </group>
+  );
+}
+
 function LandmarkShape({ landmark }: { landmark: ForestLandmarkConfig }) {
   const accentColor = landmark.accentColor ?? "#06B6D4";
-  const flowerPositions = useMemo(() => {
-    if (landmark.kind !== "flowerPatch") {
-      return [];
-    }
-    const nextRandomValue = randomFromSeed(`${landmark.key ?? "landmark"}${FLOWER_SCATTER_SEED_SUFFIX}`);
-    return Array.from({ length: FLOWER_PATCH_FLOWER_COUNT }, () => {
-      const angle = nextRandomValue() * Math.PI * 2;
-      const radius = Math.sqrt(nextRandomValue()) * FLOWER_PATCH_RADIUS;
-      const stemHeight = 0.25 + nextRandomValue() * 0.3;
-      return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius, stemHeight };
-    });
-  }, [landmark.key, landmark.kind]);
+  // Deterministic per-landmark yaw so two shrines never face identically.
+  const yawRadians = useMemo(
+    () => randomFromSeed(`${landmark.key ?? "landmark"}-yaw`)() * Math.PI * 2,
+    [landmark.key]
+  );
 
-  switch (landmark.kind) {
-    case "standingStone":
-      return (
-        <group>
-          <mesh position={[0, STANDING_STONE_HEIGHT / 2, 0]} rotation={[0, 0.4, 0.04]} castShadow>
-            <boxGeometry args={[0.9, STANDING_STONE_HEIGHT, 0.55]} />
-            <meshStandardMaterial color="#8D9289" flatShading roughness={0.9} />
-          </mesh>
-          {/* Carved rune strip that carries the accent color. */}
-          <mesh position={[0, STANDING_STONE_HEIGHT * 0.55, 0.29]} rotation={[0, 0.4, 0]}>
-            <boxGeometry args={[0.16, STANDING_STONE_HEIGHT * 0.6, 0.03]} />
-            <meshStandardMaterial color={accentColor} emissive={accentColor} emissiveIntensity={0.9} />
-          </mesh>
-        </group>
-      );
-    case "pond":
-      return (
-        <group>
-          <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[POND_RADIUS, 28]} />
-            <meshStandardMaterial
-              color={mixHexColors("#2E6E8E", accentColor, 0.25)}
-              metalness={0.85}
-              roughness={0.12}
-            />
-          </mesh>
-          {/* Stone rim + lily pads. */}
-          <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[POND_RADIUS, POND_RADIUS + 0.22, 28]} />
-            <meshStandardMaterial color="#7D8577" flatShading roughness={1} />
-          </mesh>
-          <mesh position={[POND_RADIUS * 0.4, 0.06, POND_RADIUS * 0.25]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.22, 8]} />
-            <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
-          </mesh>
-          <mesh position={[-POND_RADIUS * 0.35, 0.06, -POND_RADIUS * 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.16, 8]} />
-            <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
-          </mesh>
-        </group>
-      );
-    case "flowerPatch":
-      return (
-        <group>
-          {flowerPositions.map((flower, flowerIndex) => (
-            <group key={flowerIndex} position={[flower.x, 0, flower.z]}>
-              <mesh position={[0, flower.stemHeight / 2, 0]}>
-                <cylinderGeometry args={[0.015, 0.02, flower.stemHeight, 4]} />
-                <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.9} />
-              </mesh>
-              <mesh position={[0, flower.stemHeight + 0.05, 0]}>
-                <sphereGeometry args={[0.075, 6, 5]} />
-                <meshStandardMaterial color={accentColor} emissive={accentColor} emissiveIntensity={0.45} />
-              </mesh>
-            </group>
-          ))}
-        </group>
-      );
-    case "fallenLog":
-      return (
-        <group>
-          <mesh position={[0, 0.34, 0]} rotation={[0, 0.5, Math.PI / 2]} castShadow>
-            <cylinderGeometry args={[0.32, 0.38, FALLEN_LOG_LENGTH, 8]} />
-            <meshStandardMaterial color="#6B5744" flatShading roughness={1} />
-          </mesh>
-          {/* Moss blanket with the accent hue folded in. */}
-          <mesh position={[0, 0.62, 0]} rotation={[0, 0.5, 0]}>
-            <boxGeometry args={[FALLEN_LOG_LENGTH * 0.7, 0.08, 0.4]} />
-            <meshStandardMaterial color={mixHexColors("#5B7A4A", accentColor, 0.2)} flatShading roughness={0.9} />
-          </mesh>
-        </group>
-      );
-    case "lanternShrine":
-      return (
-        <group>
-          <mesh position={[0, LANTERN_POST_HEIGHT / 2, 0]} castShadow>
-            <boxGeometry args={[0.16, LANTERN_POST_HEIGHT, 0.16]} />
-            <meshStandardMaterial color="#4A3B2C" flatShading roughness={0.95} />
-          </mesh>
-          <mesh position={[0, LANTERN_POST_HEIGHT + 0.22, 0]} castShadow>
-            <boxGeometry args={[0.4, 0.44, 0.4]} />
-            <meshStandardMaterial
-              color={accentColor}
-              emissive={accentColor}
-              emissiveIntensity={1.3}
-              transparent
-              opacity={0.92}
-            />
-          </mesh>
-          <mesh position={[0, LANTERN_POST_HEIGHT + 0.5, 0]}>
-            <coneGeometry args={[0.34, 0.2, 4]} />
-            <meshStandardMaterial color="#4A3B2C" flatShading roughness={0.95} />
-          </mesh>
-          <pointLight
-            position={[0, LANTERN_POST_HEIGHT + 0.22, 0]}
-            color={accentColor}
-            intensity={2.6}
-            distance={9}
-            decay={2}
-          />
-        </group>
-      );
-    case "heartTree":
-    default:
-      return (
-        <group>
-          <mesh position={[0, HEART_TREE_TRUNK_HEIGHT / 2, 0]} castShadow>
-            <cylinderGeometry args={[0.22, 0.42, HEART_TREE_TRUNK_HEIGHT, 7]} />
-            <meshStandardMaterial color="#6E5138" flatShading roughness={0.95} />
-          </mesh>
-          <mesh position={[0, HEART_TREE_TRUNK_HEIGHT + HEART_TREE_CANOPY_RADIUS * 0.55, 0]} castShadow>
-            <icosahedronGeometry args={[HEART_TREE_CANOPY_RADIUS, 1]} />
-            <meshStandardMaterial
-              color={mixHexColors("#4F8A3D", accentColor, 0.45)}
-              emissive={accentColor}
-              emissiveIntensity={0.3}
-              flatShading
-              roughness={0.85}
-            />
-          </mesh>
-          <mesh position={[HEART_TREE_CANOPY_RADIUS * 0.5, HEART_TREE_TRUNK_HEIGHT + HEART_TREE_CANOPY_RADIUS * 1.25, 0]} castShadow>
-            <icosahedronGeometry args={[HEART_TREE_CANOPY_RADIUS * 0.6, 1]} />
-            <meshStandardMaterial
-              color={mixHexColors("#4F8A3D", accentColor, 0.55)}
-              emissive={accentColor}
-              emissiveIntensity={0.35}
-              flatShading
-              roughness={0.85}
-            />
-          </mesh>
-        </group>
-      );
+  // The pond stays procedural: a reflective water disc reads better than any
+  // low-poly pond model at this scale.
+  if (landmark.kind === "pond") {
+    return (
+      <group>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[POND_RADIUS, 28]} />
+          <meshStandardMaterial color={mixHexColors("#2E6E8E", accentColor, 0.25)} metalness={0.85} roughness={0.12} />
+        </mesh>
+        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[POND_RADIUS, POND_RADIUS + 0.22, 28]} />
+          <meshStandardMaterial color="#7D8577" flatShading roughness={1} />
+        </mesh>
+        <mesh position={[POND_RADIUS * 0.4, 0.06, POND_RADIUS * 0.25]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.22, 8]} />
+          <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
+        </mesh>
+        <mesh position={[-POND_RADIUS * 0.35, 0.06, -POND_RADIUS * 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.16, 8]} />
+          <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
+        </mesh>
+      </group>
+    );
   }
+
+  return <LandmarkModelShape landmarkKind={landmark.kind ?? "heartTree"} accentColor={accentColor} yawRadians={yawRadians} />;
 }
 
 function ForestLandmark({

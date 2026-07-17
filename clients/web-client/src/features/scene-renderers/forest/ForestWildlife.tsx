@@ -1,101 +1,28 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { DoubleSide, Group, Vector3 } from "three";
+import { useAnimations, useGLTF } from "@react-three/drei";
+import { SkeletonUtils } from "three-stdlib";
+import { Group, Vector3 } from "three";
 import type { ForestBirdFlockConfig, ForestGroundAnimalConfig, ForestTerrainConfig, ForestWildlifeConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import { clearingRadiusFromTerrain, treelineRadiusFromTerrain, type TerrainHeightSampler } from "./forestMath";
+import { ANIMAL_MODEL_CATALOG, BIRD_MODEL_DEFINITION, natureModelUrl, normalizationForObject } from "./forestModels";
 
-// Stylized primitive wildlife. Like the trees, every species is a low-poly
-// primitive assembly until the CC0 asset round replaces them with GLBs keyed
-// by the same modelKey vocabulary.
-
-type AnimalSpeciesShape = {
-  bodyColor: string;
-  bellyColor: string;
-  bodyLength: number;
-  bodyRadius: number;
-  legHeight: number;
-  headRadius: number;
-  hasAntlers: boolean;
-  earLength: number;
-  tailStyle: "stub" | "bushy";
-  bodyBobFrequency: number;
-};
-
-const ANIMAL_SHAPES_BY_MODEL_KEY: Record<string, AnimalSpeciesShape> = {
-  "animal-deer": {
-    bodyColor: "#A07B52",
-    bellyColor: "#C4A87E",
-    bodyLength: 1.15,
-    bodyRadius: 0.3,
-    legHeight: 0.72,
-    headRadius: 0.19,
-    hasAntlers: true,
-    earLength: 0.14,
-    tailStyle: "stub",
-    bodyBobFrequency: 6
-  },
-  "animal-fox": {
-    bodyColor: "#C96F33",
-    bellyColor: "#E8D8C8",
-    bodyLength: 0.78,
-    bodyRadius: 0.19,
-    legHeight: 0.34,
-    headRadius: 0.14,
-    hasAntlers: false,
-    earLength: 0.13,
-    tailStyle: "bushy",
-    bodyBobFrequency: 8
-  },
-  "animal-rabbit": {
-    bodyColor: "#9C948A",
-    bellyColor: "#CFC8BE",
-    bodyLength: 0.42,
-    bodyRadius: 0.15,
-    legHeight: 0.14,
-    headRadius: 0.11,
-    hasAntlers: false,
-    earLength: 0.22,
-    tailStyle: "stub",
-    bodyBobFrequency: 12
-  },
-  "animal-boar": {
-    bodyColor: "#5C4A3A",
-    bellyColor: "#776552",
-    bodyLength: 0.95,
-    bodyRadius: 0.3,
-    legHeight: 0.34,
-    headRadius: 0.2,
-    hasAntlers: false,
-    earLength: 0.09,
-    tailStyle: "stub",
-    bodyBobFrequency: 7
-  },
-  "animal-wolf": {
-    bodyColor: "#8A8D93",
-    bellyColor: "#B9BCC2",
-    bodyLength: 1.0,
-    bodyRadius: 0.24,
-    legHeight: 0.55,
-    headRadius: 0.17,
-    hasAntlers: false,
-    earLength: 0.12,
-    tailStyle: "bushy",
-    bodyBobFrequency: 7
-  }
-};
-const DEFAULT_ANIMAL_SHAPE = ANIMAL_SHAPES_BY_MODEL_KEY["animal-deer"];
+// Real animals: Quaternius' animated GLB pack (deer/fox/wolf play their Walk
+// clip) plus static CC models for boar/rabbit/bird, which fall back to a
+// gentle body bob. Movement is the same seeded ping-pong wander as before.
 
 const ANIMAL_WALK_SPEED_UNITS_PER_SECOND = 2.4;
 const ANIMAL_BODY_BOB_AMPLITUDE = 0.035;
+const ANIMAL_BODY_BOB_FREQUENCY = 8;
 const ANIMAL_TURN_PAUSE_FRACTION = 0.06;
+// Multiplies the config walkSpeed into the walk clip's playback rate so the
+// hooves match the ground speed instead of moonwalking.
+const WALK_CLIP_TIMESCALE_PER_WALK_SPEED = 2.2;
 
-const BIRD_BODY_COLOR = "#3A3F47";
-const BIRD_WING_COLOR = "#565D68";
-const BIRD_WING_FLAP_FREQUENCY = 9;
-const BIRD_WING_FLAP_AMPLITUDE = 0.55;
+const BIRD_BANK_ROLL_RADIANS = 0.3;
 const BIRD_CIRCLING_RADIUS_FRACTION = 0.5;
 const BIRD_CIRCLING_SPEED_MULTIPLIER = 0.35;
 const BIRD_CROSSING_SPEED_UNITS_PER_SECOND = 7;
@@ -107,6 +34,65 @@ type ForestWildlifeProps = {
   terrainHeightSampler: TerrainHeightSampler;
 };
 
+type AnimalModelProps = {
+  modelKey: string;
+  walkSpeed: number;
+  /** True while the wander loop is in its end-of-path pause. */
+  isPausedRef: React.MutableRefObject<boolean>;
+};
+
+/**
+ * One loaded, normalized, animation-playing animal body. Skinned scenes are
+ * cloned per individual (instancing does not apply to skeletons); counts are
+ * tiny (≤6 animals per forest), so clones are cheap.
+ */
+function AnimalModel({ modelKey, walkSpeed, isPausedRef }: AnimalModelProps) {
+  const definition = ANIMAL_MODEL_CATALOG[modelKey] ?? ANIMAL_MODEL_CATALOG["animal-deer"];
+  const gltf = useGLTF(natureModelUrl(definition));
+  const modelRootRef = useRef<Group>(null);
+
+  const clonedScene = useMemo(() => {
+    const cloned = SkeletonUtils.clone(gltf.scene);
+    cloned.traverse((object) => {
+      object.castShadow = true;
+    });
+    return cloned;
+  }, [gltf.scene]);
+
+  const { scale, footOffsetY } = useMemo(
+    () => normalizationForObject(gltf.scene, definition.targetHeight),
+    [definition.targetHeight, gltf.scene]
+  );
+
+  const { actions } = useAnimations(gltf.animations, modelRootRef);
+  useEffect(() => {
+    const walkAction = actions[definition.walkClipName] ?? actions[Object.keys(actions)[0] ?? ""];
+    if (!walkAction) {
+      return;
+    }
+    walkAction.reset().play();
+    walkAction.timeScale = walkSpeed * WALK_CLIP_TIMESCALE_PER_WALK_SPEED;
+    return () => {
+      walkAction.stop();
+    };
+  }, [actions, definition.walkClipName, walkSpeed]);
+
+  // Freeze the walk cycle during the end-of-path pause so the animal stands
+  // instead of walking on the spot.
+  useFrame(() => {
+    const walkAction = actions[definition.walkClipName] ?? actions[Object.keys(actions)[0] ?? ""];
+    if (walkAction) {
+      walkAction.timeScale = isPausedRef.current ? 0 : walkSpeed * WALK_CLIP_TIMESCALE_PER_WALK_SPEED;
+    }
+  });
+
+  return (
+    <group ref={modelRootRef} position={[0, footOffsetY, 0]} scale={scale}>
+      <primitive object={clonedScene} />
+    </group>
+  );
+}
+
 type GroundAnimalProps = {
   animalConfig: ForestGroundAnimalConfig;
   individualIndex: number;
@@ -115,12 +101,15 @@ type GroundAnimalProps = {
   terrainHeightSampler: TerrainHeightSampler;
 };
 
-/** One animal walking back and forth between two seeded waypoints. */
+/** One animal wandering back and forth between two seeded waypoints. */
 function GroundAnimal({ animalConfig, individualIndex, clearingRadius, treelineRadius, terrainHeightSampler }: GroundAnimalProps) {
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
+  const isPausedRef = useRef(false);
 
-  const shape = ANIMAL_SHAPES_BY_MODEL_KEY[animalConfig.modelKey ?? ""] ?? DEFAULT_ANIMAL_SHAPE;
+  const modelKey = animalConfig.modelKey ?? "animal-deer";
+  const definition = ANIMAL_MODEL_CATALOG[modelKey] ?? ANIMAL_MODEL_CATALOG["animal-deer"];
+  const hasWalkClip = definition.walkClipName.length > 0;
   const animalScale = animalConfig.scale ?? 1;
   const walkSpeed = animalConfig.walkSpeed ?? 0.5;
 
@@ -147,15 +136,21 @@ function GroundAnimal({ animalConfig, individualIndex, clearingRadius, treelineR
     const cycleDurationSeconds = pathLength / (walkSpeed * ANIMAL_WALK_SPEED_UNITS_PER_SECOND);
     // Ping-pong parameter with a brief pause at each end (the "graze and
     // turn" beat that sells back-and-forth wandering).
-    const cyclePosition = ((elapsedSeconds / cycleDurationSeconds + phaseOffset) % 2 + 2) % 2;
+    const cyclePosition = (((elapsedSeconds / cycleDurationSeconds + phaseOffset) % 2) + 2) % 2;
     const rawProgress = cyclePosition < 1 ? cyclePosition : 2 - cyclePosition;
     const pauseBand = ANIMAL_TURN_PAUSE_FRACTION;
+    isPausedRef.current = rawProgress < pauseBand || rawProgress > 1 - pauseBand;
     const walkProgress = Math.min(1, Math.max(0, (rawProgress - pauseBand) / (1 - 2 * pauseBand)));
     const headingSign = cyclePosition < 1 ? 1 : -1;
 
     const x = waypointA.x + (waypointB.x - waypointA.x) * walkProgress;
     const z = waypointA.z + (waypointB.z - waypointA.z) * walkProgress;
-    const bodyBob = Math.sin(elapsedSeconds * shape.bodyBobFrequency) * ANIMAL_BODY_BOB_AMPLITUDE * animalScale;
+    // Static models bob a little to read as alive; animated ones let the
+    // walk clip carry the motion.
+    const bodyBob =
+      hasWalkClip || isPausedRef.current
+        ? 0
+        : Math.sin(elapsedSeconds * ANIMAL_BODY_BOB_FREQUENCY) * ANIMAL_BODY_BOB_AMPLITUDE * animalScale;
     group.position.set(x, terrainHeightSampler(x, z) + bodyBob, z);
     group.rotation.y = Math.atan2(
       (waypointB.x - waypointA.x) * headingSign,
@@ -163,70 +158,9 @@ function GroundAnimal({ animalConfig, individualIndex, clearingRadius, treelineR
     );
   });
 
-  const legOffsetX = shape.bodyRadius * 0.55;
-  const legOffsetZ = shape.bodyLength * 0.32;
-  const bodyCenterHeight = shape.legHeight + shape.bodyRadius * 0.9;
-  const headForwardOffset = shape.bodyLength * 0.62;
-  const headHeight = bodyCenterHeight + shape.bodyRadius * 0.65;
-
   return (
     <group ref={groupRef} scale={animalScale}>
-      {/* Body — a squashed sphere reads as a torso at this poly count. */}
-      <mesh position={[0, bodyCenterHeight, 0]} scale={[shape.bodyRadius, shape.bodyRadius * 0.85, shape.bodyLength * 0.5]} castShadow>
-        <sphereGeometry args={[1, 10, 8]} />
-        <meshStandardMaterial color={shape.bodyColor} flatShading roughness={0.9} />
-      </mesh>
-      {/* Head with a hint of neck. */}
-      <mesh position={[0, headHeight, headForwardOffset]} castShadow>
-        <sphereGeometry args={[shape.headRadius, 8, 6]} />
-        <meshStandardMaterial color={shape.bodyColor} flatShading roughness={0.9} />
-      </mesh>
-      {/* Ears. */}
-      <mesh position={[shape.headRadius * 0.5, headHeight + shape.headRadius, headForwardOffset]} rotation={[0.2, 0, -0.15]}>
-        <coneGeometry args={[shape.earLength * 0.32, shape.earLength, 4]} />
-        <meshStandardMaterial color={shape.bodyColor} flatShading roughness={0.9} />
-      </mesh>
-      <mesh position={[-shape.headRadius * 0.5, headHeight + shape.headRadius, headForwardOffset]} rotation={[0.2, 0, 0.15]}>
-        <coneGeometry args={[shape.earLength * 0.32, shape.earLength, 4]} />
-        <meshStandardMaterial color={shape.bodyColor} flatShading roughness={0.9} />
-      </mesh>
-      {/* Antlers, deer only. */}
-      {shape.hasAntlers ? (
-        <>
-          <mesh position={[shape.headRadius * 0.55, headHeight + shape.headRadius * 1.6, headForwardOffset]} rotation={[0, 0, -0.4]}>
-            <coneGeometry args={[0.03, 0.3, 4]} />
-            <meshStandardMaterial color="#D9C7A8" flatShading roughness={0.85} />
-          </mesh>
-          <mesh position={[-shape.headRadius * 0.55, headHeight + shape.headRadius * 1.6, headForwardOffset]} rotation={[0, 0, 0.4]}>
-            <coneGeometry args={[0.03, 0.3, 4]} />
-            <meshStandardMaterial color="#D9C7A8" flatShading roughness={0.85} />
-          </mesh>
-        </>
-      ) : null}
-      {/* Four legs. */}
-      {[
-        [legOffsetX, legOffsetZ],
-        [-legOffsetX, legOffsetZ],
-        [legOffsetX, -legOffsetZ],
-        [-legOffsetX, -legOffsetZ]
-      ].map(([offsetX, offsetZ], legIndex) => (
-        <mesh key={legIndex} position={[offsetX, shape.legHeight / 2, offsetZ]} castShadow>
-          <cylinderGeometry args={[0.045, 0.05, shape.legHeight, 5]} />
-          <meshStandardMaterial color={shape.bodyColor} flatShading roughness={0.9} />
-        </mesh>
-      ))}
-      {/* Tail. */}
-      {shape.tailStyle === "bushy" ? (
-        <mesh position={[0, bodyCenterHeight + 0.05, -shape.bodyLength * 0.6]} rotation={[Math.PI / 2.6, 0, 0]}>
-          <coneGeometry args={[shape.bodyRadius * 0.45, shape.bodyLength * 0.6, 6]} />
-          <meshStandardMaterial color={shape.bellyColor} flatShading roughness={0.9} />
-        </mesh>
-      ) : (
-        <mesh position={[0, bodyCenterHeight + shape.bodyRadius * 0.4, -shape.bodyLength * 0.5]}>
-          <sphereGeometry args={[shape.bodyRadius * 0.28, 6, 5]} />
-          <meshStandardMaterial color={shape.bellyColor} flatShading roughness={0.9} />
-        </mesh>
-      )}
+      <AnimalModel modelKey={modelKey} walkSpeed={walkSpeed} isPausedRef={isPausedRef} />
     </group>
   );
 }
@@ -237,13 +171,18 @@ type BirdProps = {
   treelineRadius: number;
 };
 
-/** One bird: cone body + two flapping wing planes on a seeded flight path. */
+/** One bird gliding a seeded flight path (banking into the turns). */
 function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
   const groupRef = useRef<Group>(null);
-  const leftWingRef = useRef<Group>(null);
-  const rightWingRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const previousPosition = useRef(new Vector3());
+
+  const gltf = useGLTF(natureModelUrl(BIRD_MODEL_DEFINITION));
+  const clonedScene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+  const { scale, footOffsetY } = useMemo(
+    () => normalizationForObject(gltf.scene, BIRD_MODEL_DEFINITION.targetHeight),
+    [gltf.scene]
+  );
 
   const flightSpeed = flockConfig.flightSpeed ?? 0.6;
   const pattern = flockConfig.pattern ?? "circling";
@@ -269,8 +208,7 @@ function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
     }
     elapsedSecondsRef.current += deltaTimeSeconds;
     const elapsedSeconds = elapsedSecondsRef.current;
-    const altitudeWave =
-      Math.sin(elapsedSeconds * 0.8 + birdPathParameters.wavePhase) * BIRD_ALTITUDE_WAVE_AMPLITUDE;
+    const altitudeWave = Math.sin(elapsedSeconds * 0.8 + birdPathParameters.wavePhase) * BIRD_ALTITUDE_WAVE_AMPLITUDE;
 
     if (pattern === "circling") {
       const circlingRadius = treelineRadius * BIRD_CIRCLING_RADIUS_FRACTION + birdPathParameters.radiusJitter;
@@ -297,40 +235,22 @@ function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
       );
     }
 
-    // Face the direction of travel.
+    // Face the direction of travel and bank into it.
     const movement = group.position.clone().sub(previousPosition.current);
     if (movement.lengthSq() > 0.000001) {
       group.rotation.y = Math.atan2(movement.x, movement.z);
+      group.rotation.z =
+        pattern === "circling"
+          ? BIRD_BANK_ROLL_RADIANS
+          : Math.sin(elapsedSeconds * 0.8 + birdPathParameters.wavePhase) * BIRD_BANK_ROLL_RADIANS * 0.4;
     }
     previousPosition.current.copy(group.position);
-
-    // Wing flap.
-    const flapAngle = Math.sin(elapsedSeconds * BIRD_WING_FLAP_FREQUENCY + birdPathParameters.wavePhase) * BIRD_WING_FLAP_AMPLITUDE;
-    if (leftWingRef.current) {
-      leftWingRef.current.rotation.z = flapAngle;
-    }
-    if (rightWingRef.current) {
-      rightWingRef.current.rotation.z = -flapAngle;
-    }
   });
 
   return (
     <group ref={groupRef}>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.09, 0.42, 5]} />
-        <meshStandardMaterial color={BIRD_BODY_COLOR} flatShading roughness={0.85} />
-      </mesh>
-      <group ref={leftWingRef} position={[0.05, 0, 0]}>
-        <mesh position={[0.24, 0, 0]}>
-          <planeGeometry args={[0.48, 0.2]} />
-          <meshStandardMaterial color={BIRD_WING_COLOR} side={DoubleSide} flatShading roughness={0.85} />
-        </mesh>
-      </group>
-      <group ref={rightWingRef} position={[-0.05, 0, 0]}>
-        <mesh position={[-0.24, 0, 0]}>
-          <planeGeometry args={[0.48, 0.2]} />
-          <meshStandardMaterial color={BIRD_WING_COLOR} side={DoubleSide} flatShading roughness={0.85} />
-        </mesh>
+      <group position={[0, footOffsetY - BIRD_MODEL_DEFINITION.targetHeight / 2, 0]} scale={scale}>
+        <primitive object={clonedScene} />
       </group>
     </group>
   );
