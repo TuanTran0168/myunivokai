@@ -1,9 +1,38 @@
-# Render blueprint for the Myunivokai API (https://render.com/docs/blueprint-spec).
+# Render blueprint for the Myunivokai service fleet.
 # Secrets are `sync: false`: their values live ONLY in the Render dashboard
-# (templates with placeholders: services/universe-service/.env.render, untracked).
+# except the gateway credential, which Render generates once in the shared
+# environment group below.
 # The web client deploys separately (Vercel per README, or a Render static site)
-# with NEXT_PUBLIC_API_BASE_URL pointing at this service.
+# with NEXT_PUBLIC_API_BASE_URL pointing at the gateway's /api/universe prefix.
+envVarGroups:
+  - name: myunivokai-gateway-secrets
+    envVars:
+      - key: GATEWAY_SHARED_SECRET
+        generateValue: true
+
 services:
+  - type: web
+    name: myunivokai-gateway
+    runtime: docker
+    rootDir: services/api-gateway
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: API_ALLOWED_ORIGINS
+        sync: false
+      # Free Render web services cannot receive private-network requests.
+      # Public HTTPS upstream URLs plus the shared key prevent bypass.
+      - key: UNIVERSE_SERVICE_URL
+        sync: false
+      - key: NATURE_SERVICE_URL
+        sync: false
+      - fromGroup: myunivokai-gateway-secrets
+
   - type: web
     name: myunivokai-api
     runtime: docker
@@ -16,10 +45,7 @@ services:
         value: production
       - key: RUN_MIGRATIONS_ON_START
         value: "true"
-      # Render's proxy appends the real client IP to X-Forwarded-For; without
-      # this flag the rate limiter ignores the header and keys on RemoteAddr.
-      - key: TRUST_PROXY
-        value: "true"
+      - fromGroup: myunivokai-gateway-secrets
       # mock needs no key; switch to gemini/openai in the dashboard when a real
       # key is configured.
       - key: AI_PROVIDER
@@ -30,9 +56,6 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
-        sync: false
-      # The real web origin, e.g. https://myunivokai.vercel.app
-      - key: API_ALLOWED_ORIGINS
         sync: false
       - key: PUBLIC_WEB_URL
         sync: false
@@ -58,8 +81,7 @@ services:
         value: production
       - key: RUN_MIGRATIONS_ON_START
         value: "true"
-      - key: TRUST_PROXY
-        value: "true"
+      - fromGroup: myunivokai-gateway-secrets
       # mock is the only wired provider until the real-AI round.
       - key: AI_PROVIDER
         value: mock
@@ -70,8 +92,6 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
-        sync: false
-      - key: API_ALLOWED_ORIGINS
         sync: false
       - key: PUBLIC_WEB_URL
         sync: false

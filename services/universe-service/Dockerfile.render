@@ -9,7 +9,7 @@
 #   APP_ENV=production           (gates Swagger off; makes empty DATABASE_URL fatal)
 #   DATABASE_URL                 (Neon POOLED url, sslmode=require)
 #   DATABASE_DIRECT_URL          (Neon DIRECT url for migrations, sslmode=require)
-#   API_ALLOWED_ORIGINS          (the real web origin, e.g. https://myunivokai.vercel.app)
+#   GATEWAY_SHARED_SECRET        (same generated value as api-gateway)
 #   PUBLIC_WEB_URL               (same origin; used to build share links)
 #   RUN_MIGRATIONS_ON_START=true
 #   AI_PROVIDER=mock             (or gemini/openai + the matching *_API_KEY)

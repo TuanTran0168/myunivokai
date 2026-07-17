@@ -217,12 +217,9 @@ func testRouter() http.Handler {
 		AppName:         "Myunivokai",
 		AppEnv:          "test",
 		PublicWebURL:    "http://localhost:3000",
-		AllowedOrigins:  []string{"http://localhost:3000"},
 		AIProvider:      "mock",
 		AIPromptVersion: "world-dna-v1",
 		AITimeout:       time.Second,
-		RateLimitRPS:    1000,
-		RateLimitBurst:  1000,
 	}
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
 	store := repositories.NewMemoryStore()
@@ -245,11 +242,8 @@ func TestWorldHandlerCreateReturns503WhenAIIsUnavailable(t *testing.T) {
 		AppName:         "Myunivokai",
 		AppEnv:          "test",
 		PublicWebURL:    "http://localhost:3000",
-		AllowedOrigins:  []string{"http://localhost:3000"},
 		AIPromptVersion: "world-dna-v1",
 		AITimeout:       time.Second,
-		RateLimitRPS:    1000,
-		RateLimitBurst:  1000,
 	}
 	orch := ai.NewOrchestrator(unreachableProvider{}, nil, validation.ValidatePersonalityDNA, time.Second)
 	store := repositories.NewMemoryStore()
@@ -281,7 +275,7 @@ func TestWorldHandlerCreateReturns503WhenAIIsUnavailable(t *testing.T) {
 }
 
 func TestSwaggerIsDisabledInProduction(t *testing.T) {
-	cfg := config.Config{AppEnv: "production", RateLimitRPS: 1000, RateLimitBurst: 1000, AllowedOrigins: []string{"http://localhost:3000"}}
+	cfg := config.Config{AppEnv: "production"}
 	store := repositories.NewMemoryStore()
 	orch := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
 	service := services.NewWorldService(cfg, store, orch, services.NewWorldConfigBuilder())
@@ -307,5 +301,37 @@ func TestReadinessEndpoint(t *testing.T) {
 	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if res.Code != http.StatusOK {
 		t.Fatalf("expected readyz 200 with memory store, got %d", res.Code)
+	}
+}
+
+func TestRouterRequiresGatewayCredentialForProtectedRoutes(t *testing.T) {
+	const sharedSecret = "test-shared-secret"
+	cfg := config.Config{
+		AppEnv:              "test",
+		GatewaySharedSecret: sharedSecret,
+		AITimeout:           time.Second,
+		AIPromptVersion:     "world-dna-v1",
+	}
+	store := repositories.NewMemoryStore()
+	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidatePersonalityDNA, time.Second)
+	service := services.NewWorldService(cfg, store, orchestrator, services.NewWorldConfigBuilder())
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(service), NewShareHandler(service), NewLandingHandler(cfg, time.Now()))
+
+	healthResponse := httptest.NewRecorder()
+	router.ServeHTTP(healthResponse, httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil))
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("public health status = %d, want 200", healthResponse.Code)
+	}
+	unauthorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(unauthorizedResponse, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if unauthorizedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("uncredentialed readiness status = %d, want 401", unauthorizedResponse.Code)
+	}
+	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil)
+	authorizedRequest.Header.Set("X-Gateway-Key", sharedSecret)
+	authorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authorizedResponse, authorizedRequest)
+	if authorizedResponse.Code != http.StatusOK {
+		t.Fatalf("credentialed readiness status = %d, want 200", authorizedResponse.Code)
 	}
 }

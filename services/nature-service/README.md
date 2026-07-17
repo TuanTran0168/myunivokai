@@ -22,6 +22,12 @@ migrations + postgres store), Render deploy files, the contract schema
 Without `DATABASE_URL` the service runs on an in-memory store (development
 only — production start is refused, same guard as universe-service).
 
+In production, clients call nature through `services/api-gateway` at
+`/api/nature/*`. The direct `/api/v1/healthz` remains public for the Render
+liveness probe; readiness and all business routes require the shared gateway
+credential. Local standalone calls continue to work while
+`GATEWAY_SHARED_SECRET` is empty.
+
 ## Database (zero extra cost)
 
 nature-service owns its own **logical database inside the same Neon project**
@@ -80,8 +86,9 @@ curl -s -X POST http://localhost:8081/api/v1/worlds \
   }'
 ```
 
-Endpoints (same shapes as universe-service, so a future gateway routes by
-path prefix alone): `POST /api/v1/worlds`, `GET /api/v1/worlds?ids=…`,
+Direct service endpoints (same shapes as universe-service; the gateway routes
+by family prefix and rewrites to `/api/v1`): `POST /api/v1/worlds`,
+`GET /api/v1/worlds?ids=…`,
 `GET /api/v1/worlds/{id}`, `POST /api/v1/worlds/{id}/variants`,
 `POST /api/v1/worlds/{id}/variants/{variantId}/select`,
 `POST /api/v1/worlds/{id}/publish`, `GET /api/v1/share/worlds/{slug}`,

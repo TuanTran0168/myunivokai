@@ -1,24 +1,36 @@
-# CI & Quality Gates (shared FE + BE)
+# CI and quality gates
 
-Status: DONE — merged as `feat/ci/github-actions` (simplified after the initial
-paths-filter version kept failing on repo action policy).
+`.github/workflows/ci.yml` runs on every push and pull request to `staging` or
+`main`. Jobs are intentionally not path-filtered.
 
-## What runs
+## Backend jobs
 
-`.github/workflows/ci.yml` runs on every PR into `staging` and `main`:
+Three independent jobs run in:
+
+- `services/universe-service`;
+- `services/nature-service`;
+- `services/api-gateway`.
+
+Each runs:
 
 ```txt
-job backend:   cd services/universe-service -> go mod verify -> go vet -> go test
-job frontend:  cd clients/web-client -> npm ci -> typecheck -> lint -> build
+go mod verify -> go vet ./... -> go test ./... -> go build ./...
 ```
 
-- Both jobs always run (no third-party path filter; reliability beats saving
-  ~2 minutes in a small repo).
-- Go/Node dependency caching; superseded runs are cancelled (concurrency group).
-- A frontend `npm run test` step is reserved for `feat/fe/unit-testing-setup`.
+## Frontend job
 
-## Recommended repo settings
+```txt
+npm ci -> npm run typecheck -> npm run lint -> npm run test -> npm run build
+```
 
-Enable branch protection for `staging` and `main`: require both status checks
-("Backend (go vet + test)", "Frontend (typecheck + lint + build)") to pass
-before merging.
+Go and npm dependency caches are enabled, and the concurrency group cancels a
+superseded run on the same ref.
+
+## Branch protection
+
+Require all four jobs before merging to `staging` or `main`:
+
+- `Backend (go vet + test)` (legacy display name; the job now also builds);
+- `Nature service (go vet + test)` (legacy display name; also builds);
+- `API gateway (go vet + test + build)`;
+- `Frontend (typecheck + lint + test + build)`.

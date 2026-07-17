@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+bin
+coverage.*
+*.out
+*.test
+README.md

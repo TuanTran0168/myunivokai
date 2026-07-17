@@ -1,0 +1,14 @@
+services:
+  gateway:
+    build:
+      context: .
+    container_name: myunivokai-api-gateway
+    volumes:
+      - ./.env.local:/app/.env.local:ro
+    environment:
+      UNIVERSE_SERVICE_URL: http://host.docker.internal:8080
+      NATURE_SERVICE_URL: http://host.docker.internal:8081
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8082:8082"

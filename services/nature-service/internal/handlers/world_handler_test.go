@@ -25,9 +25,6 @@ func newTestRouter(t *testing.T) http.Handler {
 		AppEnv:          "test",
 		AppName:         "Myunivokai Nature",
 		PublicWebURL:    "http://localhost:3000",
-		AllowedOrigins:  []string{"http://localhost:3000"},
-		RateLimitRPS:    1000,
-		RateLimitBurst:  1000,
 		ShareSlugLength: 10,
 	}
 	store := repositories.NewMemoryStore()
@@ -75,12 +72,38 @@ func TestHealthzEndpoint(t *testing.T) {
 	}
 }
 
+func TestRouterRequiresGatewayCredentialForProtectedRoutes(t *testing.T) {
+	const sharedSecret = "test-shared-secret"
+	cfg := config.Config{
+		AppEnv:              "test",
+		GatewaySharedSecret: sharedSecret,
+		ShareSlugLength:     10,
+	}
+	store := repositories.NewMemoryStore()
+	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)
+	worldService := services.NewWorldService(cfg, store, orchestrator, services.NewForestConfigBuilder())
+	router := NewRouter(cfg, NewHealthHandler(cfg, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(cfg))
+
+	healthResponse := performRequest(t, router, http.MethodGet, "/api/v1/healthz", nil)
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("public health status = %d, want 200", healthResponse.Code)
+	}
+	unauthorizedResponse := performRequest(t, router, http.MethodGet, "/api/v1/readyz", nil)
+	if unauthorizedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("uncredentialed readiness status = %d, want 401", unauthorizedResponse.Code)
+	}
+	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil)
+	authorizedRequest.Header.Set("X-Gateway-Key", sharedSecret)
+	authorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authorizedResponse, authorizedRequest)
+	if authorizedResponse.Code != http.StatusOK {
+		t.Fatalf("credentialed readiness status = %d, want 200", authorizedResponse.Code)
+	}
+}
+
 func TestSwaggerAvailabilityFollowsEnvironment(t *testing.T) {
 	productionConfig := config.Config{
-		AppEnv:         "production",
-		AllowedOrigins: []string{"http://localhost:3000"},
-		RateLimitRPS:   1000,
-		RateLimitBurst: 1000,
+		AppEnv: "production",
 	}
 	store := repositories.NewMemoryStore()
 	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)

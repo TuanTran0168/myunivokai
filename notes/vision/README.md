@@ -1,6 +1,6 @@
 # Vision — Myunivokai as a multi-scene platform
 
-Status: **approved with amendments** (owner, 2026-07-16). The original
+Status: **active, gateway amendment implemented** (2026-07-17). The original
 decision points below were approved, and the owner additionally decided the
 vision becomes **microservices immediately** — starting with the nature
 family as a full peer service (same mechanism as universe-service, different
@@ -11,13 +11,26 @@ detailed [nature-service-plan.md](nature-service-plan.md).
 
 | Document | Content |
 | --- | --- |
-| [backend-plan.md](backend-plan.md) | SceneComposer registry (Phase 1), scene-service extraction (Phase 2), Go vs. Rust |
-| [api-gateway.md](api-gateway.md) | Gateway responsibilities, options compared, hand-rolled Go gateway design (Phase 3) |
+| [backend-plan.md](backend-plan.md) | Current peer-service backend boundaries and next source-grounded work |
+| [api-gateway.md](api-gateway.md) | Implemented Go gateway behavior, security boundary, route policies, failure taxonomy |
 | [frontend-plan.md](frontend-plan.md) | sceneType-first lazy renderer registry, type unions, mirror discipline, create-form evolution |
-| [deployment.md](deployment.md) | Render multi-service blueprint, the free-tier trap, CI, observability |
+| [deployment.md](deployment.md) | Current three-service Render blueprint, rollout, free-tier behavior, observability |
 | [contracts-and-roadmap.md](contracts-and-roadmap.md) | Schema versioning rules, phased roadmap with triggers, risk table |
 | [visual-diversity.md](visual-diversity.md) | Direction for more visual diversity: 5-tier ladder (data knobs → catalogs → procedural → rare features → new families), guardrails, suggested order |
 | [nature-service-plan.md](nature-service-plan.md) | **The active track.** `nature-service` — a full peer of universe-service (same mechanism, forest DNA): forest with wind, four seasons, weather, wildlife; config contract, asset strategy, rounds N1–N5 / F1–F5 |
+
+## Current backend architecture
+
+```txt
+web client
+  -> api-gateway
+       /api/universe/* -> universe-service -> universe Neon database
+       /api/nature/*   -> nature-service   -> nature Neon database
+```
+
+Universe and Nature are stateful full peers. The gateway owns the public HTTP
+edge but no business logic. There is no auth-service today; the shared gateway
+credential only prevents direct upstream bypass on public Render free URLs.
 
 ## The idea
 
@@ -59,7 +72,7 @@ Concrete anchors in today's code:
 | Shared 3D infra | `features/scene-renderers/shared/` | CameraRig, StarParticleField, PostEffects, CanvasLoader — scene-agnostic today, stays that way. |
 | Scene config JSON Schema | `contracts/schemas/world-scene-config.schema.json` | Becomes the solar-system family schema under `contracts/scenes/`. |
 
-## Target architecture in three phases
+## Original three-phase proposal (historical, superseded for Nature)
 
 ```txt
 Phase 1 — modular monolith          Phase 2 — extracted services          Phase 3 — platform
@@ -105,9 +118,8 @@ Phase transitions have explicit triggers (see
   tradeoff consciously — see [nature-service-plan.md](nature-service-plan.md)
   section 4. The guardrail still applies to any *third* family: it joins
   nature-service (D4), it does not get its own deploy.
-- **Do not put AI calls inside scene services.** AI stays in the
-  world-service DNA step only — that is the cost-control and determinism
-  boundary.
+- **Keep provider calls behind each peer's AI interface.** AI produces semantic
+  DNA only; seeded builders remain deterministic and provider-free.
 - **Do not fork the DNA schema per family.** DNA stays universal; only the
   composers differ.
 
@@ -117,8 +129,8 @@ Phase transitions have explicit triggers (see
 | --- | --- | --- |
 | D1 | `scene_type` lives on world_variants (enables "portrait series": one world, variants in different mediums) vs. on worlds | **variants** |
 | D2 | Language: Go for all scene services; Rust only when p95 compose > 50 ms or server-side asset baking appears | **Go now, Rust by trigger** |
-| D3 | Gateway: world-service stays the facade until auth-service; then hand-rolled Go gateway | **facade now, Go gateway at Phase 3** |
-| D4 | Forest/mountain/river/lake = one `scene-nature-service` with themes, not four services | **one nature service** |
+| D3 | Gateway trigger | **Satisfied by the second public peer; Go gateway implemented without auth-service** |
+| D4 | Forest/mountain/river/lake ownership | **one stateful `nature-service`, not a stateless composer** |
 | D5 | Phase 2 ships with an embedded/remote per-family flag so extraction is reversible on the free tier | **yes** |
 
 ## Owner decisions (2026-07-16)
@@ -140,3 +152,4 @@ all; no gateway and no FE work yet — just build the service. Full detail in
 | D6 | **Microservices immediately, as peers:** nature-service clones the universe-service mechanism end-to-end and never lives in the monolith. |
 | D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../3d-development-limitations.md)), all assets self-hosted. |
 | D8 | Backend first: rounds N1–N5 before the frontend forest renderer (F1–F5). |
+| D9 | **Gateway implemented (2026-07-17):** `/api/universe/*` and `/api/nature/*`; edge CORS/rate limit, shared upstream credential, aggregate readiness; user auth remains deferred. |

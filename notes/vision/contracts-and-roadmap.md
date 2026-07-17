@@ -24,15 +24,16 @@ Part of the [vision folder](README.md).
 | 1c | `feat/fe-be/scene-family-city` | First real second family, in the monolith: city composer + CityRenderer MVP + profile mirror pair + fixtures | Create form offers City; a city world survives save/share/gallery |
 | 1d | (repeat 1c) | nature family (forest/mountain/river/lake as themes) | same bar |
 | 2 | `feat/be/extract-scene-services` | Extract city+nature into services, compose contract, embedded/remote flag, blueprint entries | Prod works in remote mode; rollback = flip env to embedded |
-| 3 | `feat/be/api-gateway` | Go gateway (see [api-gateway.md](api-gateway.md)), middleware moves up, services shed CORS/rate-limit | One public origin; statusz aggregates; FE needs zero changes |
+| 3 ✅ | `feat/be/api-gateway` | Go gateway (see [api-gateway.md](api-gateway.md)), middleware moves up, services require a shared gateway credential | Source complete: family-prefix routing, aggregate status, edge middleware, circuit breakers, share cache, Docker/Render/CI wiring |
 
 > **Amended 2026-07-16 (owner decision):** the nature family does not follow
 > this table at all — it is born as `nature-service`, a **full peer** of
 > universe-service (same mechanism, forest DNA), per the rounds **N1–N5 /
 > F1–F5** in [nature-service-plan.md](nature-service-plan.md). Rows 1a/1c/1d/2
 > (registry, monolith families, extraction) apply only to families that would
-> start inside universe-service; row 3 (gateway) keeps its trigger unchanged
-> and will route by path prefix across the two peer services.
+> start inside universe-service. Row 3 was triggered by the second public peer
+> and now routes by path prefix across Universe and Nature without waiting for
+> an auth-service.
 
 ## Phase triggers (approve as policy)
 
@@ -42,6 +43,7 @@ Part of the [vision folder](README.md).
   service by owner decision — this trigger now governs only families that
   start in the monolith.)*
 - **Enter Phase 3** when auth-service (or any second public service) is real.
+  Nature satisfied this trigger; the gateway is now implemented.
 - **Rust port** of a scene service only on the trigger in the
   [backend plan](backend-plan.md): p95 compose > 50 ms or baked binary assets.
 
@@ -52,6 +54,6 @@ Part of the [vision folder](README.md).
 | Refactor 1a silently changes stored-world rendering | Golden-snapshot test: fixed DNA+seed fixture must be byte-identical before/after |
 | FE/BE profile drift multiplies with families | PROFILE_VERSION pair test per family, CI-enforced ([frontend-plan.md](frontend-plan.md)) |
 | Free-tier chained cold starts | Phase gating + embedded/remote flag ([deployment.md](deployment.md)) — extraction is reversible |
-| Internal endpoints publicly reachable on free tier | Shared-secret middleware; endpoints are pure + stateless; upgrade to private services when paid |
+| Stateful upstream APIs publicly reachable on free tier | Gateway shared-secret middleware protects readiness and business routes; upgrade to private services when paid |
 | Two-language stack fragments the team | Rust only behind a measured trigger; the contract keeps it swappable |
 | Registry key confusion (theme × sceneType) | `sceneType` = family (routing), `theme` = style within family (composer input) — written into both registries' doc comments |
