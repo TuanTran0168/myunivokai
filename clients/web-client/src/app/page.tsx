@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Plus } from "lucide-react";
+import { ArrowRight, Check, Loader2, Orbit, Plus, Trees } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
@@ -10,6 +10,17 @@ import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ensureRange, toggleItem } from "@/lib/formSelection";
 import { buildPreviewSceneConfig } from "@/lib/scene";
+import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
+import { worldPagePath } from "@/lib/worldRoutes";
+import type { WorldFamily } from "@/lib/types";
+
+// The world-family picker: which backend curates the portrait. Universe =
+// universe-service (solar system), Forest = nature-service (living forest).
+// Same inputs, same mechanism — only the scene family differs.
+const familyOptions: { label: string; value: WorldFamily; description: string; Icon: typeof Orbit }[] = [
+  { label: "Universe", value: "universe", description: "A solar system of you", Icon: Orbit },
+  { label: "Forest", value: "nature", description: "A living forest of you", Icon: Trees }
+];
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
@@ -64,6 +75,7 @@ export default function HomePage() {
   const [interests, setInterests] = useState(["Technology", "Design", "AI"]);
   const [traits, setTraits] = useState(["curious", "builder", "focused"]);
   const [mood, setMood] = useState("focused");
+  const [worldFamily, setWorldFamily] = useState<WorldFamily>("universe");
   const [preferredWorldStyle, setPreferredWorldStyle] = useState("cosmic-galaxy");
   const [favoriteColors, setFavoriteColors] = useState<string[]>(["#8B5CF6", "#06B6D4"]);
   const [customInterestDraft, setCustomInterestDraft] = useState("");
@@ -95,27 +107,28 @@ export default function HomePage() {
   // state) so the preview's planet count and names match the generated world,
   // and debounced so typing does not rebuild the canvas on every keystroke.
   const debouncedPayload = useDebouncedValue(payload, PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS);
-  const previewScene = useMemo(
-    () =>
-      buildPreviewSceneConfig({
-        nickname: debouncedPayload.nickname,
-        interests: debouncedPayload.interests,
-        traits: debouncedPayload.traits,
-        mood: debouncedPayload.mood,
-        preferredWorldStyle: debouncedPayload.preferredWorldStyle,
-        favoriteColors: debouncedPayload.favoriteColors
-      }),
-    [debouncedPayload]
-  );
+  const previewScene = useMemo(() => {
+    const previewInput = {
+      nickname: debouncedPayload.nickname,
+      interests: debouncedPayload.interests,
+      traits: debouncedPayload.traits,
+      mood: debouncedPayload.mood,
+      preferredWorldStyle: debouncedPayload.preferredWorldStyle,
+      favoriteColors: debouncedPayload.favoriteColors
+    };
+    // Same inputs, family-specific mirror: the preview always renders with the
+    // exact renderer the generated world will use.
+    return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
+  }, [debouncedPayload, worldFamily]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const world = await api.createWorld(payload);
-      addWorldIdentifierToGallery(world.id);
-      router.push(`/worlds/${world.id}`);
+      const world = await api.createWorld(payload, worldFamily);
+      addWorldIdentifierToGallery(world.id, worldFamily);
+      router.push(worldPagePath(world.id, worldFamily));
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -168,7 +181,7 @@ export default function HomePage() {
           {/* The world's owner, live from the form (payload defaults keep it
               non-empty), so the placard reads like the mockup's title card. */}
           <div className="font-display text-lg font-semibold leading-tight text-paper">
-            {payload.nickname}&rsquo;s Universe
+            {payload.nickname}&rsquo;s {worldFamily === "nature" ? "Forest" : "Universe"}
           </div>
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Curated from</div>
@@ -201,6 +214,42 @@ export default function HomePage() {
 
           <div className="rail-scroll min-h-0 flex-1 overflow-x-hidden lg:overflow-y-auto">
             <form id={CREATE_FORM_ELEMENT_ID} className="grid gap-5 px-5 py-6 sm:px-7" onSubmit={onSubmit}>
+              <div className="grid gap-3">
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">World Family</span>
+                <div className="grid grid-cols-2 gap-3">
+                  {familyOptions.map((option) => {
+                    const selected = worldFamily === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setWorldFamily(option.value)}
+                        aria-pressed={selected}
+                        className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
+                          selected
+                            ? "scale-[1.03] border-brass bg-brass/10 ring-2 ring-brass/40"
+                            : "border-transparent hover:border-white/20"
+                        }`}
+                      >
+                        {selected ? (
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-brass text-ink">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        <option.Icon
+                          className={`mx-auto mb-2 h-7 w-7 ${selected ? "text-brass" : "text-on-surface-variant"}`}
+                          aria-hidden="true"
+                        />
+                        <span className={`block text-sm ${selected ? "font-semibold text-brass" : "text-on-surface"}`}>
+                          {option.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-on-surface-variant">{option.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid gap-4">
                 <label className="grid gap-2">
                   <span className="font-mono text-xs uppercase tracking-widest text-brass">Nickname</span>
@@ -436,7 +485,7 @@ export default function HomePage() {
               className="focus-ring btn-brass inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold uppercase tracking-[0.04em] transition disabled:cursor-wait disabled:opacity-70"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              Curate this universe
+              {worldFamily === "nature" ? "Curate this forest" : "Curate this universe"}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>

@@ -7,6 +7,14 @@ export type ApiErrorPayload = {
   };
 };
 
+/**
+ * Which backend a world belongs to. Every world service exposes the same
+ * route shapes and error taxonomy; only the base URL and the scene family
+ * differ. "universe" is universe-service (solar systems), "nature" is
+ * nature-service (forest portraits).
+ */
+export type WorldFamily = "universe" | "nature";
+
 // Mirrors services/universe-service/internal/models/scene.go (contracts/schemas/world-scene-config.schema.json)
 export type ScenePalette = {
   background?: string;
@@ -137,9 +145,126 @@ export type SceneSunConfig = {
   surfaceHdrMultiplier?: number;
 };
 
+// --- Forest scene family (nature-service) -----------------------------------
+// Mirrors services/nature-service/internal/models/scene.go
+// (contracts/scenes/forest-scene-config.schema.json). Renderers are keyed by
+// (sceneType, schemaVersion); every field is optional on the frontend so a
+// partially-migrated config degrades instead of crashing.
+
+export type ForestSeasonConfig = {
+  kind?: string;
+  blendTowardKind?: string;
+  blendAmount?: number;
+  foliageColors?: string[];
+  groundKind?: string;
+};
+
+export type ForestLightingConfig = {
+  timeOfDay?: string;
+  sunElevationRadians?: number;
+  sunAzimuthRadians?: number;
+  sunColor?: string;
+  ambientColor?: string;
+  hdriKey?: string;
+  exposure?: number;
+  fogColor?: string;
+  fogDensity?: number;
+};
+
+export type ForestTerrainConfig = {
+  placementSeed?: string;
+  clearingRadius?: number;
+  treelineRadius?: number;
+  hillAmplitude?: number;
+  hillFrequency?: number;
+  pathEnabled?: boolean;
+  rockCount?: number;
+  grassTuftCountDesktop?: number;
+  grassTuftCountMobile?: number;
+};
+
+export type ForestTreeSpeciesMixEntry = {
+  modelKey?: string;
+  weight?: number;
+};
+
+export type ForestTreesConfig = {
+  placementSeed?: string;
+  countDesktop?: number;
+  countMobile?: number;
+  speciesMix?: ForestTreeSpeciesMixEntry[];
+  scaleMin?: number;
+  scaleMax?: number;
+  foliageTintStrength?: number;
+  windStrength?: number;
+  windDirectionRadians?: number;
+  windGustFrequency?: number;
+};
+
+export type ForestWeatherConfig = {
+  kind?: string;
+  intensity?: number;
+  cloudCoverage?: number;
+  rainDropCountDesktop?: number;
+  rainDropCountMobile?: number;
+  snowflakeCountDesktop?: number;
+  snowflakeCountMobile?: number;
+};
+
+export type ForestGroundAnimalConfig = {
+  modelKey?: string;
+  count?: number;
+  pathSeed?: string;
+  walkSpeed?: number;
+  scale?: number;
+};
+
+export type ForestBirdFlockConfig = {
+  modelKey?: string;
+  birdCount?: number;
+  pathSeed?: string;
+  altitudeMin?: number;
+  altitudeMax?: number;
+  flightSpeed?: number;
+  pattern?: string;
+};
+
+export type ForestWildlifeConfig = {
+  groundAnimals?: ForestGroundAnimalConfig[];
+  birdFlocks?: ForestBirdFlockConfig[];
+};
+
+export type ForestAmbientParticlesConfig = {
+  fallingLeafCount?: number;
+  blossomPetalCount?: number;
+  fireflyCount?: number;
+  snowDustCount?: number;
+};
+
+export type ForestLandmarkConfig = {
+  key?: string;
+  name?: string;
+  meaning?: string;
+  kind?: string;
+  angleRadians?: number;
+  radiusFromCenter?: number;
+  accentColor?: string;
+  energy?: number;
+};
+
+export type ForestAssetsConfig = {
+  catalogVersion?: string;
+  modelKeys?: string[];
+  hdriKey?: string;
+};
+
 export type SceneConfig = {
   seed?: string;
   schemaVersion?: string;
+  // Absent on universe configs; "forest" on nature-service configs. The
+  // renderer registry checks this BEFORE the theme, so a forest world can
+  // never fall into a solar-system renderer.
+  sceneType?: string;
   sceneName?: string;
   archetype?: string;
   quote?: string;
@@ -155,6 +280,16 @@ export type SceneConfig = {
   belt?: SceneBeltConfig;
   comets?: SceneCometsConfig;
   sun?: SceneSunConfig;
+  // Forest family sections (sceneType "forest").
+  season?: ForestSeasonConfig;
+  lighting?: ForestLightingConfig;
+  terrain?: ForestTerrainConfig;
+  trees?: ForestTreesConfig;
+  weather?: ForestWeatherConfig;
+  wildlife?: ForestWildlifeConfig;
+  ambientParticles?: ForestAmbientParticlesConfig;
+  landmarks?: ForestLandmarkConfig[];
+  assets?: ForestAssetsConfig;
   [key: string]: unknown;
 };
 

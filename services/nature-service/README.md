@@ -38,6 +38,14 @@ production universe data completely out of this service's blast radius:
 Never point these URLs at the universe database — the init migration would
 fail immediately (its tables already exist there), by design.
 
+## PUBLIC_WEB_URL (share links)
+
+Set `PUBLIC_WEB_URL` WITH the `/nature` prefix, e.g.
+`https://myunivokai.vercel.app/nature`. The web client serves nature share
+pages under `/nature/share/worlds/{slug}` (universe keeps the unprefixed
+route), so the prefix makes the `shareUrl` this service prints resolve to the
+right page with zero backend changes.
+
 ## Run locally
 
 ```bash

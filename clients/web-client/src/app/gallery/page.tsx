@@ -59,7 +59,12 @@ export default function GalleryPage() {
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {loadedWorldEntries.map((entry) => (
-            <SavedWorldCard key={entry.worldIdentifier} world={entry.world!} onRemove={removeSavedWorld} />
+            <SavedWorldCard
+              key={entry.worldIdentifier}
+              world={entry.world!}
+              family={entry.family}
+              onRemove={removeSavedWorld}
+            />
           ))}
         </div>
       )}

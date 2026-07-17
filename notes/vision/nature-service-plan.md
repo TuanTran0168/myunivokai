@@ -285,9 +285,11 @@ Error taxonomy identical: `VALIDATION_ERROR`, `NOT_FOUND`, `AI_UNAVAILABLE`
 
 - Same three invariants: AI produces semantics only; every visual number from
   `seed.NewPRNG` within named-constant bounds; regenerate never calls AI.
-- **Mirror pair (later, F-rounds):** `internal/services/forest_scene_profile.go`
-  ↔ `clients/web-client/src/features/scene-renderers/forest/sceneProfile.ts`,
-  with a `FOREST_PROFILE_VERSION` pair test on both sides once the FE exists.
+- **Mirror pair (landed with the F-rounds):** `internal/services/forest_scene_profile.go`
+  and `forest_config_builder.go` ↔ `clients/web-client/src/lib/forestScene.ts`
+  (same tables, same per-section streams, same draw order; FE PRNG is the
+  xorshift mirror, so previews are plausible, not byte-equal). Keep the two
+  in sync on every tuning change — the scene.ts ↔ universe discipline.
 - Golden fixtures (N3) become the executable compatibility contract; any byte
   diff ⇒ bump the forest schemaVersion and keep a reader for the old one.
 - Known note from the 1.2 review: Go `math.Round` vs JS `Math.round` differ on
@@ -304,7 +306,7 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 | **N3** ✅ (partial) | `feat/be/nature-service-be-rounds` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`). Swagger parity deferred to a later polish round | Golden test green; a byte-diff for an existing seed fails CI |
 | **N4** (deferred) | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys. Deferred — owner: "cứ random như universe service" (universe prod also runs mock today) | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
 | **N5** | `feat/fe/nature-asset-pipeline` | Download/optimize/self-host GLB + HDRI + textures; ATTRIBUTION.md; finalize the key catalog; budget audit | Every catalog key resolves to a file within budget; licenses recorded |
-| **F1–F5** | (after BE) | FE: sceneType registry → ForestRenderer MVP (terrain/trees/wind/HDRI/landmark POIs) → seasons+weather+particles → wildlife → preview mirror + create-form family picker calling nature-service's base URL | Standard FE gates per round |
+| **F1–F5** ✅ | `feat/fe/nature-scene-fe-rounds` (combined into ONE round, owner order 2026-07-17: "Gom các F liên quan với nhau lại code 1 lần luôn") | FE, all in one: `sceneType`-first renderer registry + `WorldFamily` plumbing (`NEXT_PUBLIC_NATURE_API_BASE_URL`, family param on every api call, family stored with gallery ids, `/worlds/{id}?family=nature`, `/nature/share/worlds/{slug}`), procedural ForestRenderer (terrain+clearing+path, wind-swayed instanced trees, sky dome+sun, weather rain/snow/clouds/sun-rays, seasonal ambient particles, wandering animals + bird flocks, clickable landmark POIs feeding the shared HUD/camera), preview mirror `lib/forestScene.ts` (mirror pair of `forest_scene_profile.go`+`forest_config_builder.go`) + create-form Universe/Forest picker. Primitives-only visuals until N5 GLBs; deploy needs nature-service `PUBLIC_WEB_URL` set WITH the `/nature` prefix (e.g. `https://myunivokai.vercel.app/nature`) so backend share URLs land on the nature share route | FE gates green: typecheck, lint, vitest (incl. forestScene determinism/contract tests), next build |
 | **G** | (unchanged) | api-gateway per [api-gateway.md](api-gateway.md): path-prefix routing to both services | Trigger unchanged: auth-service or when one public origin matters |
 
 ## 11. Risks

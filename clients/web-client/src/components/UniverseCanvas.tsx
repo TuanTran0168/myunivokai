@@ -5,9 +5,9 @@ import { Suspense, useRef, useState } from "react";
 import { AgXToneMapping } from "three";
 import type { Vector3 } from "three";
 import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
-import { backgroundColorFromScene, planetsFromScene, CANONICAL_FALLBACK_SEED } from "@/lib/scene";
+import { backgroundColorFromScene, isForestScene, pointsOfInterestFromScene, CANONICAL_FALLBACK_SEED } from "@/lib/scene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
-import { resolveSceneRenderer } from "@/features/scene-renderers/registry";
+import { resolveSceneRenderer, resolveSceneTypeRenderer } from "@/features/scene-renderers/registry";
 import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
 import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
 import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
@@ -79,15 +79,22 @@ export function UniverseCanvas({
   const backgroundColor = backgroundColorFromScene(scene);
   const cameraDistance = scene?.camera?.distance ?? DEFAULT_CAMERA_DISTANCE;
   const cameraFieldOfView = scene?.camera?.fov ?? DEFAULT_CAMERA_FIELD_OF_VIEW;
-  const planets = planetsFromScene(scene);
-  const hasConfiguredPlanets = planets.length > 0;
+  // Planets for universe scenes, landmarks for forest scenes — one adapter so
+  // hover/select/camera-focus work identically across families.
+  const pointsOfInterest = pointsOfInterestFromScene(scene);
+  const hasConfiguredPointsOfInterest = pointsOfInterest.length > 0;
 
-  const SceneRenderer = hasConfiguredPlanets ? resolveSceneRenderer(scene?.theme) : FallbackUniverseRenderer;
+  // Family first (sceneType), then universe theme, then the abstract fallback
+  // for configs with no renderable content at all.
+  const sceneTypeRenderer = resolveSceneTypeRenderer(scene);
+  const SceneRenderer =
+    sceneTypeRenderer ?? (hasConfiguredPointsOfInterest ? resolveSceneRenderer(scene?.theme) : FallbackUniverseRenderer);
+  const isForestFamilyScene = isForestScene(scene);
 
   const hoveredPlanetKey = hoveredPlanet
     ? planetIdentityKey(
         hoveredPlanet,
-        planets.findIndex((planet) => planet === hoveredPlanet)
+        pointsOfInterest.findIndex((pointOfInterest) => pointOfInterest === hoveredPlanet)
       )
     : null;
 
@@ -110,6 +117,9 @@ export function UniverseCanvas({
             position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
             fov: cameraFieldOfView
           }}
+          // Only the forest family casts real shadows (sun through the tree
+          // canopy); universe scenes are emissive-lit and skip the shadow pass.
+          shadows={isForestFamilyScene ? "soft" : false}
           dpr={devicePixelRatioRange}
           // AgX rolls hot highlights off more gracefully than the default ACES
           // (no neon clipping on lit planets); sky layers opt out via
@@ -150,7 +160,9 @@ export function UniverseCanvas({
             <span className="absolute inset-0 animate-spin rounded-full border border-white/10 border-t-brass" />
             <span className="absolute inset-2 animate-spin rounded-full border border-white/10 border-b-brass [animation-direction:reverse] [animation-duration:1.6s]" />
           </span>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/60">Rendering universe</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/60">
+            {isForestFamilyScene ? "Rendering forest" : "Rendering universe"}
+          </p>
         </div>
       </div>
       {hoveredPlanet ? (

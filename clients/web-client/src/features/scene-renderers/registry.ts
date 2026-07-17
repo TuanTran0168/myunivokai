@@ -1,15 +1,26 @@
+import type { SceneConfig } from "@/lib/types";
 import type { SceneRendererComponent } from "./types";
 import { SolarSystemRenderer } from "./solar-system/SolarSystemRenderer";
+import { ForestRenderer } from "./forest/ForestRenderer";
 
 /**
- * Maps WorldSceneConfig.theme to a scene renderer.
+ * Two-level renderer resolution:
  *
- * Today every universe theme renders as a solar system. The registry exists so
- * future scene families (sky, city, countryside, ...) can plug in without
- * touching existing renderers: add a folder under scene-renderers/, implement
- * SceneRendererProps, and register the theme here. The backend contract does
- * not change.
+ * 1. `sceneType` picks the scene family — it is the contract key each backend
+ *    service stamps into its configs ("forest" from nature-service; universe
+ *    configs predate the field and simply omit it). A family match wins
+ *    outright, so a forest world can never fall into a solar-system renderer
+ *    no matter what its theme says.
+ * 2. Within the universe family, `theme` picks the renderer exactly as before.
+ *
+ * Adding a scene family = new folder under scene-renderers/ implementing
+ * SceneRendererProps + one entry in SCENE_TYPE_RENDERER_REGISTRY. The backend
+ * contract does not change.
  */
+const SCENE_TYPE_RENDERER_REGISTRY: Record<string, SceneRendererComponent> = {
+  forest: ForestRenderer
+};
+
 const SCENE_RENDERER_REGISTRY: Record<string, SceneRendererComponent> = {
   "cosmic-galaxy": SolarSystemRenderer,
   nebula: SolarSystemRenderer,
@@ -25,4 +36,16 @@ export function resolveSceneRenderer(theme?: string): SceneRendererComponent {
     return SCENE_RENDERER_REGISTRY[theme];
   }
   return DEFAULT_SCENE_RENDERER;
+}
+
+/**
+ * Family-first resolution. Returns the family renderer when the scene carries
+ * a registered sceneType, otherwise null so the caller can apply its
+ * universe-era fallback rules (theme lookup / abstract fallback renderer).
+ */
+export function resolveSceneTypeRenderer(scene?: SceneConfig): SceneRendererComponent | null {
+  if (scene?.sceneType && SCENE_TYPE_RENDERER_REGISTRY[scene.sceneType]) {
+    return SCENE_TYPE_RENDERER_REGISTRY[scene.sceneType];
+  }
+  return null;
 }
