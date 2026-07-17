@@ -9,11 +9,17 @@ import { usePlanetPositionTracker } from "./PlanetPositionTracker";
 
 const ORBIT_CONTROLS_MINIMUM_DISTANCE = 2.5;
 const ORBIT_CONTROLS_MAXIMUM_DISTANCE = 26;
+// No polar clamp by default: universe scenes are viewable from below.
+const ORBIT_CONTROLS_MAXIMUM_POLAR_ANGLE = Math.PI;
 const CAMERA_FOCUS_LERP_SPEED = 3.2;
 const SCENE_CENTER = new Vector3(0, 0, 0);
 
 type CameraRigProps = {
   selectedPlanetKey: string | null;
+  /** Scene families with a ground plane pass their own zoom/tilt envelope. */
+  minimumDistance?: number;
+  maximumDistance?: number;
+  maximumPolarAngleRadians?: number;
 };
 
 /**
@@ -21,7 +27,12 @@ type CameraRigProps = {
  * inspired by NASA Eyes. When a planet is selected the controls target glides
  * to that planet and keeps following it; deselecting glides back to center.
  */
-export function CameraRig({ selectedPlanetKey }: CameraRigProps) {
+export function CameraRig({
+  selectedPlanetKey,
+  minimumDistance = ORBIT_CONTROLS_MINIMUM_DISTANCE,
+  maximumDistance = ORBIT_CONTROLS_MAXIMUM_DISTANCE,
+  maximumPolarAngleRadians = ORBIT_CONTROLS_MAXIMUM_POLAR_ANGLE
+}: CameraRigProps) {
   const orbitControlsReference = useRef<OrbitControlsImplementation>(null);
   const planetPositionTracker = usePlanetPositionTracker();
   const desiredTarget = useMemo(() => new Vector3(), []);
@@ -45,8 +56,9 @@ export function CameraRig({ selectedPlanetKey }: CameraRigProps) {
     <OrbitControls
       ref={orbitControlsReference}
       enablePan={false}
-      minDistance={ORBIT_CONTROLS_MINIMUM_DISTANCE}
-      maxDistance={ORBIT_CONTROLS_MAXIMUM_DISTANCE}
+      minDistance={minimumDistance}
+      maxDistance={maximumDistance}
+      maxPolarAngle={maximumPolarAngleRadians}
     />
   );
 }

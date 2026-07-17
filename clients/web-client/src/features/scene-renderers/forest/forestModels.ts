@@ -25,10 +25,18 @@ export type ForestModelDefinition = {
   fileName: string;
   /** World-space height the normalized model is scaled to. */
   targetHeight: number;
+  /**
+   * ONLY for files that pack several complete stand-alone models (e.g.
+   * Quaternius' "Birch Trees" set): each top-level subtree becomes its own
+   * variant. Never set it for single-model files — a normal tree's bark and
+   * leaves are sibling meshes, and splitting them apart renders bare trunks
+   * next to floating canopies.
+   */
+  splitIntoVariants?: boolean;
 };
 
 export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
-  "tree-birch": [{ fileName: "tree-birch-1.glb", targetHeight: 7.5 }],
+  "tree-birch": [{ fileName: "tree-birch-1.glb", targetHeight: 7.5, splitIntoVariants: true }],
   "tree-oak": [
     { fileName: "tree-oak-1.glb", targetHeight: 6.5 },
     { fileName: "tree-oak-2.glb", targetHeight: 6.0 }
@@ -37,17 +45,18 @@ export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
     { fileName: "tree-pine-1.glb", targetHeight: 8.5 },
     { fileName: "tree-pine-2.glb", targetHeight: 7.8 }
   ],
-  "tree-pine-snow": [
-    { fileName: "tree-pine-snow-1.glb", targetHeight: 8.0 },
-    { fileName: "tree-pine-snow-2.glb", targetHeight: 7.2 }
-  ],
+  // Only the Quaternius snow pine — the CC-BY "Snow Tree" clashed with the
+  // pack's art style (owner: style coherence beats variety).
+  "tree-pine-snow": [{ fileName: "tree-pine-snow-1.glb", targetHeight: 8.0 }],
   "tree-dead": [
     { fileName: "tree-dead-1.glb", targetHeight: 5.5 },
     { fileName: "tree-dead-2.glb", targetHeight: 5.0 }
   ],
+  // Blossom = the oak silhouettes wearing the pink foliage anchor: the two
+  // downloaded CC-BY cherry models read chunky/off-style next to Quaternius.
   "tree-blossom": [
-    { fileName: "tree-blossom-1.glb", targetHeight: 6.0 },
-    { fileName: "tree-blossom-2.glb", targetHeight: 5.5 }
+    { fileName: "tree-oak-1.glb", targetHeight: 6.0 },
+    { fileName: "tree-oak-2.glb", targetHeight: 5.6 }
   ]
 };
 
@@ -120,7 +129,9 @@ export function natureHdriUrlForKey(hdriKey?: string): string {
 
 export const LANDMARK_MODEL_CATALOG: Record<string, ForestModelDefinition> = {
   heartTree: { fileName: "landmark-heart-tree.glb", targetHeight: 9.0 },
-  standingStone: { fileName: "landmark-standing-stone.glb", targetHeight: 2.6 },
+  // A tall mossy rock reads as a menhir; the flat "Stone Block" cube read as
+  // a floating black box against the sky.
+  standingStone: { fileName: "rock-mossy-2.glb", targetHeight: 2.8 },
   fallenLog: { fileName: "landmark-fallen-log.glb", targetHeight: 0.9 },
   lanternShrine: { fileName: "landmark-lantern-shrine.glb", targetHeight: 2.0 },
   flowerPatch: { fileName: "flower-group-1.glb", targetHeight: 0.6 }
@@ -205,25 +216,33 @@ function buildVariantFromMeshes(meshes: Mesh[], targetHeight: number): Instanced
 }
 
 /**
- * Extracts instancing-ready variants from a loaded GLB scene. A file whose
- * root holds several complete sub-models (e.g. Quaternius' "Birch Trees" set)
- * yields one variant per sub-model; a single-model file yields one variant.
+ * Extracts instancing-ready variants from a loaded GLB scene. By default the
+ * WHOLE scene is one variant — a single tree's bark and leaves are sibling
+ * meshes, and splitting siblings apart renders bare trunks next to floating
+ * canopies (the bug behind the first broken-forest screenshots). Only files
+ * flagged splitIntoVariants (multi-model sets like "Birch Trees") split, and
+ * only at a level whose children are grouping nodes, never at raw meshes.
  */
-export function extractInstancedModelVariants(sceneRoot: Object3D, targetHeight: number): InstancedModelVariant[] {
+export function extractInstancedModelVariants(
+  sceneRoot: Object3D,
+  targetHeight: number,
+  splitIntoVariants = false
+): InstancedModelVariant[] {
   sceneRoot.updateMatrixWorld(true);
-  // Walk down through wrapper nodes (RootNode etc.) until a level with more
-  // than one child — if each of those children owns meshes, they are the
-  // sub-model set.
-  let splitLevel: Object3D = sceneRoot;
-  while (splitLevel.children.length === 1) {
-    splitLevel = splitLevel.children[0];
-  }
-  if (splitLevel.children.length > 1) {
-    const childVariants = splitLevel.children
-      .map((child) => buildVariantFromMeshes(collectMeshesInWorldSpace(child), targetHeight))
-      .filter((variant): variant is InstancedModelVariant => variant !== null);
-    if (childVariants.length > 1) {
-      return childVariants;
+  if (splitIntoVariants) {
+    let splitLevel: Object3D = sceneRoot;
+    while (splitLevel.children.length === 1) {
+      splitLevel = splitLevel.children[0];
+    }
+    const childrenAreGroupingNodes =
+      splitLevel.children.length > 1 && splitLevel.children.every((child) => !(child as Mesh).isMesh);
+    if (childrenAreGroupingNodes) {
+      const childVariants = splitLevel.children
+        .map((child) => buildVariantFromMeshes(collectMeshesInWorldSpace(child), targetHeight))
+        .filter((variant): variant is InstancedModelVariant => variant !== null);
+      if (childVariants.length > 1) {
+        return childVariants;
+      }
     }
   }
   const wholeVariant = buildVariantFromMeshes(collectMeshesInWorldSpace(sceneRoot), targetHeight);

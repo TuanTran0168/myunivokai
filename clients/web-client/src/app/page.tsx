@@ -9,10 +9,11 @@ import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ensureRange, toggleItem } from "@/lib/formSelection";
-import { buildPreviewSceneConfig } from "@/lib/scene";
+import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { worldPagePath } from "@/lib/worldRoutes";
-import type { WorldFamily } from "@/lib/types";
+import type { PlanetSceneConfig, WorldFamily } from "@/lib/types";
 
 // The world-family picker: which backend curates the portrait. Universe =
 // universe-service (solar system), Forest = nature-service (living forest).
@@ -131,6 +132,23 @@ export default function HomePage() {
     return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
   }, [debouncedPayload, worldFamily]);
 
+  // The preview is fully interactive too: clicking a planet/landmark/animal
+  // flies the camera to it, exactly like the world page.
+  const [selectedPreviewPointKey, setSelectedPreviewPointKey] = useState<string | null>(null);
+  const previewPointsOfInterest = useMemo(() => pointsOfInterestFromScene(previewScene), [previewScene]);
+  useEffect(() => {
+    setSelectedPreviewPointKey(null);
+  }, [previewScene]);
+
+  function handleSelectPreviewPoint(pointOfInterest: PlanetSceneConfig | null) {
+    if (!pointOfInterest) {
+      setSelectedPreviewPointKey(null);
+      return;
+    }
+    const pointIndex = previewPointsOfInterest.indexOf(pointOfInterest);
+    setSelectedPreviewPointKey(planetIdentityKey(pointOfInterest, pointIndex));
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -173,13 +191,22 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        worldFamily === "nature" ? "forest-chrome" : ""
+      }`}
+    >
       <GeneratingOverlay isVisible={loading} />
 
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
           desktop so the preview owns the screen and the rail floats over it. */}
       <div className="relative h-[46vh] min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full">
-        <UniverseCanvas scene={previewScene} className="h-full" />
+        <UniverseCanvas
+          scene={previewScene}
+          className="h-full"
+          selectedPlanetKey={selectedPreviewPointKey}
+          onSelectPlanet={handleSelectPreviewPoint}
+        />
 
         {/* Floating identity island (desktop): live state, the curatorial
             accession, and the palette — opposite the form rail. */}

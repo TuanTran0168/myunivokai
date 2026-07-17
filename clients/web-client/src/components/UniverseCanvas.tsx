@@ -19,6 +19,13 @@ export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 const DEFAULT_CAMERA_DISTANCE = 9;
 const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
 const CAMERA_HEIGHT_RATIO = 0.42;
+
+// Forest camera envelope: wide zoom-out to take in the whole treeline, and a
+// polar clamp so the camera never dives under the ground plane (universe
+// scenes have no ground and keep the default free orbit).
+const FOREST_MINIMUM_CAMERA_DISTANCE = 3;
+const FOREST_MAXIMUM_CAMERA_DISTANCE = 70;
+const FOREST_MAXIMUM_POLAR_ANGLE_RADIANS = Math.PI * 0.47;
 // Render at native device resolution (the old 1.8 cap under-sampled every
 // HiDPI display — a uniform blur). Quality-first scope: weak devices are
 // explicitly out of scope for now.
@@ -141,7 +148,12 @@ export function UniverseCanvas({
               <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
               <SceneReadySignal onSceneReady={() => setLastReadyCanvasKey(canvasRemountKey)} />
             </Suspense>
-            <CameraRig selectedPlanetKey={selectedPlanetKey ?? null} />
+            <CameraRig
+              selectedPlanetKey={selectedPlanetKey ?? null}
+              minimumDistance={isForestFamilyScene ? FOREST_MINIMUM_CAMERA_DISTANCE : undefined}
+              maximumDistance={isForestFamilyScene ? FOREST_MAXIMUM_CAMERA_DISTANCE : undefined}
+              maximumPolarAngleRadians={isForestFamilyScene ? FOREST_MAXIMUM_POLAR_ANGLE_RADIANS : undefined}
+            />
           </PlanetPositionTrackerContext.Provider>
         </Canvas>
       </div>

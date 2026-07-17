@@ -38,7 +38,15 @@ const SPECIES_FOLIAGE_ANCHOR_COLORS: Record<string, string> = {
   "tree-oak": "#4F8A3D",
   "tree-pine": "#33633B",
   "tree-pine-snow": "#DDE7EC",
-  "tree-blossom": "#EFA8C8"
+  "tree-blossom": "#F3A9CB"
+};
+
+// How strongly the season palette overrides the species anchor. Blossom stays
+// stubbornly pink and snow pines stay icy no matter the palette roll —
+// otherwise the season's greens wash out exactly what makes them special.
+const SPECIES_SEASON_TINT_MULTIPLIERS: Record<string, number> = {
+  "tree-blossom": 0.25,
+  "tree-pine-snow": 0.2
 };
 
 type TreeInstance = {
@@ -121,7 +129,9 @@ export function ForestTrees({ trees, terrain, season, terrainHeightSampler, path
         const gltf = loadedModels[modelCursor];
         modelCursor += 1;
         if (gltf?.scene) {
-          speciesVariants.push(...extractInstancedModelVariants(gltf.scene, definition.targetHeight));
+          speciesVariants.push(
+            ...extractInstancedModelVariants(gltf.scene, definition.targetHeight, definition.splitIntoVariants ?? false)
+          );
         }
       }
       if (!variantsMap.has(speciesKey) && speciesVariants.length > 0) {
@@ -176,8 +186,9 @@ export function ForestTrees({ trees, terrain, season, terrainHeightSampler, path
 
       const seasonFoliageColor = foliageColors[Math.floor(foliageColorRoll * foliageColors.length)] ?? foliageColors[0];
       const anchorHex = SPECIES_FOLIAGE_ANCHOR_COLORS[speciesKey];
+      const seasonTintMultiplier = SPECIES_SEASON_TINT_MULTIPLIERS[speciesKey] ?? 1;
       const foliageColor = anchorHex
-        ? new Color(anchorHex).lerp(seasonFoliageColor, clampValue(foliageTintStrength, 0, 1))
+        ? new Color(anchorHex).lerp(seasonFoliageColor, clampValue(foliageTintStrength * seasonTintMultiplier, 0, 1))
         : seasonFoliageColor.clone();
 
       const bucketKey = `${speciesKey}#${variantIndex}`;

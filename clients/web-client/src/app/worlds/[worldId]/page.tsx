@@ -195,7 +195,11 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        isForestScene(activeScene) ? "forest-chrome" : ""
+      }`}
+    >
       {/* Full-bleed solar system: an in-flow hero on mobile, the command-deck
           background on desktop (bleeds behind the glass header). The ref wraps
           the canvas so Export captures it. */}

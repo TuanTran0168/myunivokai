@@ -51,7 +51,7 @@ export function SavedWorldCard({ world, family, onRemove }: SavedWorldCardProps)
             </p>
           ) : null}
           <h2 className="font-display text-lg font-semibold tracking-normal text-paper">
-            {worldScene.sceneName || world.title || "Untitled universe"}
+            {worldScene.sceneName || world.title || (isForestWorld ? "Untitled forest" : "Untitled universe")}
           </h2>
           {world.nickname ? (
             <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">

@@ -30,7 +30,7 @@ export default function GalleryPage() {
           <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Saved Worlds</div>
           <h1 className="font-display text-4xl font-semibold tracking-normal text-paper">Your Gallery</h1>
           <p className="mt-2 text-on-surface-variant">
-            Universes you created on this device. They live in your browser storage.
+            Worlds you created on this device. They live in your browser storage.
           </p>
         </div>
         <Link
@@ -38,7 +38,7 @@ export default function GalleryPage() {
           className="focus-ring btn-gradient inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-semibold"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          Create new universe
+          Create new world
         </Link>
       </div>
 
@@ -46,14 +46,14 @@ export default function GalleryPage() {
         <div className="glass-panel grid place-items-center gap-4 rounded-2xl px-6 py-16 text-center">
           <p className="text-lg font-semibold text-on-surface">No saved worlds yet</p>
           <p className="max-w-md text-sm leading-6 text-on-surface-variant">
-            Create your first personal universe and it will appear here automatically.
+            Create your first personal world and it will appear here automatically.
           </p>
           <Link
             href="/"
             className="focus-ring btn-gradient inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-semibold"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Create universe
+            Create world
           </Link>
         </div>
       ) : (

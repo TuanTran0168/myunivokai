@@ -34,7 +34,6 @@ unmodified. CC0 requires no attribution; CC-BY credits are listed as required.
 | animal-wolf.glb | <https://poly.pizza/m/P1gU3Qkr9r> |
 | animal-stag.glb | <https://poly.pizza/m/tQdzbZ1Cmw> |
 | landmark-heart-tree.glb | <https://poly.pizza/m/9aWlx82xUf> |
-| landmark-standing-stone.glb | <https://poly.pizza/m/ZKvgpQwJiY> |
 | landmark-fallen-log.glb | <https://poly.pizza/m/nwsYvcI0bC> |
 
 ## CC0 (public domain) — other creators
@@ -49,9 +48,6 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 
 | File | Credit | Source |
 | --- | --- | --- |
-| tree-pine-snow-2.glb | "Snow Tree" by Jarlan Perez via Poly Pizza | <https://poly.pizza/m/1H99E82pKYS> |
-| tree-blossom-1.glb | "Cherry tree" by Poly by Google via Poly Pizza | <https://poly.pizza/m/1FSDzk-LRdA> |
-| tree-blossom-2.glb | "Tree" by konta johanna via Poly Pizza | <https://poly.pizza/m/bk19zLgwVAW> |
 | animal-boar.glb | "Boar" by Poly by Google via Poly Pizza | <https://poly.pizza/m/57fSWum6F1P> |
 | animal-rabbit.glb | "Rabbit" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/lEJ3d1gMLC> |
 | animal-bear.glb | "Bear" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/kLLBpmcw0w> |

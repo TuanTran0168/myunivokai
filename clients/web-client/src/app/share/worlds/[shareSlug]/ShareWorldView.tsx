@@ -70,7 +70,11 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        isForestScene(scene) ? "forest-chrome" : ""
+      }`}
+    >
       {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
           on desktop. Clicking a planet focuses the camera (read-only view state). */}
       <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
