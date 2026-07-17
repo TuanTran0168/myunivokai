@@ -1,218 +1,258 @@
 # Myunivokai
 
-My universe, okay? You describe yourself in a short form, AI distills it into a
-"Personality DNA", the backend turns that into a deterministic world config,
-and the frontend renders your own solar system in 3D with three.js. You can
-regenerate variants, keep a gallery, and publish a public share link.
+Myunivokai turns a short personal profile into a deterministic 3D portrait.
+The platform currently has two independent Go world services behind one Go
+API Gateway:
 
-## Live
+- `universe-service`: Personality DNA with planets and a solar-system config;
+- `nature-service`: Nature DNA with landmarks and a forest config;
+- `api-gateway`: the single public edge, family routing, CORS, rate limiting,
+  request verification, timeouts, circuit breaking, and public-share caching.
 
-| What | URL |
+Both world services follow the same pipeline: input -> AI-generated semantic
+DNA -> validated seeded builder -> PostgreSQL world/variants/share. Every 3D
+number comes from a deterministic seed, and regenerating a variant makes no AI
+call.
+
+## Live and deploy status
+
+| Component | Location |
 | --- | --- |
-| Frontend (production, Vercel) | <https://myunivokai.vercel.app> |
-| Backend (production, Render) | <https://myunivokai.onrender.com> |
-| API health check | <https://myunivokai.onrender.com/api/v1/healthz> |
-| Swagger UI (local development only) | <http://localhost:8080/swagger/index.html> |
+| Web client (Vercel) | <https://myunivokai.vercel.app> |
+| Existing universe API | <https://myunivokai.onrender.com> |
+| Existing universe liveness | <https://myunivokai.onrender.com/api/v1/healthz> |
+| API Gateway | Declared as `myunivokai-gateway` in `render.yaml`; URL is assigned on deploy |
+| Nature API | Declared as `myunivokai-nature` in `render.yaml` |
 
-Swagger documents internal endpoints, so the route is only mounted outside
-production (`internal/handlers/router.go`) — on Render (`APP_ENV=production`)
-it intentionally returns 404. The Render free plan sleeps after ~15 minutes of
-inactivity; the first request after that takes up to ~50 seconds to wake the
-API.
+Swagger belongs to each domain service and is mounted only outside production:
 
-## How it works
+- universe: <http://localhost:8080/swagger/index.html>
+- nature: <http://localhost:8081/swagger/index.html>
+
+Render free services can sleep after inactivity, so the first request may need
+about a minute to wake each service. The gateway's `/api/v1/statusz` checks both
+upstreams concurrently and reports 503 until both are ready.
+
+## Public API routing
+
+The gateway does not parse or transform business payloads. It selects the
+service from the public prefix and rewrites only the path:
+
+| Public gateway route | Upstream route |
+| --- | --- |
+| `/api/universe/*` | `universe-service /api/v1/*` |
+| `/api/nature/*` | `nature-service /api/v1/*` |
+| `/api/v1/healthz` | Gateway liveness |
+| `/api/v1/statusz` | Aggregated upstream readiness |
+
+Examples:
 
 ```txt
-Form (Next.js)
-  -> POST /api/v1/worlds (Go)
-  -> AI provider (Gemini/OpenAI/mock) generates schema-constrained Personality DNA JSON
-  -> backend validates the DNA, creates a World Seed + World Scene Config (deterministic, AI-free)
-  -> stored in PostgreSQL (or in-memory during development)
-  -> frontend reads the config and renders the solar system with React Three Fiber
+POST /api/universe/worlds -> universe-service POST /api/v1/worlds
+POST /api/nature/worlds   -> nature-service POST /api/v1/worlds
+GET  /api/nature/share/worlds/{slug}
 ```
 
-Two architecture decisions worth knowing:
+The current frontend renders universe worlds. It can move from the direct API
+to the gateway without source changes by setting
+`NEXT_PUBLIC_API_BASE_URL=https://<gateway-host>/api/universe`. Nature frontend
+work remains a later vision round.
 
-1. AI only generates the semantic part (archetype, scene name, planet
-   meanings). Every 3D number is derived by the backend from a seed within safe
-   bounds — so "regenerate variant" costs zero AI calls, and the same seed
-   always renders the same scene.
-2. AI providers sit behind a single interface. Switching Gemini to OpenAI is an
-   `AI_PROVIDER` env change, not a code change. `mock` powers tests and
-   key-less development.
+## Security boundary
 
-## Core concepts
+The gateway owns exact-origin CORS and one per-client token bucket shared by
+both services. It also validates request IDs, limits bodies to 64 KiB, sanitizes
+forwarding headers, applies security response headers, and overwrites any
+client-supplied `X-Gateway-Key`.
 
-| Concept | Meaning |
-| --- | --- |
-| Personality DNA | The AI-generated semantic profile (archetype, scene name, planet meanings) distilled from the form — the only thing AI produces. |
-| World Seed | A deterministic seed derived by the backend; the same seed always produces the same 3D scene. No `Math.random` in scene code. |
-| World Scene Config | The full numeric scene description (planets, orbits, palette, mood) computed from the seed within safe bounds — AI-free. |
-| Variant | An alternative scene config for the same world, regenerated from a new seed at zero AI cost; one variant is "selected". |
-| Mood scene profiles | Per-mood rendering parameters mirrored between Go (`mood_scene_profile.go`) and TypeScript (`scene.ts`) — the two sides must stay in sync. |
-| Share slug | Publishing a world mints a public read-only URL (`/share/worlds/{slug}`). |
-| Gallery | Saved world ids kept client-side and loaded through one batch request (`GET /worlds?ids=`). |
+The free Render upstreams still have public hostnames, so readiness and every
+business route require `GATEWAY_SHARED_SECRET`. Render generates one 256-bit
+value in the `myunivokai-gateway-secrets` environment group and links it to all
+three services. Root and `/api/v1/healthz` stay public for platform liveness
+checks. This is service-to-service authentication, not user authentication;
+the repository still has no auth-service or user identity contract.
 
 ## Tech stack
 
-### Backend — `services/universe-service`
+### Backend
 
-- Go 1.25, [chi](https://github.com/go-chi/chi) router + `go-chi/cors`
-- PostgreSQL via `pgx/v5` + pgxpool; [goose](https://github.com/pressly/goose)
-  migrations; an in-memory store fallback so local dev needs no database
-- `zerolog` structured logging with request ids; `swaggo` Swagger UI
-- Per-IP token-bucket rate limiting (`golang.org/x/time/rate`) with
-  `Retry-After` on 429
-- AI providers (Gemini / OpenAI / mock) called over plain REST behind one
-  interface — no vendor SDKs
+- Go 1.25, chi, `httputil.ReverseProxy`, zerolog;
+- PostgreSQL via pgxpool and goose migrations in each world service;
+- Gemini/OpenAI/mock provider abstraction in universe-service; mock provider
+  currently wired in nature-service;
+- Swagger in the two domain services;
+- per-upstream gateway timeouts and circuit breakers; bounded in-memory cache
+  only for successful public share responses.
 
-### Frontend — `clients/web-client`
+### Frontend
 
-- Next.js 14 (App Router) + React 18 + TypeScript
-- three.js via React Three Fiber (`@react-three/fiber`, `drei`,
-  `postprocessing`) rendering deterministic, seed-driven scenes
-- Tailwind CSS with the house "Vitrine + Liquid Glass" design system,
-  `sonner` toasts, `lucide-react` icons
-- `vitest` unit tests
+- Next.js 14, React 18, TypeScript, Tailwind;
+- React Three Fiber, drei, and postprocessing;
+- vitest unit tests.
 
-### Deploy platforms
+### Platforms
 
-| Layer | Platform | Notes |
-| --- | --- | --- |
-| Web client | [Vercel](https://vercel.com) | Builds `clients/web-client`; `NEXT_PUBLIC_API_BASE_URL` set in the dashboard |
-| API | [Render](https://render.com) (Docker) | Blueprint `render.yaml` → `Dockerfile.render`; migrations run at boot |
-| Database | [Neon](https://neon.tech) PostgreSQL | Pooled URL for runtime, direct URL for migrations |
-| CI | GitHub Actions | Go tests + FE typecheck/lint/build on every PR into `staging`/`main` |
+| Layer | Platform |
+| --- | --- |
+| Web client | Vercel |
+| Gateway + two APIs | Render Docker services from `render.yaml` |
+| Two logical databases | Neon PostgreSQL; pooled runtime URLs and direct migration URLs |
+| CI | GitHub Actions for all three Go modules plus frontend checks |
 
 ## Repository layout
 
 ```txt
-services/universe-service   Go + chi + pgxpool; the universe domain (worlds, DNA, variants, share)
-clients/web-client          Next.js 14 + TypeScript + Tailwind + React Three Fiber
-contracts                   JSON schemas + OpenAPI shared by both sides
-docs                        Early architecture notes
-notes                       Internal docs for humans and AI agents (start at notes/README.md)
+services/api-gateway        Public edge and routing to both world services
+services/universe-service   Universe DNA, solar-system builder, own store
+services/nature-service     Nature DNA, forest builder, own store
+clients/web-client          Next.js + React Three Fiber web client
+contracts                   Scene JSON schemas and shared contracts
+notes                       Internal architecture, conventions, and roadmaps
 ```
 
-The layout is microservices-ready: future services (`services/match-service`,
-`services/auth-service`) and clients (`clients/mobile-client`) slot in
-alongside the existing ones.
+## Run locally
 
-## Run the backend
+### Full Docker stack
+
+From the repository root, one command builds and starts both PostgreSQL
+databases, both migration jobs, Universe, Nature, the API Gateway, and the web
+client:
+
+```bash
+docker compose -f docker-compose-local.yml up --build
+```
+
+In VS Code, `Ctrl+Shift+B` runs the default task
+`Myunivokai: Start full local stack`. The equivalent Make target is
+`make local-up` on systems with Make installed. The VS Code task and direct
+Docker command do not require Make.
+
+| Local component | URL |
+| --- | --- |
+| Web client | <http://localhost:3000> |
+| API Gateway | <http://localhost:8082> |
+| Gateway health | <http://localhost:8082/api/v1/healthz> |
+| Gateway upstream status | <http://localhost:8082/api/v1/statusz> |
+| Universe Swagger | <http://localhost:8080/swagger/index.html> |
+| Nature Swagger | <http://localhost:8081/swagger/index.html> |
+
+The full stack builds the current universe frontend with
+`NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/api/universe`. It also gives the
+gateway and both upstreams the same development-only gateway key, so browser
+business requests follow the real gateway boundary. PostgreSQL data remains in
+named Docker volumes after stopping the stack.
+
+Stop and remove the stack containers and network without deleting database
+volumes:
+
+```bash
+docker compose -f docker-compose-local.yml down
+```
+
+The Make wrappers are `make local-up`, `make local-up-detached`,
+`make local-logs`, `make local-status`, and `make local-down`. Host ports can be
+overridden with `WEB_CLIENT_PORT`, `API_GATEWAY_PORT`, `UNIVERSE_API_PORT`,
+`NATURE_API_PORT`, `UNIVERSE_DATABASE_PORT`, and `NATURE_DATABASE_PORT` before
+running Compose.
+
+### Run components separately
+
+Each world service defaults to the mock provider and can use an in-memory store
+when `DATABASE_URL` is empty:
 
 ```bash
 cd services/universe-service
-go run ./cmd/api
+MYUNIVOKAI_ENV_FILE=.env.example go run ./cmd/api
+
+cd services/nature-service
+MYUNIVOKAI_ENV_FILE=.env.example go run ./cmd/api
 ```
 
-Defaults to `AI_PROVIDER=mock`. With an empty `DATABASE_URL` the API uses an
-in-memory store, so local development needs no database. Example env lives in
-`services/universe-service/.env.example`.
-
-The config loader reads `.env`, `.env.local`, and environment-specific files
-(`.env.dev`, `.env.prod`, ...). Force a specific file with `APP_ENV=prod` or
-`MYUNIVOKAI_ENV_FILE=.env.prod`.
-
-Health checks and Swagger:
+On PowerShell, set the env variable with
+`$env:MYUNIVOKAI_ENV_FILE = ".env.example"` before `go run`. The services
+listen on ports 8080 and 8081. Start the gateway after both:
 
 ```bash
-curl http://localhost:8080/api/v1/healthz   # liveness
-curl http://localhost:8080/api/v1/readyz    # readiness (pings the store)
-# http://localhost:8080/swagger/index.html  (disabled in production)
-
-curl https://myunivokai.onrender.com/api/v1/healthz   # production liveness
+cd services/api-gateway
+go run ./cmd/gateway
 ```
 
-Regenerate Swagger after changing handlers/models:
+The gateway listens on port 8082. Local `.env.local` files leave the shared
+credential empty so direct service and existing frontend development continue
+to work. Set one identical non-empty value in all three processes when testing
+gateway-only enforcement.
 
-```bash
-swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
-```
-
-## Run the frontend
-
-```bash
-cd clients/web-client
-npm install
-npm run dev
-```
-
-Open <http://localhost:3000>. The FE calls the API through
-`NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080/api/v1`, example env
-in `clients/web-client/.env.example`).
-
-Create a world from the form — the Live DNA Preview renders a solar system that
-updates live with your inputs (palette, mood, interests, traits), and submitting
-opens the generated world on its own page.
-
-## Run with Docker Compose
+Local PostgreSQL stacks remain service-owned:
 
 ```bash
 cd services/universe-service
 docker compose -f docker-compose-local.yml up --build
+
+cd services/nature-service
+docker compose -f docker-compose-local.yml up --build
 ```
 
-This starts PostgreSQL, runs goose migrations, then serves the API on port
-8080. The local stack mounts `.env.local` into the API and migration containers.
+With both APIs running on host ports 8080/8081, the gateway can run in Docker:
+
+```bash
+cd services/api-gateway
+docker compose -f docker-compose-local.yml up --build
+```
 
 ## Tests and checks
 
-```bash
-# Backend
-cd services/universe-service && go test ./... && go vet ./...
+Run the full gate in every Go module:
 
-# Frontend
-cd clients/web-client && npm run typecheck && npm run lint && npm run test && npm run build
+```bash
+go mod verify
+go vet ./...
+go test ./...
+go build ./...
 ```
 
-Backend tests always use the mock provider — no real AI calls. CI (GitHub
-Actions) runs the Go test suite plus the frontend typecheck, lint, and build on
-every PR into `staging`/`main`. (The frontend vitest suite runs locally; wiring
-it into CI is tracked in `notes/fe/refactor-plan.md`.)
+Frontend gate:
+
+```bash
+cd clients/web-client
+npm ci
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+```
+
+Backend tests use mock AI providers and never call a real AI API.
+
+## Production deployment
+
+`render.yaml` manages `myunivokai-gateway`, `myunivokai-api`, and
+`myunivokai-nature`. Before syncing an existing Blueprint, set the gateway's
+`API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL`, and `NATURE_SERVICE_URL` in the
+Render dashboard; new `sync: false` keys are not populated automatically on an
+existing Blueprint. Upstream URLs must be their public HTTPS Render URLs.
+
+The shared environment group provides `GATEWAY_SHARED_SECRET` to all three.
+Both world services fail production startup if that value is missing or shorter
+than 32 characters. Their database URLs remain separate, and their entrypoints
+run migrations against each service's direct Neon URL before API startup.
+
+After the gateway is healthy:
+
+1. verify `/api/v1/healthz` and `/api/v1/statusz`;
+2. create and read one universe world through `/api/universe`;
+3. create and read one nature world through `/api/nature`;
+4. confirm direct upstream business routes return 401 without the gateway key;
+5. set Vercel `NEXT_PUBLIC_API_BASE_URL` to the gateway's `/api/universe`
+   prefix and redeploy without build cache.
 
 ## Documentation
 
-- `notes/README.md` — index of internal docs (git convention, coding style, FE/BE architecture)
-- `notes/fe/threejs-scene-architecture.md` — how three.js is used and how to add new scene types
-- `notes/perf-render-plan.md` — the gallery-429 root cause, batch endpoint design, and the Render deploy kit
-- `AGENTS.md` — rules for AI agents working in this repo
+- `notes/README.md`: internal documentation index;
+- `notes/be/source-overview.md`: backend source and gateway request flow;
+- `notes/vision/api-gateway.md`: implemented gateway design and operations;
+- `notes/vision/deployment.md`: three-service Render deployment;
+- `notes/vision/nature-service-plan.md`: nature-service roadmap;
+- `AGENTS.md`: repository rules for coding agents.
 
 Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in
 `clients/web-client/public/textures/solar-system/ATTRIBUTION.md`.
-
-## Deployment
-
-Production runs the web client on Vercel, the API on Render (Docker), and the
-database on Neon PostgreSQL. Live URLs are in the [Live](#live) section.
-
-### API on Render
-
-`render.yaml` at the repo root is a Render Blueprint for the API service. It
-builds `services/universe-service/Dockerfile.render`; the container entrypoint
-(`docker-entrypoint-render.sh`) runs goose migrations first when
-`RUN_MIGRATIONS_ON_START=true` (against `DATABASE_DIRECT_URL`), then starts the
-API. Render injects `PORT` at runtime — the config reads `API_PORT` first, then
-`PORT` (`internal/config/config.go`), so no port setting is needed.
-
-Secrets are declared `sync: false` in the blueprint: their values live only in
-the Render dashboard (Environment tab), never in git. A local, untracked
-cheat-sheet with the production values is kept at
-`services/universe-service/.env.render` (`.gitignore` excludes all `.env.*`).
-
-- Neon connection strings: the pooled URL (host contains `-pooler`) for
-  `DATABASE_URL` (runtime), the direct URL for `DATABASE_DIRECT_URL`
-  (migrations); both with `sslmode=require`, without `channel_binding=require`
-  (not a pgx option).
-- CORS: `API_ALLOWED_ORIGINS=https://myunivokai.vercel.app` — the exact web
-  origin, never a wildcard, no trailing slash.
-- AI: the blueprint defaults to `AI_PROVIDER=mock` (no key needed). Switch to
-  `gemini`/`openai` plus the matching API key in the dashboard for real
-  generation.
-
-### Web on Vercel
-
-Set `NEXT_PUBLIC_API_BASE_URL=https://myunivokai.onrender.com/api/v1` in
-Vercel → Project → Settings → Environment Variables (Production). Next.js
-inlines `NEXT_PUBLIC_*` values at build time, so after changing one, redeploy
-without the build cache. Cheat-sheet: `clients/web-client/.env.render`
-(untracked).

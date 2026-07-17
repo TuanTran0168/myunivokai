@@ -1,81 +1,133 @@
-# BE Source Overview — services/universe-service
+# Backend source overview
 
-Go + chi router + pgxpool. One binary `cmd/api`, one migration tool `cmd/migrate`.
-
-## World creation request flow
+The backend is three independent Go modules:
 
 ```txt
-POST /api/v1/worlds
-  -> handlers/world_handler.go   decode + validate request (validation/world.go)
-  -> services/world_service.go   orchestrates everything
-      -> ai/orchestrator.go      call primary provider, validate JSON, repair-retry, fallback
-      -> seed/seed.go             generate WLD-XXXXXXXXXX seed (crypto random)
-      -> services/world_config_builder.go
-                                 DNA + seed -> WorldSceneConfig (deterministic PRNG, seed/prng.go)
-  -> repositories (store)         save world + variant + AI logs in one transaction
-  -> returns { world, variant, personalityDNA }
+services/api-gateway
+services/universe-service
+services/nature-service
 ```
 
-Core principle: **AI only generates Personality DNA** (semantics). Every 3D
-number (orbit, size, speed) is produced by `world_config_builder` from the seed
-within safe bounds. Regenerating a variant therefore makes NO AI call — just a
-new seed + rebuilt config.
+## Public request flow
+
+```txt
+Browser
+  -> api-gateway
+       RequestContext -> Recover -> Logging -> SecurityHeaders -> CORS
+       -> one shared per-client rate limiter -> 64 KiB body limit
+       -> /api/universe/* or /api/nature/*
+       -> route timeout + per-upstream circuit breaker
+       -> sanitized X-Forwarded-* + X-Request-Id + X-Gateway-Key
+  -> selected service /api/v1/*
+       RequestID -> Recover -> Logging -> GatewayAuthentication
+       -> handler validation -> business service -> repository
+```
+
+The gateway rewrites paths only. It must never inspect or mutate world input,
+DNA, scene config, variants, or share payloads.
+
+## World creation in each peer
+
+Universe:
+
+```txt
+POST /api/universe/worlds
+  -> universe-service handlers/world_handler.go
+  -> services/world_service.go
+  -> ai/orchestrator.go -> PersonalityDNA
+  -> services/world_config_builder.go -> WorldSceneConfig
+  -> repository transaction -> { world, variant, personalityDNA }
+```
+
+Nature mirrors the flow at `POST /api/nature/worlds`, using `NatureDNA`,
+`forest_config_builder.go`, and `ForestSceneConfig`. Its provider factory wires
+mock only until N4; do not claim Gemini/OpenAI runtime support there yet.
+
+Core invariant: AI produces semantics only. All visual numbers come from the
+seeded builder. Regeneration creates a new seed/config and makes no AI call.
+
+## API shapes
+
+Both services expose identical direct routes under `/api/v1`:
+
+```txt
+POST /worlds
+GET  /worlds?ids=...
+GET  /worlds/{id}
+POST /worlds/{id}/variants
+POST /worlds/{id}/variants/{variantId}/select
+POST /worlds/{id}/publish
+GET  /share/worlds/{slug}
+GET  /healthz
+GET  /readyz
+```
+
+The gateway makes them public under `/api/universe` and `/api/nature`.
+Universe responses use `personalityDNA`; Nature responses use `natureDNA`.
+Public share models in both services omit raw `WorldInput`.
+
+## Storage
+
+Each peer has its own `repositories.Store`, memory implementation, Postgres
+implementation, migration binary, and logical Neon database. Production
+refuses the in-memory fallback. Unique collisions surface as
+`repositories.ErrConflict` and the service retries with fresh values where the
+existing service code defines that behavior.
 
 ## AI provider switching
 
-- `ai/provider.go` — `Provider.GenerateStructured()` interface. Business code only knows this interface.
-- `ai/providers/` — Gemini + OpenAI adapters (plain REST in `rest.go`), `mock.go` for tests/dev.
-- `aifactory/factory.go` — reads `AI_PROVIDER` (gemini | openai | mock) and builds the provider.
-- `ai/orchestrator.go` — repair-prompt retry on schema-invalid JSON (AI_MAX_RETRIES),
-  fallback to `AI_FALLBACK_PROVIDER` on technical failures.
-- Switching providers = changing env, never code. Provider request shapes must
-  not leak outside the `providers/` folder.
-- Gemini accepts only an OpenAPI-style schema subset, while OpenAI strict mode
-  REQUIRES `additionalProperties:false`; `sanitizeSchemaForGemini` in rest.go
-  reconciles this, with tests locking both invariants.
+Universe keeps Gemini, OpenAI, and mock adapters under
+`internal/ai/providers`. Business code depends only on `ai.Provider`.
+`aifactory` reads `AI_PROVIDER`; the orchestrator validates structured output,
+repair-retries schema failures, and can use the configured fallback.
 
-## Store
+Nature has the same interfaces/orchestrator but currently implements mock only.
+Its Gemini/OpenAI env names are reserved for N4 and do not imply working
+providers.
 
-`repositories/store.go` is the interface; two implementations:
+## Health and security ownership
 
-- `postgres_store.go` — real Neon/Postgres (`DATABASE_URL`), pool tuned via
-  `DATABASE_MAX_CONNS` / `MIN_CONNS` / `MAX_CONN_LIFETIME` / `MAX_CONN_IDLE_TIME`.
-- `memory_store.go` — auto-selected when `DATABASE_URL` is empty. FE dev needs no database.
-  It enforces the same uniqueness rules as Postgres so behavior never diverges.
+Gateway:
 
-Unique-constraint collisions surface as `repositories.ErrConflict`; the service
-retries with fresh values (variant numbers, share slug suffixes).
+- `/api/v1/healthz` is liveness;
+- `/api/v1/statusz` concurrently checks both protected upstream ready routes;
+- CORS and rate limiting exist only here;
+- successful public share GETs may be cached for 60 seconds;
+- unsafe request IDs and client forwarding headers are replaced;
+- transport failures use `UPSTREAM_UNREACHABLE`, `UPSTREAM_TIMEOUT`, or
+  `UPSTREAM_CIRCUIT_OPEN` envelopes.
 
-## Response shapes (the FE depends on these directly)
+World services:
 
-Defined in `models/responses.go`:
+- direct `/api/v1/healthz` remains public for Render;
+- `/api/v1/readyz` and every business/share route require `X-Gateway-Key` when
+  configured;
+- production startup requires a 32+ character shared key;
+- Swagger is mounted only outside production;
+- AI keys and gateway secrets are never logged or stored.
 
-```txt
-POST /worlds            -> { world, variant, personalityDNA }
-GET  /worlds/{id}       -> { world, selectedVariant, variants, personalityDNA }   <- variants at ROOT
-GET  /share/worlds/{s}  -> { world, variant, publicDNA }                          <- world has no id/input
-```
+There is no user authentication in source.
 
-If you change a shape here, update `clients/web-client/src/lib/api.ts`
-(normalize functions) in the same PR.
+## Run and verify
 
-## Health & security
-
-- `GET /api/v1/healthz` — liveness, touches no dependency.
-- `GET /api/v1/readyz` — pings the store (3s timeout), 503 when unreachable.
-- Share APIs never return raw `input` (user goal/challenge) — see `PublicWorld`.
-- Rate limiting is per client IP (X-Forwarded-For behind the proxy).
-- Swagger UI is mounted only outside production.
-- No API keys are ever logged or stored. AI request/response/usage go to `ai_generations`.
-
-## Run locally & checks
+Run Universe on 8080, Nature on 8081, then Gateway on 8082. Each Go module has
+the same required gate:
 
 ```bash
-cd services/universe-service
-go run ./cmd/api        # empty DATABASE_URL -> memory store, AI_PROVIDER=mock by default
-go test ./...
+go mod verify
 go vet ./...
+go test ./...
+go build ./...
 ```
 
-Swagger (non-production): http://localhost:8080/swagger/index.html — regenerate with
-`swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal`.
+The gateway local and production env surface is in
+`services/api-gateway/.env.example`; domain env files remain service-specific.
+
+For the integrated local path, root `docker-compose-local.yml` starts both
+PostgreSQL databases and migrations before the two APIs, waits for both APIs
+before the gateway, then builds the web client against
+`http://localhost:8082/api/universe`. Run it with the default VS Code build
+task, `docker compose -f docker-compose-local.yml up --build`, or
+`make local-up`. The root stack supplies one development-only gateway key to
+all three backend processes so business traffic exercises the same gateway
+authentication boundary as deployment.

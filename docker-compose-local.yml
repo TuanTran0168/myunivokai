@@ -1,0 +1,167 @@
+name: myunivokai-local
+
+x-gateway-shared-secret: &gateway-shared-secret "${GATEWAY_SHARED_SECRET:-myunivokai-local-gateway-secret}"
+
+services:
+  universe-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: myunivokai
+      POSTGRES_PASSWORD: myunivokai
+      POSTGRES_DB: myunivokai
+    ports:
+      - "${UNIVERSE_DATABASE_PORT:-5432}:5432"
+    volumes:
+      - universe-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myunivokai -d myunivokai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  universe-migrate:
+    build:
+      context: ./services/universe-service
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://myunivokai:myunivokai@universe-postgres:5432/myunivokai?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://myunivokai:myunivokai@universe-postgres:5432/myunivokai?sslmode=disable
+      MIGRATIONS_DIR: /app/migrations
+    depends_on:
+      universe-postgres:
+        condition: service_healthy
+    command: ["/app/migrate"]
+    restart: "no"
+
+  universe-service:
+    build:
+      context: ./services/universe-service
+    environment:
+      APP_ENV: development
+      APP_NAME: Myunivokai
+      PUBLIC_WEB_URL: "http://localhost:${WEB_CLIENT_PORT:-3000}"
+      PUBLIC_API_URL: "http://localhost:${UNIVERSE_API_PORT:-8080}"
+      API_HOST: 0.0.0.0
+      API_PORT: 8080
+      DATABASE_URL: postgresql://myunivokai:myunivokai@universe-postgres:5432/myunivokai?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://myunivokai:myunivokai@universe-postgres:5432/myunivokai?sslmode=disable
+      GATEWAY_SHARED_SECRET: *gateway-shared-secret
+      AI_PROVIDER: mock
+      AI_FALLBACK_PROVIDER: mock
+      AI_ENABLE_FALLBACK: "true"
+    ports:
+      - "${UNIVERSE_API_PORT:-8080}:8080"
+    depends_on:
+      universe-postgres:
+        condition: service_healthy
+      universe-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8080/api/v1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  nature-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: myunivokai_nature
+      POSTGRES_PASSWORD: myunivokai_nature
+      POSTGRES_DB: myunivokai_nature
+    ports:
+      - "${NATURE_DATABASE_PORT:-5433}:5432"
+    volumes:
+      - nature-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myunivokai_nature -d myunivokai_nature"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nature-migrate:
+    build:
+      context: ./services/nature-service
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://myunivokai_nature:myunivokai_nature@nature-postgres:5432/myunivokai_nature?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://myunivokai_nature:myunivokai_nature@nature-postgres:5432/myunivokai_nature?sslmode=disable
+      MIGRATIONS_DIR: /app/migrations
+    depends_on:
+      nature-postgres:
+        condition: service_healthy
+    command: ["/app/migrate"]
+    restart: "no"
+
+  nature-service:
+    build:
+      context: ./services/nature-service
+    environment:
+      APP_ENV: development
+      APP_NAME: Myunivokai Nature
+      PUBLIC_WEB_URL: "http://localhost:${WEB_CLIENT_PORT:-3000}"
+      PUBLIC_API_URL: "http://localhost:${NATURE_API_PORT:-8081}"
+      API_HOST: 0.0.0.0
+      API_PORT: 8081
+      DATABASE_URL: postgresql://myunivokai_nature:myunivokai_nature@nature-postgres:5432/myunivokai_nature?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://myunivokai_nature:myunivokai_nature@nature-postgres:5432/myunivokai_nature?sslmode=disable
+      GATEWAY_SHARED_SECRET: *gateway-shared-secret
+      AI_PROVIDER: mock
+      AI_FALLBACK_PROVIDER: mock
+      AI_ENABLE_FALLBACK: "true"
+    ports:
+      - "${NATURE_API_PORT:-8081}:8081"
+    depends_on:
+      nature-postgres:
+        condition: service_healthy
+      nature-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8081/api/v1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    environment:
+      APP_ENV: development
+      APP_NAME: Myunivokai API Gateway
+      API_HOST: 0.0.0.0
+      API_PORT: 8082
+      API_ALLOWED_ORIGINS: "http://localhost:${WEB_CLIENT_PORT:-3000}"
+      UNIVERSE_SERVICE_URL: http://universe-service:8080
+      NATURE_SERVICE_URL: http://nature-service:8081
+      GATEWAY_SHARED_SECRET: *gateway-shared-secret
+    ports:
+      - "${API_GATEWAY_PORT:-8082}:8082"
+    depends_on:
+      universe-service:
+        condition: service_healthy
+      nature-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8082/api/v1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  web-client:
+    build:
+      context: ./clients/web-client
+      args:
+        NEXT_PUBLIC_API_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}/api/universe"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}/api/universe"
+    ports:
+      - "${WEB_CLIENT_PORT:-3000}:3000"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+volumes:
+  universe-postgres-data:
+  nature-postgres-data:

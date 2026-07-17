@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -10,87 +11,76 @@ import (
 )
 
 type Config struct {
-	AppEnv             string
-	AppName            string
-	PublicWebURL       string
-	PublicAPIURL       string
-	APIHost            string
-	APIPort            string
-	AllowedOrigins     []string
-	DatabaseURL        string
-	DatabaseDirectURL  string
+	AppEnv              string
+	AppName             string
+	PublicWebURL        string
+	PublicAPIURL        string
+	APIHost             string
+	APIPort             string
+	GatewaySharedSecret string
+	DatabaseURL         string
+	DatabaseDirectURL   string
 	// Pool sizing. Neon's pooler prefers short-lived connections, so the
 	// lifetime defaults stay conservative.
 	DatabaseMaxConns        int
 	DatabaseMinConns        int
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseMaxConnIdleTime time.Duration
-	AIProvider         string
-	AIFallbackProvider string
-	AIEnableFallback   bool
-	AITimeout          time.Duration
+	AIProvider              string
+	AIFallbackProvider      string
+	AIEnableFallback        bool
+	AITimeout               time.Duration
 	// AITotalBudget caps one whole DNA generation (all repair retries and the
 	// fallback provider combined); AITimeout caps each individual call.
 	AITotalBudget   time.Duration
 	AIMaxRetries    int
 	AIPromptVersion string
-	GeminiAPIKey       string
-	GeminiModel        string
-	OpenAIAPIKey       string
-	OpenAIModel        string
-	RateLimitRPS       float64
-	RateLimitBurst     int
-	// TrustProxyHeaders declares that a trusted reverse proxy (Render, a load
-	// balancer) sits in front of the API and appends the real client address
-	// to X-Forwarded-For. Only then may rate limiting key on that header.
-	TrustProxyHeaders bool
-	ShareSlugLength   int
+	GeminiAPIKey    string
+	GeminiModel     string
+	OpenAIAPIKey    string
+	OpenAIModel     string
+	ShareSlugLength int
 }
 
 // defaultAITotalBudgetMultiplier derives the whole-generation budget from the
 // per-call timeout when AI_TOTAL_BUDGET is unset: enough for a primary call, a
 // repair retry, and the fallback, while staying under the server write timeout.
 const defaultAITotalBudgetMultiplier = 3
+const minimumGatewaySharedSecretLength = 32
 
 func Load() Config {
 	LoadEnv()
 	cfg := Config{
-		AppEnv:             getAny([]string{"APP_ENV", "ENV"}, "development"),
-		AppName:            get("APP_NAME", "Myunivokai"),
-		PublicWebURL:       get("PUBLIC_WEB_URL", "http://localhost:3000"),
-		PublicAPIURL:       get("PUBLIC_API_URL", "http://localhost:8080"),
-		APIHost: get("API_HOST", "0.0.0.0"),
+		AppEnv:       getAny([]string{"APP_ENV", "ENV"}, "development"),
+		AppName:      get("APP_NAME", "Myunivokai"),
+		PublicWebURL: get("PUBLIC_WEB_URL", "http://localhost:3000"),
+		PublicAPIURL: get("PUBLIC_API_URL", "http://localhost:8080"),
+		APIHost:      get("API_HOST", "0.0.0.0"),
 		// API_PORT wins locally; PORT is the platform-injected port on
 		// Render/Heroku-style hosts, so an unconfigured deploy still binds
 		// where the platform routes traffic.
-		APIPort: getAny([]string{"API_PORT", "PORT"}, "8080"),
-		AllowedOrigins:     split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
-		DatabaseURL:        get("DATABASE_URL", ""),
-		DatabaseDirectURL:  get("DATABASE_DIRECT_URL", ""),
+		APIPort:                 getAny([]string{"API_PORT", "PORT"}, "8080"),
+		GatewaySharedSecret:     strings.TrimSpace(os.Getenv("GATEWAY_SHARED_SECRET")),
+		DatabaseURL:             get("DATABASE_URL", ""),
+		DatabaseDirectURL:       get("DATABASE_DIRECT_URL", ""),
 		DatabaseMaxConns:        getInt("DATABASE_MAX_CONNS", 10),
 		DatabaseMinConns:        getInt("DATABASE_MIN_CONNS", 0),
 		DatabaseMaxConnLifetime: getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
 		DatabaseMaxConnIdleTime: getDuration("DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
-		AIProvider:         get("AI_PROVIDER", "mock"),
-		AIFallbackProvider: get("AI_FALLBACK_PROVIDER", "mock"),
-		AIEnableFallback:   getBool("AI_ENABLE_FALLBACK", true),
-		AITimeout:          time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
+		AIProvider:              get("AI_PROVIDER", "mock"),
+		AIFallbackProvider:      get("AI_FALLBACK_PROVIDER", "mock"),
+		AIEnableFallback:        getBool("AI_ENABLE_FALLBACK", true),
+		AITimeout:               time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
 		// 0 means "derive from AI_TIMEOUT_SECONDS"; resolved right below so
 		// every consumer (orchestrator, server write timeout) sees one value.
-		AITotalBudget:      getDuration("AI_TOTAL_BUDGET", 0),
-		AIMaxRetries:       getInt("AI_MAX_RETRIES", 2),
-		AIPromptVersion:    get("AI_PROMPT_VERSION", "world-dna-v1"),
-		GeminiAPIKey:       get("GEMINI_API_KEY", ""),
-		GeminiModel:        get("GEMINI_MODEL", "gemini-2.5-flash"),
-		OpenAIAPIKey:       get("OPENAI_API_KEY", ""),
-		OpenAIModel:        get("OPENAI_MODEL", "gpt-4.1-mini"),
-		RateLimitRPS: getFloat("RATE_LIMIT_RPS", 2),
-		// Burst must comfortably exceed one screen's legitimate fan-out (the
-		// gallery burst); 20 keeps abuse protection while never starving a
-		// single user's page load.
-		RateLimitBurst:    getInt("RATE_LIMIT_BURST", 20),
-		TrustProxyHeaders: getBool("TRUST_PROXY", false),
-		ShareSlugLength:   getInt("SHARE_SLUG_LENGTH", 10),
+		AITotalBudget:   getDuration("AI_TOTAL_BUDGET", 0),
+		AIMaxRetries:    getInt("AI_MAX_RETRIES", 2),
+		AIPromptVersion: get("AI_PROMPT_VERSION", "world-dna-v1"),
+		GeminiAPIKey:    get("GEMINI_API_KEY", ""),
+		GeminiModel:     get("GEMINI_MODEL", "gemini-2.5-flash"),
+		OpenAIAPIKey:    get("OPENAI_API_KEY", ""),
+		OpenAIModel:     get("OPENAI_MODEL", "gpt-4.1-mini"),
+		ShareSlugLength: getInt("SHARE_SLUG_LENGTH", 10),
 	}
 	if cfg.AITotalBudget <= 0 {
 		cfg.AITotalBudget = defaultAITotalBudgetMultiplier * cfg.AITimeout
@@ -126,6 +116,15 @@ func (c Config) Addr() string {
 func (c Config) IsProduction() bool {
 	normalized := strings.ToLower(strings.TrimSpace(c.AppEnv))
 	return normalized == "production" || normalized == "prod"
+}
+
+// ValidateProductionGatewayAccess prevents a public production service from
+// starting with business routes that callers could use to bypass the gateway.
+func (c Config) ValidateProductionGatewayAccess() error {
+	if c.IsProduction() && len(c.GatewaySharedSecret) < minimumGatewaySharedSecretLength {
+		return fmt.Errorf("GATEWAY_SHARED_SECRET must contain at least %d characters in production", minimumGatewaySharedSecretLength)
+	}
+	return nil
 }
 
 func envAliases(appEnv string) []string {
@@ -194,29 +193,10 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 	return value
 }
 
-func getFloat(key string, fallback float64) float64 {
-	value, err := strconv.ParseFloat(get(key, ""), 64)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
 func getBool(key string, fallback bool) bool {
 	value := strings.ToLower(get(key, ""))
 	if value == "" {
 		return fallback
 	}
 	return value == "1" || value == "true" || value == "yes"
-}
-
-func split(value string) []string {
-	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
 }

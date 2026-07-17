@@ -1,5 +1,9 @@
 # Performance Refactor + Render Deploy Plan — feat/fe-be/perf-and-render
 
+> Historical universe-service optimization record. CORS, client-IP rate
+> limiting, proxy trust, and the public base URL now belong to
+> `services/api-gateway`; see `notes/vision/api-gateway.md`.
+
 Source: a 5-dimension FE+BE code review (41 findings: BE perf/Go idioms, BE
 patterns/SOLID, FE perf/fetch, FE patterns, devops/deploy), with the two
 critical gallery-429 findings adversarially verified against the code.

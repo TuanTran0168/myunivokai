@@ -2,7 +2,10 @@
 
 Part of the [vision folder](README.md). Written 2026-07-16 against commit
 `392f785` (staging = main, schema 1.2 live in production). **v2 supersedes the
-v1 "stateless composer" draft** after the owner clarified the architecture:
+v1 "stateless composer" draft** after the owner clarified the architecture.
+Gateway amendment (2026-07-17): `services/api-gateway` now fronts both peer
+services; statements quoting "no gateway yet" below record the earlier N-round
+scope and are superseded by round G.
 
 > "Chỉ cần giữ nature-service. Hiện tại cứ random như universe service — cơ chế
 > giống nhau, chỉ khác DNA thôi. Chưa có API gateway và FE đâu, cứ build
@@ -23,12 +26,12 @@ every future session on this track — it is deliberately self-contained.
   độc lập** với `services/universe-service` — **cùng một cơ chế**: input người
   dùng → AI sinh DNA (mặc định mock, như prod hiện tại) → builder deterministic
   theo seed → scene config → lưu → variants/share. **Chỉ khác lớp DNA**:
-  planets trở thành **landmarks** trong rừng. `universe-service` **không bị sửa
-  một dòng nào** — không migration, không field mới, zero rủi ro prod.
-- **Chưa có gateway, chưa có FE** — đúng lời owner: chỉ build service. Gateway
-  (Phase 3, [api-gateway.md](api-gateway.md)) sau này route theo prefix
-  (`/api/universe/*`, `/api/nature/*`); FE sau này thêm picker "Vũ trụ / Rừng
-  cây" và gọi thẳng base URL của từng service cho tới khi gateway có thật.
+  planets trở thành **landmarks** trong rừng. Các N-round không sửa
+  `universe-service`; round G sau đó chỉ chuyển edge middleware và thêm shared
+  gateway credential, không đổi model, migration hay business flow.
+- **Gateway đã có; FE vẫn deferred.** Gateway route theo prefix
+  (`/api/universe/*`, `/api/nature/*`). FE hiện tại có thể đổi base URL sang
+  `/api/universe`; picker "Vũ trụ / Rừng cây" vẫn thuộc các round FE sau.
 - **Sản phẩm:** rừng cây là "chân dung tính cách" thứ hai — gió thổi cây đung
   đưa, **4 mùa + giao mùa**, thời tiết **mưa/nắng**, **thú đi lại, chim bay**,
   **thu lá rụng, đông tuyết**. Mỗi DNA landmark là một điểm click-to-focus
@@ -59,6 +62,7 @@ every future session on this track — it is deliberately self-contained.
 | 2026-07-16 (1) | Microservices immediately; forest scenery is the second family; Go backend first; beauty-first CC0 assets; gateway stays far-future. |
 | 2026-07-16 (2) | **Architecture correction:** `nature-service` (not `scene-nature-service`) is a **full peer** of universe-service — same mechanism end-to-end (AI DNA → seeded builder → store → share), only the DNA layer differs. NOT a stateless compose endpoint; universe-service is not modified at all. No gateway and no FE work yet. |
 | 2026-07-17 (3) | **One branch for all BE work** (`feat/be/nature-service-be-rounds`), pushed before any FE work. **Database:** no budget for extra Neon instances → share the existing Neon project and create a second **logical database** (`myunivokai_nature`) inside it — zero cost, own connection string/tables/goose state, zero blast radius into the production universe data. Never share tables or a schema with universe-service. |
+| 2026-07-17 (4) | **Gateway implemented without auth-service:** one public edge routes `/api/universe/*` and `/api/nature/*`; CORS/rate limit move to the gateway; public Render upstream business routes require a shared gateway credential. |
 
 Consequences vs. the old D1–D5 decision set:
 
@@ -66,7 +70,8 @@ Consequences vs. the old D1–D5 decision set:
   own worlds; nothing dispatches by scene type. Revisit only when a gateway or
   a cross-service "portrait series" feature becomes real.
 - **D2 (Go)** — unchanged, confirmed ("Backend bằng Golang").
-- **D3 (gateway later)** — unchanged, confirmed ("chưa có API gateway").
+- **D3 (gateway)** — triggered by the second public service and implemented in
+  round G; no auth-service was required.
 - **D4 (one nature service for forest/mountain/lake)** — unchanged: the service
   is named `nature-service`; forest is its first scene family
   (`sceneType: "forest"`), mountains/lakes join later inside it.
@@ -78,7 +83,7 @@ Consequences vs. the old D1–D5 decision set:
 
 | Piece | Where | Relevance |
 | --- | --- | --- |
-| The mechanism to clone | `services/universe-service` | chi router + middleware (request-id, logging, recover, per-IP rate limit) + CORS; `WorldService` (create/get/batch/regenerate/select/publish/share); AI `Orchestrator` (primary→repair→fallback, mock default); `Store` interface with memory + postgres implementations; goose migrations; zerolog. |
+| The mechanism cloned | `services/universe-service` | chi router; request-id/logging/recovery; `WorldService` (create/get/batch/regenerate/select/publish/share); AI `Orchestrator` (primary→repair→fallback, mock default); `Store` interface with memory + postgres implementations; goose migrations; zerolog. CORS and rate limiting moved to api-gateway in round G. |
 | Deterministic builder pattern | `internal/services/world_config_builder.go` + `mood/sky/diversity_scene_profile.go` | Dedicated PRNG stream per section, fixed draw order, named-constant bounds, `round()` 2dp, mirror-pair discipline. The forest builder follows exactly this. |
 | Seeded PRNG | `internal/seed/prng.go` (FNV-64a → `math/rand`) | Copied byte-identical into nature-service. |
 | Mock AI mechanism | `internal/ai/providers/mock.go` + `mock_presets.go` | Parses the user prompt back into a profile, picks a preset group by mood, personalizes planet names from interests/traits. Nature clones this with forest presets and landmark names. |
@@ -121,8 +126,8 @@ its meaning — the same POI interaction the universe has, in a new medium.
  ─ Neon DB (worlds, variants, share)     ─ own storage (memory now → own Neon DB in N2)
  ─ deployed, UNTOUCHED by this track     ─ new code, new deploy
 
- (Phase 3, unchanged trigger: one api-gateway in front, path-prefix routing —
-  /api/universe/* and /api/nature/* — see api-gateway.md)
+ (Implemented round G: api-gateway path-prefix routing — /api/universe/* and
+  /api/nature/* — see api-gateway.md)
 ```
 
 Rules:
@@ -134,7 +139,7 @@ Rules:
   Shared-library extraction is deliberately NOT done now — two copies are
   cheaper than a premature `libs/` module; revisit at a third service.
 - **Same route shapes** (`/api/v1/worlds`, `/variants`, `/publish`,
-  `/share/worlds/{slug}`, `/healthz`, `/readyz`) so the future gateway is pure
+  `/share/worlds/{slug}`, `/healthz`, `/readyz`) so the gateway is pure
   path-prefix routing and the FE client code can be reused per service.
 - **AI stays mock by default** (`AI_PROVIDER=mock`), matching universe prod
   today. Real providers (Gemini/OpenAI) are a later round (N4) — the port is
@@ -245,9 +250,9 @@ the universe-service layout, DNA layer renamed, no DB code until N2:
 ```txt
 services/nature-service/
   cmd/api/main.go                     # memory store; refuses production start until the DB round
-  internal/config/config.go           # env: PORT, APP_ENV, AI_*, RATE_LIMIT_*, TRUST_PROXY, SHARE_SLUG_LENGTH
+  internal/config/config.go           # env: PORT, APP_ENV, AI_*, DB_*, GATEWAY_SHARED_SECRET, SHARE_SLUG_LENGTH
   internal/httpx/                     # error envelope + request-id (same shapes as universe)
-  internal/middleware/                # RequestID, Logging, Recover, per-IP RateLimit
+  internal/middleware/                # RequestID, Logging, Recover, GatewayAuthentication
   internal/models/                    # NatureDNA (landmarks), World/WorldInput/WorldVariant, ForestSceneConfig, responses
   internal/seed/                      # byte-identical PRNG copy + NAT-/VAR- seed generators
   internal/ai/                        # provider iface + Orchestrator (repair/fallback) — validator returns NatureDNA
@@ -269,7 +274,7 @@ services/nature-service/
   go.mod
 ```
 
-Public API (same shapes as universe — future gateway = path-prefix only):
+Direct API (same shapes as universe; gateway exposes `/api/nature/*`):
 
 ```txt
 POST /api/v1/worlds                          → 201 CreateWorldResponse (world, variant, natureDNA)
@@ -305,12 +310,12 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 | Round | Branch | Content | Done when |
 | --- | --- | --- | --- |
 | **N1** ✅ | `feat/be/nature-service-scaffold` (merged, PR #63, `22aca0b`) | The whole pipeline on the memory store: config/middleware/handlers + NatureDNA + mock provider + orchestrator + forest profile & builder + worlds/variants/share API + tests + CI job | Gates green; smoke-tested end-to-end locally |
-| **N2** ✅ | `feat/be/nature-service-be-rounds` | Own **logical** Neon database (second database inside the existing Neon project — zero cost, owner decision 2026-07-17), goose migrations (worlds/world_variants/ai_generations, `nature_dna` column), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry | Gates green. Deploy checklist: create database `myunivokai_nature` in the Neon dashboard → apply render.yaml (new service `myunivokai-nature`) → paste DATABASE_URL/DATABASE_DIRECT_URL (dbname `myunivokai_nature`) + API_ALLOWED_ORIGINS + PUBLIC_WEB_URL → verify `/api/v1/healthz`, create a world, restart, world survives |
+| **N2** ✅ | `feat/be/nature-service-be-rounds` | Own **logical** Neon database (second database inside the existing Neon project — zero cost, owner decision 2026-07-17), goose migrations (worlds/world_variants/ai_generations, `nature_dna` column), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry | Gates green. Create database `myunivokai_nature`; set its pooled/direct URLs and `PUBLIC_WEB_URL`; after round G the shared gateway secret is also required in production. |
 | **N3** ✅ | `feat/be/nature-service-be-rounds` + `feat/be/nature-service-dev-parity` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`) + generated Swagger docs/UI outside production. The parity branch also adds the local Postgres → migration → API Docker stack. | Golden test green; a byte-diff for an existing seed fails CI; Swagger is hidden in production; local Docker smoke survives an API restart. |
 | **N4** (deferred) | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys. Deferred — owner: "cứ random như universe service" (universe prod also runs mock today) | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
 | **N5** | `feat/fe/nature-asset-pipeline` | Download/optimize/self-host GLB + HDRI + textures; ATTRIBUTION.md; finalize the key catalog; budget audit | Every catalog key resolves to a file within budget; licenses recorded |
 | **F1–F5** | (after BE) | FE: sceneType registry → ForestRenderer MVP (terrain/trees/wind/HDRI/landmark POIs) → seasons+weather+particles → wildlife → preview mirror + create-form family picker calling nature-service's base URL | Standard FE gates per round |
-| **G** | (unchanged) | api-gateway per [api-gateway.md](api-gateway.md): path-prefix routing to both services | Trigger unchanged: auth-service or when one public origin matters |
+| **G** ✅ | `feat/be/api-gateway` | Production Go gateway per [api-gateway.md](api-gateway.md): family-prefix routing, edge middleware, shared upstream credential, aggregate readiness, timeouts/circuits/cache, Docker/Render/CI | Local Go gates and cross-service smoke must pass; production rollout follows [deployment.md](deployment.md) |
 
 ## 11. Risks
 
@@ -326,7 +331,7 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 ## 12. Defaults chosen (flag to owner if wrong)
 
 1. **Same API route shapes** as universe-service (`/api/v1/worlds`…) so the
-   future gateway is pure path-prefix routing and FE client code is reusable.
+   gateway is pure path-prefix routing and FE client code is reusable.
 2. **Season is seed-random with mood bias** — no season picker in v1;
    regenerate rolls a new one ("cứ random như universe service").
 3. **Own Neon database** (same Neon project) in N2 — no shared tables with

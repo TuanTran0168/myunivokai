@@ -13,7 +13,7 @@
 #                                 myunivokai_nature — sslmode=require.
 #                                 NEVER the universe database.)
 #   DATABASE_DIRECT_URL          (DIRECT url of the same database, for migrations)
-#   API_ALLOWED_ORIGINS          (the real web origin, e.g. https://myunivokai.vercel.app)
+#   GATEWAY_SHARED_SECRET        (same generated value as api-gateway)
 #   PUBLIC_WEB_URL               (same origin; used to build share links)
 #   RUN_MIGRATIONS_ON_START=true
 #   AI_PROVIDER=mock             (the only wired provider until the real-AI round)

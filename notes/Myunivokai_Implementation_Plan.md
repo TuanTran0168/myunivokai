@@ -1,5 +1,9 @@
 # Myunivokai — Technical Implementation Plan for Codex Agent
 
+> Historical baseline. The active backend now has `api-gateway`,
+> `universe-service`, and `nature-service`; current routing/security/deployment
+> contracts live in `notes/be/source-overview.md` and `notes/vision/`.
+
 > **Project name:** Myunivokai  
 > **Hidden joke:** “My universe, okay” + “AI”  
 > **Tagline:** My universe, okay?  

@@ -15,10 +15,10 @@ in their own folder.
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | three.js principles, scene renderer architecture, customization | Before touching any 3D code |
 | [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md) | How the universe is drawn from models: 4 model layers, texture/GLB pipelines, determinism rules, asset checklist | Before adding any 3D asset or visual feature |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | FE production upgrade plan (8 branches, in order) | When doing FE refactor work |
-| [be/source-overview.md](be/source-overview.md) | How the BE source works (Go API): layers, AI providers, determinism | When working in `services/universe-service` |
+| [be/source-overview.md](be/source-overview.md) | How all three Go modules work: gateway flow, peer APIs, AI, storage, security | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | BE production upgrade plan (8 branches, in order) | When doing BE refactor work |
 | [Myunivokai_Implementation_Plan.md](Myunivokai_Implementation_Plan.md) | Original end-to-end project plan | Reference for direction |
-| [vision/](vision/README.md) | Full multi-scene platform plan: composer registry, scene services, API gateway, deployment, roadmap + decision points | Before any architecture decision |
+| [vision/](vision/README.md) | Active peer-service platform plan: Universe, Nature, API Gateway, deployment, contracts, roadmap | Before any architecture decision |
 | [stitch_personal_universe_3d/](stitch_personal_universe_3d/) | Stitch UI mockups (7 screens) | When polishing UI |
 
 ## Instructions for AI agents
