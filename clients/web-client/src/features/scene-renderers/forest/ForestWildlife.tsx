@@ -23,8 +23,11 @@ import {
   BIRD_PLUMAGE_TINTS,
   natureModelUrl,
   normalizationForObject,
+  SPECIAL_ANIMAL_DEFINITIONS,
+  SPECIAL_ANIMAL_PROBABILITY,
   SPECIAL_BIRD_DEFINITIONS,
   SPECIAL_BIRD_PROBABILITY,
+  type SpecialAnimalDefinition,
   type SpecialBirdDefinition
 } from "./forestModels";
 
@@ -70,6 +73,16 @@ function resolveSpecialBird(worldSeed: string): SpecialBirdDefinition | null {
   return SPECIAL_BIRD_DEFINITIONS[speciesIndex] ?? SPECIAL_BIRD_DEFINITIONS[0];
 }
 
+// The rare ground animal ("động vật quý hiếm"), same seeded pattern.
+function resolveSpecialAnimal(worldSeed: string): SpecialAnimalDefinition | null {
+  const nextRandomValue = randomFromSeed(worldSeed + "-forest-special-animal");
+  if (nextRandomValue() >= SPECIAL_ANIMAL_PROBABILITY) {
+    return null;
+  }
+  const speciesIndex = Math.floor(nextRandomValue() * SPECIAL_ANIMAL_DEFINITIONS.length);
+  return SPECIAL_ANIMAL_DEFINITIONS[speciesIndex] ?? SPECIAL_ANIMAL_DEFINITIONS[0];
+}
+
 const ANIMAL_HIT_SPHERE_RADIUS_MULTIPLIER = 1.4;
 const ANIMAL_CAMERA_FOCUS_HEIGHT = 0.9;
 
@@ -78,25 +91,48 @@ type AnimalModelProps = {
   walkSpeed: number;
   /** True while the wander loop is in its end-of-path pause. */
   isPausedRef: React.MutableRefObject<boolean>;
+  /** Rare animals recolor their coat with a luminous tint. */
+  coatColor?: string;
+  emissiveIntensity?: number;
 };
 
 /**
  * One loaded, normalized, animation-playing animal body. Skinned scenes are
  * cloned per individual (instancing does not apply to skeletons); counts are
- * tiny (≤6 animals per forest), so clones are cheap.
+ * tiny, so clones are cheap.
  */
-function AnimalModel({ modelKey, walkSpeed, isPausedRef }: AnimalModelProps) {
+function AnimalModel({ modelKey, walkSpeed, isPausedRef, coatColor, emissiveIntensity = 0 }: AnimalModelProps) {
   const definition = ANIMAL_MODEL_CATALOG[modelKey] ?? ANIMAL_MODEL_CATALOG["animal-deer"];
   const gltf = useGLTF(natureModelUrl(definition));
   const modelRootRef = useRef<Group>(null);
 
   const clonedScene = useMemo(() => {
     const cloned = SkeletonUtils.clone(gltf.scene);
+    const coat = coatColor ? new Color(coatColor) : null;
     cloned.traverse((object) => {
       object.castShadow = true;
+      const mesh = object as Mesh;
+      if (!coat || !mesh.isMesh) {
+        return;
+      }
+      const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      if (!material) {
+        return;
+      }
+      const tinted = (material as MeshStandardMaterial).clone();
+      if (tinted.color) {
+        // lerp (not multiply) so a legendary coat reads as its own color, not
+        // the base pelt darkened.
+        tinted.color = tinted.color.clone().lerp(coat, 0.8);
+      }
+      if (emissiveIntensity > 0 && tinted.emissive) {
+        tinted.emissive = coat.clone();
+        tinted.emissiveIntensity = emissiveIntensity;
+      }
+      mesh.material = tinted;
     });
     return cloned;
-  }, [gltf.scene]);
+  }, [coatColor, emissiveIntensity, gltf.scene]);
 
   const { scale, footOffsetY } = useMemo(
     () => normalizationForObject(gltf.scene, definition.targetHeight),
@@ -142,6 +178,9 @@ type GroundAnimalProps = {
   isSelected: boolean;
   onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
   onSelectPlanet?: (pointOfInterest: PlanetSceneConfig | null) => void;
+  /** Rare-animal coat tint, forwarded to AnimalModel. */
+  coatColor?: string;
+  emissiveIntensity?: number;
 };
 
 /** One animal wandering back and forth between two seeded waypoints. */
@@ -154,7 +193,9 @@ function GroundAnimal({
   pointOfInterest,
   isSelected,
   onHoverPlanet,
-  onSelectPlanet
+  onSelectPlanet,
+  coatColor,
+  emissiveIntensity
 }: GroundAnimalProps) {
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
@@ -248,7 +289,13 @@ function GroundAnimal({
 
   return (
     <group ref={groupRef} scale={animalScale}>
-      <AnimalModel modelKey={modelKey} walkSpeed={walkSpeed} isPausedRef={isPausedRef} />
+      <AnimalModel
+        modelKey={modelKey}
+        walkSpeed={walkSpeed}
+        isPausedRef={isPausedRef}
+        coatColor={coatColor}
+        emissiveIntensity={emissiveIntensity}
+      />
       {/* Invisible, forgiving hit target around the body. */}
       <mesh
         visible={false}
@@ -398,7 +445,7 @@ function Bird({ flockConfig, flockIndex, birdIndex, treelineRadius }: BirdProps)
     // Face the direction of travel and bank into it (no fake body-roll flap).
     const movement = group.position.clone().sub(previousPosition.current);
     if (movement.lengthSq() > 0.000001) {
-      group.rotation.y = Math.atan2(movement.x, movement.z);
+      group.rotation.y = Math.atan2(movement.x, movement.z) + birdDefinition.headingOffsetRadians;
       group.rotation.z =
         pattern === "circling"
           ? BIRD_BANK_ROLL_RADIANS
@@ -501,7 +548,7 @@ function SpecialBird({ definition, worldSeed, treelineRadius }: SpecialBirdProps
 
     const movement = group.position.clone().sub(previousPosition.current);
     if (movement.lengthSq() > 0.000001) {
-      group.rotation.y = Math.atan2(movement.x, movement.z);
+      group.rotation.y = Math.atan2(movement.x, movement.z) + birdDefinition.headingOffsetRadians;
       group.rotation.z = BIRD_BANK_ROLL_RADIANS * 0.5;
     }
     previousPosition.current.copy(group.position);
@@ -535,6 +582,7 @@ export function ForestWildlife({
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const specialBird = useMemo(() => resolveSpecialBird(worldSeed), [worldSeed]);
+  const specialAnimal = useMemo(() => resolveSpecialAnimal(worldSeed), [worldSeed]);
 
   return (
     <group>
@@ -579,6 +627,41 @@ export function ForestWildlife({
       {specialBird ? (
         <SpecialBird definition={specialBird} worldSeed={worldSeed} treelineRadius={treelineRadius} />
       ) : null}
+      {specialAnimal
+        ? (() => {
+            // A single rare animal wandering the clearing, using the same
+            // interactive GroundAnimal (hover tooltip + camera follow).
+            const rareConfig: ForestGroundAnimalConfig = {
+              modelKey: specialAnimal.baseModelKey,
+              count: 1,
+              pathSeed: `${worldSeed}-forest-special-animal-path`,
+              walkSpeed: 0.4,
+              scale: specialAnimal.scale
+            };
+            const pointOfInterest: PlanetSceneConfig = {
+              key: `${worldSeed}-special-animal-poi`,
+              name: specialAnimal.label,
+              meaning: `A rare ${specialAnimal.label.toLowerCase()} — a legendary sighting in this forest.`,
+              energy: 100
+            };
+            const identityKey = planetIdentityKey(pointOfInterest, 0);
+            return (
+              <GroundAnimal
+                animalConfig={rareConfig}
+                individualIndex={0}
+                clearingRadius={clearingRadius}
+                treelineRadius={treelineRadius}
+                terrainHeightSampler={terrainHeightSampler}
+                pointOfInterest={pointOfInterest}
+                isSelected={identityKey === selectedPlanetKey}
+                onHoverPlanet={onHoverPlanet}
+                onSelectPlanet={onSelectPlanet}
+                coatColor={specialAnimal.coatColor}
+                emissiveIntensity={specialAnimal.emissiveIntensity}
+              />
+            );
+          })()
+        : null}
     </group>
   );
 }

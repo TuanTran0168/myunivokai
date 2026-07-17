@@ -32,9 +32,9 @@ import {
 // the backend output; the preview seed starts with "preview|" and never
 // collides with a stored NAT- seed.
 
-// 1.1 (2026-07-18): wider ground-animal species pools (stag, bear, squirrel)
-// — mirrors the same bump in forest_config_builder.go.
-export const FOREST_PREVIEW_SCHEMA_VERSION = "1.1";
+// Mirrors forest_config_builder.go. 1.1: wider animal species pools. 1.2:
+// more animal slots/individuals + lower/wider bird altitude band.
+export const FOREST_PREVIEW_SCHEMA_VERSION = "1.2";
 
 // Season kinds, in canonical order. The order is part of the contract: the
 // mood season-weight vectors index into it, and the "giao mùa" transition
@@ -289,10 +289,10 @@ const GROUND_ANIMAL_SPECIES_BY_SEASON: Record<string, string[]> = {
 // Base active slot counts before the mood wildlife multiplier; fractional so
 // the multiplier has room to round up or down.
 const BASE_GROUND_ANIMAL_SLOTS_BY_SEASON: Record<string, number> = {
-  [FOREST_SEASON_SPRING]: 2.0,
-  [FOREST_SEASON_SUMMER]: 3.0,
-  [FOREST_SEASON_AUTUMN]: 2.0,
-  [FOREST_SEASON_WINTER]: 1.0
+  [FOREST_SEASON_SPRING]: 3.5,
+  [FOREST_SEASON_SUMMER]: 4.5,
+  [FOREST_SEASON_AUTUMN]: 3.5,
+  [FOREST_SEASON_WINTER]: 2.5
 };
 
 const BASE_BIRD_FLOCKS_BY_SEASON: Record<string, number> = {
@@ -432,18 +432,18 @@ const MOBILE_SNOW_FRACTION = 0.3;
 
 // Slots are FIXED so the PRNG draw count never changes; the active count only
 // gates how many drawn slots are kept.
-const MAXIMUM_GROUND_ANIMAL_SLOTS = 3;
+const MAXIMUM_GROUND_ANIMAL_SLOTS = 5;
 const MAXIMUM_BIRD_FLOCK_SLOTS = 2;
 const GROUND_ANIMAL_COUNT_BASE = 1;
-const GROUND_ANIMAL_COUNT_SPREAD = 2;
+const GROUND_ANIMAL_COUNT_SPREAD = 3;
 const WALK_SPEED_BASE = 0.35;
 const WALK_SPEED_RANGE = 0.4;
 const ANIMAL_SCALE_BASE = 0.85;
 const ANIMAL_SCALE_RANGE = 0.25;
 const BIRDS_PER_FLOCK_BASE = 3;
 const BIRDS_PER_FLOCK_SPREAD = 5;
-const BIRD_ALTITUDE_BASE = 12.0;
-const BIRD_ALTITUDE_BASE_RANGE = 6.0;
+const BIRD_ALTITUDE_BASE = 5.0;
+const BIRD_ALTITUDE_BASE_RANGE = 17.0;
 const BIRD_ALTITUDE_SPAN_BASE = 4.0;
 const BIRD_ALTITUDE_SPAN_RANGE = 6.0;
 const FLIGHT_SPEED_BASE = 0.4;

@@ -60,6 +60,8 @@ type UniverseCanvasProps = {
   preserveDrawingBuffer?: boolean;
   /** Device-pixel-ratio clamp; ambient backdrops pass a lower cap. */
   devicePixelRatioRange?: [number, number];
+  /** Decorative backdrops (gallery) disable WASD/arrow camera movement. */
+  enableKeyboardMove?: boolean;
 };
 
 /**
@@ -73,7 +75,8 @@ export function UniverseCanvas({
   selectedPlanetKey,
   onSelectPlanet,
   preserveDrawingBuffer = false,
-  devicePixelRatioRange = CANVAS_DEVICE_PIXEL_RATIO_RANGE
+  devicePixelRatioRange = CANVAS_DEVICE_PIXEL_RATIO_RANGE,
+  enableKeyboardMove = true
 }: UniverseCanvasProps) {
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
@@ -153,6 +156,7 @@ export function UniverseCanvas({
               minimumDistance={isForestFamilyScene ? FOREST_MINIMUM_CAMERA_DISTANCE : undefined}
               maximumDistance={isForestFamilyScene ? FOREST_MAXIMUM_CAMERA_DISTANCE : undefined}
               maximumPolarAngleRadians={isForestFamilyScene ? FOREST_MAXIMUM_POLAR_ANGLE_RADIANS : undefined}
+              keyboardMoveEnabled={enableKeyboardMove}
             />
           </PlanetPositionTrackerContext.Provider>
         </Canvas>
@@ -188,6 +192,11 @@ export function UniverseCanvas({
         </div>
       ) : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-lowest/65 to-transparent" />
+      {enableKeyboardMove && isSceneReady ? (
+        <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-md border border-white/10 bg-surface-low/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/50 backdrop-blur sm:block">
+          WASD / arrows to move · drag to orbit · scroll to zoom
+        </div>
+      ) : null}
     </div>
   );
 }

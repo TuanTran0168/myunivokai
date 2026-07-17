@@ -43,7 +43,7 @@ describe("buildPreviewForestSceneConfig", () => {
   it("stamps the forest family contract keys", () => {
     const scene = buildPreviewForestSceneConfig(BASE_PREVIEW_INPUT);
     expect(scene.sceneType).toBe("forest");
-    expect(scene.schemaVersion).toBe("1.1");
+    expect(scene.schemaVersion).toBe("1.2");
     expect(scene.theme).toBe("aurora");
   });
 

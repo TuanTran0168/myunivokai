@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://myunivokai.com/contracts/scenes/forest-scene-config.schema.json",
   "title": "ForestSceneConfig",
-  "description": "Scene contract for the forest family, produced by nature-service (sceneType 'forest', schemaVersion '1.1' — 1.1 widened the ground-animal species pools with stag/bear/squirrel). Renderers are keyed by (sceneType, schemaVersion). Only semantic and hero placements are stored; mass scatter (trees, grass, particles, paths) is derived frontend-side from the placement/path seeds embedded here. Golden fixtures in services/nature-service/internal/services/testdata are the executable form of this contract.",
+  "description": "Scene contract for the forest family, produced by nature-service (sceneType 'forest', schemaVersion '1.2' — 1.1 widened the ground-animal species pools with stag/bear/squirrel; 1.2 added more ground-animal slots/individuals and a lower/wider bird altitude band). Renderers are keyed by (sceneType, schemaVersion). Only semantic and hero placements are stored; mass scatter (trees, grass, particles, paths) is derived frontend-side from the placement/path seeds embedded here. Golden fixtures in services/nature-service/internal/services/testdata are the executable form of this contract.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -26,7 +26,7 @@
     "assets"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.1" },
+    "schemaVersion": { "const": "1.2" },
     "sceneType": { "const": "forest" },
     "sceneName": { "type": "string" },
     "archetype": { "type": "string" },
@@ -132,13 +132,13 @@
       "properties": {
         "groundAnimals": {
           "type": "array",
-          "maxItems": 3,
+          "maxItems": 5,
           "items": {
             "type": "object",
             "required": ["modelKey", "count", "pathSeed", "walkSpeed", "scale"],
             "properties": {
               "modelKey": { "enum": ["animal-deer", "animal-fox", "animal-rabbit", "animal-boar", "animal-wolf", "animal-stag", "animal-bear", "animal-squirrel"] },
-              "count": { "type": "integer", "minimum": 1, "maximum": 2 },
+              "count": { "type": "integer", "minimum": 1, "maximum": 3 },
               "pathSeed": { "type": "string" },
               "walkSpeed": { "type": "number", "minimum": 0.35, "maximum": 0.75 },
               "scale": { "type": "number", "minimum": 0.85, "maximum": 1.1 }
@@ -155,8 +155,8 @@
               "modelKey": { "const": "bird-forest" },
               "birdCount": { "type": "integer", "minimum": 3, "maximum": 7 },
               "pathSeed": { "type": "string" },
-              "altitudeMin": { "type": "number", "minimum": 12, "maximum": 18 },
-              "altitudeMax": { "type": "number", "minimum": 16, "maximum": 28 },
+              "altitudeMin": { "type": "number", "minimum": 5, "maximum": 22 },
+              "altitudeMax": { "type": "number", "minimum": 9, "maximum": 32 },
               "flightSpeed": { "type": "number", "minimum": 0.4, "maximum": 0.8 },
               "pattern": { "enum": ["circling", "crossing"] }
             }

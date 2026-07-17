@@ -13,9 +13,11 @@ import (
 // bump the schema version.
 const (
 	// 1.1 (2026-07-18): wider ground-animal species pools (stag, bear,
-	// squirrel) — the species draw shifted for existing seeds, so the version
-	// bumped and the golden fixtures were regenerated deliberately.
-	forestSchemaVersion = "1.1"
+	// squirrel). 1.2 (2026-07-18): more ground-animal slots (3→5) and
+	// individuals per slot (1-2→1-3), plus a lower/wider bird altitude band
+	// for high+low tiers. Both shifted the draws for existing seeds → version
+	// bump + deliberate golden regeneration.
+	forestSchemaVersion = "1.2"
 	forestSceneType     = "forest"
 )
 

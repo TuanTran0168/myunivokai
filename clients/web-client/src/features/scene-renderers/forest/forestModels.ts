@@ -99,6 +99,27 @@ export const ANIMAL_MODEL_CATALOG: Record<string, AnimalModelDefinition> = {
   "animal-squirrel": { fileName: "animal-squirrel.glb", targetHeight: 0.35, walkClipName: "" }
 };
 
+// Rare "legendary" ground animals ("động vật quý hiếm") — a reskin of an
+// existing animated animal with a luminous coat, so they need no new models
+// and still play their Walk clip. One occasionally wanders a world, seed-gated
+// off the world seed (= DNA).
+export type SpecialAnimalDefinition = {
+  key: string;
+  label: string;
+  baseModelKey: string;
+  coatColor: string;
+  emissiveIntensity: number;
+  scale: number;
+};
+export const SPECIAL_ANIMAL_DEFINITIONS: SpecialAnimalDefinition[] = [
+  { key: "white-stag", label: "White Stag", baseModelKey: "animal-stag", coatColor: "#EFF3F7", emissiveIntensity: 0.35, scale: 1.15 },
+  { key: "golden-fox", label: "Golden Fox", baseModelKey: "animal-fox", coatColor: "#F6C445", emissiveIntensity: 0.5, scale: 1.1 },
+  { key: "spirit-wolf", label: "Spirit Wolf", baseModelKey: "animal-wolf", coatColor: "#9FD0E8", emissiveIntensity: 0.55, scale: 1.1 },
+  { key: "verdant-stag", label: "Verdant Stag", baseModelKey: "animal-stag", coatColor: "#7BE0A3", emissiveIntensity: 0.45, scale: 1.1 }
+];
+// ~40% of worlds host one rare animal; a second roll picks the species.
+export const SPECIAL_ANIMAL_PROBABILITY = 0.4;
+
 // Hover/detail display names for the interactive wildlife layer.
 export const ANIMAL_DISPLAY_NAMES: Record<string, string> = {
   "animal-deer": "Deer",
@@ -115,13 +136,16 @@ export const ANIMAL_DISPLAY_NAMES: Record<string, string> = {
 // static perched model was the "vỗ cánh quá tệ" complaint). flapClipName is
 // the animation clip to loop; each is normalized by wingspan (longest axis),
 // not height. Alternated per flock for species variety.
-export type BirdModelDefinition = ForestModelDefinition & { flapClipName: string };
+// headingOffsetRadians corrects the model's rest facing so it flies nose-first
+// (the renderer yaws to atan2(velocity) which assumes +Z forward; a model
+// authored facing another axis needs this offset, else it flies backward).
+export type BirdModelDefinition = ForestModelDefinition & { flapClipName: string; headingOffsetRadians: number };
 export const BIRD_MODEL_DEFINITIONS: BirdModelDefinition[] = [
   // A rigged hawk — realistic flapping flight (Sherkiz, CC-BY).
-  { fileName: "bird-hawk.glb", targetHeight: 1.3, flapClipName: "metarig|Fly" },
+  { fileName: "bird-hawk.glb", targetHeight: 1.3, flapClipName: "metarig|Fly", headingOffsetRadians: Math.PI },
   // A Quaternius flyer — stylized but skeletally animated, style-matched to
   // the Quaternius forest (CC0).
-  { fileName: "bird-armabee.glb", targetHeight: 0.9, flapClipName: "CharacterArmature|Fast_Flying" }
+  { fileName: "bird-armabee.glb", targetHeight: 0.9, flapClipName: "CharacterArmature|Fast_Flying", headingOffsetRadians: Math.PI }
 ];
 
 // Per-bird plumage tints multiplied into the model materials — one model,
