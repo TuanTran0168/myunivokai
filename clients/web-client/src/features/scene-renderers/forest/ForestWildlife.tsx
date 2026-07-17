@@ -22,7 +22,10 @@ import {
   BIRD_MODEL_DEFINITIONS,
   BIRD_PLUMAGE_TINTS,
   natureModelUrl,
-  normalizationForObject
+  normalizationForObject,
+  SPECIAL_BIRD_DEFINITIONS,
+  SPECIAL_BIRD_PROBABILITY,
+  type SpecialBirdDefinition
 } from "./forestModels";
 
 // Real animals: Quaternius' animated GLB pack (deer/fox/wolf play their Walk
@@ -42,22 +45,30 @@ const BIRD_CIRCLING_RADIUS_FRACTION = 0.5;
 const BIRD_CIRCLING_SPEED_MULTIPLIER = 0.35;
 const BIRD_CROSSING_SPEED_UNITS_PER_SECOND = 7;
 const BIRD_ALTITUDE_WAVE_AMPLITUDE = 1.1;
-// Flap illusion for static flying-pose models: a fast roll oscillation plus a
-// synchronized bob — at flock distance it reads as a wingbeat-glide rhythm.
-const BIRD_FLAP_FREQUENCY_RADIANS_PER_SECOND = 8;
-const BIRD_FLAP_ROLL_RADIANS = 0.28;
-const BIRD_FLAP_BOB_UNITS = 0.09;
 
 type ForestWildlifeProps = {
   wildlife?: ForestWildlifeConfig;
   terrain?: ForestTerrainConfig;
   terrainHeightSampler: TerrainHeightSampler;
+  // The world seed drives the rare special-bird sighting (seed encodes DNA).
+  worldSeed: string;
   // Animals join the interactive POI layer: hover shows the species tooltip,
   // click makes the camera follow the wandering animal.
   selectedPlanetKey: string | null;
   onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
   onSelectPlanet?: (pointOfInterest: PlanetSceneConfig | null) => void;
 };
+
+// A per-world seeded roll: ~SPECIAL_BIRD_PROBABILITY of forests get one rare
+// crosser, and a second roll picks which species. Returns null otherwise.
+function resolveSpecialBird(worldSeed: string): SpecialBirdDefinition | null {
+  const nextRandomValue = randomFromSeed(worldSeed + "-forest-special-bird");
+  if (nextRandomValue() >= SPECIAL_BIRD_PROBABILITY) {
+    return null;
+  }
+  const speciesIndex = Math.floor(nextRandomValue() * SPECIAL_BIRD_DEFINITIONS.length);
+  return SPECIAL_BIRD_DEFINITIONS[speciesIndex] ?? SPECIAL_BIRD_DEFINITIONS[0];
+}
 
 const ANIMAL_HIT_SPHERE_RADIUS_MULTIPLIER = 1.4;
 const ANIMAL_CAMERA_FOCUS_HEIGHT = 0.9;
@@ -252,6 +263,33 @@ function GroundAnimal({
   );
 }
 
+// Recolors every mesh material of a cloned bird by multiplying a plumage tint
+// (and optional emissive glow for the special birds) into it.
+function tintBirdScene(scene: Group, plumageColor: string, emissiveIntensity: number): Group {
+  const tint = new Color(plumageColor);
+  scene.traverse((object) => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) {
+      return;
+    }
+    mesh.castShadow = true;
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (!material) {
+      return;
+    }
+    const tintedMaterial = (material as MeshStandardMaterial).clone();
+    if (tintedMaterial.color) {
+      tintedMaterial.color = tintedMaterial.color.clone().multiply(tint);
+    }
+    if (emissiveIntensity > 0 && tintedMaterial.emissive) {
+      tintedMaterial.emissive = tint.clone();
+      tintedMaterial.emissiveIntensity = emissiveIntensity;
+    }
+    mesh.material = tintedMaterial;
+  });
+  return scene;
+}
+
 type BirdProps = {
   flockConfig: ForestBirdFlockConfig;
   flockIndex: number;
@@ -259,40 +297,52 @@ type BirdProps = {
   treelineRadius: number;
 };
 
-/** One flying-pose bird on a seeded flight path, flap-bobbing as it banks. */
+/**
+ * One bird on a seeded flight path. The wings flap via the model's own
+ * skeletal animation clip (useAnimations) — the previous whole-body roll
+ * "flap" on a static mesh was the thing that looked wrong. The body only
+ * banks into turns.
+ */
 function Bird({ flockConfig, flockIndex, birdIndex, treelineRadius }: BirdProps) {
   const groupRef = useRef<Group>(null);
+  const modelRootRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const previousPosition = useRef(new Vector3());
 
   // Alternate the bird model per flock and the plumage tint per bird — two
-  // silhouettes × three tints reads as several species overhead.
+  // animated silhouettes × three tints reads as several species overhead.
   const birdDefinition = BIRD_MODEL_DEFINITIONS[flockIndex % BIRD_MODEL_DEFINITIONS.length];
   const plumageTint = BIRD_PLUMAGE_TINTS[birdIndex % BIRD_PLUMAGE_TINTS.length];
   const gltf = useGLTF(natureModelUrl(birdDefinition));
-  const clonedScene = useMemo(() => {
-    const cloned = SkeletonUtils.clone(gltf.scene);
-    const tint = new Color(plumageTint);
-    cloned.traverse((object) => {
-      const mesh = object as Mesh;
-      if (!mesh.isMesh) {
-        return;
-      }
-      const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-      if (material) {
-        const tintedMaterial = (material as MeshStandardMaterial).clone();
-        if (tintedMaterial.color) {
-          tintedMaterial.color = tintedMaterial.color.clone().multiply(tint);
-        }
-        mesh.material = tintedMaterial;
-      }
-    });
-    return cloned;
-  }, [gltf.scene, plumageTint]);
-  const { scale, footOffsetY } = useMemo(
+  const clonedScene = useMemo(
+    () => tintBirdScene(SkeletonUtils.clone(gltf.scene) as Group, plumageTint, 0),
+    [gltf.scene, plumageTint]
+  );
+  const { scale, centerOffset } = useMemo(
     () => normalizationForObject(gltf.scene, birdDefinition.targetHeight, "longestAxis"),
     [birdDefinition.targetHeight, gltf.scene]
   );
+
+  // Play the flap clip, staggered per bird so a flock doesn't beat in unison.
+  // useAnimations drives the mixer on its own internal useFrame — do NOT also
+  // update it here or the wingbeat runs at double speed.
+  const { actions } = useAnimations(gltf.animations, modelRootRef);
+  useEffect(() => {
+    const flapAction =
+      actions[birdDefinition.flapClipName] ??
+      Object.entries(actions).find(([name]) => /fly|flap/i.test(name))?.[1] ??
+      actions[Object.keys(actions)[0] ?? ""];
+    if (!flapAction) {
+      return;
+    }
+    flapAction.reset().play();
+    // Vary the wingbeat rate a touch per bird and desync the phase.
+    flapAction.timeScale = 0.85 + ((birdIndex * 0.37) % 1) * 0.5;
+    flapAction.time = (birdIndex * 0.53) % Math.max(flapAction.getClip().duration, 0.001);
+    return () => {
+      flapAction.stop();
+    };
+  }, [actions, birdDefinition.flapClipName, birdIndex]);
 
   const flightSpeed = flockConfig.flightSpeed ?? 0.6;
   const pattern = flockConfig.pattern ?? "circling";
@@ -345,28 +395,124 @@ function Bird({ flockConfig, flockIndex, birdIndex, treelineRadius }: BirdProps)
       );
     }
 
-    // Wingbeat illusion: fast roll oscillation + bob layered over the bank.
-    const flapPhase = elapsedSeconds * BIRD_FLAP_FREQUENCY_RADIANS_PER_SECOND + birdPathParameters.wavePhase * 3;
-    const flapRoll = Math.sin(flapPhase) * BIRD_FLAP_ROLL_RADIANS;
-    group.position.y += Math.sin(flapPhase * 0.5) * BIRD_FLAP_BOB_UNITS;
-
-    // Face the direction of travel and bank into it.
+    // Face the direction of travel and bank into it (no fake body-roll flap).
     const movement = group.position.clone().sub(previousPosition.current);
     if (movement.lengthSq() > 0.000001) {
       group.rotation.y = Math.atan2(movement.x, movement.z);
-      const bankRoll =
+      group.rotation.z =
         pattern === "circling"
           ? BIRD_BANK_ROLL_RADIANS
           : Math.sin(elapsedSeconds * 0.8 + birdPathParameters.wavePhase) * BIRD_BANK_ROLL_RADIANS * 0.4;
-      group.rotation.z = bankRoll + flapRoll;
     }
     previousPosition.current.copy(group.position);
   });
 
   return (
     <group ref={groupRef}>
-      <group position={[0, footOffsetY - birdDefinition.targetHeight / 2, 0]} scale={scale}>
-        <primitive object={clonedScene} />
+      {/* mixer root (unscaled) → scaled+centered model. Keeping scale off the
+          mixer root avoids double-scaling the centerOffset. */}
+      <group ref={modelRootRef}>
+        <group scale={scale} position={[-centerOffset[0], -centerOffset[1], -centerOffset[2]]}>
+          <primitive object={clonedScene} />
+        </group>
+      </group>
+    </group>
+  );
+}
+
+type SpecialBirdProps = {
+  definition: SpecialBirdDefinition;
+  worldSeed: string;
+  treelineRadius: number;
+};
+
+/**
+ * A rare, distinctive bird that arcs high across the whole scene on a long
+ * loop with a wide off-screen gap between passes ("thi thoảng có 1 con bay
+ * qua"). Same animated flapping model as the flock, scaled up with a vivid
+ * emissive plumage.
+ */
+function SpecialBird({ definition, worldSeed, treelineRadius }: SpecialBirdProps) {
+  const groupRef = useRef<Group>(null);
+  const modelRootRef = useRef<Group>(null);
+  const elapsedSecondsRef = useRef(0);
+  const previousPosition = useRef(new Vector3());
+
+  // Always the hawk (realistic flap) for the special crosser.
+  const birdDefinition = BIRD_MODEL_DEFINITIONS[0];
+  const gltf = useGLTF(natureModelUrl(birdDefinition));
+  const clonedScene = useMemo(
+    () => tintBirdScene(SkeletonUtils.clone(gltf.scene) as Group, definition.plumageColor, definition.emissiveIntensity),
+    [definition.emissiveIntensity, definition.plumageColor, gltf.scene]
+  );
+  const { scale, centerOffset } = useMemo(
+    () => normalizationForObject(gltf.scene, birdDefinition.targetHeight * definition.scale, "longestAxis"),
+    [birdDefinition.targetHeight, definition.scale, gltf.scene]
+  );
+
+  const { actions } = useAnimations(gltf.animations, modelRootRef);
+  useEffect(() => {
+    const flapAction = actions[birdDefinition.flapClipName] ?? actions[Object.keys(actions)[0] ?? ""];
+    if (!flapAction) {
+      return;
+    }
+    flapAction.reset().play();
+    flapAction.timeScale = 0.7; // slower, majestic wingbeat
+    return () => {
+      flapAction.stop();
+    };
+  }, [actions, birdDefinition.flapClipName]);
+
+  const pathParameters = useMemo(() => {
+    const nextRandomValue = randomFromSeed(worldSeed + "-forest-special-bird-path");
+    return {
+      altitude: 24 + nextRandomValue() * 8,
+      directionRadians: nextRandomValue() * Math.PI * 2,
+      lateralOffset: (nextRandomValue() - 0.5) * treelineRadius * 0.6,
+      // Long loop: one pass, then a long empty sky before the next.
+      loopSeconds: 26 + nextRandomValue() * 14,
+      startPhase: nextRandomValue()
+    };
+  }, [treelineRadius, worldSeed]);
+
+  useFrame((_, deltaTimeSeconds) => {
+    const group = groupRef.current;
+    if (!group) {
+      return;
+    }
+    elapsedSecondsRef.current += deltaTimeSeconds;
+    const elapsedSeconds = elapsedSecondsRef.current;
+    // travelFraction runs 0..1 across the crossing, then the bird waits
+    // off-screen (clamped past 1) until the loop restarts.
+    const rawPhase = (elapsedSeconds / pathParameters.loopSeconds + pathParameters.startPhase) % 1;
+    const crossFraction = Math.min(1, rawPhase / 0.45); // crossing takes 45% of the loop
+    const spanRadius = treelineRadius * 1.8;
+    const travel = (crossFraction * 2 - 1) * spanRadius;
+    const directionX = Math.cos(pathParameters.directionRadians);
+    const directionZ = Math.sin(pathParameters.directionRadians);
+    const altitudeArc = Math.sin(crossFraction * Math.PI) * 4; // gentle rise-and-fall arc
+    group.position.set(
+      directionX * travel - directionZ * pathParameters.lateralOffset,
+      pathParameters.altitude + altitudeArc,
+      directionZ * travel + directionX * pathParameters.lateralOffset
+    );
+    // Hide it while it is "waiting" off-screen between passes.
+    group.visible = rawPhase < 0.45;
+
+    const movement = group.position.clone().sub(previousPosition.current);
+    if (movement.lengthSq() > 0.000001) {
+      group.rotation.y = Math.atan2(movement.x, movement.z);
+      group.rotation.z = BIRD_BANK_ROLL_RADIANS * 0.5;
+    }
+    previousPosition.current.copy(group.position);
+  });
+
+  return (
+    <group ref={groupRef}>
+      <group ref={modelRootRef}>
+        <group scale={scale} position={[-centerOffset[0], -centerOffset[1], -centerOffset[2]]}>
+          <primitive object={clonedScene} />
+        </group>
       </group>
     </group>
   );
@@ -381,12 +527,14 @@ export function ForestWildlife({
   wildlife,
   terrain,
   terrainHeightSampler,
+  worldSeed,
   selectedPlanetKey,
   onHoverPlanet,
   onSelectPlanet
 }: ForestWildlifeProps) {
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
+  const specialBird = useMemo(() => resolveSpecialBird(worldSeed), [worldSeed]);
 
   return (
     <group>
@@ -428,6 +576,9 @@ export function ForestWildlife({
           />
         ))
       )}
+      {specialBird ? (
+        <SpecialBird definition={specialBird} worldSeed={worldSeed} treelineRadius={treelineRadius} />
+      ) : null}
     </group>
   );
 }

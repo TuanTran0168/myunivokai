@@ -111,17 +111,42 @@ export const ANIMAL_DISPLAY_NAMES: Record<string, string> = {
   "animal-squirrel": "Squirrel"
 };
 
-// Flying-pose birds (wings spread), alternated per flock for variety; the
-// old perched-pose bird read as gliding furniture. Normalized by wingspan
-// (longest axis), not height — a flying bird is wide and flat.
-export const BIRD_MODEL_DEFINITIONS: ForestModelDefinition[] = [
-  { fileName: "bird-flying-1.glb", targetHeight: 1.15 },
-  { fileName: "bird-flying-2.glb", targetHeight: 1.0 }
+// Birds with REAL skeletal flap animations (the fake whole-body roll on a
+// static perched model was the "vỗ cánh quá tệ" complaint). flapClipName is
+// the animation clip to loop; each is normalized by wingspan (longest axis),
+// not height. Alternated per flock for species variety.
+export type BirdModelDefinition = ForestModelDefinition & { flapClipName: string };
+export const BIRD_MODEL_DEFINITIONS: BirdModelDefinition[] = [
+  // A rigged hawk — realistic flapping flight (Sherkiz, CC-BY).
+  { fileName: "bird-hawk.glb", targetHeight: 1.3, flapClipName: "metarig|Fly" },
+  // A Quaternius flyer — stylized but skeletally animated, style-matched to
+  // the Quaternius forest (CC0).
+  { fileName: "bird-armabee.glb", targetHeight: 0.9, flapClipName: "CharacterArmature|Fast_Flying" }
 ];
 
 // Per-bird plumage tints multiplied into the model materials — one model,
 // several species impressions.
 export const BIRD_PLUMAGE_TINTS = ["#FFFFFF", "#C9975B", "#8CA3C4"];
+
+// Rare special crossers ("tùy DNA, thi thoảng có 1-2 con bay qua"): a majestic
+// flyer that occasionally arcs high across the sky, seed-gated so it is a
+// per-world surprise. Built on the animated hawk with a vivid emissive
+// plumage — a CC0-pipeline stand-in for the phoenix/macaw the owner
+// referenced (those live on Sketchfab, which is login-gated for downloads).
+export type SpecialBirdDefinition = {
+  key: string;
+  label: string;
+  plumageColor: string;
+  emissiveIntensity: number;
+  scale: number;
+};
+export const SPECIAL_BIRD_DEFINITIONS: SpecialBirdDefinition[] = [
+  { key: "firebird", label: "Firebird", plumageColor: "#FF6A1F", emissiveIntensity: 1.4, scale: 2.4 },
+  { key: "azure-macaw", label: "Azure Macaw", plumageColor: "#2E7DE0", emissiveIntensity: 0.5, scale: 1.8 },
+  { key: "golden-eagle", label: "Golden Raptor", plumageColor: "#E8B54B", emissiveIntensity: 0.6, scale: 2.6 }
+];
+// ~35% of worlds get a special crosser; which species is a second seeded roll.
+export const SPECIAL_BIRD_PROBABILITY = 0.35;
 
 // Poly Haven CC0 pure-sky HDRIs (1k .hdr), self-hosted — image-based
 // environment lighting keyed by the config's lighting.hdriKey.
@@ -304,13 +329,22 @@ export function normalizationForObject(
   object: Object3D,
   targetSize: number,
   normalizeBy: "height" | "longestAxis" = "height"
-): { scale: number; footOffsetY: number } {
+): { scale: number; footOffsetY: number; centerOffset: [number, number, number] } {
   const boundingBox = new Box3().setFromObject(object);
   const size = boundingBox.getSize(new Vector3());
+  const center = boundingBox.getCenter(new Vector3());
   const referenceDimension =
     normalizeBy === "longestAxis" ? Math.max(size.x, size.y, size.z, 0.0001) : Math.max(size.y, 0.0001);
   const scale = targetSize / referenceDimension;
-  return { scale, footOffsetY: -boundingBox.min.y * scale };
+  // centerOffset re-centers a model on the group origin (subtract it on an
+  // inner group). Ground models (animals/landmarks) use footOffsetY instead;
+  // flying models (birds) use the full center so they don't pivot around an
+  // off-body point.
+  return {
+    scale,
+    footOffsetY: -boundingBox.min.y * scale,
+    centerOffset: [center.x * scale, center.y * scale, center.z * scale]
+  };
 }
 
 export type StaticInstanceTransform = {

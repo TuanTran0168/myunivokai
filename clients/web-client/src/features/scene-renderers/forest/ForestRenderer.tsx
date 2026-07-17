@@ -143,6 +143,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         wildlife={wildlife}
         terrain={terrain}
         terrainHeightSampler={terrainHeightSampler}
+        worldSeed={placementSeed}
         selectedPlanetKey={selectedPlanetKey}
         onHoverPlanet={onHoverPlanet}
         onSelectPlanet={onSelectPlanet}

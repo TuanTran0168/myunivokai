@@ -33,6 +33,7 @@ unmodified. CC0 requires no attribution; CC-BY credits are listed as required.
 | animal-fox.glb | <https://poly.pizza/m/Bc97C66HKi> |
 | animal-wolf.glb | <https://poly.pizza/m/P1gU3Qkr9r> |
 | animal-stag.glb | <https://poly.pizza/m/tQdzbZ1Cmw> |
+| bird-armabee.glb | <https://poly.pizza/m/42djT5zJnx> |
 | landmark-heart-tree.glb | <https://poly.pizza/m/9aWlx82xUf> |
 | landmark-fallen-log.glb | <https://poly.pizza/m/nwsYvcI0bC> |
 
@@ -52,8 +53,7 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 | animal-rabbit.glb | "Rabbit" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/lEJ3d1gMLC> |
 | animal-bear.glb | "Bear" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/kLLBpmcw0w> |
 | animal-squirrel.glb | "Squirrel" by Poly by Google via Poly Pizza | <https://poly.pizza/m/caxos24uWC9> |
-| bird-flying-1.glb | "Flying seagull" by Poly by Google via Poly Pizza | <https://poly.pizza/m/6Tpj_vcWP3f> |
-| bird-flying-2.glb | "Crow" by Poly by Google via Poly Pizza | <https://poly.pizza/m/1MIvWQ5Q3R9> |
+| bird-hawk.glb (rigged flap animation; also reused tinted as the special-bird crosser) | "Hawk Lp Rigged" by Sherkiz via Poly Pizza | <https://poly.pizza/m/RkN6MEbP6g> |
 
 ## HDRIs — Poly Haven, CC0
 
