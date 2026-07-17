@@ -4,6 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
+  AmbientLight,
   BufferGeometry,
   Color,
   DoubleSide,
@@ -20,6 +21,7 @@ import {
 import type { ForestLightingConfig, ForestTerrainConfig, ForestTreesConfig, ForestWeatherConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import { getSoftCircleTexture } from "@/features/scene-renderers/shared/softCircleTexture";
+import { getLightShaftTexture } from "@/features/scene-renderers/shared/lightShaftTexture";
 import { clampValue, treelineRadiusFromTerrain } from "./forestMath";
 import { sunDirectionFromLighting } from "./ForestSkyDome";
 
@@ -30,17 +32,27 @@ const RAIN_SCATTER_SEED_SUFFIX = "-rain";
 const SNOW_SCATTER_SEED_SUFFIX = "-snowfall";
 const SUN_RAY_SCATTER_SEED_SUFFIX = "-sunrays";
 
-const MINIMUM_CLOUD_SPRITE_COUNT = 3;
-const CLOUD_SPRITE_COUNT_PER_COVERAGE = 12;
+const MINIMUM_CLOUD_SPRITE_COUNT = 5;
+const CLOUD_SPRITE_COUNT_PER_COVERAGE = 16;
 const CLOUD_ALTITUDE_MINIMUM = 32;
 const CLOUD_ALTITUDE_RANGE = 14;
 const CLOUD_SCALE_MINIMUM = 16;
 const CLOUD_SCALE_RANGE = 22;
 const CLOUD_BASE_OPACITY = 0.16;
 const CLOUD_OPACITY_PER_COVERAGE = 0.3;
-const CLOUD_DRIFT_RADIANS_PER_SECOND = 0.004;
+// Visible drift ("thêm tí mây bay") — a slow but noticeable procession.
+const CLOUD_DRIFT_RADIANS_PER_SECOND = 0.011;
 const CLOUD_SUNNY_COLOR = "#FFFFFF";
 const CLOUD_OVERCAST_COLOR = "#8E99A8";
+
+// Storm lightning: heavy rain occasionally throws a cold double-flash across
+// the whole scene (an ambient pulse — no geometry, reads as sheet lightning).
+const LIGHTNING_MINIMUM_RAIN_INTENSITY = 0.5;
+const LIGHTNING_MINIMUM_INTERVAL_SECONDS = 6;
+const LIGHTNING_INTERVAL_RANGE_SECONDS = 9;
+const LIGHTNING_FLASH_DURATION_SECONDS = 0.45;
+const LIGHTNING_PEAK_INTENSITY = 2.6;
+const LIGHTNING_COLOR = "#CFE0FF";
 
 const PRECIPITATION_CEILING = 24;
 
@@ -243,10 +255,60 @@ function SnowfallLayer({ flakeCount, areaRadius, seed, intensity, windDirectionR
   return <points geometry={geometry} material={material} />;
 }
 
+type LightningFlashesProps = {
+  seed: string;
+};
+
+/**
+ * Sheet lightning during heavy rain: a seeded schedule of double-pulse
+ * ambient flashes. The envelope is two spikes inside a short window — the
+ * classic strike-then-echo rhythm.
+ */
+function LightningFlashes({ seed }: LightningFlashesProps) {
+  const flashLightRef = useRef<AmbientLight>(null);
+  const elapsedSecondsRef = useRef(0);
+  const nextFlashAtSecondsRef = useRef<number | null>(null);
+  const flashStartSecondsRef = useRef<number | null>(null);
+  const nextIntervalRef = useRef(randomFromSeed(seed + "-lightning"));
+
+  useFrame((_, deltaTimeSeconds) => {
+    elapsedSecondsRef.current += deltaTimeSeconds;
+    const elapsedSeconds = elapsedSecondsRef.current;
+    if (nextFlashAtSecondsRef.current === null) {
+      nextFlashAtSecondsRef.current =
+        elapsedSeconds + LIGHTNING_MINIMUM_INTERVAL_SECONDS + nextIntervalRef.current() * LIGHTNING_INTERVAL_RANGE_SECONDS;
+    }
+    if (flashStartSecondsRef.current === null && elapsedSeconds >= nextFlashAtSecondsRef.current) {
+      flashStartSecondsRef.current = elapsedSeconds;
+      nextFlashAtSecondsRef.current =
+        elapsedSeconds + LIGHTNING_MINIMUM_INTERVAL_SECONDS + nextIntervalRef.current() * LIGHTNING_INTERVAL_RANGE_SECONDS;
+    }
+
+    let flashIntensity = 0;
+    if (flashStartSecondsRef.current !== null) {
+      const flashAgeSeconds = elapsedSeconds - flashStartSecondsRef.current;
+      if (flashAgeSeconds > LIGHTNING_FLASH_DURATION_SECONDS) {
+        flashStartSecondsRef.current = null;
+      } else {
+        // Two decaying spikes: strike at t=0, echo at ~55% of the window.
+        const normalizedAge = flashAgeSeconds / LIGHTNING_FLASH_DURATION_SECONDS;
+        const firstSpike = Math.exp(-normalizedAge * 14);
+        const echoSpike = normalizedAge > 0.55 ? Math.exp(-(normalizedAge - 0.55) * 18) * 0.7 : 0;
+        flashIntensity = (firstSpike + echoSpike) * LIGHTNING_PEAK_INTENSITY;
+      }
+    }
+    if (flashLightRef.current) {
+      flashLightRef.current.intensity = flashIntensity;
+    }
+  });
+
+  return <ambientLight ref={flashLightRef} color={LIGHTNING_COLOR} intensity={0} />;
+}
+
 /**
  * The weather layer: drifting cloud sprites scaled by coverage, wind-carried
  * rain streaks or snowfall gated by the weather kind (counts straight from
- * config), and additive light shafts for sunRays.
+ * config), additive light shafts for sunRays, and sheet lightning in storms.
  */
 export function ForestWeatherEffects({ weather, lighting, terrain, trees, placementSeed }: ForestWeatherEffectsProps) {
   const cloudGroupRef = useRef<Group>(null);
@@ -352,15 +414,22 @@ export function ForestWeatherEffects({ weather, lighting, terrain, trees, placem
         <mesh key={shaft.key} position={shaft.position} rotation={shaft.rotation}>
           <planeGeometry args={[SUN_RAY_WIDTH * shaft.widthScale, SUN_RAY_LENGTH]} />
           <meshBasicMaterial
+            // The gradient map fades the beam toward its edges and foot —
+            // without it the shafts render as hard-edged rectangles.
+            map={getLightShaftTexture() ?? undefined}
             color={lighting?.sunColor ?? "#FFF6E5"}
             transparent
-            opacity={SUN_RAY_BASE_OPACITY + intensity * SUN_RAY_OPACITY_PER_INTENSITY}
+            opacity={(SUN_RAY_BASE_OPACITY + intensity * SUN_RAY_OPACITY_PER_INTENSITY) * 2.2}
             blending={AdditiveBlending}
             side={DoubleSide}
             depthWrite={false}
           />
         </mesh>
       ))}
+
+      {weatherKind === "rain" && intensity >= LIGHTNING_MINIMUM_RAIN_INTENSITY ? (
+        <LightningFlashes seed={placementSeed} />
+      ) : null}
     </group>
   );
 }

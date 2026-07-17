@@ -52,7 +52,8 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 | animal-rabbit.glb | "Rabbit" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/lEJ3d1gMLC> |
 | animal-bear.glb | "Bear" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/kLLBpmcw0w> |
 | animal-squirrel.glb | "Squirrel" by Poly by Google via Poly Pizza | <https://poly.pizza/m/caxos24uWC9> |
-| bird-forest.glb | "Bird" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/F3km1zKccq> |
+| bird-flying-1.glb | "Flying seagull" by Poly by Google via Poly Pizza | <https://poly.pizza/m/6Tpj_vcWP3f> |
+| bird-flying-2.glb | "Crow" by Poly by Google via Poly Pizza | <https://poly.pizza/m/1MIvWQ5Q3R9> |
 
 ## HDRIs — Poly Haven, CC0
 

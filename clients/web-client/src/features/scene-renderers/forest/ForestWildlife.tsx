@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { SkeletonUtils } from "three-stdlib";
-import { Group, Vector3 } from "three";
+import { Color, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import type {
   ForestBirdFlockConfig,
   ForestGroundAnimalConfig,
@@ -19,7 +19,8 @@ import { clearingRadiusFromTerrain, treelineRadiusFromTerrain, type TerrainHeigh
 import {
   ANIMAL_DISPLAY_NAMES,
   ANIMAL_MODEL_CATALOG,
-  BIRD_MODEL_DEFINITION,
+  BIRD_MODEL_DEFINITIONS,
+  BIRD_PLUMAGE_TINTS,
   natureModelUrl,
   normalizationForObject
 } from "./forestModels";
@@ -41,6 +42,11 @@ const BIRD_CIRCLING_RADIUS_FRACTION = 0.5;
 const BIRD_CIRCLING_SPEED_MULTIPLIER = 0.35;
 const BIRD_CROSSING_SPEED_UNITS_PER_SECOND = 7;
 const BIRD_ALTITUDE_WAVE_AMPLITUDE = 1.1;
+// Flap illusion for static flying-pose models: a fast roll oscillation plus a
+// synchronized bob — at flock distance it reads as a wingbeat-glide rhythm.
+const BIRD_FLAP_FREQUENCY_RADIANS_PER_SECOND = 8;
+const BIRD_FLAP_ROLL_RADIANS = 0.28;
+const BIRD_FLAP_BOB_UNITS = 0.09;
 
 type ForestWildlifeProps = {
   wildlife?: ForestWildlifeConfig;
@@ -248,21 +254,44 @@ function GroundAnimal({
 
 type BirdProps = {
   flockConfig: ForestBirdFlockConfig;
+  flockIndex: number;
   birdIndex: number;
   treelineRadius: number;
 };
 
-/** One bird gliding a seeded flight path (banking into the turns). */
-function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
+/** One flying-pose bird on a seeded flight path, flap-bobbing as it banks. */
+function Bird({ flockConfig, flockIndex, birdIndex, treelineRadius }: BirdProps) {
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const previousPosition = useRef(new Vector3());
 
-  const gltf = useGLTF(natureModelUrl(BIRD_MODEL_DEFINITION));
-  const clonedScene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+  // Alternate the bird model per flock and the plumage tint per bird — two
+  // silhouettes × three tints reads as several species overhead.
+  const birdDefinition = BIRD_MODEL_DEFINITIONS[flockIndex % BIRD_MODEL_DEFINITIONS.length];
+  const plumageTint = BIRD_PLUMAGE_TINTS[birdIndex % BIRD_PLUMAGE_TINTS.length];
+  const gltf = useGLTF(natureModelUrl(birdDefinition));
+  const clonedScene = useMemo(() => {
+    const cloned = SkeletonUtils.clone(gltf.scene);
+    const tint = new Color(plumageTint);
+    cloned.traverse((object) => {
+      const mesh = object as Mesh;
+      if (!mesh.isMesh) {
+        return;
+      }
+      const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      if (material) {
+        const tintedMaterial = (material as MeshStandardMaterial).clone();
+        if (tintedMaterial.color) {
+          tintedMaterial.color = tintedMaterial.color.clone().multiply(tint);
+        }
+        mesh.material = tintedMaterial;
+      }
+    });
+    return cloned;
+  }, [gltf.scene, plumageTint]);
   const { scale, footOffsetY } = useMemo(
-    () => normalizationForObject(gltf.scene, BIRD_MODEL_DEFINITION.targetHeight),
-    [gltf.scene]
+    () => normalizationForObject(gltf.scene, birdDefinition.targetHeight, "longestAxis"),
+    [birdDefinition.targetHeight, gltf.scene]
   );
 
   const flightSpeed = flockConfig.flightSpeed ?? 0.6;
@@ -316,21 +345,27 @@ function Bird({ flockConfig, birdIndex, treelineRadius }: BirdProps) {
       );
     }
 
+    // Wingbeat illusion: fast roll oscillation + bob layered over the bank.
+    const flapPhase = elapsedSeconds * BIRD_FLAP_FREQUENCY_RADIANS_PER_SECOND + birdPathParameters.wavePhase * 3;
+    const flapRoll = Math.sin(flapPhase) * BIRD_FLAP_ROLL_RADIANS;
+    group.position.y += Math.sin(flapPhase * 0.5) * BIRD_FLAP_BOB_UNITS;
+
     // Face the direction of travel and bank into it.
     const movement = group.position.clone().sub(previousPosition.current);
     if (movement.lengthSq() > 0.000001) {
       group.rotation.y = Math.atan2(movement.x, movement.z);
-      group.rotation.z =
+      const bankRoll =
         pattern === "circling"
           ? BIRD_BANK_ROLL_RADIANS
           : Math.sin(elapsedSeconds * 0.8 + birdPathParameters.wavePhase) * BIRD_BANK_ROLL_RADIANS * 0.4;
+      group.rotation.z = bankRoll + flapRoll;
     }
     previousPosition.current.copy(group.position);
   });
 
   return (
     <group ref={groupRef}>
-      <group position={[0, footOffsetY - BIRD_MODEL_DEFINITION.targetHeight / 2, 0]} scale={scale}>
+      <group position={[0, footOffsetY - birdDefinition.targetHeight / 2, 0]} scale={scale}>
         <primitive object={clonedScene} />
       </group>
     </group>
@@ -387,6 +422,7 @@ export function ForestWildlife({
           <Bird
             key={`flock-${flockIndex}-bird-${birdIndex}`}
             flockConfig={flockConfig}
+            flockIndex={flockIndex}
             birdIndex={birdIndex}
             treelineRadius={treelineRadius}
           />

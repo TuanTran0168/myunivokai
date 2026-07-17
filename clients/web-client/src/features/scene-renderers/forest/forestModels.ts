@@ -111,7 +111,17 @@ export const ANIMAL_DISPLAY_NAMES: Record<string, string> = {
   "animal-squirrel": "Squirrel"
 };
 
-export const BIRD_MODEL_DEFINITION: ForestModelDefinition = { fileName: "bird-forest.glb", targetHeight: 0.35 };
+// Flying-pose birds (wings spread), alternated per flock for variety; the
+// old perched-pose bird read as gliding furniture. Normalized by wingspan
+// (longest axis), not height — a flying bird is wide and flat.
+export const BIRD_MODEL_DEFINITIONS: ForestModelDefinition[] = [
+  { fileName: "bird-flying-1.glb", targetHeight: 1.15 },
+  { fileName: "bird-flying-2.glb", targetHeight: 1.0 }
+];
+
+// Per-bird plumage tints multiplied into the model materials — one model,
+// several species impressions.
+export const BIRD_PLUMAGE_TINTS = ["#FFFFFF", "#C9975B", "#8CA3C4"];
 
 // Poly Haven CC0 pure-sky HDRIs (1k .hdr), self-hosted — image-based
 // environment lighting keyed by the config's lighting.hdriKey.
@@ -172,10 +182,46 @@ function collectMeshesInWorldSpace(root: Object3D): Mesh[] {
   return meshes;
 }
 
-// One shared white-based material per foliage part so instanceColor carries
-// the whole color; created once per extraction, reused across instances.
-function foliageReplacementMaterial(): MeshStandardMaterial {
-  return new MeshStandardMaterial({ color: new Color("#FFFFFF"), roughness: 0.9, metalness: 0 });
+// Recolorable foliage material. KEEPS the source model's leaf texture and its
+// smooth normals (the canopy geometry is 3k-20k verts of real leaf clusters —
+// dropping the texture and flat-shading it was what collapsed canopies into
+// featureless faceted blobs, the "lá như hình vuông" complaint). The texture
+// now drives only light/dark DETAIL (luminance); the HUE comes from the
+// per-instance color (season tint) via a shader injection — a straight
+// multiply of an autumn-orange tint over a green leaf texture turns muddy.
+function recolorableFoliageMaterial(originalMaterial: Material): MeshStandardMaterial {
+  const source = originalMaterial as MeshStandardMaterial;
+  const material = new MeshStandardMaterial({
+    map: source.map ?? null,
+    normalMap: source.normalMap ?? null,
+    alphaMap: source.alphaMap ?? null,
+    transparent: source.transparent,
+    alphaTest: source.alphaTest,
+    side: source.side,
+    roughness: source.roughness ?? 0.9,
+    metalness: 0,
+    color: new Color("#FFFFFF")
+  });
+  material.onBeforeCompile = (shader) => {
+    // Replace the stock map multiply: sample the leaf texture, collapse it to
+    // luminance, remap into a gentle light range, and multiply that onto the
+    // instance-colored diffuse. Result = season hue × texture detail.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <map_fragment>",
+      [
+        "#ifdef USE_MAP",
+        "  vec4 sampledLeafColor = texture2D( map, vMapUv );",
+        "  float leafLuma = dot( sampledLeafColor.rgb, vec3( 0.299, 0.587, 0.114 ) );",
+        "  leafLuma = mix( 0.72, 1.12, leafLuma );",
+        "  diffuseColor.rgb *= leafLuma;",
+        "  diffuseColor.a *= sampledLeafColor.a;",
+        "#endif"
+      ].join("\n")
+    );
+  };
+  // Foliage materials all share one program despite per-instance colors.
+  material.customProgramCacheKey = () => "forest-foliage-recolor";
+  return material;
 }
 
 function buildVariantFromMeshes(meshes: Mesh[], targetHeight: number): InstancedModelVariant | null {
@@ -208,7 +254,7 @@ function buildVariantFromMeshes(meshes: Mesh[], targetHeight: number): Instanced
     const foliage = isFoliageMaterial(material);
     return {
       geometry,
-      material: foliage ? foliageReplacementMaterial() : material,
+      material: foliage ? recolorableFoliageMaterial(material) : material,
       isFoliage: foliage
     };
   });
@@ -251,12 +297,19 @@ export function extractInstancedModelVariants(
 
 /**
  * Normalization transform for a non-instanced model (animals, landmarks):
- * scale so the model stands targetHeight tall with its feet at y=0.
+ * scale so the model stands targetSize tall with its feet at y=0. Wide, flat
+ * models (flying birds) normalize by their longest axis instead of height.
  */
-export function normalizationForObject(object: Object3D, targetHeight: number): { scale: number; footOffsetY: number } {
+export function normalizationForObject(
+  object: Object3D,
+  targetSize: number,
+  normalizeBy: "height" | "longestAxis" = "height"
+): { scale: number; footOffsetY: number } {
   const boundingBox = new Box3().setFromObject(object);
-  const height = Math.max(boundingBox.max.y - boundingBox.min.y, 0.0001);
-  const scale = targetHeight / height;
+  const size = boundingBox.getSize(new Vector3());
+  const referenceDimension =
+    normalizeBy === "longestAxis" ? Math.max(size.x, size.y, size.z, 0.0001) : Math.max(size.y, 0.0001);
+  const scale = targetSize / referenceDimension;
   return { scale, footOffsetY: -boundingBox.min.y * scale };
 }
 

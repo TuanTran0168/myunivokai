@@ -190,6 +190,10 @@ export function ForestTrees({ trees, terrain, season, terrainHeightSampler, path
       const foliageColor = anchorHex
         ? new Color(anchorHex).lerp(seasonFoliageColor, clampValue(foliageTintStrength * seasonTintMultiplier, 0, 1))
         : seasonFoliageColor.clone();
+      // Per-tree brightness jitter (decorrelated reuse of the variant roll —
+      // no extra draw) breaks the "every canopy the same color" flatness.
+      const brightnessJitter = 0.88 + ((variantRoll * 13.37) % 1) * 0.24;
+      foliageColor.multiplyScalar(brightnessJitter);
 
       const bucketKey = `${speciesKey}#${variantIndex}`;
       const bucketInstances = instancesByBucket.get(bucketKey) ?? [];

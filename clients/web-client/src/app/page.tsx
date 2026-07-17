@@ -322,8 +322,8 @@ export default function HomePage() {
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
-                            ? "border-primary/50 bg-primary/20 text-primary shadow-glow"
-                            : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
+                            ? "border-primary bg-primary/35 font-semibold text-paper shadow-glow"
+                            : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
                         {item}
@@ -340,7 +340,7 @@ export default function HomePage() {
                         type="button"
                         aria-pressed="true"
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
-                        className="focus-ring tappable rounded-full border border-primary/50 bg-primary/20 px-4 py-1.5 text-sm text-primary shadow-glow"
+                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper shadow-glow"
                       >
                         {item}
                       </button>
@@ -372,7 +372,7 @@ export default function HomePage() {
                       type="button"
                       onClick={() => setIsAddingCustomInterest(true)}
                       disabled={interests.length >= MAXIMUM_INTERESTS}
-                      className="focus-ring tappable inline-flex items-center gap-1 rounded-full border border-dashed border-white/15 bg-surface-bright px-4 py-1.5 text-sm text-outline hover:border-primary/40 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+                      className="focus-ring tappable inline-flex items-center gap-1 rounded-full border border-dashed border-white/20 bg-white/5 px-4 py-1.5 text-sm text-on-surface-variant hover:border-primary/40 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                       Custom
@@ -393,8 +393,8 @@ export default function HomePage() {
                         onClick={() => setTraits((current) => toggleItem(current, item, 3, 6))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm capitalize ${
                           selected
-                            ? "border-secondary/50 bg-secondary/15 text-secondary shadow-cyan"
-                            : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
+                            ? "border-secondary bg-secondary/30 font-semibold text-paper shadow-cyan"
+                            : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
                         {item}
