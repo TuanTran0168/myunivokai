@@ -27,6 +27,11 @@ func NewHealthHandler(cfg config.Config, store ReadinessChecker) *HealthHandler 
 
 // Handle returns liveness: the process is up. It must not touch dependencies,
 // so the platform never restarts the API just because storage blipped.
+// @Summary Health check (liveness)
+// @Tags health
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /healthz [get]
 func (h *HealthHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
@@ -38,6 +43,12 @@ func (h *HealthHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 // HandleReadiness returns readiness: dependencies are reachable. Deploy
 // platforms should route traffic only when this returns 200.
+// @Summary Readiness check (dependencies)
+// @Tags health
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
+// @Router /readyz [get]
 func (h *HealthHandler) HandleReadiness(w http.ResponseWriter, r *http.Request) {
 	checkCtx, cancel := context.WithTimeout(r.Context(), readinessCheckTimeout)
 	defer cancel()

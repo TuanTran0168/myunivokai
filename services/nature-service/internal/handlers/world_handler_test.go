@@ -75,6 +75,34 @@ func TestHealthzEndpoint(t *testing.T) {
 	}
 }
 
+func TestSwaggerAvailabilityFollowsEnvironment(t *testing.T) {
+	productionConfig := config.Config{
+		AppEnv:         "production",
+		AllowedOrigins: []string{"http://localhost:3000"},
+		RateLimitRPS:   1000,
+		RateLimitBurst: 1000,
+	}
+	store := repositories.NewMemoryStore()
+	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)
+	worldService := services.NewWorldService(productionConfig, store, orchestrator, services.NewForestConfigBuilder())
+	productionRouter := NewRouter(productionConfig, NewHealthHandler(productionConfig, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(productionConfig))
+
+	productionResponse := httptest.NewRecorder()
+	productionRouter.ServeHTTP(productionResponse, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if productionResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected swagger to be hidden in production, got %d", productionResponse.Code)
+	}
+
+	developmentConfig := productionConfig
+	developmentConfig.AppEnv = "development"
+	developmentRouter := NewRouter(developmentConfig, NewHealthHandler(developmentConfig, store), NewWorldHandler(worldService), NewShareHandler(worldService), NewLandingHandler(developmentConfig))
+	developmentResponse := httptest.NewRecorder()
+	developmentRouter.ServeHTTP(developmentResponse, httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if developmentResponse.Code != http.StatusOK {
+		t.Fatalf("expected swagger outside production, got %d", developmentResponse.Code)
+	}
+}
+
 func TestCreateWorldEndpoint(t *testing.T) {
 	router := newTestRouter(t)
 	response := performRequest(t, router, http.MethodPost, "/api/v1/worlds", validCreateBody(t))

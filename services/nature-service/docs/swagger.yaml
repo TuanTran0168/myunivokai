@@ -1,0 +1,767 @@
+basePath: /api/v1
+definitions:
+  github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorBody:
+    properties:
+      code:
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorDetail'
+        type: array
+      message:
+        type: string
+      requestId:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorDetail:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorBody'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.AmbientParticlesConfig:
+    properties:
+      blossomPetalCount:
+        type: integer
+      fallingLeafCount:
+        type: integer
+      fireflyCount:
+        type: integer
+      snowDustCount:
+        type: integer
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.AssetsConfig:
+    properties:
+      catalogVersion:
+        type: string
+      hdriKey:
+        type: string
+      modelKeys:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.BirdFlockConfig:
+    properties:
+      altitudeMax:
+        type: number
+      altitudeMin:
+        type: number
+      birdCount:
+        type: integer
+      flightSpeed:
+        type: number
+      modelKey:
+        type: string
+      pathSeed:
+        type: string
+      pattern:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.CameraConfig:
+    properties:
+      distance:
+        type: number
+      fov:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.CreateWorldResponse:
+    properties:
+      natureDNA:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.NatureDNA'
+      variant:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldVariant'
+      world:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.World'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.DNALandmark:
+    properties:
+      energy:
+        type: integer
+      key:
+        type: string
+      meaning:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.EnergySignature:
+    properties:
+      intensity:
+        type: integer
+      primary:
+        type: string
+      secondary:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.ForestSceneConfig:
+    properties:
+      ambientParticles:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.AmbientParticlesConfig'
+      archetype:
+        type: string
+      assets:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.AssetsConfig'
+      camera:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.CameraConfig'
+      hud:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.HUDConfig'
+      landmarks:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.LandmarkSceneConfig'
+        type: array
+      lighting:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.LightingConfig'
+      palette:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.Palette'
+      postFX:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PostFXConfig'
+      quote:
+        type: string
+      sceneName:
+        type: string
+      sceneType:
+        type: string
+      schemaVersion:
+        type: string
+      season:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.SeasonConfig'
+      terrain:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.TerrainConfig'
+      theme:
+        type: string
+      trees:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.TreesConfig'
+      weather:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WeatherConfig'
+      wildlife:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WildlifeConfig'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.GroundAnimalConfig:
+    properties:
+      count:
+        type: integer
+      modelKey:
+        type: string
+      pathSeed:
+        description: |-
+          PathSeed feeds the frontend's deterministic walk-loop generation for
+          this animal slot.
+        type: string
+      scale:
+        type: number
+      walkSpeed:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.HUDConfig:
+    properties:
+      showLabels:
+        type: boolean
+      showTraitBars:
+        type: boolean
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.LandmarkSceneConfig:
+    properties:
+      accentColor:
+        type: string
+      angleRadians:
+        type: number
+      energy:
+        type: integer
+      key:
+        type: string
+      kind:
+        type: string
+      meaning:
+        type: string
+      name:
+        type: string
+      radiusFromCenter:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.LightingConfig:
+    properties:
+      ambientColor:
+        type: string
+      exposure:
+        type: number
+      fogColor:
+        type: string
+      fogDensity:
+        type: number
+      hdriKey:
+        type: string
+      sunAzimuthRadians:
+        type: number
+      sunColor:
+        type: string
+      sunElevationRadians:
+        type: number
+      timeOfDay:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.NatureDNA:
+    properties:
+      archetype:
+        type: string
+      energySignature:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.EnergySignature'
+      landmarks:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.DNALandmark'
+        type: array
+      quote:
+        type: string
+      sceneName:
+        type: string
+      schemaVersion:
+        type: string
+      shortNarrative:
+        type: string
+      traitScores:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.TraitScores'
+      visualHints:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.VisualHints'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.Palette:
+    properties:
+      accent:
+        type: string
+      background:
+        type: string
+      gradient:
+        items:
+          type: string
+        type: array
+      primary:
+        type: string
+      secondary:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PostFXConfig:
+    properties:
+      bloomIntensity:
+        type: number
+      grade:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PostFXGradeConfig'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PostFXGradeConfig:
+    properties:
+      brightness:
+        type: number
+      contrast:
+        type: number
+      hueRadians:
+        type: number
+      saturation:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicDNA:
+    properties:
+      landmarks:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.DNALandmark'
+        type: array
+      traitScores:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.TraitScores'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicVariant:
+    properties:
+      config:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.ForestSceneConfig'
+      seed:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicWorld:
+    properties:
+      archetype:
+        type: string
+      nickname:
+        type: string
+      quote:
+        type: string
+      sceneName:
+        type: string
+      shortNarrative:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicWorldResponse:
+    properties:
+      publicDNA:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicDNA'
+      variant:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicVariant'
+      world:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicWorld'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublishResponse:
+    properties:
+      shareSlug:
+        type: string
+      shareUrl:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.SeasonConfig:
+    properties:
+      blendAmount:
+        type: number
+      blendTowardKind:
+        type: string
+      foliageColors:
+        items:
+          type: string
+        type: array
+      groundKind:
+        type: string
+      kind:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.TerrainConfig:
+    properties:
+      clearingRadius:
+        type: number
+      grassTuftCountDesktop:
+        type: integer
+      grassTuftCountMobile:
+        type: integer
+      hillAmplitude:
+        type: number
+      hillFrequency:
+        type: number
+      pathEnabled:
+        type: boolean
+      placementSeed:
+        description: |-
+          PlacementSeed feeds the frontend's deterministic scatter of rocks and
+          grass; the backend only decides the counts and bounds.
+        type: string
+      rockCount:
+        type: integer
+      treelineRadius:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.TraitScores:
+    properties:
+      creativity:
+        type: integer
+      curiosity:
+        type: integer
+      discipline:
+        type: integer
+      energy:
+        type: integer
+      focus:
+        type: integer
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.TreeSpeciesMixEntry:
+    properties:
+      modelKey:
+        type: string
+      weight:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.TreesConfig:
+    properties:
+      countDesktop:
+        type: integer
+      countMobile:
+        type: integer
+      foliageTintStrength:
+        type: number
+      placementSeed:
+        type: string
+      scaleMax:
+        type: number
+      scaleMin:
+        type: number
+      speciesMix:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.TreeSpeciesMixEntry'
+        type: array
+      windDirectionRadians:
+        type: number
+      windGustFrequency:
+        type: number
+      windStrength:
+        type: number
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.VariantResponse:
+    properties:
+      variant:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldVariant'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.VisualHints:
+    properties:
+      coreSymbol:
+        type: string
+      motionIntent:
+        type: string
+      paletteIntent:
+        type: string
+      theme:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WeatherConfig:
+    properties:
+      cloudCoverage:
+        type: number
+      intensity:
+        type: number
+      kind:
+        type: string
+      rainDropCountDesktop:
+        type: integer
+      rainDropCountMobile:
+        type: integer
+      snowflakeCountDesktop:
+        type: integer
+      snowflakeCountMobile:
+        type: integer
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WildlifeConfig:
+    properties:
+      birdFlocks:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.BirdFlockConfig'
+        type: array
+      groundAnimals:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.GroundAnimalConfig'
+        type: array
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.World:
+    properties:
+      archetype:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      nickname:
+        type: string
+      quote:
+        type: string
+      role:
+        type: string
+      sceneName:
+        type: string
+      selectedVariantId:
+        type: string
+      shareSlug:
+        type: string
+      shortNarrative:
+        type: string
+      updatedAt:
+        type: string
+      visibility:
+        type: string
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldInput:
+    properties:
+      challenge:
+        type: string
+      favoriteColors:
+        items:
+          type: string
+        type: array
+      goal:
+        type: string
+      interests:
+        items:
+          type: string
+        type: array
+      mood:
+        type: string
+      nickname:
+        type: string
+      preferredWorldStyle:
+        type: string
+      role:
+        type: string
+      traits:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldListResponse:
+    properties:
+      worlds:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldResponse'
+        type: array
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldResponse:
+    properties:
+      natureDNA:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.NatureDNA'
+      selectedVariant:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldVariant'
+      variants:
+        items:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldVariant'
+        type: array
+      world:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.World'
+    type: object
+  github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldVariant:
+    properties:
+      config:
+        $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.ForestSceneConfig'
+      createdAt:
+        type: string
+      id:
+        type: string
+      isSelected:
+        type: boolean
+      seed:
+        type: string
+      thumbnailUrl:
+        type: string
+      variantNo:
+        type: integer
+      worldId:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Backend API for Myunivokai personal forest generation.
+  title: Myunivokai Nature API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check (liveness)
+      tags:
+      - health
+  /readyz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Readiness check (dependencies)
+      tags:
+      - health
+  /share/worlds/{shareSlug}:
+    get:
+      parameters:
+      - description: Share slug
+        in: path
+        name: shareSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublicWorldResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Get public forest world
+      tags:
+      - share
+  /worlds:
+    get:
+      parameters:
+      - description: Comma-separated world IDs (max 50)
+        in: query
+        name: ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Get forest worlds by ids
+      tags:
+      - worlds
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: World input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.CreateWorldResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Create forest world
+      tags:
+      - worlds
+  /worlds/{worldId}:
+    get:
+      parameters:
+      - description: World ID
+        in: path
+        name: worldId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.WorldResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Get forest world
+      tags:
+      - worlds
+  /worlds/{worldId}/publish:
+    post:
+      parameters:
+      - description: World ID
+        in: path
+        name: worldId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.PublishResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Publish forest world
+      tags:
+      - worlds
+  /worlds/{worldId}/variants:
+    post:
+      parameters:
+      - description: World ID
+        in: path
+        name: worldId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.VariantResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Regenerate forest variant
+      tags:
+      - worlds
+  /worlds/{worldId}/variants/{variantId}/select:
+    post:
+      parameters:
+      - description: World ID
+        in: path
+        name: worldId
+        required: true
+        type: string
+      - description: Variant ID
+        in: path
+        name: variantId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_models.VariantResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_myunivokai_myunivokai_services_nature-service_internal_httpx.ErrorEnvelope'
+      summary: Select forest variant
+      tags:
+      - worlds
+swagger: "2.0"

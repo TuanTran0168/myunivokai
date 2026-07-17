@@ -40,10 +40,29 @@ fail immediately (its tables already exist there), by design.
 
 ## Run locally
 
-```bash
+The committed `.env.local` mirrors universe-service and targets the Docker
+hostname `postgres`. To run the API without Docker on the in-memory store,
+force the empty database values from `.env.example`:
+
+```powershell
 cd services/nature-service
+$env:MYUNIVOKAI_ENV_FILE = ".env.example"
 go run ./cmd/api          # listens on :8081 (universe-service keeps :8080)
 ```
+
+For the complete local Postgres → migration → API stack:
+
+```bash
+cd services/nature-service
+docker compose -f docker-compose-local.yml up --build
+```
+
+The local stack publishes the API on `http://localhost:8081` and its dedicated
+Postgres database on `localhost:5433`, so it can run beside universe-service.
+Both the migration and API containers mount `.env.local` read-only, matching
+the universe-service local workflow.
+Swagger is available outside production at
+`http://localhost:8081/swagger/index.html`.
 
 Create a forest world:
 
@@ -72,4 +91,10 @@ path prefix alone): `POST /api/v1/worlds`, `GET /api/v1/worlds?ids=…`,
 
 ```bash
 go vet ./... && go test ./... && go build ./...
+```
+
+Regenerate Swagger after changing handlers or response models:
+
+```bash
+swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
 ```

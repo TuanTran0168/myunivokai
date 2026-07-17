@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: myunivokai-nature-postgres
+    environment:
+      POSTGRES_USER: myunivokai_nature
+      POSTGRES_PASSWORD: myunivokai_nature
+      POSTGRES_DB: myunivokai_nature
+    ports:
+      - "5433:5432"
+    volumes:
+      - myunivokai-nature-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myunivokai_nature -d myunivokai_nature"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+    container_name: myunivokai-nature-migrate
+    volumes:
+      - ./.env.local:/app/.env.local:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/app/migrate"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+    container_name: myunivokai-nature-api
+    volumes:
+      - ./.env.local:/app/.env.local:ro
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  myunivokai-nature-postgres-data:
