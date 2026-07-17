@@ -122,3 +122,12 @@ go build ./...
 
 The gateway local and production env surface is in
 `services/api-gateway/.env.example`; domain env files remain service-specific.
+
+For the integrated local path, root `docker-compose-local.yml` starts both
+PostgreSQL databases and migrations before the two APIs, waits for both APIs
+before the gateway, then builds the web client against
+`http://localhost:8082/api/universe`. Run it with the default VS Code build
+task, `docker compose -f docker-compose-local.yml up --build`, or
+`make local-up`. The root stack supplies one development-only gateway key to
+all three backend processes so business traffic exercises the same gateway
+authentication boundary as deployment.

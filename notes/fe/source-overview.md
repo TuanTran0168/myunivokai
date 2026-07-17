@@ -49,3 +49,8 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+For integrated local development, root `docker-compose-local.yml` builds this
+client with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/api/universe` and
+starts it after the API Gateway is healthy. The default VS Code build task
+starts that full stack.

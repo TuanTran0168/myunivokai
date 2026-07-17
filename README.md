@@ -112,6 +112,51 @@ notes                       Internal architecture, conventions, and roadmaps
 
 ## Run locally
 
+### Full Docker stack
+
+From the repository root, one command builds and starts both PostgreSQL
+databases, both migration jobs, Universe, Nature, the API Gateway, and the web
+client:
+
+```bash
+docker compose -f docker-compose-local.yml up --build
+```
+
+In VS Code, `Ctrl+Shift+B` runs the default task
+`Myunivokai: Start full local stack`. The equivalent Make target is
+`make local-up` on systems with Make installed. The VS Code task and direct
+Docker command do not require Make.
+
+| Local component | URL |
+| --- | --- |
+| Web client | <http://localhost:3000> |
+| API Gateway | <http://localhost:8082> |
+| Gateway health | <http://localhost:8082/api/v1/healthz> |
+| Gateway upstream status | <http://localhost:8082/api/v1/statusz> |
+| Universe Swagger | <http://localhost:8080/swagger/index.html> |
+| Nature Swagger | <http://localhost:8081/swagger/index.html> |
+
+The full stack builds the current universe frontend with
+`NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/api/universe`. It also gives the
+gateway and both upstreams the same development-only gateway key, so browser
+business requests follow the real gateway boundary. PostgreSQL data remains in
+named Docker volumes after stopping the stack.
+
+Stop and remove the stack containers and network without deleting database
+volumes:
+
+```bash
+docker compose -f docker-compose-local.yml down
+```
+
+The Make wrappers are `make local-up`, `make local-up-detached`,
+`make local-logs`, `make local-status`, and `make local-down`. Host ports can be
+overridden with `WEB_CLIENT_PORT`, `API_GATEWAY_PORT`, `UNIVERSE_API_PORT`,
+`NATURE_API_PORT`, `UNIVERSE_DATABASE_PORT`, and `NATURE_DATABASE_PORT` before
+running Compose.
+
+### Run components separately
+
 Each world service defaults to the mock provider and can use an in-memory store
 when `DATABASE_URL` is empty:
 
