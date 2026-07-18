@@ -1,5 +1,8 @@
 # Cơ chế vẽ vũ trụ bằng models — Myunivokai FE
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 > Tài liệu này ghi lại **cơ chế thực tế** đang chạy trên nhánh
 > `feat/fe/universe-visual-quality` (07/2026): vũ trụ được vẽ từ những "model"
 > nào, mỗi loại đi qua pipeline gì, và quy tắc bắt buộc khi thêm model mới.
@@ -57,6 +60,11 @@ presentation** (texture nào, shader nào, ánh sáng, hậu kỳ). Giá trị n
 texture trong `public/textures/solar-system/` (Solar System Scope, CC BY 4.0,
 ghi công trong `ATTRIBUTION.md` cùng thư mục). Độ phân giải: 8K cho
 sun/skybox/earth/jupiter/saturn, 4K mercury/venus/mars, 2K phần còn lại.
+
+Tại lần review 2026-07-18, thư mục này có 22 file khoảng **31.3 MB**. Đây là
+source budget đáng kể, không phải “free” chỉ vì geometry là primitive. Trước
+khi thêm texture mới phải triển khai/đo quality tier hoặc KTX2/WebP phù hợp,
+bao gồm network bytes, decode/upload time, GPU memory và frame time.
 
 ### Pipeline chất lượng texture — bắt buộc cho MỌI texture mới
 

@@ -1,5 +1,8 @@
 # Backend source overview
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 The backend is three independent Go modules:
 
 ```txt
@@ -107,6 +110,24 @@ World services:
 - AI keys and gateway secrets are never logged or stored.
 
 There is no user authentication in source.
+
+## Known upgrade boundaries
+
+- The root `contracts/openapi.yaml` is only a health placeholder; the generated
+  peer Swagger documents describe direct `/api/v1` routes, not the public
+  gateway prefixes.
+- Universe scene config has schema 1.2 but no explicit `sceneType`; Forest has
+  `sceneType: "forest"`. Contract normalization currently lives in the FE.
+- Forest golden fixtures are byte-checked but not validated against their JSON
+  Schema in CI; Universe has no equivalent JSON golden set.
+- Gateway rate-limit buckets, share cache, and circuit state are process-local.
+  This is intentional for one instance and must be revisited before scale-out.
+- Logs and request IDs exist, but metrics/distributed tracing do not.
+- Nature's provider factory is mock-only. User authentication remains deferred
+  until identity/ownership semantics exist.
+
+The prioritized Given/When/Then work is in
+`notes/user-stories/engineering-backlog.md`.
 
 ## Run and verify
 

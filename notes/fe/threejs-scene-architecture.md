@@ -1,5 +1,8 @@
 # three.js in Myunivokai — Principles and scene renderer architecture
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 This document explains how three.js works, how this repo uses it, and how to
 customize/extend it. The registry pattern below is no longer hypothetical: the
 **forest/nature family is the real second renderer** (see
@@ -188,7 +191,16 @@ on the create form.
 
 ### Performance
 
-- `dpr={[1, 1.8]}` on the Canvas caps render density on retina screens.
-- Mobile particle counts are lower than desktop (the BE sends both numbers; the FE picks by viewport).
+- The main Canvas currently allows `dpr={[1, 3]}` for quality-first rendering;
+  weak-device adaptation is **not implemented**. The next production step is a
+  measured `PerformanceMonitor`/adaptive-DPR and effect/LOD tier, not another
+  unconditional DPR increase.
+- Mobile particle counts are lower than desktop where the renderer reads the
+  paired config values.
 - 2k textures are enough; convert to `.webp` or use 1k versions to go lighter.
 - Many repeated objects (asteroids, buildings) -> use `InstancedMesh`: one draw call for thousands of objects.
+
+The registry is sceneType-first but not lazy: `registry.ts` statically imports
+both renderers. A visitor who only needs one family still receives both family
+code graphs. Dynamic family chunks are tracked in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

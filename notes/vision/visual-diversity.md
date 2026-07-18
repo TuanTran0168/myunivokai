@@ -1,147 +1,144 @@
-# Định hướng vẽ đa dạng hơn — từ 1 look chung đến mỗi world một cá tính
+# Định hướng đa dạng hình ảnh và model Three.js
 
-> Status: định hướng (07/2026), viết sau khi hoàn thành round
-> `feat/fe/universe-visual-quality`. Trả lời câu hỏi: **làm sao để các world
-> khác nhau TRÔNG khác nhau nhiều hơn**, và mở rộng dần sang các scene family
-> khác theo vision. Cơ chế render nền tảng xem
-> [../fe/universe-render-mechanism.md](../fe/universe-render-mechanism.md);
-> kiến trúc đa scene xem [README.md](README.md).
+> **Document status:** Active after source re-baseline
+> **Last source review:** 2026-07-18
 
-## Chẩn đoán hiện trạng: cái gì đã đa dạng, cái gì còn đồng phục
+Tài liệu này ghi current state sau khi các round Universe diversity và Forest
+renderer đã land, rồi xếp hướng mở rộng dựa trên source, asset budget và nguồn
+model có giấy phép rõ ràng.
 
-Đã đa dạng theo seed/DNA/theme:
+## Baseline đã có trong source
 
-| Trục | Nguồn |
-|---|---|
-| Số hành tinh, size, orbit, tốc độ, màu, energy | BE builder từ DNA + seed |
-| Palette, mood background, particles | BE (mood profile) |
-| Hình dải Milky Way, Great Rift, chòm sao | BE section `sky` (schema 1.1) |
-| Độ nghiêng quỹ đạo (phẳng ↔ hỗn loạn) | FE theo theme |
-| Grade màu điện ảnh | FE `THEME_SCENE_GRADES` theo theme |
-| Vệ tinh NASA nào, Bennu nằm đâu, hình dạng đá vành đai | FE seeded |
+Universe đã vượt qua hầu hết “thang đa dạng” cũ:
 
-Còn "đồng phục" — mọi world đều giống nhau ở:
+- scene config 1.2 có `belt`, `comets`, `sun`, `postFX.grade` và sky 1.1;
+- catalog có 14 vai texture, phân bổ seeded không lặp trước khi hết pool;
+- procedural gas giant, moon, ring, asteroid, comet và sky layers;
+- rare features như binary sun và meteor shower;
+- model NASA tự host cho spacecraft/asteroid;
+- mọi lựa chọn ngẫu nhiên dùng stream seeded riêng.
 
-1. **Cùng 1 Mặt Trời** (texture, size, màu lửa như nhau).
-2. **Cùng pool 8 texture hành tinh thật** — world 8 hành tinh dùng đủ bộ,
-   nhìn nhiều world là thấy lặp.
-3. **Cùng 1 ảnh skybox Milky Way** phía sau (dải procedural có khác nhưng nền
-   ảnh là một).
-4. **Vành đai + sao chổi luôn tồn tại, luôn cùng mật độ/màu đá**.
-5. **Không có mặt trăng, không vành đai cho hành tinh ngoài Saturn-role**.
+Forest cũng đã là family thứ hai thật:
 
-Đa dạng hoá = tấn công dần danh sách này, theo thang chi phí bên dưới.
+- schema 1.2, mùa/thời tiết/động vật/landmark/HDRI;
+- 33 GLB tự host khoảng 6.7 MB và 3 HDRI khoảng 3.9 MB;
+- instancing cho cây/decor, skeletal animation cho thú/chim, procedural terrain
+  và particle;
+- rare special bird/animal theo seed.
 
-## Nguyên tắc: thang đa dạng 5 bậc (rẻ → đắt)
+Vì vậy các câu cũ như “chưa có family thứ hai”, “gas giant/moon chưa làm”, hoặc
+“HDRI chưa resolve” là lịch sử, không còn là backlog.
 
-Quy tắc chọn việc: **luôn làm cạn bậc rẻ trước khi leo bậc đắt**, và mọi bậc
-đều phải giữ 3 bất biến của vision (DNA theme-agnostic, determinism theo
-seed, mirror-pair BE↔FE cho giá trị lưu DB).
+## Giới hạn hiện tại đọc trực tiếp từ source
 
-### Bậc 1 — Vặn knob từ dữ liệu (0 asset mới, BE mirror)
+1. Hai renderer được import tĩnh trong `registry.ts`; người chỉ xem Universe
+   vẫn nhận code của Forest trong cùng graph client.
+2. `public/textures/solar-system` khoảng 31.3 MB; tổng static 3D asset đã vượt
+   mốc 40 MB từng được đề xuất làm trigger quality tiers.
+3. Canvas chính cho DPR tới 3 và ghi rõ weak devices đang ngoài scope; chưa có
+   adaptive DPR, LOD hay effect tier theo frame time.
+4. Nature GLB nén Draco nhưng `useGLTF` chưa cấu hình decoder local. Drei mặc
+   định tải decoder từ Google CDN, trái với mục tiêu runtime self-hosted.
+5. Chưa có test duyệt toàn bộ catalog để bảo đảm file tồn tại, attribution tồn
+   tại và size không vượt budget.
+6. Universe scene config chưa có `sceneType: "solar-system"`; FE phải hiểu
+   thiếu discriminator là Universe legacy.
 
-Biến những thứ FE đang hardcode thành **tham số trong scene config**, theo
-đúng tiền lệ section `sky` 1.1 (BE builder + FE fallback + schemaVersion
-bump):
+## Format và kỹ thuật model nên chuẩn hoá
 
-- `belt`: có/không, mật độ (thưa 300 ↔ dày 2500), bán kính, màu đá theo
-  palette, độ dẹt — world "tĩnh lặng" không vành đai, world "hỗn loạn" vành
-  đai dày nghiêng mạnh.
-- `comets`: số lượng 0–3, cỡ đuôi, chu kỳ.
-- `spacecraft`: cho DNA quyết vai (telescope cho archetype chiêm nghiệm,
-  Voyager cho archetype phiêu lưu) thay vì thuần seed.
-- `sun`: scale màu nhiệt độ (đỏ lạnh ↔ trắng xanh) + cường độ — chi phí gần
-  0 vì chỉ là tint + HDR multiplier.
-- Vị trí đưa vào: `schemaVersion 1.2` cùng đợt promote `postFX` grade (đã
-  ghi trong `notes/archive/3d-next-steps-proposal.md` đợt 1 mục 8).
+- **GLB/glTF 2.0 là format runtime mặc định.** Three.js `GLTFLoader` hỗ trợ
+  Draco, Meshopt, KTX2/Basis, WebP, instancing và nhiều extension PBR:
+  [Three.js GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html).
+- **Mesh compression:** dùng Meshopt khi muốn decoder nằm trong bundle; dùng
+  Draco khi mesh hưởng lợi rõ, nhưng self-host decoder bằng
+  `useGLTF.setDecoderPath(...)` hoặc path argument. Drei xác nhận decoder mặc
+  định là CDN: [Drei useGLTF](https://drei.docs.pmnd.rs/loaders/gltf-use-gltf).
+- **Texture compression:** đánh giá KTX2/Basis cho texture lớn; đừng chỉ nhìn
+  dung lượng file, phải đo GPU memory và thời gian upload.
+- **Repeated objects:** tiếp tục `InstancedMesh`; **far objects:** chuẩn bị LOD;
+  **weak devices:** `PerformanceMonitor`/adaptive DPR. Đây là các pattern chính
+  thức của R3F: [Scaling performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance).
+- **Validation:** chạy glTF Validator/asset audit và một viewer độc lập trước
+  khi đưa model vào catalog. Bộ [Khronos glTF Sample Assets](https://github.khronos.org/glTF-Assets/)
+  phù hợp làm fixture interoperability, không phải kho sản phẩm mặc định; phải
+  đọc license của từng asset.
 
-### Bậc 2 — Nở catalog (asset mới, cơ chế cũ)
+## Model/scene family phổ biến và phù hợp với Myunivokai
 
-Cơ chế catalog + pipeline nén đã dựng xong, thêm entry là chạy:
+### 1. City — ứng viên family thứ ba mạnh nhất
 
-- **Texture hành tinh**: thêm bộ "exoplanet" (moon, ceres, eris, makemake,
-  haumea của Solar System Scope còn chưa dùng; texture fictional CC0) →
-  pool 8 thành pool 15–20, seed rút không lặp.
-- **Tint theo palette**: cùng 1 texture nhân màu palette (`material.color`)
-  → nhân đôi đa dạng cảm nhận với 0 byte thêm. Cần luật tint nhẹ để không
-  phá tính "thật" (chỉ tint hành tinh vai fiction, không tint Earth).
-- **GLB**: thêm spacecraft (ISS, Juno, New Horizons đều có trong NASA repo),
-  thêm 2–3 asteroid radar-shape (Itokawa, Eros) làm hero rock luân phiên.
-- Ràng buộc: ngân sách payload — mỗi đợt thêm phải cân đối lại tổng
-  (hiện ~27MB; trần đề xuất trước khi bắt buộc làm quality tiers: ~40MB).
+City cho độ khác biệt lớn với Universe/Forest và map DNA tốt: skyline,
+district density, traffic pulse, window warmth, neon/lantern ratio.
 
-### Bậc 3 — Procedural surfaces (0 payload, đa dạng vô hạn)
+Nguồn phù hợp:
 
-Trần của bậc 2 là "pool hữu hạn". Vượt trần bằng shader — đã có sẵn nền
-`seededNoise3d` + kinh nghiệm fBm domain-warp từ nebula atlas:
+- [Quaternius Downtown City MegaKit](https://quaternius.com/packs/downtowncitymegakit.html):
+  hơn 300 modular pieces, có glTF, CC0;
+- [Kenney City Kit Commercial](https://kenney.nl/assets/city-kit-commercial) và
+  [City Kit Suburban](https://www.kenney.nl/assets/city-kit-suburban): CC0,
+  style đơn giản, dễ instance/LOD.
 
-- **Gas giant procedural**: shader dải mây fBm cuộn theo vĩ độ, màu từ
-  palette, seed điều khiển số dải/độ xoáy/bão — mỗi world một hành tinh khí
-  KHÔNG world nào giống. Đây là món đáng làm nhất bậc này.
-- **Mặt trăng**: 0–3 moon nhỏ procedural (icosphere + crater noise) quay
-  quanh hành tinh lớn — pattern `PlanetPositionTracker` + group lồng đã có.
-- **Vành đai seeded cho hành tinh bất kỳ**: `buildRadialRingGeometry` đã có,
-  sinh texture vành 1D procedural theo palette là xong.
-- **Binary sun** cho DNA energy cực cao — hai sun quay quanh trọng tâm,
-  hiếm gặp (xem bậc 4).
+Không implement ngay chỉ vì asset sẵn. Story City phải chốt backend owner,
+schema, layout grammar, traffic budget và mobile tier trước.
 
-### Bậc 4 — "Xổ số vũ trụ": feature hiếm theo seed
+### 2. Room / personal gallery — phù hợp cho trải nghiệm gần gũi
 
-Tăng giá trị sưu tầm/chia sẻ: một số feature chỉ xuất hiện với xác suất thấp,
-tất định theo seed (ai xem cùng world thấy cùng thứ):
+Room có thể biến traits/interests thành bàn, sách, tranh, đèn và góc trưng bày.
+[Kenney Furniture Kit](https://kenney.nl/assets/furniture-kit) có 140 asset CC0.
+Đây là lựa chọn tốt cho prototype vì layout grammar rõ, nhưng khó đạt đẹp nếu
+chỉ scatter ngẫu nhiên; cần authored slots như bàn sát tường, đèn cạnh ghế.
 
-- ~5%: sao chổi đôi / mưa sao băng định kỳ.
-- ~3%: binary sun, hành tinh lang thang ngoài rìa.
-- ~1%: supernova remnant ở góc trời (sprite nebula ridged phóng to + tint).
-- Quy tắc: rút từ stream riêng (`seed + "-rare-features"`), ngưỡng xác suất
-  là hằng số đặt tên, và **hiển thị tên feature hiếm trong HUD/share page**
-  để user biết mình "trúng" — không có nhãn thì feature hiếm vô nghĩa.
-- Đây là ứng viên tốt cho marketing loop: "regenerate variant để săn
-  binary sun".
+### 3. Mountain / lake / river — mở rộng trong `nature-service`
 
-### Bậc 5 — Scene family thứ hai (bước nhảy lớn nhất)
+Đây là hướng ít tăng backend fleet nhất vì quyết định owner đã đặt các theme tự
+nhiên dưới Nature. Nguồn:
 
-Đa dạng thật sự không nằm trong solar-system mà ở **medium khác cho cùng một
-DNA** — city/nature/room theo đúng [README.md](README.md). Điểm mấu chốt cho
-người thực hiện sau này: **toàn bộ pipeline model của round visual-quality là
-scene-agnostic** và tái dùng nguyên vẹn:
+- [Kenney Nature Kit](https://kenney.nl/assets/nature-kit): 330 asset CC0;
+- [Quaternius Ultimate Nature Pack](https://quaternius.com/packs/ultimatenature.html):
+  150 model CC0, nhưng bản pack liệt kê FBX/OBJ/Blend nên phải export/optimize
+  GLB offline;
+- Poly Haven cho HDRI/PBR hero assets; toàn bộ asset là CC0 theo
+  [license chính thức](https://polyhaven.com/license).
 
-| Đã có (solar-system) | Dùng lại cho family mới |
-|---|---|
-| Catalog + `targetSize` + Box3 normalize | Kit nội thất/cây/nhà CC0 (KayKit, Kenney, Quaternius — license đã verify trong `notes/archive/3d-next-steps-proposal.md`) |
-| meshopt + webp pipeline, no-CDN | y hệt, `--texture-size 512` cho kit flat-color |
-| `InstancedMesh` + noise displacement | rừng cây, đá núi, toà nhà |
-| `PlanetPositionTracker` + CameraRig | click-focus đồ vật/toà nhà, 0 sửa CameraRig |
-| Grade theo theme + rig đèn + IBL Lightformer | preset ánh sáng phòng/thành phố |
-| Stream PRNG riêng + mirror-pair | composer mới ở BE theo registry Phase 1 |
+Ưu tiên reuse forest catalog, terrain sampler và lighting; chỉ tách renderer
+theo `sceneType` khi mountain/lake có contract khác thật, không tạo service mới.
 
-Trigger giữ nguyên như vision: **không tách service trước khi family thứ 2
-tồn tại trong code** — family mới bắt đầu là 1 renderer mới + 1 composer mới
-trong monolith.
+### 4. Animated wildlife / avatar
 
-## Guardrails — mọi bậc đều phải giữ
+[Quaternius Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html)
+có glTF, nhiều clip và CC0. Source Forest đã dùng cùng kiểu pipeline nên có thể
+mở rộng species mà không đổi kiến trúc. Avatar người chỉ nên vào roadmap khi có
+story điều khiển/identity rõ; character controller là một feature lớn, không
+phải model swap.
 
-1. **Determinism tuyệt đối**: mọi biến thể từ `randomFromSeed` stream riêng;
-   không `Math.random`, không `Date.now` trong scene code.
-2. **DNA không chứa số visual**: AI chỉ sinh ngữ nghĩa; composer (BE) đổi
-   ngữ nghĩa → số; FE đổi số → pixel.
-3. **Mirror-pair**: giá trị nào lưu DB thì BE builder và FE preview builder
-   phải sinh giống nhau, kèm fallback cho world cũ (tiền lệ sky 1.1).
-4. **Ngân sách payload**: asset mới phải qua nén + cập nhật ATTRIBUTION;
-   vượt ~40MB tổng thì bắt buộc làm quality tiers trước khi thêm tiếp.
-5. **License**: chỉ CC0 / public domain / CC BY (ghi công); tự host 100%.
-6. **Feature mới không đổi world cũ**: field mới optional + omitempty,
-   stream PRNG mới, schemaVersion bump có chủ đích.
+### 5. High-realism hero props
 
-## Thứ tự đề xuất
+[Poly Haven](https://polyhaven.com/) phù hợp cho vài hero prop/HDRI chất lượng
+cao, không phù hợp để đưa hàng loạt model photogrammetry vào mobile scene.
+Dùng cho landmark có ngân sách riêng, LOD và texture tier; không hotlink runtime.
 
-> Bản break-task chi tiết theo round/branch (kèm trạng thái thực thi) nằm ở
-> [../archive/visual-diversity-implementation-plan.md](../archive/visual-diversity-implementation-plan.md).
+## Thứ tự nâng cấp đề xuất
 
-1. **Bậc 1 + promote postFX** gộp 1 round schema 1.2 (BE quay lại scope khi
-   user cho phép) — rẻ nhất, mở khoá "world tĩnh lặng khác world hỗn loạn".
-2. **Bậc 3 gas giant + moons** — FE-only, 0 payload, ăn ngay vào cảm giác
-   "hành tinh của tôi không giống của bạn".
-3. **Bậc 2 texture pool + tint** — khi cần thêm chiều rộng.
-4. **Bậc 4 rare features** — khi có share page metrics để đo hiệu ứng.
-5. **Bậc 5 family mới** — theo roadmap vision, quyết định D1–D5 duyệt xong.
+1. P0: hoàn tất Next.js security migration và executable contracts.
+2. P1: lazy-load renderer family; self-host Draco decoder; thêm catalog/license/
+   size validation.
+3. P1: adaptive DPR, LOD, shadow/effect/particle tiers và WebGL fallback.
+4. P1: chuyển texture lớn sang delivery format/tier được đo bằng network,
+   decode time, GPU memory và frame time.
+5. Discovery: prototype City bằng một block nhỏ từ kit CC0, đo trước khi duyệt
+   family thứ ba.
+6. Sau đó mới thêm breadth: mountain/lake, room hoặc species mới.
+
+## Guardrails
+
+1. AI sinh semantics; builder sinh visual numbers; renderer sinh pixels.
+2. Không `Math.random()`/`Date.now()` trong scene identity.
+3. Feature mới dùng PRNG stream mới và giữ world cũ render được.
+4. Asset phải self-host, license rõ, attribution cập nhật và có budget.
+5. Không tải asset/decoder từ CDN runtime nếu source không có explicit policy
+   và fallback.
+6. Không gọi một scene “production-ready” nếu chưa đo trên thiết bị yếu và chưa
+   có đường fallback khi WebGL/model load thất bại.
+
+Các acceptance criteria Given/When/Then nằm trong
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

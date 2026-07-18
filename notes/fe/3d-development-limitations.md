@@ -1,5 +1,8 @@
 # Myunivokai — Giới hạn khi phát triển hình ảnh 3D (memo cho team)
 
+> **Document status:** Reference memo — its room-demo references are historical
+> **Last source review:** 2026-07-18
+
 > Mục đích: giải thích **vì sao chất lượng hình ảnh 3D không thể "bật một nút" là đạt mức như các demo tham chiếu** (ví dụ *Summer Afternoon* — https://summer-afternoon.vlucendo.com), và **cái gì là giới hạn cứng (không tiền/thời gian nào giải được ở kiến trúc hiện tại) so với giới hạn mềm (đổi được bằng đầu tư)**. Viết sau khi thử một bản demo "room kit" và thấy kết quả chưa đạt kỳ vọng.
 
 ---

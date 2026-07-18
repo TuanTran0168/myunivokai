@@ -1,5 +1,9 @@
 # Nature family — `nature-service` plan (v2, peer service)
 
+> **Document status:** Historical decision log — implementation details below contain superseded round-state
+> **Last source review:** 2026-07-18
+> **Current source:** [../be/source-overview.md](../be/source-overview.md) and [../fe/forest-render-mechanism.md](../fe/forest-render-mechanism.md)
+
 Part of the [vision folder](README.md). Written 2026-07-16 against commit
 `392f785` (staging = main, schema 1.2 live in production). **v2 supersedes the
 v1 "stateless composer" draft** after the owner clarified the architecture.
@@ -29,9 +33,11 @@ every future session on this track — it is deliberately self-contained.
   planets trở thành **landmarks** trong rừng. Các N-round không sửa
   `universe-service`; round G sau đó chỉ chuyển edge middleware và thêm shared
   gateway credential, không đổi model, migration hay business flow.
-- **Gateway đã có; FE vẫn deferred.** Gateway route theo prefix
-  (`/api/universe/*`, `/api/nature/*`). FE hiện tại có thể đổi base URL sang
-  `/api/universe`; picker "Vũ trụ / Rừng cây" vẫn thuộc các round FE sau.
+- **Gateway và FE đều đã có.** Gateway route theo prefix
+  (`/api/universe/*`, `/api/nature/*`); frontend chỉ nhận một gateway origin,
+  đã có picker Universe/Forest, preview Forest, gallery family-aware và route
+  share Nature. Các câu “future FE picker” ở phần lịch sử bên dưới là trạng
+  thái của round cũ, không còn là current state.
 - **Sản phẩm:** rừng cây là "chân dung tính cách" thứ hai — gió thổi cây đung
   đưa, **4 mùa + giao mùa**, thời tiết **mưa/nắng**, **thú đi lại, chim bay**,
   **thu lá rụng, đông tuyết**. Mỗi DNA landmark là một điểm click-to-focus
@@ -121,16 +127,16 @@ its meaning — the same POI interaction the universe has, in a new medium.
 ## 4. Architecture — two peer services
 
 ```txt
- (future FE picker)                     (future FE picker)
+       (current FE picker: Universe / Forest)
         │                                      │
         ▼                                      ▼
  universe-service                        nature-service
  ─ REST /api/v1/*                        ─ REST /api/v1/*  (same route shapes)
  ─ AI DNA: PersonalityDNA (planets)      ─ AI DNA: NatureDNA (landmarks)
  ─ builder → WorldSceneConfig             ─ builder → ForestSceneConfig
-   (schemaVersion 1.2, solar system)       (schemaVersion 1.0, sceneType "forest")
- ─ Neon DB (worlds, variants, share)     ─ own storage (memory now → own Neon DB in N2)
- ─ deployed, UNTOUCHED by this track     ─ new code, new deploy
+   (schemaVersion 1.2, solar system)       (schemaVersion 1.2, sceneType "forest")
+ ─ Neon DB (worlds, variants, share)     ─ own Neon logical database
+ ─ peer behind gateway                  ─ peer behind gateway
 
  (Implemented round G: api-gateway path-prefix routing — /api/universe/* and
   /api/nature/* — see api-gateway.md)
@@ -165,7 +171,12 @@ energy; 3–7 items; named from interests/traits). Prompt version:
 Dawn Wanderer, … per mood group), same selection mechanics as universe's
 `mock_presets.go`.
 
-## 6. `ForestSceneConfig` v1 — the contract
+## 6. `ForestSceneConfig` evolution — historical v1 baseline
+
+The field list below records the original 1.0 design. Source now emits schema
+1.2; the current executable description is
+`contracts/scenes/forest-scene-config.schema.json` plus the four golden
+fixtures under `services/nature-service/internal/services/testdata/`.
 
 Envelope: `schemaVersion: "1.0"`, `sceneType: "forest"`, sceneName, archetype,
 quote, theme, palette, camera, postFX (bloom + per-season `grade`), hud.
@@ -326,9 +337,9 @@ BE gates per round: `go vet ./... && go test ./... && go build ./...`.
 | **N2** ✅ | `feat/be/nature-service-be-rounds` | Own **logical** Neon database (second database inside the existing Neon project — zero cost, owner decision 2026-07-17), goose migrations (worlds/world_variants/ai_generations, `nature_dna` column), `cmd/migrate`, postgres store, Dockerfile.render + entrypoint, render.yaml entry | Gates green. Create database `myunivokai_nature`; set its pooled/direct URLs and `PUBLIC_WEB_URL`; after round G the shared gateway secret is also required in production. |
 | **N3** ✅ | `feat/be/nature-service-be-rounds` + `feat/be/nature-service-dev-parity` | `contracts/scenes/forest-scene-config.schema.json` + golden fixtures in testdata (the executable contract; regenerate deliberately with `UPDATE_GOLDEN=1`) + generated Swagger docs/UI outside production. The parity branch also adds the local Postgres → migration → API Docker stack. | Golden test green; a byte-diff for an existing seed fails CI; Swagger is hidden in production; local Docker smoke survives an API restart. |
 | **N4** (deferred) | `feat/be/nature-real-ai` | Port Gemini/OpenAI REST providers + repair prompts (mechanical — interfaces identical), env keys. Deferred — owner: "cứ random như universe service" (universe prod also runs mock today) | Real DNA behind `AI_PROVIDER=gemini`; mock stays the fallback |
-| **N5** ✅ | `feat/fe/nature-scene-fe-rounds` (pulled forward — owner 2026-07-17 rejected the primitive visuals: "Chất lượng thực sự rất tệ... Tham khảo các models trên sketchfab") | 33 curated CC0/CC-BY GLBs from poly.pizza (Quaternius packs for style coherence: trees/rocks/grass/flowers/bushes/ferns/mushrooms/stumps; **animated** deer/fox/wolf with Walk clips; boar/rabbit/bird static; landmark hero props), self-hosted under `clients/web-client/public/assets/nature/models/`, optimized 37MB→3.6MB (gltf-transform: Draco + 512px WebP), `ATTRIBUTION.md` records every source/license. Catalog + runtime normalization (scale-to-targetHeight, foot at y=0) + per-(variant,part) instancing in `features/scene-renderers/forest/forestModels.ts`; renderer swapped from primitives to models (whole-tree wind lean, seasonal re-color of foliage materials, understory decor layer). HDRI keys still unresolved (sky dome remains procedural) — optional polish later | Every catalog modelKey resolves to a self-hosted file; licenses recorded; FE gates green |
+| **N5** ✅ | `feat/fe/nature-scene-fe-rounds` (pulled forward — owner 2026-07-17 rejected the primitive visuals: "Chất lượng thực sự rất tệ... Tham khảo các models trên sketchfab") | 33 curated CC0/CC-BY GLBs from poly.pizza/Quaternius-style sources, now about 6.7 MB, plus 3 self-hosted Poly Haven HDRIs about 3.9 MB. Catalog + runtime normalization + instancing/animation are implemented in `features/scene-renderers/forest/forestModels.ts`. | Rendering and licenses are present; automated catalog-file/license/budget validation remains a new backlog task |
 | **F1–F5** ✅ | `feat/fe/nature-scene-fe-rounds` (combined into ONE round, owner order 2026-07-17: "Gom các F liên quan với nhau lại code 1 lần luôn") | FE, all in one: `sceneType`-first renderer registry + `WorldFamily` plumbing (family param on every API call, family stored with gallery ids, `/worlds/{id}?family=nature`, `/nature/share/worlds/{slug}`), procedural ForestRenderer (terrain+clearing+path, wind-swayed instanced trees, sky dome+sun, weather rain/snow/clouds/sun-rays, seasonal ambient particles, wandering animals + bird flocks, clickable landmark POIs feeding the shared HUD/camera), preview mirror `lib/forestScene.ts` (mirror pair of `forest_scene_profile.go`+`forest_config_builder.go`) + create-form Universe/Forest picker. Primitives-only visuals until N5 GLBs; deployment now gives FE one `NEXT_PUBLIC_GATEWAY_BASE_URL`, while nature-service still needs `PUBLIC_WEB_URL=<web-origin>/nature` so backend share URLs land on the nature share route | FE gates green: typecheck, lint, vitest (incl. forestScene determinism/contract tests), next build |
-| **G** | (unchanged) | api-gateway per [api-gateway.md](api-gateway.md): path-prefix routing to both services | Trigger unchanged: auth-service or when one public origin matters |
+| **G** ✅ | `feat/be/api-gateway` | api-gateway per [api-gateway.md](api-gateway.md): path-prefix routing to both services | Implemented without auth-service once the second public peer made one edge valuable |
 
 ## 11. Risks
 

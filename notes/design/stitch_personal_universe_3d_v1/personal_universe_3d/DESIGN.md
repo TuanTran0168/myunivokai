@@ -1,5 +1,7 @@
 ---
 name: Personal Universe 3D
+document_status: superseded-design-reference
+last_source_review: '2026-07-18'
 colors:
   surface: '#0e1323'
   surface-dim: '#0e1323'
@@ -102,6 +104,10 @@ spacing:
   margin-desktop: 48px
   container-max: 1440px
 ---
+
+> This v1 visual language is historical. Use it only as a layout reference;
+> the active source uses the Vitrine/Liquid-Glass system recorded in
+> `notes/fe/refactor-plan.md`.
 
 ## Brand & Style
 

@@ -1,5 +1,8 @@
 # Myunivokai — Technical Implementation Plan for Codex Agent
 
+> **Document status:** Archived historical baseline
+> **Last source review:** 2026-07-18
+
 > Historical baseline. The active backend now has `api-gateway`,
 > `universe-service`, and `nature-service`; current routing/security/deployment
 > contracts live in `notes/be/source-overview.md` and `notes/vision/`.

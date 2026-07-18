@@ -1,5 +1,8 @@
 # FE chỉ biết một URL gateway
 
+> **Document status:** Implemented and active
+> **Last source review:** 2026-07-18
+
 Status: **IMPLEMENTED** on `feat/repo/render-gateway-deployment` (2026-07-18).
 
 ## Contract

@@ -1,5 +1,8 @@
 # Cơ chế vẽ khu rừng bằng models — Myunivokai FE (nature/forest)
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 > Tài liệu này ghi lại **cơ chế thực tế** của renderer rừng
 > (`features/scene-renderers/forest/`, nhánh `feat/fe/nature-scene-fe-rounds`,
 > 07/2026): rừng được vẽ từ loại "model" nào, mỗi loại đi qua pipeline gì, và
@@ -88,7 +91,11 @@ Sketchfab.** Đây là trần chất lượng hiện tại và lý do:
   `public/assets/nature/ATTRIBUTION.md` — cập nhật file đó mỗi khi thêm asset.
 
 Nguyên tắc bất di: **CC0 ưu tiên, CC-BY phải ghi công, tuyệt đối không hotlink**
-— mọi asset self-host trong `public/`, không fetch runtime từ CDN.
+— mọi asset tự host trong `public/`. **Gap hiện tại:** model GLB là self-hosted
+nhưng Drei vẫn lấy Draco decoder mặc định từ Google CDN vì source chưa gọi
+`useGLTF.setDecoderPath(...)`. Backlog yêu cầu copy decoder versioned vào
+`public/draco/` và cấu hình path local để policy runtime self-hosted đúng hoàn
+toàn; xem [Drei useGLTF](https://drei.docs.pmnd.rs/loaders/gltf-use-gltf).
 
 ## Pipeline nén GLB + chuẩn hoá (làm offline, trước khi commit)
 
@@ -102,9 +109,10 @@ npx --yes @gltf-transform/cli optimize input.glb output.glb \
 (Cây/đá/decor để 512px; model nhỏ trên màn hình có thể 256px.)
 
 - **Chọn Draco cho rừng:** khối lượng vertex lớn (nhiều cây), Draco nén hình học
-  mạnh; decoder Draco lấy từ CDN gstatic lúc `useGLTF` decode. (Universe ngược
-  lại chọn meshopt để tránh CDN — hai họ scene có budget khác nhau, đừng bê
-  nguyên xi.)
+  mạnh. Source hiện còn dùng decoder mặc định từ gstatic; đây là technical debt,
+  không phải kiến trúc đích. Giữ Draco nhưng self-host decoder versioned, hoặc
+  chỉ đổi sang Meshopt sau benchmark payload/decode/frame time. Universe dùng
+  Meshopt và không có dependency decoder CDN này.
 - **🪤 BẪY ĐÃ TRẢ GIÁ — tên file output PHẢI kết thúc `.glb`.** Nếu đặt output
   không có đuôi `.glb`, gltf-transform lặng lẽ ghi ra **JSON + .bin + texture
   rời** trùng tên → GLB "hỏng" (mất magic bytes `glTF`), scene vỡ. Sau khi nén
@@ -284,3 +292,6 @@ byte-diff cho seed cũ = breaking change ⇒ bump `schemaVersion` + giữ reader
 9. Chạy đủ 4 gate FE: `npm run typecheck && npm run lint && npm run test &&
    npm run build`. Nếu chạm mirror (tuning) → đồng bộ `forestScene.ts` ↔ builder
    Go và cân nhắc golden/schema.
+10. Catalog phải có test CI xác nhận mọi model/HDRI key resolve tới file thật,
+    attribution có entry và tổng size không vượt budget; test này chưa có trong
+    source ở lần review 2026-07-18.

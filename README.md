@@ -265,6 +265,8 @@ After all four services are configured:
 - `notes/ops/render-deployment.md`: step-by-step Render deploy runbook;
 - `notes/vision/deployment.md`: deployment architecture/rationale;
 - `notes/vision/nature-service-plan.md`: nature-service roadmap and decision log;
+- `notes/user-stories/implemented-capabilities.md`: source-backed current product stories;
+- `notes/user-stories/engineering-backlog.md`: prioritized BE/FE/repo tasks with Given/When/Then acceptance;
 - `AGENTS.md`: repository rules for coding agents.
 
 Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in

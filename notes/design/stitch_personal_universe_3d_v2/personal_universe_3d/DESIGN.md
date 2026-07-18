@@ -1,5 +1,7 @@
 ---
 name: Personal Universe 3D
+document_status: superseded-visual-reference
+last_source_review: '2026-07-18'
 colors:
   surface: '#0e1323'
   surface-dim: '#0e1323'
@@ -102,6 +104,10 @@ spacing:
   margin-desktop: 48px
   container-max: 1440px
 ---
+
+> This v2 mockup remains a layout reference, but its purple/cyan visual
+> language is superseded by the Vitrine/Liquid-Glass system implemented in
+> the frontend and recorded in `notes/fe/refactor-plan.md`.
 
 ## Brand & Style
 

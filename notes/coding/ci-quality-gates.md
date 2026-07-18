@@ -1,5 +1,8 @@
 # CI and quality gates
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 `.github/workflows/ci.yml` runs on every push and pull request to `staging` or
 `main`. Jobs are intentionally not path-filtered.
 

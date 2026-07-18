@@ -1,5 +1,13 @@
 # BE Production Refactor Plan — services/universe-service
 
+> **Document status:** Historical — do not use as the current backend backlog
+> **Last source review:** 2026-07-18
+> **Current backlog:** [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md)
+
+> **Known stale status rows:** cleanup, varied mock DNA, and mood scene
+> parameters are present in current Universe source. Rate limiting/CORS moved
+> to the gateway. Preserve the table only as the original branch sequence.
+
 > Historical universe-service refactor sequence. Its completed per-IP limiter
 > moved to `services/api-gateway` when Nature became the second public service.
 > See `notes/be/source-overview.md` for current middleware ownership.

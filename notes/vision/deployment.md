@@ -1,5 +1,8 @@
 # Deployment — gateway plus two peer APIs
 
+> **Document status:** Implemented configuration; live deployment verification pending
+> **Last source review:** 2026-07-18
+
 > **Step-by-step operator runbook:**
 > [../ops/render-deployment.md](../ops/render-deployment.md) (the "how" — Neon
 > setup, four-service Blueprint sync, every env value, rollout smoke tests).
@@ -19,7 +22,7 @@ remain separate logical databases on Neon.
 | `myunivokai-api` | `services/universe-service` | Universe domain; direct business routes require gateway key |
 | `myunivokai-nature` | `services/nature-service` | Nature domain; direct business routes require gateway key |
 
-All three are Docker web services. The two world APIs each own a logical Neon
+All four are Docker web services. The two world APIs each own a logical Neon
 database, migrations, worlds, variants, AI logs, and shares. There is no
 cross-service database access.
 

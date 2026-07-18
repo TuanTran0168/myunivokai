@@ -1,6 +1,9 @@
 # Vision — Myunivokai as a multi-scene platform
 
-Status: **active, gateway amendment implemented** (2026-07-17). The original
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
+Status: **active, gateway amendment implemented**. The original
 decision points below were approved, and the owner additionally decided the
 vision becomes **microservices immediately** — starting with the nature
 family as a full peer service (same mechanism as universe-service, different
@@ -13,12 +16,12 @@ detailed [nature-service-plan.md](nature-service-plan.md).
 | --- | --- |
 | [backend-plan.md](backend-plan.md) | Current peer-service backend boundaries and next source-grounded work |
 | [api-gateway.md](api-gateway.md) | Implemented Go gateway behavior, security boundary, route policies, failure taxonomy |
-| [frontend-plan.md](frontend-plan.md) | sceneType-first lazy renderer registry, type unions, mirror discipline, create-form evolution |
-| [deployment.md](deployment.md) | Current three-service Render blueprint, rollout, free-tier behavior, observability |
-| [contracts-and-roadmap.md](contracts-and-roadmap.md) | Schema versioning rules, phased roadmap with triggers, risk table |
-| [visual-diversity.md](visual-diversity.md) | Direction for more visual diversity: 5-tier ladder (data knobs → catalogs → procedural → rare features → new families), guardrails, suggested order |
-| [nature-service-plan.md](nature-service-plan.md) | **The active track.** `nature-service` — a full peer of universe-service (same mechanism, forest DNA): forest with wind, four seasons, weather, wildlife; config contract, asset strategy, rounds N1–N5 / F1–F5 |
-| [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | **Proposed, not implemented.** Collapse the FE's two family base-URL env vars into one gateway URL + code-computed path prefix |
+| [frontend-plan.md](frontend-plan.md) | Implemented sceneType-first baseline plus pending lazy chunks, typed contracts, and performance tiers |
+| [deployment.md](deployment.md) | Current four-service Render blueprint, rollout, free-tier behavior, observability |
+| [contracts-and-roadmap.md](contracts-and-roadmap.md) | Current source gaps, schema compatibility policy, and prioritized roadmap |
+| [visual-diversity.md](visual-diversity.md) | Implemented diversity baseline, remaining delivery/performance gaps, and researched model sources |
+| [nature-service-plan.md](nature-service-plan.md) | **Historical decision/round log.** Current contracts live in the BE/FE source overviews |
+| [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | **Implemented.** One frontend gateway origin plus source-owned family prefixes |
 
 ## Current backend architecture
 
@@ -35,8 +38,9 @@ credential only prevents direct upstream bypass on public Render free URLs.
 
 ## The idea
 
-Today Myunivokai paints one kind of portrait: a solar system. The vision is a
-family of scene types, each a different "medium" for the same person:
+Today Myunivokai paints two kinds of portrait: a solar system and a living
+forest. The vision is a growing family of scene types, each a different
+"medium" for the same person:
 
 | Scene family | What the DNA drives |
 | --- | --- |
@@ -46,16 +50,20 @@ family of scene types, each a different "medium" for the same person:
 | Rivers & streams | Meander curvature, flow speed, banks, stones |
 | Lakes | Stillness, reflections, shore vegetation, weather |
 
-Long-term, each scene family is owned by its own backend service and rendered
-by its own frontend renderer. One Personality DNA, many worlds.
+Long-term, each scene family has an explicit backend owner and its own frontend
+renderer. Source today does **not** generate one shared DNA record across
+services: Universe produces `PersonalityDNA`, while Nature independently
+produces `NatureDNA` from the same input shape. A future “portrait series” must
+define a cross-service identity/DNA contract before claiming one DNA powers
+many families.
 
 ## Why the current architecture already points there
 
 Three rules are already enforced — every new family must keep honoring them:
 
-1. **Personality DNA is theme-agnostic.** The AI produces semantics only
-   (archetype, trait scores, planet meanings, energy signature) — never
-   visual numbers. A city composer and a lake composer consume the same DNA.
+1. **AI output is semantic.** Each peer's DNA contains meanings, trait scores,
+   energy, and family entities — never visual numbers. The deterministic
+   builder owns visual values.
 2. **Determinism.** `seed.NewPRNG(seed)` drives every visual number inside
    safe bounds; the same seed always renders the same scene, and regenerating
    a variant costs zero AI calls.
@@ -67,11 +75,12 @@ Concrete anchors in today's code:
 | Piece | Where | Role in this plan |
 | --- | --- | --- |
 | `WorldConfigBuilder.Build(...)` | `internal/services/world_config_builder.go` | Already a pure function `(DNA, seed, variantNo, input) -> scene config`. It IS the first SceneComposer — it just doesn't know it yet. |
-| `WorldSceneConfig` envelope | `internal/models/scene.go` | Has `schemaVersion` + `theme`; needs a `sceneType` discriminator. |
-| FE renderer registry | `features/scene-renderers/registry.ts` | Maps `theme` → renderer; 5 themes all resolve to `SolarSystemRenderer`. Becomes `sceneType`-first. |
+| Universe `WorldSceneConfig` envelope | `services/universe-service/internal/models/scene.go` | Has `schemaVersion` + `theme` but still lacks explicit `sceneType`; legacy FE handling relies on absence meaning solar-system. |
+| Nature `ForestSceneConfig` envelope | `services/nature-service/internal/models/scene.go` | Emits `sceneType: "forest"` and schema 1.2. |
+| FE renderer registry | `features/scene-renderers/registry.ts` | Already resolves `sceneType` first, then Universe theme; both renderers are still eagerly imported. |
 | `SceneRendererProps` contract | `features/scene-renderers/types.ts` | Every renderer already implements one shared prop shape. |
 | Shared 3D infra | `features/scene-renderers/shared/` | CameraRig, StarParticleField, PostEffects, CanvasLoader — scene-agnostic today, stays that way. |
-| Scene config JSON Schema | `contracts/schemas/world-scene-config.schema.json` | Becomes the solar-system family schema under `contracts/scenes/`. |
+| Scene config JSON Schemas | `contracts/schemas/world-scene-config.schema.json`, `contracts/scenes/forest-scene-config.schema.json` | Forest follows the family folder; Universe still needs migration/aliasing into the same structure. |
 
 ## Original three-phase proposal (historical, superseded for Nature)
 
@@ -117,14 +126,37 @@ Phase transitions have explicit triggers (see
   **Superseded 2026-07-16** (owner decision): the second family is born as its
   own full peer service (`nature-service`), accepting the free-tier cold-start
   tradeoff consciously — see [nature-service-plan.md](nature-service-plan.md)
-  section 4. The guardrail still applies to any *third* family: it joins
-  nature-service (D4), it does not get its own deploy.
+  section 4. The guardrail still applies to the next family: mountain/river/
+  lake belongs in `nature-service` (D4); a non-natural family such as City
+  needs an ownership ADR and does not get a new deploy automatically.
 - **Keep provider calls behind each peer's AI interface.** AI produces semantic
   DNA only; seeded builders remain deterministic and provider-free.
-- **Do not fork the DNA schema per family.** DNA stays universal; only the
-  composers differ.
+- **Do not pretend the DNA schemas are shared.** They are family-specific in
+  source. Reuse semantic concepts intentionally, and introduce a shared
+  identity/portrait contract only when a real cross-family product story needs it.
 
-## Decision points for approval
+## Source-grounded next upgrades
+
+The prioritized acceptance criteria and tasks live in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).
+The vision-level order is:
+
+1. Prove the current four-service Render deployment with live smoke evidence.
+2. Remove the known frontend dependency audit blocker by migrating Next.js
+   through supported majors, without using `npm audit fix --force` blindly.
+3. Make scene contracts executable across BE and FE: explicit Universe
+   `sceneType`, per-family schemas, a real public Gateway OpenAPI contract,
+   discriminated FE types, and CI validation.
+4. Split scene-family renderer chunks and establish a measurable asset/frame
+   budget, including a self-hosted Draco decoder and adaptive quality.
+5. Add metrics/traces and shared gateway state only before horizontal scaling.
+6. Evaluate a third scene family only after its ownership, asset budget, and
+   user value have an approved story.
+
+## Original decision points (historical)
+
+This table records the first proposal. The dated owner-decision table below is
+newer: D1 is deferred and D5 is obsolete under the peer-service architecture.
 
 | # | Decision | Recommendation |
 | --- | --- | --- |

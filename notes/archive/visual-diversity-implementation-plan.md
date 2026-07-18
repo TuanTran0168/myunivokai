@@ -1,5 +1,8 @@
 # Kế hoạch triển khai "vẽ đa dạng hơn" — 5 rounds
 
+> **Document status:** Archived historical implementation record
+> **Last source review:** 2026-07-18
+
 > Bản triển khai của định hướng
 > [vision/visual-diversity.md](../vision/visual-diversity.md) (thang 5 bậc).
 > Ghi đủ chi tiết để nếu phiên làm việc đứt giữa chừng, phiên sau (hoặc người

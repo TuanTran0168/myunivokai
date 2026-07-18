@@ -1,5 +1,8 @@
 # Performance Refactor + Render Deploy Plan — feat/fe-be/perf-and-render
 
+> **Document status:** Archived historical implementation record
+> **Last source review:** 2026-07-18
+
 > Historical universe-service optimization record. CORS, client-IP rate
 > limiting, proxy trust, and the public base URL now belong to
 > `services/api-gateway`; see `notes/vision/api-gateway.md`.

@@ -1,5 +1,8 @@
 # API Gateway — implemented production design
 
+> **Document status:** Implemented and active
+> **Last source review:** 2026-07-18
+
 Status: implemented on `feat/be/api-gateway` for the two peer services that
 exist in source: `universe-service` and `nature-service`. User authentication
 is deliberately absent because there is no auth-service or identity contract.

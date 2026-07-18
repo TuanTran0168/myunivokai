@@ -1,59 +1,60 @@
 # Contracts, roadmap, and risks
 
-Part of the [vision folder](README.md).
+> **Document status:** Active after source re-baseline
+> **Last source review:** 2026-07-18
 
-## Contracts and compatibility
+Part of the [vision folder](README.md). This replaces the old
+modular-monolith/extraction roadmap, which no longer matches the two-peer
+service architecture.
 
-- Envelope: `{ schemaVersion, sceneType, theme, palette, camera, postFX, ...family fields }`.
-- One schema per family: `contracts/scenes/<sceneType>.schema.json`; the
-  compose request/response schemas live beside them.
-- **Saved worlds must render forever.** Renderers are keyed by
-  `sceneType` + `schemaVersion`; stored configs are never mutated.
-  - Additive change (new optional field with deterministic default): no bump.
-  - Breaking change: new `schemaVersion`; the renderer keeps a reader for the
-    old version (or a pure upgrade function old→new, tested by fixture).
-- Golden fixtures per family per schemaVersion in the composer's testdata are
-  the compatibility contract in executable form.
+## Compatibility policy
 
-## Roadmap
+- Saved worlds must continue rendering after deploys.
+- Additive optional fields require deterministic defaults in the frontend.
+- Breaking output changes require a new `schemaVersion`, an old-version reader
+  or pure upgrade function, and fixed fixtures.
+- PRNG features use new named streams; never insert draws into an existing
+  stream and silently change old worlds.
+- The gateway rewrites transport paths only. Domain contracts remain owned by
+  Universe and Nature.
 
-| Step | Branch | Content | Done when |
+## Contract inventory from source
+
+| Contract | Current state | Gap |
+| --- | --- | --- |
+| Universe scene | Go model + `contracts/schemas/world-scene-config.schema.json`, schema 1.2 | No explicit `sceneType`; schema is outside the family folder; no JSON golden fixture |
+| Forest scene | Go model + `contracts/scenes/forest-scene-config.schema.json` + four golden fixtures, schema 1.2 | Golden bytes are not validated against the JSON Schema in CI |
+| Public HTTP | Two generated Swagger 2.0 documents for direct `/api/v1` peer routes | Gateway-prefixed public routes have no complete OpenAPI document; root `contracts/openapi.yaml` only contains health |
+| Frontend types | Hand-written `lib/types.ts` and defensive normalizers | Broad optional `SceneConfig`, `any` normalizers, no generated/type-drift gate |
+| Profile mirrors | Go builders plus `scene.ts` / `forestScene.ts` preview mirrors | No shared profile-version assertion across languages |
+
+## Prioritized roadmap
+
+| Priority | Work | Why now | Done when |
 | --- | --- | --- | --- |
-| 1a | `feat/be/scene-composer-registry` | `internal/scenes` package, SceneComposer + Registry, solar-system composer moved, `sceneType` in envelope + migration, API fields | Golden test proves byte-identical solar-system output; all existing tests green |
-| 1b | `feat/fe/scene-type-registry` | sceneType-first lazy registry, normalize legacy configs, types union | Old worlds render unchanged; bundle for `/` unchanged |
-| 1c | `feat/fe-be/scene-family-city` | First real second family, in the monolith: city composer + CityRenderer MVP + profile mirror pair + fixtures | Create form offers City; a city world survives save/share/gallery |
-| 1d | (repeat 1c) | nature family (forest/mountain/river/lake as themes) | same bar |
-| 2 | `feat/be/extract-scene-services` | Extract city+nature into services, compose contract, embedded/remote flag, blueprint entries | Prod works in remote mode; rollback = flip env to embedded |
-| 3 ✅ | `feat/be/api-gateway` | Go gateway (see [api-gateway.md](api-gateway.md)), middleware moves up, services require a shared gateway credential | Source complete: family-prefix routing, aggregate status, edge middleware, circuit breakers, share cache, Docker/Render/CI wiring |
+| P0 | Live Render deployment verification | Config exists but has not been proven on the real fleet | Runbook evidence covers health, status, direct-peer 401, create/get/regenerate/publish/share for both families, and browser single-origin traffic |
+| P0 | Next.js supported-major migration | `npm audit --omit=dev --audit-level=high` currently fails on the Next 14 tree | Typecheck/lint/test/build and production audit are green without force-installing an unreviewed major |
+| P0 | Executable contract baseline | Current schemas, Swagger, Go models, and TS types can drift independently | Universe emits explicit `sceneType`; both family schemas live under `contracts/scenes`; public Gateway OpenAPI is complete; fixtures validate against schemas; FE types/runtime validation derive from or are checked against the contract |
+| P1 | Renderer and asset delivery budget | Both family renderers are eagerly imported; static 3D assets exceed 40 MB; Nature uses a remote Draco decoder | Separate family chunk proven in network trace; decoder is self-hosted; catalog/file/license tests pass; budgets are recorded in CI or a reproducible report |
+| P1 | Adaptive 3D quality and recovery | DPR up to 3 and full effects have no weak-device feedback loop | Measured tiers adapt DPR/shadows/effects/particle counts; WebGL failure has a usable fallback; deterministic scene identity remains unchanged |
+| P1 | Observability | Request IDs/logs exist, but no metrics or distributed traces | Gateway and peers expose latency/error/saturation signals; one request can be followed end-to-end without logging personal input or secrets |
+| P2 | Gateway horizontal scaling | Rate limits, share cache, and circuit state are process-local | Scale trigger is measured; shared state is introduced only where semantics require it and failure behavior is documented |
+| P2 | Nature real AI providers | Nature factory currently supports mock only | Gemini/OpenAI adapters pass structured-output/repair/fallback tests and mock remains test/default-safe |
+| Deferred | User authentication | No user/account/ownership contract exists | Product first defines issuer, subject, ownership, anonymous migration, and route authorization; only then implement auth |
+| Discovery | Third scene family | City/room/lake would add a large asset and art-direction surface | An approved story names its service owner, schema, renderer, asset/license budget, and measurable product value |
 
-> **Amended 2026-07-16 (owner decision):** the nature family does not follow
-> this table at all — it is born as `nature-service`, a **full peer** of
-> universe-service (same mechanism, forest DNA), per the rounds **N1–N5 /
-> F1–F5** in [nature-service-plan.md](nature-service-plan.md). Rows 1a/1c/1d/2
-> (registry, monolith families, extraction) apply only to families that would
-> start inside universe-service. Row 3 was triggered by the second public peer
-> and now routes by path prefix across Universe and Nature without waiting for
-> an auth-service.
+## Current risks
 
-## Phase triggers (approve as policy)
+| Risk | Evidence | Mitigation |
+| --- | --- | --- |
+| Documentation claims exceed deployed reality | Render configuration is committed, but live smoke evidence is absent | Keep deployment status “pending verification” until the runbook passes |
+| Contract drift | Placeholder root OpenAPI, hand-written FE types, schemas not exercised together | Complete the executable-contract P0 before a third family |
+| Frontend security debt | Current production dependency audit fails | Isolate the Next migration in its own branch and validate all existing routes |
+| Weak-device frame drops | DPR up to 3, continuous animation, HDRI/shadows/post effects | Adaptive quality story with frame-time measurements |
+| External decoder availability | Drei defaults Draco to Google CDN | Self-host versioned decoder files with the web client |
+| Asset/license drift | Forest catalog has no filesystem/attribution test | Catalog validation plus attribution and size budget in CI |
+| Per-instance gateway behavior | In-memory limiter/cache/circuit breaker | Run one instance now; define Redis/shared-state semantics before scale-out |
+| Premature service growth | Every family repeats DB, AI, renderer, asset, and deploy cost | Require an ownership/traffic/art-direction trigger, not “microservices by default” |
 
-- **Enter Phase 2** only when BOTH: two+ families live in the monolith AND
-  (a family's deploy cadence conflicts with world-service, or compose load is
-  measurable). Not before. *(Amended 2026-07-16: the nature family is a peer
-  service by owner decision — this trigger now governs only families that
-  start in the monolith.)*
-- **Enter Phase 3** when auth-service (or any second public service) is real.
-  Nature satisfied this trigger; the gateway is now implemented.
-- **Rust port** of a scene service only on the trigger in the
-  [backend plan](backend-plan.md): p95 compose > 50 ms or baked binary assets.
-
-## Risks
-
-| Risk | Mitigation |
-| --- | --- |
-| Refactor 1a silently changes stored-world rendering | Golden-snapshot test: fixed DNA+seed fixture must be byte-identical before/after |
-| FE/BE profile drift multiplies with families | PROFILE_VERSION pair test per family, CI-enforced ([frontend-plan.md](frontend-plan.md)) |
-| Free-tier chained cold starts | Phase gating + embedded/remote flag ([deployment.md](deployment.md)) — extraction is reversible |
-| Stateful upstream APIs publicly reachable on free tier | Gateway shared-secret middleware protects readiness and business routes; upgrade to private services when paid |
-| Two-language stack fragments the team | Rust only behind a measured trigger; the contract keeps it swappable |
-| Registry key confusion (theme × sceneType) | `sceneType` = family (routing), `theme` = style within family (composer input) — written into both registries' doc comments |
+Detailed Given/When/Then scenarios are in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

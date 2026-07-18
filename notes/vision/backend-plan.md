@@ -1,5 +1,8 @@
 # Backend plan — current peer-service architecture
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 Status: the original modular-monolith/stateless-composer proposal was
 superseded by the owner's 2026-07-16 decision and by the source now present.
 This file records the active boundaries instead of describing code that does
@@ -62,9 +65,19 @@ The current builders output JSON numbers and do not justify a second toolchain.
 ## Next backend work grounded in source
 
 1. Deploy and smoke the gateway fleet using [deployment.md](deployment.md).
-2. Complete Nature N4 only when real Gemini/OpenAI output is wanted; mock is
+2. Complete the executable contract baseline: explicit Universe
+   `sceneType: "solar-system"`, family schemas, schema-validated fixtures, and a
+   real Gateway-prefixed OpenAPI document. The current root `contracts/openapi.yaml`
+   only documents health.
+3. Add metrics/tracing around the request ID already propagated end-to-end;
+   never attach raw personal input, AI keys, database URLs, or the gateway key.
+4. Keep gateway limiter/cache/circuit state process-local while one instance is
+   intentional. Define shared-state semantics before horizontal scaling.
+5. Complete Nature N4 only when real Gemini/OpenAI output is wanted; mock is
    intentionally the current Nature provider.
-3. Add contract-schema validation for forest golden fixtures to prevent schema
-   and executable fixture drift.
-4. Revisit user auth only after defining users, token issuer, claims, and route
-   authorization. Do not add a placeholder auth-service.
+6. Revisit user auth only after defining users, token issuer, claims, anonymous
+   world migration, ownership, and route authorization. Do not add a placeholder
+   auth-service.
+
+Branch-sized Given/When/Then tasks are in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

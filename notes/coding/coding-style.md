@@ -1,5 +1,8 @@
 # Coding Style — Myunivokai
 
+> **Document status:** Active policy
+> **Last source review:** 2026-07-18
+
 Applies to all code in this repo (Go backend and TypeScript frontend).
 
 ## 1. No hardcoded values
