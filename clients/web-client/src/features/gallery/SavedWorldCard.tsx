@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Orbit, Trash2 } from "lucide-react";
-import type { World } from "@/lib/types";
-import { paletteFromScene, planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
+import { Orbit, Trash2, Trees } from "lucide-react";
+import type { World, WorldFamily } from "@/lib/types";
+import { isForestScene, paletteFromScene, pointsOfInterestFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
+import { worldPagePath } from "@/lib/worldRoutes";
 
 const PALETTE_STRIP_COLOR_COUNT = 3;
 
 type SavedWorldCardProps = {
   world: World;
+  family: WorldFamily;
   onRemove: (worldIdentifier: string) => void;
 };
 
@@ -23,17 +25,19 @@ function formatCreatedDate(createdAt?: string): string | null {
   return parsedDate.toLocaleDateString();
 }
 
-export function SavedWorldCard({ world, onRemove }: SavedWorldCardProps) {
+export function SavedWorldCard({ world, family, onRemove }: SavedWorldCardProps) {
   const worldVariant = selectedVariant(world);
   const worldScene = sceneFromVariant(worldVariant);
   const scenePalette = paletteFromScene(worldScene);
-  const planetCount = planetsFromScene(worldScene).length;
+  const pointOfInterestCount = pointsOfInterestFromScene(worldScene).length;
+  const isForestWorld = isForestScene(worldScene);
+  const PointOfInterestIcon = isForestWorld ? Trees : Orbit;
   const createdDateLabel = formatCreatedDate(world.createdAt);
   const paletteStripColors = scenePalette.slice(0, PALETTE_STRIP_COLOR_COUNT);
 
   return (
     <div className="glass-panel glass-lift glass-rise group relative overflow-hidden rounded-2xl border border-white/10 transition hover:border-white/25">
-      <Link href={`/worlds/${world.id}`} className="focus-ring block">
+      <Link href={worldPagePath(world.id, family)} className="focus-ring block">
         {/* Palette specimen strip — solid swatches, not a gradient bar. */}
         <div className="flex h-2 w-full">
           {paletteStripColors.map((stripColor, stripIndex) => (
@@ -47,7 +51,7 @@ export function SavedWorldCard({ world, onRemove }: SavedWorldCardProps) {
             </p>
           ) : null}
           <h2 className="font-display text-lg font-semibold tracking-normal text-paper">
-            {worldScene.sceneName || world.title || "Untitled universe"}
+            {worldScene.sceneName || world.title || (isForestWorld ? "Untitled forest" : "Untitled universe")}
           </h2>
           {world.nickname ? (
             <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
@@ -61,8 +65,8 @@ export function SavedWorldCard({ world, onRemove }: SavedWorldCardProps) {
           ) : null}
           <div className="mt-4 flex items-center gap-4 font-mono text-xs text-on-surface-variant">
             <span className="inline-flex items-center gap-1.5">
-              <Orbit className="h-3.5 w-3.5 text-brass" aria-hidden="true" />
-              {planetCount} bodies
+              <PointOfInterestIcon className="h-3.5 w-3.5 text-brass" aria-hidden="true" />
+              {pointOfInterestCount} {isForestWorld ? "landmarks" : "bodies"}
             </span>
             {createdDateLabel ? <span>{createdDateLabel}</span> : null}
           </div>

@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <header className="fixed top-0 z-50 w-full border-b border-white/10 bg-mount/35 shadow-[0_1px_0_0_rgba(201,163,91,0.22)] backdrop-blur-2xl backdrop-saturate-150">
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between px-margin-mobile py-3 md:px-margin-desktop">
               <Link href="/" className="font-display text-xl font-semibold tracking-normal text-paper">
-                Personal Universe
+                Myunivokai
               </Link>
               <nav className="flex items-center gap-3 sm:gap-6">
                 <Link
@@ -56,7 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   href="/"
                   className="focus-ring btn-gradient rounded-full px-4 py-1.5 text-sm font-semibold"
                 >
-                  Create Universe
+                  Create World
                 </Link>
               </nav>
             </div>
@@ -66,9 +66,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           <footer className="relative z-10 mt-auto border-t border-white/10 bg-void/45 shadow-[0_-1px_0_0_rgba(201,163,91,0.15)] backdrop-blur-2xl backdrop-saturate-150">
             <div className="mx-auto flex w-full max-w-container-max flex-col items-center justify-between gap-2 px-margin-mobile py-8 text-center md:flex-row md:px-margin-desktop md:text-left">
-              <span className="font-display text-body-lg font-semibold text-paper">Personal Universe</span>
+              <span className="font-display text-body-lg font-semibold text-paper">Myunivokai</span>
               <span className="font-body text-sm text-on-surface-variant">
-                © {COPYRIGHT_YEAR} Personal Universe 3D — turn your personality into a living 3D universe.
+                © {COPYRIGHT_YEAR} Myunivokai — turn your personality into a living 3D world.
               </span>
               <span className="font-mono text-xs uppercase tracking-widest text-secondary">MVP</span>
             </div>

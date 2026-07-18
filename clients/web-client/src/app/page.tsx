@@ -2,22 +2,44 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Plus } from "lucide-react";
+import { ArrowRight, Check, Loader2, Orbit, Plus, Trees } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ensureRange, toggleItem } from "@/lib/formSelection";
-import { buildPreviewSceneConfig } from "@/lib/scene";
+import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
+import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { worldPagePath } from "@/lib/worldRoutes";
+import type { PlanetSceneConfig, WorldFamily } from "@/lib/types";
+
+// The world-family picker: which backend curates the portrait. Universe =
+// universe-service (solar system), Forest = nature-service (living forest).
+// Same inputs, same mechanism — only the scene family differs.
+const familyOptions: { label: string; value: WorldFamily; description: string; Icon: typeof Orbit }[] = [
+  { label: "Universe", value: "universe", description: "A solar system of you", Icon: Orbit },
+  { label: "Forest", value: "nature", description: "A living forest of you", Icon: Trees }
+];
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
 const traitOptions = ["curious", "builder", "focused", "creative", "calm", "explorer"];
+// Same four mood VALUES for every family (the backend contract keys off
+// them); only the label/swatch changes so the card reads in the family's own
+// language — universe moods are cosmic, forest moods are seasonal (each label
+// names the season that mood leans toward in the forest builder).
 const moodOptions = [
   { label: "Cybernetic", value: "focused", swatch: "#3b82f6" },
   { label: "Nebula", value: "dreamy", swatch: "#a855f7" },
   { label: "Solar", value: "energetic", swatch: "#eab308" },
   { label: "Void", value: "reflective", swatch: "#ef4444" }
+];
+const natureMoodOptions = [
+  { label: "Frostwood", value: "focused", swatch: "#93C5FD" },
+  { label: "Blossom", value: "dreamy", swatch: "#F9A8D4" },
+  { label: "Summer Meadow", value: "energetic", swatch: "#4ADE80" },
+  { label: "Amber Autumn", value: "reflective", swatch: "#F59E0B" }
 ];
 const styleOptions = [
   { label: "Cosmic", value: "cosmic-galaxy", swatch: "#8B5CF6" },
@@ -64,6 +86,7 @@ export default function HomePage() {
   const [interests, setInterests] = useState(["Technology", "Design", "AI"]);
   const [traits, setTraits] = useState(["curious", "builder", "focused"]);
   const [mood, setMood] = useState("focused");
+  const [worldFamily, setWorldFamily] = useState<WorldFamily>("universe");
   const [preferredWorldStyle, setPreferredWorldStyle] = useState("cosmic-galaxy");
   const [favoriteColors, setFavoriteColors] = useState<string[]>(["#8B5CF6", "#06B6D4"]);
   const [customInterestDraft, setCustomInterestDraft] = useState("");
@@ -95,27 +118,45 @@ export default function HomePage() {
   // state) so the preview's planet count and names match the generated world,
   // and debounced so typing does not rebuild the canvas on every keystroke.
   const debouncedPayload = useDebouncedValue(payload, PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS);
-  const previewScene = useMemo(
-    () =>
-      buildPreviewSceneConfig({
-        nickname: debouncedPayload.nickname,
-        interests: debouncedPayload.interests,
-        traits: debouncedPayload.traits,
-        mood: debouncedPayload.mood,
-        preferredWorldStyle: debouncedPayload.preferredWorldStyle,
-        favoriteColors: debouncedPayload.favoriteColors
-      }),
-    [debouncedPayload]
-  );
+  const previewScene = useMemo(() => {
+    const previewInput = {
+      nickname: debouncedPayload.nickname,
+      interests: debouncedPayload.interests,
+      traits: debouncedPayload.traits,
+      mood: debouncedPayload.mood,
+      preferredWorldStyle: debouncedPayload.preferredWorldStyle,
+      favoriteColors: debouncedPayload.favoriteColors
+    };
+    // Same inputs, family-specific mirror: the preview always renders with the
+    // exact renderer the generated world will use.
+    return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
+  }, [debouncedPayload, worldFamily]);
+
+  // The preview is fully interactive too: clicking a planet/landmark/animal
+  // flies the camera to it, exactly like the world page.
+  const [selectedPreviewPointKey, setSelectedPreviewPointKey] = useState<string | null>(null);
+  const previewPointsOfInterest = useMemo(() => pointsOfInterestFromScene(previewScene), [previewScene]);
+  useEffect(() => {
+    setSelectedPreviewPointKey(null);
+  }, [previewScene]);
+
+  function handleSelectPreviewPoint(pointOfInterest: PlanetSceneConfig | null) {
+    if (!pointOfInterest) {
+      setSelectedPreviewPointKey(null);
+      return;
+    }
+    const pointIndex = previewPointsOfInterest.indexOf(pointOfInterest);
+    setSelectedPreviewPointKey(planetIdentityKey(pointOfInterest, pointIndex));
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const world = await api.createWorld(payload);
-      addWorldIdentifierToGallery(world.id);
-      router.push(`/worlds/${world.id}`);
+      const world = await api.createWorld(payload, worldFamily);
+      addWorldIdentifierToGallery(world.id, worldFamily);
+      router.push(worldPagePath(world.id, worldFamily));
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -150,13 +191,22 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        worldFamily === "nature" ? "forest-chrome" : ""
+      }`}
+    >
       <GeneratingOverlay isVisible={loading} />
 
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
           desktop so the preview owns the screen and the rail floats over it. */}
       <div className="relative h-[46vh] min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full">
-        <UniverseCanvas scene={previewScene} className="h-full" />
+        <UniverseCanvas
+          scene={previewScene}
+          className="h-full"
+          selectedPlanetKey={selectedPreviewPointKey}
+          onSelectPlanet={handleSelectPreviewPoint}
+        />
 
         {/* Floating identity island (desktop): live state, the curatorial
             accession, and the palette — opposite the form rail. */}
@@ -168,7 +218,7 @@ export default function HomePage() {
           {/* The world's owner, live from the form (payload defaults keep it
               non-empty), so the placard reads like the mockup's title card. */}
           <div className="font-display text-lg font-semibold leading-tight text-paper">
-            {payload.nickname}&rsquo;s Universe
+            {payload.nickname}&rsquo;s {worldFamily === "nature" ? "Forest" : "Universe"}
           </div>
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Curated from</div>
@@ -201,6 +251,42 @@ export default function HomePage() {
 
           <div className="rail-scroll min-h-0 flex-1 overflow-x-hidden lg:overflow-y-auto">
             <form id={CREATE_FORM_ELEMENT_ID} className="grid gap-5 px-5 py-6 sm:px-7" onSubmit={onSubmit}>
+              <div className="grid gap-3">
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">World Family</span>
+                <div className="grid grid-cols-2 gap-3">
+                  {familyOptions.map((option) => {
+                    const selected = worldFamily === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setWorldFamily(option.value)}
+                        aria-pressed={selected}
+                        className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
+                          selected
+                            ? "scale-[1.03] border-brass bg-brass/10 ring-2 ring-brass/40"
+                            : "border-transparent hover:border-white/20"
+                        }`}
+                      >
+                        {selected ? (
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-brass text-ink">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        <option.Icon
+                          className={`mx-auto mb-2 h-7 w-7 ${selected ? "text-brass" : "text-on-surface-variant"}`}
+                          aria-hidden="true"
+                        />
+                        <span className={`block text-sm ${selected ? "font-semibold text-brass" : "text-on-surface"}`}>
+                          {option.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-on-surface-variant">{option.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid gap-4">
                 <label className="grid gap-2">
                   <span className="font-mono text-xs uppercase tracking-widest text-brass">Nickname</span>
@@ -236,8 +322,8 @@ export default function HomePage() {
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
-                            ? "border-primary/50 bg-primary/20 text-primary shadow-glow"
-                            : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
+                            ? "border-primary bg-primary/35 font-semibold text-paper shadow-glow"
+                            : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
                         {item}
@@ -254,7 +340,7 @@ export default function HomePage() {
                         type="button"
                         aria-pressed="true"
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
-                        className="focus-ring tappable rounded-full border border-primary/50 bg-primary/20 px-4 py-1.5 text-sm text-primary shadow-glow"
+                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper shadow-glow"
                       >
                         {item}
                       </button>
@@ -286,7 +372,7 @@ export default function HomePage() {
                       type="button"
                       onClick={() => setIsAddingCustomInterest(true)}
                       disabled={interests.length >= MAXIMUM_INTERESTS}
-                      className="focus-ring tappable inline-flex items-center gap-1 rounded-full border border-dashed border-white/15 bg-surface-bright px-4 py-1.5 text-sm text-outline hover:border-primary/40 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-45"
+                      className="focus-ring tappable inline-flex items-center gap-1 rounded-full border border-dashed border-white/20 bg-white/5 px-4 py-1.5 text-sm text-on-surface-variant hover:border-primary/40 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                       Custom
@@ -307,8 +393,8 @@ export default function HomePage() {
                         onClick={() => setTraits((current) => toggleItem(current, item, 3, 6))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm capitalize ${
                           selected
-                            ? "border-secondary/50 bg-secondary/15 text-secondary shadow-cyan"
-                            : "border-white/10 bg-surface-bright text-on-surface-variant hover:border-white/30"
+                            ? "border-secondary bg-secondary/30 font-semibold text-paper shadow-cyan"
+                            : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
                         {item}
@@ -341,9 +427,11 @@ export default function HomePage() {
               </label>
 
               <div className="grid gap-3">
-                <span className="font-mono text-xs uppercase tracking-widest text-brass">Atmospheric Mood</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-brass">
+                  {worldFamily === "nature" ? "Forest Mood" : "Atmospheric Mood"}
+                </span>
                 <div className="grid grid-cols-2 gap-3">
-                  {moodOptions.map((option) => {
+                  {(worldFamily === "nature" ? natureMoodOptions : moodOptions).map((option) => {
                     const selected = mood === option.value;
                     return (
                       <button
@@ -372,7 +460,10 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="grid gap-3">
+              {/* World Style only shapes universe visuals (sky/orbit themes);
+                  the forest's look comes from mood/season, so the section
+                  hides for nature (the stored theme keeps its default). */}
+              <div className={worldFamily === "nature" ? "hidden" : "grid gap-3"}>
                 <span className="font-mono text-xs uppercase tracking-widest text-brass">World Style</span>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {styleOptions.map((option) => {
@@ -436,7 +527,7 @@ export default function HomePage() {
               className="focus-ring btn-brass inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold uppercase tracking-[0.04em] transition disabled:cursor-wait disabled:opacity-70"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              Curate this universe
+              {worldFamily === "nature" ? "Curate this forest" : "Curate this universe"}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>

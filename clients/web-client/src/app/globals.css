@@ -329,3 +329,12 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 textarea {
   cursor: text;
 }
+
+/* Forest chrome: forest scenes are BRIGHT (daylight canopy) where universe
+   scenes are near-black, so the translucent glass panels wash out and dark
+   buttons float as black pills. Inside .forest-chrome every glass panel gets
+   a solid warm-dark base under its blur, restoring the contrast the chrome
+   was designed against. */
+.forest-chrome .glass-panel {
+  background-color: rgba(14, 18, 13, 0.62);
+}

@@ -97,6 +97,37 @@ export function planetsFromScene(scene?: SceneConfig): PlanetSceneConfig[] {
   return scene.planets.filter((planet) => typeof planet === "object" && planet !== null);
 }
 
+export const FOREST_SCENE_TYPE = "forest";
+
+export function isForestScene(scene?: SceneConfig): boolean {
+  return scene?.sceneType === FOREST_SCENE_TYPE;
+}
+
+/**
+ * The scene's clickable point-of-interest layer, family-agnostic: universe
+ * scenes expose planets, forest scenes expose landmarks adapted into the same
+ * PlanetSceneConfig shape (name/meaning/color/energy). Every HUD component
+ * (details panel, hover tooltip, camera focus) consumes this instead of
+ * planetsFromScene so both families get the full interaction layer for free.
+ */
+export function pointsOfInterestFromScene(scene?: SceneConfig): PlanetSceneConfig[] {
+  if (!isForestScene(scene)) {
+    return planetsFromScene(scene);
+  }
+  if (!Array.isArray(scene?.landmarks)) {
+    return [];
+  }
+  return scene.landmarks
+    .filter((landmark) => typeof landmark === "object" && landmark !== null)
+    .map((landmark) => ({
+      key: landmark.key,
+      name: landmark.name,
+      meaning: landmark.meaning,
+      color: landmark.accentColor,
+      energy: landmark.energy
+    }));
+}
+
 export function hashSeed(seed: string): number {
   let hash = 2166136261;
   for (let index = 0; index < seed.length; index += 1) {
@@ -597,7 +628,10 @@ export function buildPreviewSunConfig(seed: string): SceneSunConfig {
   };
 }
 
-function previewSeedFromInputs(input: PreviewSceneInput): string {
+// Exported for the forest preview mirror (lib/forestScene.ts): both families
+// derive the preview seed from the form inputs the same way, so switching the
+// family picker back and forth is stable for identical inputs.
+export function previewSeedFromInputs(input: PreviewSceneInput): string {
   return [
     "preview",
     input.nickname.trim(),
@@ -623,8 +657,9 @@ function previewPlanetColor(planetIndex: number, primaryColor: string, secondary
 // Names the preview planets from the user's interests then traits, deduplicated
 // and clamped to 3-7. This mirrors the backend mock's collectPlanetSources
 // (services/.../mock_presets.go) so the preview shows the same planet count and
-// names as the generated world.
-function previewPlanetNames(interests: string[], traits: string[]): string[] {
+// names as the generated world. Exported because nature-service's mock names
+// its landmarks from the same sources — the forest preview mirror reuses it.
+export function previewPlanetNames(interests: string[], traits: string[]): string[] {
   const seenNames = new Set<string>();
   const planetNames: string[] = [];
   const addName = (rawName: string) => {

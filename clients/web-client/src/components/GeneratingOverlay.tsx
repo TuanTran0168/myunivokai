@@ -7,7 +7,7 @@ const STATUS_MESSAGE_ROTATION_INTERVAL_MILLISECONDS = 2200;
 const GENERATION_STATUS_MESSAGES = [
   "Reading your portrait...",
   "Resolving your Personality DNA...",
-  "Seeding your universe...",
+  "Seeding your world...",
   "Placing your worlds...",
   "Curating the final view..."
 ];
@@ -57,7 +57,7 @@ export function GeneratingOverlay({ isVisible }: GeneratingOverlayProps) {
 
         <div className="grid gap-2">
           <div className="flex items-center justify-center gap-2 text-brass">
-            <span className="font-mono text-xs uppercase tracking-[0.2em]">Curating your universe</span>
+            <span className="font-mono text-xs uppercase tracking-[0.2em]">Curating your world</span>
           </div>
           <p className="min-h-7 text-lg font-semibold text-on-surface" aria-live="polite">
             {GENERATION_STATUS_MESSAGES[statusMessageIndex]}

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "forest",
   "sceneName": "The Amberfall Sanctuary",
   "archetype": "Grove Keeper",
@@ -91,17 +91,31 @@
         "pathSeed": "NAT-GOLDEN-DREAMY-forest-animal-0",
         "walkSpeed": 0.68,
         "scale": 1.06
+      },
+      {
+        "modelKey": "animal-fox",
+        "count": 2,
+        "pathSeed": "NAT-GOLDEN-DREAMY-forest-animal-1",
+        "walkSpeed": 0.63,
+        "scale": 0.87
+      },
+      {
+        "modelKey": "animal-deer",
+        "count": 1,
+        "pathSeed": "NAT-GOLDEN-DREAMY-forest-animal-2",
+        "walkSpeed": 0.47,
+        "scale": 0.94
       }
     ],
     "birdFlocks": [
       {
         "modelKey": "bird-forest",
-        "birdCount": 7,
+        "birdCount": 4,
         "pathSeed": "NAT-GOLDEN-DREAMY-forest-birds-0",
-        "altitudeMin": 17.11,
-        "altitudeMax": 24.58,
-        "flightSpeed": 0.53,
-        "pattern": "crossing"
+        "altitudeMin": 11.09,
+        "altitudeMax": 18.63,
+        "flightSpeed": 0.46,
+        "pattern": "circling"
       }
     ]
   },
@@ -208,6 +222,8 @@
       "tree-dead",
       "rock-mossy",
       "animal-wolf",
+      "animal-fox",
+      "animal-deer",
       "bird-forest",
       "landmark-heart-tree",
       "landmark-lantern-shrine",

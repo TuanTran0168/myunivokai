@@ -26,7 +26,12 @@ export function AmbientWorld() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
-      <UniverseCanvas scene={scene} className="h-full" devicePixelRatioRange={AMBIENT_DEVICE_PIXEL_RATIO_RANGE} />
+      <UniverseCanvas
+        scene={scene}
+        className="h-full"
+        devicePixelRatioRange={AMBIENT_DEVICE_PIXEL_RATIO_RANGE}
+        enableKeyboardMove={false}
+      />
       {/* Dim + vignette so foreground glass cards stay legible over the world. */}
       <div className="absolute inset-0 bg-void/55" />
       <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_30%,transparent_45%,rgba(8,8,10,0.72))]" />

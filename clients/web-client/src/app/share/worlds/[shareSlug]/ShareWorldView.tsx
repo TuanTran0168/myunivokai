@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { api, apiErrorMessage } from "@/lib/api";
-import type { PlanetSceneConfig, ShareWorld } from "@/lib/types";
-import { planetsFromScene, sceneFromVariant } from "@/lib/scene";
+import { api, apiErrorMessage, DEFAULT_WORLD_FAMILY } from "@/lib/api";
+import type { PlanetSceneConfig, ShareWorld, WorldFamily } from "@/lib/types";
+import { isForestScene, pointsOfInterestFromScene, sceneFromVariant } from "@/lib/scene";
 import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
@@ -13,9 +13,12 @@ import { StatusMessage } from "@/components/StatusMessage";
 
 type ShareWorldViewProps = {
   shareSlug: string;
+  // Which backend published this slug: /share/worlds/... renders universe
+  // shares, /nature/share/worlds/... renders nature (forest) shares.
+  family?: WorldFamily;
 };
 
-export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
+export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: ShareWorldViewProps) {
   const [world, setWorld] = useState<ShareWorld | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -24,7 +27,7 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
   useEffect(() => {
     let mounted = true;
     api
-      .getShareWorld(shareSlug)
+      .getShareWorld(shareSlug, family)
       .then((nextWorld) => mounted && setWorld(nextWorld))
       .catch((err) => mounted && setError(apiErrorMessage(err)))
       .finally(() => mounted && setLoading(false));
@@ -32,10 +35,10 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
     return () => {
       mounted = false;
     };
-  }, [shareSlug]);
+  }, [family, shareSlug]);
 
   const scene = useMemo(() => sceneFromVariant(world?.variant), [world]);
-  const planets = useMemo(() => planetsFromScene(scene), [scene]);
+  const planets = useMemo(() => pointsOfInterestFromScene(scene), [scene]);
 
   useEffect(() => {
     setSelectedPlanetKey(null);
@@ -67,7 +70,11 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        isForestScene(scene) ? "forest-chrome" : ""
+      }`}
+    >
       {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
           on desktop. Clicking a planet focuses the camera (read-only view state). */}
       <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
@@ -91,7 +98,7 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
               ) : null}
               <RareFeatureBadge scene={scene} />
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
-                {world.title || "Shared universe"}
+                {world.title || (isForestScene(scene) ? "Shared forest" : "Shared universe")}
               </h1>
               {world.nickname ? (
                 <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
@@ -128,7 +135,7 @@ export function ShareWorldView({ shareSlug }: ShareWorldViewProps) {
             href="/"
             className="focus-ring btn-gradient inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-semibold"
           >
-            Create Your Own Universe
+            {isForestScene(scene) ? "Create Your Own Forest" : "Create Your Own Universe"}
             <ArrowRight className="h-5 w-5" aria-hidden="true" />
           </Link>
         </div>

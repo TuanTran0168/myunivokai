@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "forest",
   "sceneName": "The Amberfall Sanctuary",
   "archetype": "Grove Keeper",
@@ -84,28 +84,42 @@
   "wildlife": {
     "groundAnimals": [
       {
-        "modelKey": "animal-fox",
-        "count": 2,
+        "modelKey": "animal-boar",
+        "count": 3,
         "pathSeed": "NAT-GOLDEN-FOCUSED-forest-animal-0",
         "walkSpeed": 0.48,
         "scale": 0.97
       },
       {
-        "modelKey": "animal-boar",
-        "count": 2,
+        "modelKey": "animal-rabbit",
+        "count": 1,
         "pathSeed": "NAT-GOLDEN-FOCUSED-forest-animal-1",
         "walkSpeed": 0.55,
         "scale": 0.86
+      },
+      {
+        "modelKey": "animal-deer",
+        "count": 3,
+        "pathSeed": "NAT-GOLDEN-FOCUSED-forest-animal-2",
+        "walkSpeed": 0.65,
+        "scale": 1.1
+      },
+      {
+        "modelKey": "animal-bear",
+        "count": 3,
+        "pathSeed": "NAT-GOLDEN-FOCUSED-forest-animal-3",
+        "walkSpeed": 0.73,
+        "scale": 1.01
       }
     ],
     "birdFlocks": [
       {
         "modelKey": "bird-forest",
-        "birdCount": 5,
+        "birdCount": 6,
         "pathSeed": "NAT-GOLDEN-FOCUSED-forest-birds-0",
-        "altitudeMin": 13.4,
-        "altitudeMax": 23.11,
-        "flightSpeed": 0.65,
+        "altitudeMin": 5.49,
+        "altitudeMax": 13.78,
+        "flightSpeed": 0.78,
         "pattern": "crossing"
       }
     ]
@@ -172,8 +186,10 @@
       "tree-birch",
       "tree-pine",
       "rock-mossy",
-      "animal-fox",
       "animal-boar",
+      "animal-rabbit",
+      "animal-deer",
+      "animal-bear",
       "bird-forest",
       "landmark-heart-tree",
       "landmark-lantern-shrine",

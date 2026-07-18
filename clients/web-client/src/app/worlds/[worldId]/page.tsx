@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Copy, Download, ExternalLink, Loader2, RefreshCw, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
 import { exportSceneCanvasAsPng } from "@/lib/exportImage";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
-import { planetsFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
-import type { PlanetSceneConfig, World, WorldVariant } from "@/lib/types";
+import { isForestScene, pointsOfInterestFromScene, sceneFromVariant, selectedVariant } from "@/lib/scene";
+import { sharePagePath, worldFamilyFromQueryValue, WORLD_FAMILY_QUERY_PARAMETER } from "@/lib/worldRoutes";
+import type { PlanetSceneConfig, World, WorldFamily, WorldVariant } from "@/lib/types";
 import { StatusMessage } from "@/components/StatusMessage";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
@@ -21,7 +23,30 @@ type PageProps = {
   };
 };
 
+// useSearchParams requires a Suspense boundary during prerendering; the
+// wrapper reads ?family=nature (nature-service worlds) and hands the resolved
+// family to the actual page.
 export default function WorldPage({ params }: PageProps) {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+          <StatusMessage tone="loading">Loading world...</StatusMessage>
+        </main>
+      }
+    >
+      <WorldPageWithFamily worldId={params.worldId} />
+    </Suspense>
+  );
+}
+
+function WorldPageWithFamily({ worldId }: { worldId: string }) {
+  const searchParams = useSearchParams();
+  const family = worldFamilyFromQueryValue(searchParams.get(WORLD_FAMILY_QUERY_PARAMETER));
+  return <WorldPageContent worldId={worldId} family={family} />;
+}
+
+function WorldPageContent({ worldId, family }: { worldId: string; family: WorldFamily }) {
   const [world, setWorld] = useState<World | null>(null);
   const [activeVariantId, setActiveVariantId] = useState<string>();
   const [error, setError] = useState("");
@@ -32,7 +57,7 @@ export default function WorldPage({ params }: PageProps) {
 
   async function loadWorld() {
     setError("");
-    const nextWorld = await api.getWorld(params.worldId);
+    const nextWorld = await api.getWorld(worldId, family);
     setWorld(nextWorld);
     const active = selectedVariant(nextWorld);
     setActiveVariantId((current) => current || active?.id);
@@ -42,14 +67,14 @@ export default function WorldPage({ params }: PageProps) {
     let mounted = true;
     setLoading(true);
     api
-      .getWorld(params.worldId)
+      .getWorld(worldId, family)
       .then((nextWorld) => {
         if (!mounted) {
           return;
         }
         setWorld(nextWorld);
         setActiveVariantId(selectedVariant(nextWorld)?.id);
-        addWorldIdentifierToGallery(nextWorld.id);
+        addWorldIdentifierToGallery(nextWorld.id, family);
       })
       .catch((err) => mounted && setError(apiErrorMessage(err)))
       .finally(() => mounted && setLoading(false));
@@ -57,7 +82,7 @@ export default function WorldPage({ params }: PageProps) {
     return () => {
       mounted = false;
     };
-  }, [params.worldId]);
+  }, [family, worldId]);
 
   const activeVariant = useMemo(() => {
     if (!world) {
@@ -67,7 +92,9 @@ export default function WorldPage({ params }: PageProps) {
   }, [activeVariantId, world]);
 
   const activeScene = useMemo(() => sceneFromVariant(activeVariant), [activeVariant]);
-  const activeScenePlanets = useMemo(() => planetsFromScene(activeScene), [activeScene]);
+  // Planets for universe worlds, landmarks for forest worlds — the details
+  // panel, selection and camera focus all run off the same adapter.
+  const activeScenePlanets = useMemo(() => pointsOfInterestFromScene(activeScene), [activeScene]);
 
   useEffect(() => {
     setSelectedPlanetKey(null);
@@ -85,7 +112,7 @@ export default function WorldPage({ params }: PageProps) {
   async function regenerateVariant() {
     setAction("variant");
     try {
-      const variant = await api.regenerateVariant(params.worldId);
+      const variant = await api.regenerateVariant(worldId, family);
       await loadWorld();
       setActiveVariantId(variant.id);
       toast.success("Variant created.");
@@ -100,7 +127,7 @@ export default function WorldPage({ params }: PageProps) {
     setAction("select");
     setActiveVariantId(variant.id);
     try {
-      await api.selectVariant(params.worldId, variant.id);
+      await api.selectVariant(worldId, variant.id, family);
       await loadWorld();
       toast.success("Variant selected.");
     } catch (err) {
@@ -113,7 +140,7 @@ export default function WorldPage({ params }: PageProps) {
   async function publishWorld() {
     setAction("publish");
     try {
-      await api.publishWorld(params.worldId);
+      await api.publishWorld(worldId, family);
       // Publish returns only the share slug, not a full world. Re-fetch so the
       // world keeps its variants/planets (otherwise the canvas falls back to the
       // abstract renderer) and picks up the new shareSlug.
@@ -142,7 +169,7 @@ export default function WorldPage({ params }: PageProps) {
     }
     setAction("copy");
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/share/worlds/${world.shareSlug}`);
+      await navigator.clipboard.writeText(`${window.location.origin}${sharePagePath(world.shareSlug, family)}`);
       toast.success("Share link copied.");
     } catch {
       toast("Share link ready.");
@@ -168,7 +195,11 @@ export default function WorldPage({ params }: PageProps) {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden">
+    <main
+      className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
+        isForestScene(activeScene) ? "forest-chrome" : ""
+      }`}
+    >
       {/* Full-bleed solar system: an in-flow hero on mobile, the command-deck
           background on desktop (bleeds behind the glass header). The ref wraps
           the canvas so Export captures it. */}
@@ -195,7 +226,7 @@ export default function WorldPage({ params }: PageProps) {
               ) : null}
               <RareFeatureBadge scene={activeScene} />
               <h1 className="font-display text-2xl font-semibold tracking-normal text-paper">
-                {activeScene.sceneName || world.title || "Untitled universe"}
+                {activeScene.sceneName || world.title || (isForestScene(activeScene) ? "Untitled forest" : "Untitled universe")}
               </h1>
               {world.nickname ? (
                 <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-grey">
@@ -234,7 +265,7 @@ export default function WorldPage({ params }: PageProps) {
               <div className="glass-panel rounded-2xl p-4">
                 <h2 className="mb-3 font-display text-base font-semibold text-on-surface">Share</h2>
                 <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-white/10 bg-surface-low p-2">
-                  <span className="truncate text-sm text-on-surface-variant">/share/worlds/{world.shareSlug}</span>
+                  <span className="truncate text-sm text-on-surface-variant">{sharePagePath(world.shareSlug, family)}</span>
                   <button
                     type="button"
                     title="Copy link"
@@ -245,7 +276,7 @@ export default function WorldPage({ params }: PageProps) {
                     {action === "copy" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
                   </button>
                   <Link
-                    href={`/share/worlds/${world.shareSlug}`}
+                    href={sharePagePath(world.shareSlug, family)}
                     title="Open share page"
                     aria-label="Open share page"
                     className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface"

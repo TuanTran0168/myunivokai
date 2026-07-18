@@ -1,7 +1,30 @@
-import type { ApiErrorPayload, CreateWorldInput, PublishResult, ShareWorld, World, WorldVariant } from "./types";
+import type {
+  ApiErrorPayload,
+  CreateWorldInput,
+  PublishResult,
+  ShareWorld,
+  World,
+  WorldFamily,
+  WorldVariant
+} from "./types";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
+const DEFAULT_NATURE_API_BASE_URL = "http://localhost:8081/api/v1";
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
+const NATURE_API_BASE_URL = (process.env.NEXT_PUBLIC_NATURE_API_BASE_URL ?? DEFAULT_NATURE_API_BASE_URL).replace(
+  /\/$/,
+  ""
+);
+
+// Every world service exposes the same /api/v1 route shapes; the family only
+// picks which base URL a request goes to. Until an API gateway exists this
+// map IS the frontend's routing table.
+const API_BASE_URLS_BY_FAMILY: Record<WorldFamily, string> = {
+  universe: API_BASE_URL,
+  nature: NATURE_API_BASE_URL
+};
+
+export const DEFAULT_WORLD_FAMILY: WorldFamily = "universe";
 
 /**
  * The backend's origin (scheme + host) derived from the configured API base —
@@ -51,12 +74,12 @@ function rateLimitRetryDelayMilliseconds(response: Response): number {
   return DEFAULT_RATE_LIMIT_RETRY_MILLISECONDS;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(family: WorldFamily, path: string, init?: RequestInit): Promise<T> {
   const isIdempotentGet = !init?.method || init.method.toUpperCase() === "GET";
   let rateLimitRetriesLeft = isIdempotentGet ? MAXIMUM_GET_RETRIES_ON_RATE_LIMIT : 0;
 
   for (;;) {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${API_BASE_URLS_BY_FAMILY[family]}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -152,55 +175,70 @@ function normalizeShare(raw: any): ShareWorld {
   };
 }
 
+// Every function takes the world family last (defaulting to universe) so
+// existing universe call sites stay unchanged while forest pages route to
+// nature-service with the same request shapes.
 export const api = {
-  async createWorld(input: CreateWorldInput): Promise<World> {
+  async createWorld(input: CreateWorldInput, family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<World> {
     return normalizeWorld(
-      await request<unknown>("/worlds", {
+      await request<unknown>(family, "/worlds", {
         method: "POST",
         body: JSON.stringify(input)
       })
     );
   },
 
-  async getWorld(worldId: string): Promise<World> {
-    return normalizeWorld(await request<unknown>(`/worlds/${worldId}`));
+  async getWorld(worldId: string, family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<World> {
+    return normalizeWorld(await request<unknown>(family, `/worlds/${worldId}`));
   },
 
   // Batch read: one request for the whole gallery instead of one per world.
   // Each returned entry has the same shape as GET /worlds/{id}; ids the
   // backend does not know are simply absent from the result.
-  async getWorldsByIds(worldIds: string[]): Promise<World[]> {
+  async getWorldsByIds(worldIds: string[], family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<World[]> {
     if (worldIds.length === 0) {
       return [];
     }
     const payload = await request<{ worlds?: unknown[] }>(
+      family,
       `/worlds?ids=${worldIds.map(encodeURIComponent).join(",")}`
     );
     const rawWorlds = Array.isArray(payload.worlds) ? payload.worlds : [];
     return rawWorlds.map(normalizeWorld).filter((world) => world.id);
   },
 
-  async regenerateVariant(worldId: string): Promise<WorldVariant> {
-    const payload: any = await request<unknown>(`/worlds/${worldId}/variants`, { method: "POST", body: "{}" });
+  async regenerateVariant(worldId: string, family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<WorldVariant> {
+    const payload: any = await request<unknown>(family, `/worlds/${worldId}/variants`, {
+      method: "POST",
+      body: "{}"
+    });
     return normalizeVariant(payload.variant ?? payload.data ?? payload);
   },
 
-  async selectVariant(worldId: string, variantId: string): Promise<World> {
+  async selectVariant(
+    worldId: string,
+    variantId: string,
+    family: WorldFamily = DEFAULT_WORLD_FAMILY
+  ): Promise<World> {
     return normalizeWorld(
-      await request<unknown>(`/worlds/${worldId}/variants/${variantId}/select`, { method: "POST", body: "{}" })
+      await request<unknown>(family, `/worlds/${worldId}/variants/${variantId}/select`, {
+        method: "POST",
+        body: "{}"
+      })
     );
   },
 
-  async publishWorld(worldId: string): Promise<PublishResult> {
+  async publishWorld(worldId: string, family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<PublishResult> {
     const payload = await request<{ shareSlug?: string; shareUrl?: string; share_slug?: string }>(
+      family,
       `/worlds/${worldId}/publish`,
       { method: "POST", body: "{}" }
     );
     return { shareSlug: payload.shareSlug ?? payload.share_slug ?? "", shareUrl: payload.shareUrl ?? "" };
   },
 
-  async getShareWorld(shareSlug: string): Promise<ShareWorld> {
-    return normalizeShare(await request<unknown>(`/share/worlds/${shareSlug}`));
+  async getShareWorld(shareSlug: string, family: WorldFamily = DEFAULT_WORLD_FAMILY): Promise<ShareWorld> {
+    return normalizeShare(await request<unknown>(family, `/share/worlds/${shareSlug}`));
   }
 };
 
@@ -227,7 +265,7 @@ export function apiErrorMessage(error: unknown): string {
   }
   if (error instanceof Error) {
     if (error.message === "Failed to fetch" || error.message.toLowerCase().includes("fetch failed")) {
-      return `Backend is not reachable at ${API_BASE_URL}. Start the API, then try Generate again.`;
+      return `Backend is not reachable (universe: ${API_BASE_URL}, nature: ${NATURE_API_BASE_URL}). Start the API, then try Generate again.`;
     }
     return error.message;
   }
