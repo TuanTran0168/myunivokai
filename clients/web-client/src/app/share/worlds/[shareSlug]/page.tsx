@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ShareWorldView } from "./ShareWorldView";
+import { apiBaseUrlForFamily } from "@/lib/gateway";
 
 type PageProps = {
   params: {
@@ -7,7 +8,7 @@ type PageProps = {
   };
 };
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
+const UNIVERSE_API_BASE_URL = apiBaseUrlForFamily("universe");
 
 // Social crawlers read metadata server-side; cache it so a popular share link
 // does not hammer the API, and bail out fast when the API is cold so the page
@@ -31,7 +32,7 @@ type ShareWorldMetadataPayload = {
 
 async function fetchShareWorldForMetadata(shareSlug: string): Promise<ShareWorldMetadataPayload | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/share/worlds/${encodeURIComponent(shareSlug)}`, {
+    const response = await fetch(`${UNIVERSE_API_BASE_URL}/share/worlds/${encodeURIComponent(shareSlug)}`, {
       next: { revalidate: METADATA_REVALIDATE_SECONDS },
       signal: AbortSignal.timeout(METADATA_FETCH_TIMEOUT_MILLISECONDS)
     });

@@ -1,100 +1,72 @@
-# Đề xuất — FE chỉ cần biết 1 URL gateway duy nhất
+# FE chỉ biết một URL gateway
 
-Status: **PROPOSED, chưa code.** Ghi lại vì đây là câu hỏi hợp lý owner đặt ra
-khi đọc [../ops/render-deployment.md](../ops/render-deployment.md) (2026-07-18):
-*"Sao lại 2 biến `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_NATURE_API_BASE_URL`?
-Tôi tưởng chỉ cần 1 URL vào gateway, gateway tự forward đi tới services chứ?"*
-Câu hỏi đúng về mặt kiến trúc gateway — chỉ là FE hiện tại chưa tận dụng nó.
+Status: **IMPLEMENTED** on `feat/repo/render-gateway-deployment` (2026-07-18).
 
-## Hiện trạng — vì sao đang là 2 biến
+## Contract
 
-Gateway **đúng là** chỉ cần 1 origin: nó tự route theo path prefix
-(`/api/universe/*` → universe-service, `/api/nature/*` → nature-service — xem
-[api-gateway.md](api-gateway.md)). Nhưng FE **chưa** tự tính prefix theo
-`family` trong code — nó nối chuỗi thẳng từ biến môi trường:
-
-```ts
-// clients/web-client/src/lib/api.ts (hiện tại)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
-const NATURE_API_BASE_URL = process.env.NEXT_PUBLIC_NATURE_API_BASE_URL ?? DEFAULT_NATURE_API_BASE_URL;
-
-const API_BASE_URLS_BY_FAMILY: Record<WorldFamily, string> = {
-  universe: API_BASE_URL,
-  nature: NATURE_API_BASE_URL
-};
-
-// request() chỉ nối chuỗi, không tự suy prefix từ family:
-fetch(`${API_BASE_URLS_BY_FAMILY[family]}${path}`, ...)
-```
-
-**Lý do lịch sử:** trước khi có gateway, universe-service và nature-service là
-**2 host thật khác nhau** (`myunivokai.onrender.com` vs
-`myunivokai-nature.onrender.com`) — lúc đó bắt buộc 2 biến. Khi gateway ra đời
-(PR #68), cách làm là **giữ nguyên code FE**, chỉ đổi **giá trị** 2 biến để cả
-hai cùng trỏ một gateway host, khác suffix:
+The browser receives exactly one API location:
 
 ```txt
-NEXT_PUBLIC_API_BASE_URL        = https://<gateway>/api/universe
-NEXT_PUBLIC_NATURE_API_BASE_URL = https://<gateway>/api/nature
-```
-
-Zero thay đổi code, đổi hạ tầng xong chỉ sửa Vercel env — hợp lý cho lúc đó
-(gateway là thay đổi rủi ro, muốn tách biệt khỏi thay đổi FE). Nhưng hệ quả:
-2 biến giờ **luôn phải cùng 1 host** — không còn lý do kiến trúc để tách, chỉ
-còn là chỗ có thể gõ nhầm (lệch host giữa 2 biến mà không ai biết cho tới khi
-gọi API sai).
-
-## Đề xuất — 1 biến gateway, FE tự nối prefix
-
-```ts
-// clients/web-client/src/lib/api.ts (đề xuất)
-const GATEWAY_BASE_URL = (process.env.NEXT_PUBLIC_GATEWAY_BASE_URL ?? DEFAULT_GATEWAY_BASE_URL).replace(/\/$/, "");
-
-const API_PATH_PREFIX_BY_FAMILY: Record<WorldFamily, string> = {
-  universe: "/api/universe",
-  nature: "/api/nature"
-};
-
-const API_BASE_URLS_BY_FAMILY: Record<WorldFamily, string> = {
-  universe: `${GATEWAY_BASE_URL}${API_PATH_PREFIX_BY_FAMILY.universe}`,
-  nature: `${GATEWAY_BASE_URL}${API_PATH_PREFIX_BY_FAMILY.nature}`
-};
-```
-
-```txt
-# .env — chỉ còn 1 biến
 NEXT_PUBLIC_GATEWAY_BASE_URL=https://<gateway-host>
 ```
 
-FE giờ **chỉ cần biết gateway ở đâu**; việc "family nào đi prefix nào" là
-hằng số trong code (giống hệt cách gateway tự biết prefix nào forward đi
-đâu) — đúng tinh thần "1 URL, gateway/registry lo phần còn lại".
+This value is an origin only: no credentials, path, query, or fragment. The
+frontend fails its build for an explicitly malformed value instead of shipping
+an unusable API client.
 
-## Việc cần làm nếu triển khai (chỉ liệt kê — chưa làm)
+`clients/web-client/src/lib/gateway.ts` owns the public family prefixes:
 
-| File | Thay đổi |
-| --- | --- |
-| `clients/web-client/src/lib/api.ts` | Gộp `API_BASE_URL`/`NATURE_API_BASE_URL` thành `GATEWAY_BASE_URL` + `API_PATH_PREFIX_BY_FAMILY`; `backendOriginUrl()` đổi nguồn đọc |
-| `clients/web-client/.env.example` | 1 biến `NEXT_PUBLIC_GATEWAY_BASE_URL` thay 2 biến cũ |
-| `clients/web-client/.env.render` | Cập nhật ghi chú + giá trị production |
-| `clients/web-client/docker-compose-local.yml` + root `docker-compose-local.yml` | Build arg đổi tên biến |
-| `notes/ops/render-deployment.md` | Bảng Vercel env chỉ còn 1 dòng |
-| `notes/vision/deployment.md` | Câu "cả 2 biến mang prefix đầy đủ" sửa lại |
-| FE test liên quan `api.ts` (nếu có) | Cập nhật theo tên biến mới |
+```txt
+universe -> <gateway-origin>/api/universe
+nature   -> <gateway-origin>/api/nature
+```
 
-## Trade-off — vì sao chưa làm ngay
+The gateway remains the only component that knows `UNIVERSE_SERVICE_URL` and
+`NATURE_SERVICE_URL`. It rewrites those public prefixes to the peers' common
+`/api/v1/*` contract. The frontend never stores or calls a peer-service host.
 
-- **Được:** ít 1 biến cấu hình, không còn nguy cơ 2 biến lệch host nhau, code
-  FE phản ánh đúng thực tế "1 gateway, N family".
-- **Mất:** nếu tương lai một family cần đi thẳng một host khác gateway (hiếm,
-  nhưng ví dụ: rollback tạm thời gọi thẳng nature-service bỏ qua gateway để
-  debug), phải thêm lại override — dễ, nhưng không "free" như bây giờ (2 biến
-  độc lập cho phép override từng cái ngay, không cần đổi code).
-- Đây là **refactor code thật** (không phải docs), cần nhánh `feat/fe/...`
-  riêng, chạy lại 4 gate FE, và test cả 2 họ scene (universe + forest) trỏ
-  đúng gateway sau khi đổi biến.
+## Source integration
 
-## Quyết định
+The same helper is used by:
 
-Chưa quyết. Ghi lại để owner duyệt khi thấy đáng làm; không chặn việc gì khác
-— 2 biến hiện tại **vẫn đúng và chạy tốt**, đây thuần là dọn nợ kỹ thuật nhỏ.
+- the family-aware browser API client in `src/lib/api.ts`;
+- server-side metadata fetches for both share routes;
+- the header's gateway route-index link;
+- local Docker builds and the Render web-client build.
+
+`gateway.test.ts` verifies URL validation and both family routes. Adding a
+third family requires one new prefix in the helper and one matching gateway
+route; it does not require another frontend environment variable.
+
+## Deployment and local development
+
+`render.yaml` declares the Next.js client as `myunivokai-web`, a Docker web
+service alongside the gateway and two peer APIs. During Blueprint creation,
+set `NEXT_PUBLIC_GATEWAY_BASE_URL` to the gateway's public HTTPS origin. Render
+passes service environment variables to Docker as build arguments, which is
+required because `NEXT_PUBLIC_*` values are compiled into the Next.js bundle.
+The production Docker build fails when this argument is missing, preventing a
+Render image from silently embedding the localhost development fallback.
+
+The root `docker-compose-local.yml` uses the same contract:
+
+```txt
+NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082
+```
+
+All browser business traffic therefore exercises Gateway CORS, rate limiting,
+request verification, routing, and the upstream shared-secret boundary in both
+local and deployed environments.
+
+## Historical reason for the change
+
+Before the gateway, Universe and Nature had distinct public hosts, so the
+frontend needed `NEXT_PUBLIC_API_BASE_URL` and
+`NEXT_PUBLIC_NATURE_API_BASE_URL`. The first gateway rollout preserved those
+two variables and pointed both at one host with different suffixes. Once the
+gateway became the required public edge, keeping two independently editable
+host values created configuration drift without providing a useful boundary.
+
+The old variables are removed rather than retained as fallbacks. A fallback
+would allow a deployment to bypass the gateway silently, which would also
+bypass its CORS, rate-limit, and request-verification policies.

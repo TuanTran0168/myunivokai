@@ -20,6 +20,21 @@ uses a family prefix and rewrites only the path:
 The gateway never parses domain JSON and never chooses DNA, seeds, scene
 values, variants, or storage. Query strings and response bodies pass through.
 
+The frontend is configured with one `NEXT_PUBLIC_GATEWAY_BASE_URL` origin and
+derives both family prefixes in `clients/web-client/src/lib/gateway.ts`. Only
+the gateway receives `UNIVERSE_SERVICE_URL` and `NATURE_SERVICE_URL`; direct
+peer URLs are not frontend configuration.
+
+## Technology choice
+
+The implementation uses Go's production-standard `net/http/httputil.ReverseProxy`
+with its `ProxyRequest.Rewrite` API, chi routing/CORS, and
+`golang.org/x/time/rate`. Cache, timeout, circuit-breaker, and shared-secret
+policies stay in the existing Go process. Introducing Kong, Traefik, or Envoy
+would add another deployable control plane while duplicating policies already
+implemented and tested here, so this rollout keeps the current widely used Go
+libraries instead of adding a second gateway layer.
+
 ## Middleware and request verification
 
 Global order in `internal/handlers/router.go`:
@@ -118,7 +133,9 @@ count against the circuit.
 
 The concrete env surface is documented in
 `services/api-gateway/.env.example`; the Render rollout and smoke checklist are
-in [deployment.md](deployment.md).
+in [../ops/render-deployment.md](../ops/render-deployment.md). The root
+Blueprint deploys the Next.js web client, this gateway, and both peer services
+as four Docker web services.
 
 ## Source map
 

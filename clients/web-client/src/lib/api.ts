@@ -7,41 +7,16 @@ import type {
   WorldFamily,
   WorldVariant
 } from "./types";
+import { apiBaseUrlForFamily, gatewayOriginUrl } from "./gateway";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
-const DEFAULT_NATURE_API_BASE_URL = "http://localhost:8081/api/v1";
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
-const NATURE_API_BASE_URL = (process.env.NEXT_PUBLIC_NATURE_API_BASE_URL ?? DEFAULT_NATURE_API_BASE_URL).replace(
-  /\/$/,
-  ""
-);
-
-// Every world service exposes the same /api/v1 route shapes; the family only
-// picks which base URL a request goes to. Until an API gateway exists this
-// map IS the frontend's routing table.
+// The browser knows one gateway origin. Family prefixes select the public
+// gateway route; only the gateway knows the peer-service hostnames.
 const API_BASE_URLS_BY_FAMILY: Record<WorldFamily, string> = {
-  universe: API_BASE_URL,
-  nature: NATURE_API_BASE_URL
+  universe: apiBaseUrlForFamily("universe"),
+  nature: apiBaseUrlForFamily("nature")
 };
 
 export const DEFAULT_WORLD_FAMILY: WorldFamily = "universe";
-
-/**
- * The backend's origin (scheme + host) derived from the configured API base —
- * https://myunivokai.onrender.com in production, http://localhost:8080 in dev.
- * Used for links to the backend's own pages (landing page, Swagger), so no
- * URL is ever hardcoded in the UI. A malformed env value falls back to the
- * default instead of throwing inside the root layout (which would take down
- * every page at build time).
- */
-export function backendOriginUrl(): string {
-  try {
-    return new URL(API_BASE_URL).origin;
-  } catch {
-    return new URL(DEFAULT_API_BASE_URL).origin;
-  }
-}
-
 export class ApiError extends Error {
   code: string;
   details: unknown[];
@@ -265,7 +240,7 @@ export function apiErrorMessage(error: unknown): string {
   }
   if (error instanceof Error) {
     if (error.message === "Failed to fetch" || error.message.toLowerCase().includes("fetch failed")) {
-      return `Backend is not reachable (universe: ${API_BASE_URL}, nature: ${NATURE_API_BASE_URL}). Start the API, then try Generate again.`;
+      return `API Gateway is not reachable (${gatewayOriginUrl()}). Start the local stack, then try Generate again.`;
     }
     return error.message;
   }

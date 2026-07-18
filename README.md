@@ -18,7 +18,8 @@ call.
 
 | Component | Location |
 | --- | --- |
-| Web client (Vercel) | <https://myunivokai.vercel.app> |
+| Existing web client | <https://myunivokai.vercel.app> |
+| Render web client | Declared as `myunivokai-web` in `render.yaml`; URL is assigned on deploy |
 | Existing universe API | <https://myunivokai.onrender.com> |
 | Existing universe liveness | <https://myunivokai.onrender.com/api/v1/healthz> |
 | API Gateway | Declared as `myunivokai-gateway` in `render.yaml`; URL is assigned on deploy |
@@ -54,10 +55,10 @@ GET  /api/nature/share/worlds/{slug}
 ```
 
 The frontend ships a **Universe/Forest family picker** and renders both scene
-families from one source (`WorldFamily`). It moves from the direct APIs to the
-gateway without source changes by setting
-`NEXT_PUBLIC_API_BASE_URL=https://<gateway-host>/api/universe` and
-`NEXT_PUBLIC_NATURE_API_BASE_URL=https://<gateway-host>/api/nature`.
+families from one source (`WorldFamily`). It receives only
+`NEXT_PUBLIC_GATEWAY_BASE_URL=https://<gateway-host>`; its gateway helper adds
+the family prefix. The peer-service hosts are never exposed to frontend
+configuration.
 
 ## Security boundary
 
@@ -95,8 +96,7 @@ the repository still has no auth-service or user identity contract.
 
 | Layer | Platform |
 | --- | --- |
-| Web client | Vercel |
-| Gateway + two APIs | Render Docker services from `render.yaml` |
+| Web client + gateway + two APIs | Render Docker services from `render.yaml` |
 | Two logical databases | Neon PostgreSQL; pooled runtime URLs and direct migration URLs |
 | CI | GitHub Actions for all three Go modules plus frontend checks |
 
@@ -137,11 +137,12 @@ Docker command do not require Make.
 | Universe Swagger | <http://localhost:8080/swagger/index.html> |
 | Nature Swagger | <http://localhost:8081/swagger/index.html> |
 
-The full stack builds the current universe frontend with
-`NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/api/universe`. It also gives the
-gateway and both upstreams the same development-only gateway key, so browser
-business requests follow the real gateway boundary. PostgreSQL data remains in
-named Docker volumes after stopping the stack.
+The full stack builds the web client with the single
+`NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082` origin. The client derives
+both `/api/universe` and `/api/nature`; it has no direct peer URL. The stack also
+gives the gateway and both upstreams the same development-only gateway key, so
+browser business requests follow the real gateway boundary. PostgreSQL data
+remains in named Docker volumes after stopping the stack.
 
 Stop and remove the stack containers and network without deleting database
 volumes:
@@ -227,28 +228,31 @@ Backend tests use mock AI providers and never call a real AI API.
 ## Production deployment
 
 **Full step-by-step runbook: [notes/ops/render-deployment.md](notes/ops/render-deployment.md)**
-(Neon two-database setup, Blueprint sync, every env value, rollout smoke tests,
-Vercel). Summary below.
+(Neon two-database setup, four-service Blueprint sync, every env value, and
+rollout smoke tests). Summary below.
 
-`render.yaml` manages `myunivokai-gateway`, `myunivokai-api`, and
-`myunivokai-nature`. Before syncing an existing Blueprint, set the gateway's
-`API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL`, and `NATURE_SERVICE_URL` in the
-Render dashboard; new `sync: false` keys are not populated automatically on an
-existing Blueprint. Upstream URLs must be their public HTTPS Render URLs.
+`render.yaml` manages `myunivokai-web`, `myunivokai-gateway`,
+`myunivokai-api`, and `myunivokai-nature`. During initial Blueprint creation,
+Render prompts for every `sync: false` value. Before syncing an existing
+Blueprint, add the new web client's `NEXT_PUBLIC_GATEWAY_BASE_URL` and the
+gateway's `API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL`, and
+`NATURE_SERVICE_URL` in the dashboard. Upstream URLs must be their public HTTPS
+Render URLs on the free plan.
 
 The shared environment group provides `GATEWAY_SHARED_SECRET` to all three.
 Both world services fail production startup if that value is missing or shorter
 than 32 characters. Their database URLs remain separate, and their entrypoints
 run migrations against each service's direct Neon URL before API startup.
 
-After the gateway is healthy:
+After all four services are configured:
 
-1. verify `/api/v1/healthz` and `/api/v1/statusz`;
-2. create and read one universe world through `/api/universe`;
-3. create and read one nature world through `/api/nature`;
-4. confirm direct upstream business routes return 401 without the gateway key;
-5. set Vercel `NEXT_PUBLIC_API_BASE_URL` to the gateway's `/api/universe`
-   prefix and redeploy without build cache.
+1. set the web client's `NEXT_PUBLIC_GATEWAY_BASE_URL` to the gateway origin
+   and set gateway CORS to the web-client origin;
+2. verify gateway `/api/v1/healthz` and `/api/v1/statusz`;
+3. create and read one universe world through `/api/universe`;
+4. create and read one nature world through `/api/nature`;
+5. confirm direct upstream business routes return 401 without the gateway key;
+6. verify both families from the deployed web client.
 
 ## Documentation
 
@@ -257,6 +261,7 @@ After the gateway is healthy:
 - `notes/fe/source-overview.md`: frontend source, the Universe/Forest family picker;
 - `notes/fe/forest-render-mechanism.md`: how the forest scene is drawn + the asset/Sketchfab constraint;
 - `notes/vision/api-gateway.md`: implemented gateway design and operations;
+- `notes/vision/frontend-gateway-consolidation.md`: the one-gateway-origin frontend contract;
 - `notes/ops/render-deployment.md`: step-by-step Render deploy runbook;
 - `notes/vision/deployment.md`: deployment architecture/rationale;
 - `notes/vision/nature-service-plan.md`: nature-service roadmap and decision log;

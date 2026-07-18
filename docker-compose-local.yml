@@ -99,7 +99,7 @@ services:
     environment:
       APP_ENV: development
       APP_NAME: Myunivokai Nature
-      PUBLIC_WEB_URL: "http://localhost:${WEB_CLIENT_PORT:-3000}"
+      PUBLIC_WEB_URL: "http://localhost:${WEB_CLIENT_PORT:-3000}/nature"
       PUBLIC_API_URL: "http://localhost:${NATURE_API_PORT:-8081}"
       API_HOST: 0.0.0.0
       API_PORT: 8081
@@ -153,9 +153,9 @@ services:
     build:
       context: ./clients/web-client
       args:
-        NEXT_PUBLIC_API_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}/api/universe"
+        NEXT_PUBLIC_GATEWAY_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}/api/universe"
+      NEXT_PUBLIC_GATEWAY_BASE_URL: "http://localhost:${API_GATEWAY_PORT:-8082}"
     ports:
       - "${WEB_CLIENT_PORT:-3000}:3000"
     depends_on:

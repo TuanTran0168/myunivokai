@@ -2,16 +2,19 @@
 
 > **Step-by-step operator runbook:**
 > [../ops/render-deployment.md](../ops/render-deployment.md) (the "how" — Neon
-> setup, Blueprint sync, every env value, rollout smoke tests, Vercel). **This**
+> setup, four-service Blueprint sync, every env value, rollout smoke tests).
+> **This**
 > document is the architecture/rationale companion (the "why").
 
 Status: `render.yaml` describes the architecture currently present in source.
-The web client remains on Vercel and the databases remain on Neon.
+The web client and all three Go processes deploy on Render; the two databases
+remain separate logical databases on Neon.
 
 ## Service fleet
 
 | Render service | Root | Public responsibility |
 | --- | --- | --- |
+| `myunivokai-web` | `clients/web-client` | Next.js UI; configured with one gateway origin |
 | `myunivokai-gateway` | `services/api-gateway` | The only browser-facing API origin |
 | `myunivokai-api` | `services/universe-service` | Universe domain; direct business routes require gateway key |
 | `myunivokai-nature` | `services/nature-service` | Nature domain; direct business routes require gateway key |
@@ -36,7 +39,7 @@ services. Never create three independent secret values.
 
 The full env-var tables (per service), the Neon two-logical-database setup, the
 first-time Blueprint sync, the existing-Blueprint `sync: false` gotcha, the
-ordered rollout with smoke tests, and the Vercel step all live in the runbook:
+ordered rollout with smoke tests, and the web-client rebuild step all live in the runbook:
 [../ops/render-deployment.md](../ops/render-deployment.md). Two facts worth
 keeping here because they shape the architecture:
 
@@ -46,9 +49,12 @@ keeping here because they shape the architecture:
   `sync: false` variables — they must be entered in the dashboard before syncing.
   The generated secret environment group is managed by the Blueprint.
 
-The frontend now ships a Universe/Forest picker, so it uses **both** the
-`/api/universe` and `/api/nature` gateway prefixes (via `NEXT_PUBLIC_API_BASE_URL`
-and `NEXT_PUBLIC_NATURE_API_BASE_URL`).
+The frontend ships a Universe/Forest picker and receives one
+`NEXT_PUBLIC_GATEWAY_BASE_URL`. `src/lib/gateway.ts` appends `/api/universe` or
+`/api/nature` from `WorldFamily`, so no direct-service URL or second family URL
+is a deployment variable. The Next.js client uses a standalone, non-root Docker
+runtime because its server-rendered share metadata prevents treating it as a
+plain static export.
 
 ## Health and observability
 
@@ -63,8 +69,9 @@ and `NEXT_PUBLIC_NATURE_API_BASE_URL`).
 
 ## Free-tier behavior
 
-Each service can sleep independently. A cold gateway request can wake the
-gateway and then an upstream, so first-request latency can be material. The
+Each of the four services can sleep independently. A cold browser visit can
+wake the web client, then a request can wake the gateway and one upstream, so
+first-request latency can be material. The
 120-second create timeout is aligned with the existing AI generation budget;
 short reads and shares use lower timeouts. Circuit breaking prevents a dead
 upstream from consuming connection slots indefinitely, but it does not hide a
