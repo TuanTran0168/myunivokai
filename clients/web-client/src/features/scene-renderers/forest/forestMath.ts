@@ -23,6 +23,16 @@ const FULL_CIRCLE_RADIANS = Math.PI * 2;
 const CLEARING_FLATTEN_INNER_FRACTION = 0.65;
 const CLEARING_FLATTEN_OUTER_FRACTION = 1.45;
 
+// Distant terrain: beyond the treeline the ground swells into forested hills
+// that rise toward the horizon, so a zoomed-out view meets a ridgeline
+// silhouette instead of the flat edge of a finite slab. Multiples of the
+// treeline radius.
+const DISTANT_RISE_INNER_FRACTION = 0.85;
+const DISTANT_RISE_OUTER_FRACTION = 2.6;
+const DISTANT_HILL_BASE_RISE = 7.0;
+const DISTANT_HILL_UNDULATION = 9.0;
+const DISTANT_HILL_FREQUENCY = 0.05;
+
 // Path ribbon shape: a gently S-curving dirt line from the clearing to the
 // treeline.
 const PATH_CURVE_PHASE_RANGE_RADIANS = FULL_CIRCLE_RADIANS;
@@ -69,6 +79,7 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
   const hillAmplitude = terrain?.hillAmplitude ?? DEFAULT_HILL_AMPLITUDE;
   const hillFrequency = terrain?.hillFrequency ?? DEFAULT_HILL_FREQUENCY;
   const clearingRadius = clearingRadiusFromTerrain(terrain);
+  const treelineRadius = treelineRadiusFromTerrain(terrain);
   const angularFrequency = hillFrequency * FULL_CIRCLE_RADIANS;
 
   return (x: number, z: number) => {
@@ -81,7 +92,25 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
     const crossedBands =
       Math.sin(x * angularFrequency + phaseA) * Math.cos(z * angularFrequency * 1.7 + phaseB) * 0.65;
     const diagonalSwell = Math.sin((x + z) * angularFrequency * 0.5 + phaseC) * 0.35;
-    return hillAmplitude * (crossedBands + diagonalSwell) * clearingFlattenFactor;
+    const nearHills = hillAmplitude * (crossedBands + diagonalSwell) * clearingFlattenFactor;
+
+    // Distant forested hills: ramp up past the treeline so the far horizon is
+    // a rolling ridgeline, not the cut edge of a flat slab.
+    const distantRise = smoothstepValue(
+      treelineRadius * DISTANT_RISE_INNER_FRACTION,
+      treelineRadius * DISTANT_RISE_OUTER_FRACTION,
+      radiusFromCenter
+    );
+    if (distantRise <= 0) {
+      return nearHills;
+    }
+    const distantAngularFrequency = DISTANT_HILL_FREQUENCY;
+    const distantUndulation =
+      (Math.sin(x * distantAngularFrequency + phaseB * 1.7) * Math.cos(z * distantAngularFrequency * 1.3 + phaseC) * 0.5 +
+        0.5) *
+      DISTANT_HILL_UNDULATION;
+    const distantHills = (DISTANT_HILL_BASE_RISE + distantUndulation) * Math.pow(distantRise, 1.4);
+    return nearHills + distantHills;
   };
 }
 

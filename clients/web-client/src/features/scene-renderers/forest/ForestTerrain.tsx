@@ -24,10 +24,22 @@ import {
   type StaticInstanceTransform
 } from "./forestModels";
 
-const GROUND_SEGMENTS_PER_SIDE = 128;
-// The ground extends past the treeline so the horizon never shows a raw mesh
-// edge; fog and the sky dome hide the rim.
-const GROUND_RADIUS_BEYOND_TREELINE_MULTIPLIER = 1.6;
+const GROUND_SEGMENTS_PER_SIDE = 160;
+// The ground reaches far past the treeline so a zoomed-out view never sees the
+// slab edge; the far band rises into forested hills (height sampler) and the
+// colour fades to the horizon/fog colour at the rim, so the finite square
+// dissolves into the sky instead of showing corners.
+const GROUND_RADIUS_BEYOND_TREELINE_MULTIPLIER = 3.2;
+
+// Distant colour bands (fractions of the treeline radius): mid-far ground
+// takes on a forested-canopy green so the rising hills read as tree-covered;
+// the outer rim fades to the horizon colour.
+const DISTANT_CANOPY_INNER_FRACTION = 0.9;
+const DISTANT_CANOPY_OUTER_FRACTION = 1.7;
+const DISTANT_CANOPY_STRENGTH = 0.85;
+const RIM_FADE_INNER_FRACTION = 2.0;
+const RIM_FADE_OUTER_FRACTION_OF_GROUND = 0.97;
+const DISTANT_CANOPY_DARKEN = 0.72;
 
 const GROUND_COLOR_NOISE_SEED_SUFFIX = "-ground-noise";
 const ROCK_SCATTER_SEED_SUFFIX = "-rocks";
@@ -56,6 +68,8 @@ type ForestTerrainProps = {
   season?: ForestSeasonConfig;
   /** Wind (under trees in the config) also ripples the grass layer. */
   trees?: ForestTreesConfig;
+  /** Sky/fog colour the far ground rim fades into so the slab edge vanishes. */
+  horizonColor?: string;
   terrainHeightSampler: TerrainHeightSampler;
   pathLateralDistanceSampler: PathLateralDistanceSampler;
 };
@@ -73,7 +87,14 @@ function isMobileViewport(): boolean {
  * flattened clearing, seeded dirt path), plus instanced rocks and grass
  * tufts scattered from the terrain placement seed.
  */
-export function ForestTerrain({ terrain, season, trees, terrainHeightSampler, pathLateralDistanceSampler }: ForestTerrainProps) {
+export function ForestTerrain({
+  terrain,
+  season,
+  trees,
+  horizonColor,
+  terrainHeightSampler,
+  pathLateralDistanceSampler
+}: ForestTerrainProps) {
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const placementSeed = terrain?.placementSeed ?? "forest-terrain";
@@ -87,6 +108,13 @@ export function ForestTerrain({ terrain, season, trees, terrainHeightSampler, pa
     const nextRandomValue = randomFromSeed(placementSeed + GROUND_COLOR_NOISE_SEED_SUFFIX);
     const baseGroundColor = blendedGroundColor(season);
     const pathColor = new Color(DIRT_PATH_COLOR);
+    // Distant hills read as tree-covered: a darkened forest-canopy green from
+    // the season palette (stays pale in winter, so snowy hills stay snowy).
+    const foliageColors = blendedFoliageColors(season);
+    const distantCanopyColor = (foliageColors[0] ?? baseGroundColor).clone().multiplyScalar(DISTANT_CANOPY_DARKEN);
+    // The rim melts into the sky: fall back to the ground colour if no horizon
+    // colour was supplied.
+    const rimColor = horizonColor ? new Color(horizonColor) : baseGroundColor.clone();
 
     const positionAttribute = geometry.getAttribute("position");
     const vertexColors = new Float32Array(positionAttribute.count * 3);
@@ -109,6 +137,19 @@ export function ForestTerrain({ terrain, season, trees, terrainHeightSampler, pa
       const pathLateralDistance = pathLateralDistanceSampler(x, z);
       const pathBlend = 1 - smoothstepValue(PATH_HALF_WIDTH, PATH_HALF_WIDTH + PATH_EDGE_FEATHER, pathLateralDistance);
       workingColor.lerp(pathColor, pathBlend);
+      // Mid-far ground turns forest-green (rising hills read as forested)...
+      const distantCanopyBlend =
+        smoothstepValue(treelineRadius * DISTANT_CANOPY_INNER_FRACTION, treelineRadius * DISTANT_CANOPY_OUTER_FRACTION, radiusFromCenter) *
+        DISTANT_CANOPY_STRENGTH;
+      workingColor.lerp(distantCanopyColor, distantCanopyBlend);
+      // ...and the outer rim dissolves into the horizon colour, so the finite
+      // square's edge and corners are sky-coloured and invisible.
+      const rimFadeBlend = smoothstepValue(
+        treelineRadius * RIM_FADE_INNER_FRACTION,
+        groundRadius * RIM_FADE_OUTER_FRACTION_OF_GROUND,
+        radiusFromCenter
+      );
+      workingColor.lerp(rimColor, rimFadeBlend);
 
       vertexColors[vertexIndex * 3] = workingColor.r;
       vertexColors[vertexIndex * 3 + 1] = workingColor.g;
@@ -123,7 +164,7 @@ export function ForestTerrain({ terrain, season, trees, terrainHeightSampler, pa
       metalness: 0
     });
     return { geometry, material };
-  }, [clearingRadius, groundKind, pathLateralDistanceSampler, placementSeed, season, terrainHeightSampler, treelineRadius]);
+  }, [clearingRadius, groundKind, horizonColor, pathLateralDistanceSampler, placementSeed, season, terrainHeightSampler, treelineRadius]);
 
   // Real mossy rocks (Quaternius MegaKit), instanced across the seeded
   // scatter. Draw order per rock: angle, radius, scale, yaw, variant pick.

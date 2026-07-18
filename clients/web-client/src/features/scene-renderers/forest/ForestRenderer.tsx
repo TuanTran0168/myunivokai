@@ -110,6 +110,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrain={terrain}
         season={season}
         trees={trees}
+        horizonColor={fogColor}
         terrainHeightSampler={terrainHeightSampler}
         pathLateralDistanceSampler={pathLateralDistanceSampler}
       />
