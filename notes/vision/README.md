@@ -18,6 +18,7 @@ detailed [nature-service-plan.md](nature-service-plan.md).
 | [contracts-and-roadmap.md](contracts-and-roadmap.md) | Schema versioning rules, phased roadmap with triggers, risk table |
 | [visual-diversity.md](visual-diversity.md) | Direction for more visual diversity: 5-tier ladder (data knobs → catalogs → procedural → rare features → new families), guardrails, suggested order |
 | [nature-service-plan.md](nature-service-plan.md) | **The active track.** `nature-service` — a full peer of universe-service (same mechanism, forest DNA): forest with wind, four seasons, weather, wildlife; config contract, asset strategy, rounds N1–N5 / F1–F5 |
+| [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | **Proposed, not implemented.** Collapse the FE's two family base-URL env vars into one gateway URL + code-computed path prefix |
 
 ## Current backend architecture
 
