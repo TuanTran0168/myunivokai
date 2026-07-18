@@ -1,7 +1,7 @@
 # Source-grounded engineering backlog
 
 > **Document status:** Active prioritized backlog
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
 This is the current task selection source. Architecture rationale lives in
 `notes/vision/`; implementation mechanics live in `notes/be/` and `notes/fe/`.
@@ -180,43 +180,6 @@ Tasks:
 - [ ] Cover textures, GLBs, HDRIs, and local decoder assets.
 - [ ] Record current baseline separately from target budgets; do not hide existing excess.
 
-## P1-FE-004 — Adapt 3D quality to the device
-
-Status: Ready
-Priority: P1
-Suggested branch: `feat/fe/adaptive-3d-quality`
-
-As a visitor on a weaker device,
-I want the scene to stay responsive,
-so that high DPR, shadows, particles, and post effects do not crash or freeze
-the experience.
-
-Scenario: Recover frame time under load
-
-Given a representative Universe and Forest scene
-When measured FPS/frame time remains below the target band
-Then the client lowers DPR and expensive family-specific effects in named tiers
-And interaction remains responsive
-And scene identity, seed, object positions, and saved config do not change.
-
-Scenario: WebGL cannot render
-
-Given WebGL creation/model loading fails or the context is lost
-When the canvas cannot recover
-Then the page shows a usable accessible fallback with retry/navigation
-And the rest of the page does not crash.
-
-Reference:
-
-- [R3F scaling performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance)
-- [Drei AdaptiveDpr](https://drei.docs.pmnd.rs/performances/adaptive-dpr)
-
-Tasks:
-
-- [ ] Define measured high/balanced/low profiles and device test matrix.
-- [ ] Wire adaptive DPR plus shadow/post/particle/LOD policy.
-- [ ] Add WebGL/model error recovery and reduced-motion behavior.
-
 ## P1-BE-001 — Add production observability without sensitive payloads
 
 Status: Ready
@@ -283,35 +246,227 @@ Then the adapter returns schema-valid `NatureDNA`
 And repair/fallback behavior matches the orchestrator contract
 And tests still use mock without network calls.
 
-## DISCOVERY-3D-001 — Evaluate City as the next scene family
+## EPIC-CITY-001 — Deliver City as the third stateful scene family
 
-Status: Discovery
-Priority: Discovery
+Status: Approved plan; implementation not started
+Priority: P1 after P0 contract/security prerequisites
 
 As a returning user,
-I want a genuinely different visual medium,
-so that the product grows beyond two portraits without only adding cosmetic
-variants.
+I want a high-fidelity personal city generated from my input,
+so that Myunivokai adds a genuinely different visual medium rather than a
+cosmetic variant of Universe or Forest.
 
-Scenario: Approve a City vertical slice
+Owner decisions:
 
-Given CC0 modular city kits and the existing renderer registry
-When a small deterministic block prototype is measured
-Then the proposal states backend ownership, schema, layout grammar, interaction,
-license, bundle/mobile budget, and product value
-And no new service is created without an explicit deploy/load trigger.
+- City is owned by an independent `city-service` peer with its own database.
+- The web client calls City only through `/api/city/*` on the gateway origin.
+- Desktop beauty, sharpness and realism are delivered before mobile/weak-device
+  optimization.
+- The exact scope and phase exits are defined in
+  [city-service-plan.md](../vision/city-service-plan.md).
 
-Candidate sources:
+### CITY-CONTRACT-001 — Make City contracts executable first
+
+Status: Planned
+Suggested branch: `feat/repo/city-executable-contracts`
+
+Scenario: Validate a City scene across Go and TypeScript
+
+Given approved semantic `CityDNA` fields and a deterministic City fixture
+When CI serializes a builder output and the frontend consumes the envelope
+Then the output matches a versioned `CitySceneConfig` JSON Schema
+And it declares `sceneType: "city"`
+And frontend types/runtime validation discriminate City from Universe/Forest
+And invalid AI output or scene output fails before persistence/rendering.
+
+Tasks:
+
+- [ ] Define CityDNA semantics without render coordinates or asset paths.
+- [ ] Define CitySceneConfig envelope, district/layout graph and compatibility policy.
+- [ ] Add JSON Schema, fixed fixtures and validation tests.
+- [ ] Add City paths/components to the public Gateway OpenAPI contract before implementation drifts.
+
+### CITY-BE-001 — Build the stateful City peer
+
+Status: Planned after CITY-CONTRACT-001
+Suggested branches: `feat/be/city-service-foundation`, then
+`feat/be/city-generation-lifecycle`
+
+Scenario: Complete the City world lifecycle deterministically
+
+Given valid user input reaches `city-service` with the internal gateway credential
+When a City world is created, regenerated, selected, published and shared
+Then AI produces validated semantic CityDNA only for initial creation
+And the seeded builder produces validated CitySceneConfig
+And regeneration does not call AI by default
+And City data is stored in the City database
+And public share responses omit raw sensitive input.
+
+Scenario: Reject direct public bypass
+
+Given a caller reaches the City peer URL without the gateway credential
+When it calls a business route
+Then the peer rejects the request consistently with Universe and Nature
+And health policy remains explicitly documented.
+
+Tasks:
+
+- [ ] Add Go module/config, migrations, repositories and transaction boundaries.
+- [ ] Add provider interface, mock provider, orchestrator and repair/validation path.
+- [ ] Add deterministic builder with named PRNG streams and golden fixtures.
+- [ ] Add lifecycle handlers/services, structured errors, health/readiness and Swagger.
+- [ ] Add unit/integration tests using mock AI and an isolated City database contract.
+
+### CITY-EDGE-001 — Add City to gateway, local Docker and Render
+
+Status: Planned after CITY-BE-001
+Suggested branches: `feat/be/city-gateway-routing`, then
+`feat/repo/city-local-render-deployment`
+
+Scenario: Use one public origin for all three families
+
+Given gateway City upstream configuration is valid
+When the browser calls `/api/city/*`
+Then the gateway applies CORS, request ID, body limit, rate limit, timeout,
+circuit and upstream credential policies
+And forwards to `city-service`
+And the browser never needs the peer URL.
+
+Scenario: Start and verify the expanded fleet
+
+Given documented local environment values or Render/Neon values
+When the operator follows the one-command local flow or deployment runbook
+Then web, gateway and all three peers become ready
+And City lifecycle smoke passes through the gateway
+And a direct City business call without the gateway credential returns 401.
+
+Tasks:
+
+- [ ] Add typed City upstream config and route policies to the gateway.
+- [ ] Extend aggregate readiness, failure taxonomy and gateway tests.
+- [ ] Extend root Docker Compose, env examples and one-command workflow.
+- [ ] Extend `render.yaml`, database matrix, rollout/rollback and smoke runbook.
+
+### CITY-VISUAL-001 — Approve a high-fidelity City scene foundation
+
+Status: Planned; desktop high tier first
+Suggested branch: `feat/fe/city-high-fidelity-scene`
+
+Scenario: Render a coherent personal city
+
+Given a fixed CitySceneConfig fixture and approved visual references
+When the City renderer loads on the desktop review matrix
+Then skyline, districts, roads, buildings, landmark, traffic and lighting map
+deterministically from the config
+And authored placement avoids visibly invalid roads/facades/props
+And PBR materials, shadows, reflection, atmosphere and color grading read as
+one coherent city
+And owner-approved screenshots establish the high-tier visual baseline.
+
+Scenario: Protect asset provenance and runtime independence
+
+Given the City asset catalog
+When catalog validation runs
+Then every runtime GLB/texture/HDRI/decoder is self-hosted and exists
+And scale, pivot, format, license and attribution checks pass
+And low-poly prototype assets are not silently accepted as final
+high-fidelity art direction.
+
+Candidate prototype/reference sources:
 
 - [Quaternius Downtown City MegaKit](https://quaternius.com/packs/downtowncitymegakit.html)
 - [Kenney City Kit Commercial](https://kenney.nl/assets/city-kit-commercial)
 - [Kenney City Kit Suburban](https://www.kenney.nl/assets/city-kit-suburban)
+- [Poly Haven license](https://polyhaven.com/license)
 
 Tasks:
 
-- [ ] Write an ADR for ownership: existing peer versus justified new peer.
-- [ ] Build a non-production vertical slice with a hard asset/draw-call budget.
-- [ ] Compare City against mountain/lake and room stories before approval.
+- [ ] Lock art references, desktop viewport/GPU review matrix and visual checklist.
+- [ ] Build deterministic district/road/placement grammar before catalog breadth.
+- [ ] Build the PBR asset/material manifest and hero landmark pipeline.
+- [ ] Implement lighting, shadow, reflection, atmosphere, camera and motion baseline.
+- [ ] Capture size/GPU/draw-call/frame-time facts without reducing approved visual quality yet.
+
+### CITY-FE-001 — Complete the City product flow
+
+Status: Planned after CITY-VISUAL-001 and CITY-EDGE-001
+Suggested branch: `feat/fe/city-product-flow`
+
+Scenario: Create and share a City portrait
+
+Given City is available in the family picker
+When a visitor creates a City and completes variant selection/publishing
+Then all API traffic uses the gateway origin
+And the registry lazy-loads the City renderer for `sceneType: "city"`
+And view, regenerate, select, publish and public share preserve the City family
+And loading/error/metadata behavior matches the existing product contract.
+
+Tasks:
+
+- [ ] Add City picker/input semantics without calling AI from the frontend.
+- [ ] Add lazy renderer registration and runtime contract validation.
+- [ ] Integrate lifecycle, share route metadata and accessible error states.
+- [ ] Add unit/integration/browser and visual-regression coverage.
+
+### CITY-VERIFY-001 — Prove City production readiness for its initial support matrix
+
+Status: Planned after all City implementation stories
+Suggested branch: `feat/repo/city-production-verification`
+
+Scenario: Verify rather than infer deployment success
+
+Given City code, migrations, gateway routes and frontend flow are merged
+When CI, local Docker and the real Render/Neon smoke run complete
+Then the commit SHA, timestamp, environment-safe evidence and pass/fail are recorded
+And create/get/regenerate/select/publish/share pass through the gateway
+And direct-peer protection passes
+And owner-approved high-tier screenshots show no visual regression.
+
+Tasks:
+
+- [ ] Run all Go/FE/contract/asset checks and local Docker smoke.
+- [ ] Run Render migration/readiness/lifecycle/share smoke without recording secrets.
+- [ ] Mark stories `Verified` only after the evidence exists.
+- [ ] Open `POST-CITY-FE-001` only after this story and the high-fidelity baseline pass.
+
+## POST-CITY-FE-001 — Adapt 3D quality to mobile and weak devices
+
+Status: Blocked until City feature completion and production verification
+Priority: Post-City
+Suggested branch: `feat/fe/adaptive-3d-quality`
+
+As a visitor on a weaker device,
+I want the scene to stay responsive,
+so that high DPR, shadows, particles, and post effects do not crash or freeze
+the experience.
+
+Scenario: Recover frame time under load
+
+Given representative Universe, Forest and approved City high-tier scenes
+When measured FPS/frame time remains below the target band
+Then the client lowers DPR and expensive family-specific effects in named tiers
+And interaction remains responsive
+And scene identity, seed, object positions, and saved config do not change
+And the approved desktop City high tier does not lose sharpness or art direction.
+
+Scenario: WebGL cannot render
+
+Given WebGL creation/model loading fails or the context is lost
+When the canvas cannot recover
+Then the page shows a usable accessible fallback with retry/navigation
+And the rest of the page does not crash.
+
+Reference:
+
+- [R3F scaling performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance)
+- [Drei AdaptiveDpr](https://drei.docs.pmnd.rs/performances/adaptive-dpr)
+
+Tasks:
+
+- [ ] Define measured high/balanced/low profiles and device test matrix.
+- [ ] Wire adaptive DPR plus shadow/post/particle/LOD policy.
+- [ ] Add WebGL/model error recovery and reduced-motion behavior.
+- [ ] Compare the final high tier against the approved City visual-regression baseline.
 
 ## DISCOVERY-AUTH-001 — Define identity before auth implementation
 
@@ -331,4 +486,3 @@ When auth is proposed
 Then the proposal defines issuer, subject/claims, world ownership, anonymous
 migration, public-share policy, service authorization, and deletion/export
 And implementation does not begin until those decisions are approved.
-

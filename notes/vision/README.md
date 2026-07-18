@@ -1,14 +1,13 @@
 # Vision — Myunivokai as a multi-scene platform
 
 > **Document status:** Active
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
-Status: **active, gateway amendment implemented**. The original
-decision points below were approved, and the owner additionally decided the
-vision becomes **microservices immediately** — starting with the nature
-family as a full peer service (same mechanism as universe-service, different
-DNA). See [Owner decisions (2026-07-16)](#owner-decisions-2026-07-16) and the
-detailed [nature-service-plan.md](nature-service-plan.md).
+Status: **active, gateway amendment implemented, City peer approved for future
+implementation**. Universe and Nature exist in source today. On 2026-07-19 the
+owner selected City as the third family and `city-service` as its backend
+owner; this is an approved plan, not implemented source. See
+[city-service-plan.md](city-service-plan.md).
 
 ## Documents in this folder
 
@@ -20,6 +19,7 @@ detailed [nature-service-plan.md](nature-service-plan.md).
 | [deployment.md](deployment.md) | Current four-service Render blueprint, rollout, free-tier behavior, observability |
 | [contracts-and-roadmap.md](contracts-and-roadmap.md) | Current source gaps, schema compatibility policy, and prioritized roadmap |
 | [visual-diversity.md](visual-diversity.md) | Implemented diversity baseline, remaining delivery/performance gaps, and researched model sources |
+| [city-service-plan.md](city-service-plan.md) | **Approved plan.** Independent City peer, high-fidelity-first delivery phases, contracts and branch sequence |
 | [nature-service-plan.md](nature-service-plan.md) | **Historical decision/round log.** Current contracts live in the BE/FE source overviews |
 | [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | **Implemented.** One frontend gateway origin plus source-owned family prefixes |
 
@@ -35,6 +35,19 @@ web client
 Universe and Nature are stateful full peers. The gateway owns the public HTTP
 edge but no business logic. There is no auth-service today; the shared gateway
 credential only prevents direct upstream bypass on public Render free URLs.
+
+Approved target after City implementation:
+
+```txt
+web client
+  -> api-gateway
+       /api/universe/* -> universe-service -> universe database
+       /api/nature/*   -> nature-service   -> nature database
+       /api/city/*     -> city-service     -> city database
+```
+
+The City line is a target contract only; it must not be documented as deployed
+until code, migrations, gateway routing and live smoke evidence exist.
 
 ## The idea
 
@@ -127,8 +140,10 @@ Phase transitions have explicit triggers (see
   own full peer service (`nature-service`), accepting the free-tier cold-start
   tradeoff consciously — see [nature-service-plan.md](nature-service-plan.md)
   section 4. The guardrail still applies to the next family: mountain/river/
-  lake belongs in `nature-service` (D4); a non-natural family such as City
-  needs an ownership ADR and does not get a new deploy automatically.
+  lake belongs in `nature-service` (D4). **Superseded for City on 2026-07-19:**
+  the owner approved City as a separate peer after choosing its product and
+  ownership boundary. Implementation follows
+  [city-service-plan.md](city-service-plan.md), not an automatic clone.
 - **Keep provider calls behind each peer's AI interface.** AI produces semantic
   DNA only; seeded builders remain deterministic and provider-free.
 - **Do not pretend the DNA schemas are shared.** They are family-specific in
@@ -147,11 +162,14 @@ The vision-level order is:
 3. Make scene contracts executable across BE and FE: explicit Universe
    `sceneType`, per-family schemas, a real public Gateway OpenAPI contract,
    discriminated FE types, and CI validation.
-4. Split scene-family renderer chunks and establish a measurable asset/frame
-   budget, including a self-hosted Draco decoder and adaptive quality.
-5. Add metrics/traces and shared gateway state only before horizontal scaling.
-6. Evaluate a third scene family only after its ownership, asset budget, and
-   user value have an approved story.
+4. Implement the approved City contracts and stateful `city-service`, then add
+   gateway/local/Render topology while preserving one public gateway origin.
+5. Build and approve the City desktop high-fidelity scene before reducing its
+   art quality for weak-device budgets; complete the product lifecycle and
+   production verification.
+6. Only after City is feature complete, add measured mobile/weak-device tiers,
+   LOD and adaptive quality without regressing the approved high tier.
+7. Add metrics/traces and shared gateway state only before horizontal scaling.
 
 ## Original decision points (historical)
 
@@ -186,3 +204,4 @@ all; no gateway and no FE work yet — just build the service. Full detail in
 | D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../fe/3d-development-limitations.md)), all assets self-hosted. |
 | D8 | Backend first: rounds N1–N5 before the frontend forest renderer (F1–F5). |
 | D9 | **Gateway implemented (2026-07-17):** `/api/universe/*` and `/api/nature/*`; edge CORS/rate limit, shared upstream credential, aggregate readiness; user auth remains deferred. |
+| D10 | **City peer approved (2026-07-19):** City is the third family and will use an independent stateful `city-service`, its own database/contracts and `/api/city/*` gateway prefix. Delivery is high-fidelity desktop first; mobile/weak-device optimization starts only after feature completion and production verification. |

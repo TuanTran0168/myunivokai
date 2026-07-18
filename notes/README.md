@@ -1,7 +1,7 @@
 # Notes — Myunivokai internal documentation
 
 > **Document status:** Active index
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
 This folder is the project's single knowledge base for both humans and AI agents.
 Shared docs live in the shared folder; FE/BE-specific docs live in their own
@@ -38,6 +38,7 @@ date; it is not the original creation date.
 | [be/source-overview.md](be/source-overview.md) | How all three Go modules work: gateway flow, peer APIs, AI, storage, security | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
 | [vision/](vision/README.md) | Active peer-service platform plan: Universe, Nature, API Gateway, deployment rationale, contracts, roadmap | Before any architecture decision |
+| [vision/city-service-plan.md](vision/city-service-plan.md) | Approved City peer plan and high-fidelity-first implementation phases; not implemented source | Before any City contract, BE, gateway, asset or FE branch |
 | [ops/render-deployment.md](ops/render-deployment.md) | **Step-by-step Render deploy runbook** (web + gateway + 2 peers, backed by Neon) | When deploying or changing infra |
 | [user-stories/](user-stories/README.md) | Source-grounded product stories and prioritized engineering tasks, with Given/When/Then acceptance | Before selecting the next feature branch |
 | [design/](design/) | Stitch UI mockups (v1, v2) | When polishing UI |
@@ -65,6 +66,7 @@ date; it is not the original creation date.
 | `vision/frontend-plan.md` | Active | Re-baselined: family registry exists, stronger contracts and lazy chunks remain |
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
+| `vision/city-service-plan.md` | Approved plan | City peer and high-fidelity-first direction approved 2026-07-19; implementation has not started |
 | `ops/render-deployment.md` | Active runbook | Requires real Render values and post-deploy verification |
 | `design/**/DESIGN.md` | Superseded reference | Layout ideas remain; purple/cyan visual language is not the active design system |
 | `archive/*.md` | Archived | Historical only |

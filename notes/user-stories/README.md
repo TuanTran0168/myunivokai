@@ -1,7 +1,7 @@
 # User stories and engineering tasks
 
 > **Document status:** Active index
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
 This folder translates source-grounded product behavior and technical gaps into
 branch-sized work. It does not replace architecture docs: each story links to
@@ -14,13 +14,18 @@ the source and vision contract it exercises.
 | [implemented-capabilities.md](implemented-capabilities.md) | What the current product already supports, expressed as verifiable stories |
 | [engineering-backlog.md](engineering-backlog.md) | Prioritized BE/FE/repo upgrades with Given/When/Then acceptance and tasks |
 
+Approved feature plans referenced by this backlog:
+
+- [City Service implementation plan](../vision/city-service-plan.md) — third
+  family, independent peer, high-fidelity desktop first.
+
 ## Story format
 
 ```md
 ## US-AREA-NNN — Short outcome
 
 Status: Planned | Ready | Blocked | Implemented | Verified
-Priority: P0 | P1 | P2 | Discovery
+Priority: P0 | P1 | P2 | Post-City | Discovery
 
 As a <persona>,
 I want <capability>,
@@ -51,4 +56,3 @@ Tasks:
   `staging`.
 - Given/When/Then describes externally observable behavior. Internal file edits
   belong under Tasks, not under Then.
-

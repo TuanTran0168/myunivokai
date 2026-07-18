@@ -1,7 +1,7 @@
 # Frontend plan — scene-family renderers
 
 > **Document status:** Active after source re-baseline
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
 Part of the [vision folder](README.md). This plan describes the source that
 exists now and the smallest upgrades needed next.
@@ -43,7 +43,15 @@ type ForestSceneConfig = SceneConfigBase & {
   landmarks: ForestLandmarkConfig[];
 };
 
-type SceneConfig = SolarSystemSceneConfig | ForestSceneConfig;
+type CitySceneConfig = SceneConfigBase & {
+  sceneType: "city";
+  districts: CityDistrictConfig[];
+};
+
+type SceneConfig =
+  | SolarSystemSceneConfig
+  | ForestSceneConfig
+  | CitySceneConfig;
 ```
 
 Legacy configs without `sceneType` must normalize to `"solar-system"` before
@@ -65,12 +73,15 @@ shapes, but malformed gateway/service output is not validated against a
 runtime schema. Generate or hand-maintain one validated boundary; do not spread
 schema checks through components.
 
-### 4. Mobile quality is deliberately missing
+### 4. Mobile quality is deliberately missing and now scheduled post-City
 
 The main canvas allows DPR up to 3 and source comments explicitly put weak
 devices out of scope. There is no `PerformanceMonitor`, adaptive DPR,
-family-level quality profile, LOD policy, or WebGL error boundary. Add measured
-tiers before adding another heavy scene family.
+family-level quality profile, LOD policy, or WebGL error boundary. The owner
+decided on 2026-07-19 that City reaches a desktop high-fidelity baseline and
+feature completion first. Measured mobile/weak-device tiers follow afterward
+and must preserve that approved high tier. Basic load/WebGL failure containment
+remains required during City implementation.
 
 ### 5. Asset delivery has two concrete gaps
 
@@ -89,7 +100,12 @@ tiers before adding another heavy scene family.
    validation.
 3. Lazy-load renderer families and publish per-family JS/asset budgets.
 4. Self-host the Draco decoder and add catalog/file/license/budget tests.
-5. Add adaptive DPR/LOD/effect tiers and a recoverable WebGL fallback.
+5. Implement City contracts, `city-service`, gateway/deployment and the
+   high-fidelity desktop renderer/product flow defined in
+   [city-service-plan.md](city-service-plan.md).
+6. Verify City locally and on Render against the initial desktop support matrix.
+7. Only then add adaptive DPR/LOD/texture/shadow/reflection/effect tiers for
+   mobile and weak devices; keep the approved high tier unchanged.
 
 Given/When/Then acceptance and branch-sized tasks are maintained in
 [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

@@ -1,7 +1,7 @@
 # Định hướng đa dạng hình ảnh và model Three.js
 
 > **Document status:** Active after source re-baseline
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-19
 
 Tài liệu này ghi current state sau khi các round Universe diversity và Forest
 renderer đã land, rồi xếp hướng mở rộng dựa trên source, asset budget và nguồn
@@ -65,10 +65,12 @@ Vì vậy các câu cũ như “chưa có family thứ hai”, “gas giant/moon
 
 ## Model/scene family phổ biến và phù hợp với Myunivokai
 
-### 1. City — ứng viên family thứ ba mạnh nhất
+### 1. City — family thứ ba đã được owner phê duyệt
 
-City cho độ khác biệt lớn với Universe/Forest và map DNA tốt: skyline,
-district density, traffic pulse, window warmth, neon/lantern ratio.
+Ngày 2026-07-19, owner chọn City và kiến trúc `city-service` độc lập. City cho
+độ khác biệt lớn với Universe/Forest và map DNA tốt: skyline, district density,
+traffic pulse, window warmth, neon/lantern ratio. Kế hoạch chi tiết nằm tại
+[city-service-plan.md](city-service-plan.md).
 
 Nguồn phù hợp:
 
@@ -78,8 +80,12 @@ Nguồn phù hợp:
   [City Kit Suburban](https://www.kenney.nl/assets/city-kit-suburban): CC0,
   style đơn giản, dễ instance/LOD.
 
-Không implement ngay chỉ vì asset sẵn. Story City phải chốt backend owner,
-schema, layout grammar, traffic budget và mobile tier trước.
+Hai nguồn trên phù hợp cho layout/contract prototype và placeholder có license
+rõ, nhưng phong cách low-poly không mặc nhiên đạt yêu cầu final. Baseline City
+ưu tiên đẹp, sắc nét và thực tế: final catalog cần art direction thống nhất,
+PBR material, authored placement, hero landmark, coherent lighting/shadow/
+reflection và visual review trên desktop. Mobile tier không chặn phase này;
+nó chỉ bắt đầu sau khi City feature complete.
 
 ### 2. Room / personal gallery — phù hợp cho trải nghiệm gần gũi
 
@@ -117,17 +123,18 @@ phải model swap.
 cao, không phù hợp để đưa hàng loạt model photogrammetry vào mobile scene.
 Dùng cho landmark có ngân sách riêng, LOD và texture tier; không hotlink runtime.
 
-## Thứ tự nâng cấp đề xuất
+## Thứ tự nâng cấp đã phê duyệt
 
 1. P0: hoàn tất Next.js security migration và executable contracts.
-2. P1: lazy-load renderer family; self-host Draco decoder; thêm catalog/license/
-   size validation.
-3. P1: adaptive DPR, LOD, shadow/effect/particle tiers và WebGL fallback.
-4. P1: chuyển texture lớn sang delivery format/tier được đo bằng network,
-   decode time, GPU memory và frame time.
-5. Discovery: prototype City bằng một block nhỏ từ kit CC0, đo trước khi duyệt
-   family thứ ba.
-6. Sau đó mới thêm breadth: mountain/lake, room hoặc species mới.
+2. P1: chốt executable City contracts, xây `city-service`, database và gateway
+   route theo [city-service-plan.md](city-service-plan.md).
+3. P1: dựng City high-fidelity desktop baseline; asset prototype low-poly chỉ
+   dùng để kiểm tra grammar, không quyết định chất lượng final.
+4. P1: hoàn chỉnh renderer và create/view/regenerate/select/publish/share, rồi
+   xác minh local/Render end-to-end.
+5. Post-City: sau khi visual baseline được owner duyệt mới thêm adaptive DPR,
+   LOD, texture/shadow/reflection/effect tiers cho mobile và máy yếu.
+6. Sau City mới đánh giá breadth tiếp theo: mountain/lake, room hoặc species.
 
 ## Guardrails
 
@@ -137,8 +144,11 @@ Dùng cho landmark có ngân sách riêng, LOD và texture tier; không hotlink 
 4. Asset phải self-host, license rõ, attribution cập nhật và có budget.
 5. Không tải asset/decoder từ CDN runtime nếu source không có explicit policy
    và fallback.
-6. Không gọi một scene “production-ready” nếu chưa đo trên thiết bị yếu và chưa
-   có đường fallback khi WebGL/model load thất bại.
+6. Không gọi City “optimized for broad devices” trước khi có device evidence.
+   Bản high-fidelity đầu tiên có thể có support matrix desktop rõ ràng, nhưng
+   vẫn phải có đường fallback an toàn khi WebGL/model load thất bại.
+7. Vòng tối ưu sau không được làm desktop high tier giảm độ sắc nét hoặc lệch
+   art direction đã duyệt.
 
 Các acceptance criteria Given/When/Then nằm trong
 [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).
