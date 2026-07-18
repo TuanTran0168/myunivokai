@@ -30,8 +30,10 @@ Before writing code or committing, read the docs in `notes/`:
 - `notes/coding/git-convention.md` — branch naming + commit message format (mandatory)
 - `notes/coding/coding-style.md` — no hardcoded values, no abbreviated names (mandatory)
 - `notes/fe/source-overview.md` — how the Next.js app is wired (read for FE tasks)
-- `notes/fe/threejs-scene-architecture.md` — three.js principles, scene renderer registry, how to add new scene types (read before touching 3D code)
+- `notes/fe/threejs-scene-architecture.md` — three.js principles, the sceneType-first renderer registry, how to add new scene types (read before touching 3D code)
+- `notes/fe/forest-render-mechanism.md` — forest/nature asset pipeline, GLB/animation gotchas, the Sketchfab download constraint (read before touching forest 3D or assets)
 - `notes/be/source-overview.md` — Go API layers, AI provider switching, response shapes (read for BE tasks)
+- `notes/ops/render-deployment.md` — step-by-step Render deploy runbook (read before deploying)
 
 ## Commands
 

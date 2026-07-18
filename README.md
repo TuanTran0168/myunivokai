@@ -53,10 +53,11 @@ POST /api/nature/worlds   -> nature-service POST /api/v1/worlds
 GET  /api/nature/share/worlds/{slug}
 ```
 
-The current frontend renders universe worlds. It can move from the direct API
-to the gateway without source changes by setting
-`NEXT_PUBLIC_API_BASE_URL=https://<gateway-host>/api/universe`. Nature frontend
-work remains a later vision round.
+The frontend ships a **Universe/Forest family picker** and renders both scene
+families from one source (`WorldFamily`). It moves from the direct APIs to the
+gateway without source changes by setting
+`NEXT_PUBLIC_API_BASE_URL=https://<gateway-host>/api/universe` and
+`NEXT_PUBLIC_NATURE_API_BASE_URL=https://<gateway-host>/api/nature`.
 
 ## Security boundary
 
@@ -225,6 +226,10 @@ Backend tests use mock AI providers and never call a real AI API.
 
 ## Production deployment
 
+**Full step-by-step runbook: [notes/ops/render-deployment.md](notes/ops/render-deployment.md)**
+(Neon two-database setup, Blueprint sync, every env value, rollout smoke tests,
+Vercel). Summary below.
+
 `render.yaml` manages `myunivokai-gateway`, `myunivokai-api`, and
 `myunivokai-nature`. Before syncing an existing Blueprint, set the gateway's
 `API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL`, and `NATURE_SERVICE_URL` in the
@@ -249,9 +254,12 @@ After the gateway is healthy:
 
 - `notes/README.md`: internal documentation index;
 - `notes/be/source-overview.md`: backend source and gateway request flow;
+- `notes/fe/source-overview.md`: frontend source, the Universe/Forest family picker;
+- `notes/fe/forest-render-mechanism.md`: how the forest scene is drawn + the asset/Sketchfab constraint;
 - `notes/vision/api-gateway.md`: implemented gateway design and operations;
-- `notes/vision/deployment.md`: three-service Render deployment;
-- `notes/vision/nature-service-plan.md`: nature-service roadmap;
+- `notes/ops/render-deployment.md`: step-by-step Render deploy runbook;
+- `notes/vision/deployment.md`: deployment architecture/rationale;
+- `notes/vision/nature-service-plan.md`: nature-service roadmap and decision log;
 - `AGENTS.md`: repository rules for coding agents.
 
 Planet textures come from Solar System Scope (CC BY 4.0); attribution lives in

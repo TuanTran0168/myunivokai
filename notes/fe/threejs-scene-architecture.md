@@ -1,7 +1,10 @@
 # three.js in Myunivokai — Principles and scene renderer architecture
 
 This document explains how three.js works, how this repo uses it, and how to
-customize/extend it (mountain or city scenes in the future).
+customize/extend it. The registry pattern below is no longer hypothetical: the
+**forest/nature family is the real second renderer** (see
+[forest-render-mechanism.md](forest-render-mechanism.md)), and a mountain or
+city scene would join the same way.
 
 ## 1. three.js fundamentals
 
@@ -87,7 +90,7 @@ clients/web-client/src/
 ├── components/UniverseCanvas.tsx          <- shell: Canvas + camera + bloom + hover overlay
 └── features/scene-renderers/
     ├── types.ts                           <- SceneRendererProps: the contract every renderer implements
-    ├── registry.ts                        <- theme (string from BE) -> renderer component
+    ├── registry.ts                        <- sceneType-first resolution: resolveSceneTypeRenderer(scene) THEN theme
     ├── planetIdentity.ts                  <- identity key for selectable objects
     ├── shared/                            <- usable by every scene type
     │   ├── CameraRig.tsx                  <- OrbitControls + fly-to-selected-object animation
@@ -101,18 +104,24 @@ clients/web-client/src/
     │   ├── OrbitPath.tsx                  <- faint orbit ring
     │   ├── Skybox.tsx                     <- inside-out sphere with the milky-way texture
     │   └── planetTextureCatalog.ts        <- texture catalog + per-style axial tilt
+    ├── forest/                            <- the forest/nature renderer (sceneType "forest")
+    │   ├── ForestRenderer.tsx             <- composes terrain + trees + wildlife + weather + landmarks
+    │   ├── forestModels.ts                <- GLB catalog + instancing/animation helpers
+    │   ├── forestMath.ts                  <- terrain height sampler, path/blend helpers
+    │   └── Forest*.tsx                    <- Terrain/Trees/Wildlife/WeatherEffects/GroundDecor/SkyDome/...
     └── fallback/FallbackUniverseRenderer.tsx <- abstract scene when no config exists (landing preview)
 ```
 
 ### Data flow from backend to pixels
 
 ```txt
-BE returns WorldSceneConfig (JSON)
+BE returns a scene config (JSON)
   -> lib/api.ts normalizes onto lib/types.ts types
-  -> lib/scene.ts: safe readers for palette/planets/background
-  -> UniverseCanvas: resolveSceneRenderer(config.theme) picks the renderer
-  -> SolarSystemRenderer reads config.planets (size, orbitRadius, orbitSpeed, phase, color, energy)
-  -> each SolarPlanet animates itself in useFrame
+  -> lib/scene.ts: safe readers for palette/planets/background (+ isForestScene)
+  -> UniverseCanvas: registry resolves the renderer sceneType-FIRST
+       resolveSceneTypeRenderer(scene)  // "forest" -> ForestRenderer
+       else resolveSceneRenderer(theme) // universe themes -> SolarSystemRenderer
+  -> the renderer reads its config sections and animates in useFrame
 ```
 
 The backend decides the **data** (how many planets, orbits, speeds — derived
@@ -156,17 +165,26 @@ entry to `planetTextureCatalog.ts` (with `axialTiltRadians`, plus
 
 ### Adding a new scene type (mountains, city, countryside, ...)
 
+The forest/nature family is the worked example — follow its shape:
+
 1. Create `features/scene-renderers/<scene-name>/`.
 2. Write the main component implementing `SceneRendererProps` (see `types.ts`) —
    draw freely with three.js: terrain via `PlaneGeometry` + displacement,
    buildings via `InstancedMesh`, sky via shaders... no limits.
 3. For click-focusable objects: write positions into `PlanetPositionTracker`
-   and call `onSelectPlanet`/`onHoverPlanet` (the shared contract keeps these names).
-4. Register one line in `registry.ts`: `"mountain-valley": MountainValleyRenderer`.
-5. The BE only needs to allow the new theme in its enum — no schema change.
+   and call `onSelectPlanet`/`onHoverPlanet` (the shared contract keeps these
+   names). If your config uses a different noun (forest uses `landmarks`), adapt
+   it into the shared POI shape in `lib/scene.ts` (see
+   `pointsOfInterestFromScene`) so HUD/hover/camera stay family-agnostic.
+4. Register the renderer in `registry.ts` under its `sceneType` (resolved BEFORE
+   theme), e.g. the forest maps `sceneType: "forest"` -> `ForestRenderer`.
+5. A big new family is usually its own backend peer with its own scene config +
+   `sceneType` discriminator (forest = nature-service, `ForestSceneConfig`); a
+   small variant of the solar system can instead just add a theme.
 
-A future scene-switch button is just changing the theme passed to
-`resolveSceneRenderer()`. Old renderers are never touched.
+A scene-switch is just the `sceneType`/family the config carries; old renderers
+are never touched. The client already exposes this as the Universe/Forest picker
+on the create form.
 
 ### Performance
 

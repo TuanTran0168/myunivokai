@@ -170,7 +170,7 @@ and the MD3 token vocabulary are still deleted.
 
 Goal: a premium, professional interface where the **3D canvas is the hero**, not a
 boxed-in widget — the "futuristic command deck" feel of the Stitch reference
-(`notes/stitch_personal_universe_3d_v2`), benchmarked against the restraint of
+(`notes/design/stitch_personal_universe_3d_v2`), benchmarked against the restraint of
 Apple / supercar / interior-design sites. **Pure presentation: no logic or
 behavior change.** Same form state, same payload, same API calls, same scene
 builder (`buildPreviewSceneConfig` / `sceneFromVariant`), same handlers — only
@@ -178,7 +178,7 @@ layout, spacing, and chrome change. Every U-branch must keep all existing tests
 green (`npm run typecheck && lint && build && test`).
 
 Design language is already half-built and stays the single source of truth — see
-`notes/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md`:
+`notes/design/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md`:
 deep-space navy `#050816`, glassmorphism (20px backdrop blur, 1px white/10
 border, brighter top edge), gradient CTA (purple→cyan), Space Grotesk headlines /
 Inter body / JetBrains Mono data-labels. The tokens and fonts already exist in
