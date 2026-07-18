@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { Toaster } from "sonner";
-import { backendOriginUrl } from "@/lib/api";
+import { gatewayOriginUrl } from "@/lib/gateway";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -40,14 +40,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 >
                   Gallery
                 </Link>
-                {/* External: the Go service's landing page (origin derived from
-                    NEXT_PUBLIC_API_BASE_URL — never hardcoded). Hidden on the
+                {/* External: the Go gateway's route index (origin derived from
+                    NEXT_PUBLIC_GATEWAY_BASE_URL — never hardcoded). Hidden on the
                     narrowest screens so the 57px header never wraps. */}
                 <a
-                  href={backendOriginUrl()}
+                  href={gatewayOriginUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Universe Service — backend landing page"
+                  title="Myunivokai API Gateway"
                   className="hidden font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-secondary sm:inline"
                 >
                   API

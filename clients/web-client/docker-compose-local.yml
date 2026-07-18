@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080/api/v1
+        NEXT_PUBLIC_GATEWAY_BASE_URL: http://localhost:8082
     env_file:
       - .env.local
     ports:

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ShareWorldView } from "@/app/share/worlds/[shareSlug]/ShareWorldView";
+import { apiBaseUrlForFamily } from "@/lib/gateway";
 
 // The nature-service twin of /share/worlds/[shareSlug]: same view component,
 // forest backend. nature-service's PUBLIC_WEB_URL is configured with the
@@ -12,10 +13,7 @@ type PageProps = {
   };
 };
 
-const NATURE_API_BASE_URL = (process.env.NEXT_PUBLIC_NATURE_API_BASE_URL ?? "http://localhost:8081/api/v1").replace(
-  /\/$/,
-  ""
-);
+const NATURE_API_BASE_URL = apiBaseUrlForFamily("nature");
 
 // Social crawlers read metadata server-side; cache it so a popular share link
 // does not hammer the API, and bail out fast when the API is cold so the page

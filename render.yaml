@@ -1,9 +1,10 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
 # Render blueprint for the Myunivokai service fleet.
 # Secrets are `sync: false`: their values live ONLY in the Render dashboard
 # except the gateway credential, which Render generates once in the shared
 # environment group below.
-# The web client deploys separately (Vercel per README, or a Render static site)
-# with NEXT_PUBLIC_API_BASE_URL pointing at the gateway's /api/universe prefix.
+# The web client receives one public gateway origin at build time. Family path
+# prefixes remain source-owned; peer-service hosts are visible only to gateway.
 envVarGroups:
   - name: myunivokai-gateway-secrets
     envVars:
@@ -12,11 +13,24 @@ envVarGroups:
 
 services:
   - type: web
+    name: myunivokai-web
+    runtime: docker
+    rootDir: clients/web-client
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeployTrigger: checksPass
+    healthCheckPath: /
+    envVars:
+      - key: NEXT_PUBLIC_GATEWAY_BASE_URL
+        sync: false
+
+  - type: web
     name: myunivokai-gateway
     runtime: docker
     rootDir: services/api-gateway
     dockerfilePath: ./Dockerfile
     plan: free
+    autoDeployTrigger: checksPass
     healthCheckPath: /api/v1/healthz
     envVars:
       - key: APP_ENV
@@ -39,6 +53,7 @@ services:
     rootDir: services/universe-service
     dockerfilePath: ./Dockerfile.render
     plan: free
+    autoDeployTrigger: checksPass
     healthCheckPath: /api/v1/healthz
     envVars:
       - key: APP_ENV
@@ -75,6 +90,7 @@ services:
     rootDir: services/nature-service
     dockerfilePath: ./Dockerfile.render
     plan: free
+    autoDeployTrigger: checksPass
     healthCheckPath: /api/v1/healthz
     envVars:
       - key: APP_ENV

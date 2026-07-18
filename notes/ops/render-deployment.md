@@ -1,223 +1,283 @@
-# Hướng dẫn deploy lên Render — kiến trúc gateway + 2 peer service
+# Hướng dẫn deploy toàn bộ Myunivokai lên Render
 
-> **Runbook thao tác** (cái "làm thế nào"). Phần lý do/thiết kế (vì sao có
-> gateway, vì sao upstream vẫn public, hành vi free-tier) nằm ở
-> [../vision/deployment.md](../vision/deployment.md). Nguồn sự thật của cấu hình
-> là `render.yaml` ở gốc repo — tài liệu này bám theo nó.
+> Đây là runbook thao tác. Thiết kế và lý do kiến trúc nằm ở
+> [../vision/deployment.md](../vision/deployment.md); nguồn sự thật của hạ tầng
+> là `render.yaml` ở gốc repo.
 
-## Bức tranh triển khai
+Tài liệu nền tảng đã đối chiếu: [Blueprint YAML Reference](https://render.com/docs/blueprint-spec),
+[Docker on Render](https://render.com/docs/docker),
+[Deploy a Next.js App](https://render.com/docs/deploy-nextjs-app), và
+[Free instance limitations](https://render.com/docs/free).
+
+## Kiến trúc deploy
 
 ```txt
-Vercel (web client)
-  └─ NEXT_PUBLIC_API_BASE_URL         → https://<gateway>/api/universe
-     NEXT_PUBLIC_NATURE_API_BASE_URL  → https://<gateway>/api/nature
-        │
-        ▼
-Render: myunivokai-gateway            (services/api-gateway, Docker)
-   ├─ /api/universe/*  → myunivokai-api     (services/universe-service) → Neon DB "universe"
-   └─ /api/nature/*    → myunivokai-nature  (services/nature-service)   → Neon DB "myunivokai_nature"
+Render: myunivokai-web
+  NEXT_PUBLIC_GATEWAY_BASE_URL=https://<gateway-origin>
+                    │
+                    ▼
+Render: myunivokai-gateway
+  ├─ /api/universe/* ──> myunivokai-api    ──> Neon logical DB "universe"
+  └─ /api/nature/*   ──> myunivokai-nature ──> Neon logical DB "nature"
 ```
 
-- 3 web service Docker trên Render, khai báo trong `render.yaml` (Blueprint).
-- 2 **logical database trong CÙNG một project Neon** (không phải 2 project) — DB
-  thứ hai không tốn phí. **Không bao giờ** trỏ DB nature vào DB universe.
-- `GATEWAY_SHARED_SECRET` do Render tự sinh 1 lần trong env group
-  `myunivokai-gateway-secrets`, link cho cả 3 service. Upstream free-tier vẫn có
-  URL public nên mọi business route yêu cầu credential này; chỉ `/` và
-  `/api/v1/healthz` để public cho probe của Render.
+Blueprint tạo bốn Docker web service:
 
-## Bước 0 — Chuẩn bị
+| Service | Source | Vai trò |
+| --- | --- | --- |
+| `myunivokai-web` | `clients/web-client` | Next.js UI |
+| `myunivokai-gateway` | `services/api-gateway` | API origin duy nhất của browser |
+| `myunivokai-api` | `services/universe-service` | Universe domain |
+| `myunivokai-nature` | `services/nature-service` | Nature domain |
 
-- [ ] Có tài khoản Render (kết nối GitHub repo), Neon, Vercel.
-- [ ] Đã đọc [../vision/deployment.md](../vision/deployment.md) để hiểu ràng buộc.
-- [ ] `render.yaml` đã ở nhánh sẽ deploy (mặc định `main`).
-- [ ] Sẵn origin FE để whitelist CORS (vd `https://myunivokai.vercel.app`).
+Cả bốn dùng `autoDeployTrigger: checksPass`: Render chỉ auto-deploy commit sau
+khi CI của repo xanh.
 
-## Bước 1 — Neon: 2 logical database, 4 connection string
+FE chỉ nhận **một** biến `NEXT_PUBLIC_GATEWAY_BASE_URL`, không có URL trực tiếp
+tới Universe hay Nature. Helper FE tự thêm `/api/universe` hoặc `/api/nature`;
+gateway mới là nơi biết hostname của hai peer service.
 
-Trong **một project Neon duy nhất**:
+Hai peer vẫn có public hostname khi dùng Render Free vì free web service không
+nhận private-network traffic. Mọi business route và readiness route của peer
+yêu cầu `GATEWAY_SHARED_SECRET`; chỉ `/` và `/api/v1/healthz` public cho probe.
 
-1. Databases → tạo database universe (nếu chưa có, vd `myunivokai`) và
-   `myunivokai_nature`.
-2. Với **mỗi** database lấy **2 URL**, đều `sslmode=require`:
-   - **Pooled** (qua PgBouncer, host có `-pooler`) → dùng lúc chạy (`DATABASE_URL`).
-   - **Direct** (không pooler) → dùng chạy migration (`DATABASE_DIRECT_URL`).
+## Bước 0 — chuẩn bị
 
-Kết quả: 4 URL.
+- [ ] Repo đã merge nhánh deploy vào `staging`, CI xanh, rồi merge `staging` vào
+      `main` theo convention.
+- [ ] Render đã kết nối GitHub repo và deploy từ `main`.
+- [ ] Có một project Neon với hai logical database riêng.
+- [ ] Chốt tên public của web và gateway. Ví dụ dưới đây giả định
+      `https://myunivokai-web.onrender.com` và
+      `https://myunivokai-gateway.onrender.com`.
+
+Nếu Render cấp hostname khác, thay hostname thực tế ở tất cả biến tương ứng rồi
+rebuild/redeploy. Không đưa path `/api/...` vào
+`NEXT_PUBLIC_GATEWAY_BASE_URL`.
+
+## Bước 1 — Neon: hai logical database, bốn connection string
+
+Trong **một** Neon project:
+
+1. Tạo database Universe, ví dụ `myunivokai`.
+2. Tạo database Nature riêng, ví dụ `myunivokai_nature`.
+3. Với mỗi database, lấy URL **pooled** cho runtime và URL **direct** cho
+   migration; cả hai dùng `sslmode=require`.
 
 | Biến | Universe | Nature |
 | --- | --- | --- |
-| `DATABASE_URL` (pooled, runtime) | dbname universe | dbname `myunivokai_nature` |
-| `DATABASE_DIRECT_URL` (direct, migration) | dbname universe | dbname `myunivokai_nature` |
+| `DATABASE_URL` | pooled URL, dbname Universe | pooled URL, dbname Nature |
+| `DATABASE_DIRECT_URL` | direct URL, dbname Universe | direct URL, dbname Nature |
 
-> Migration chạy trên URL **direct**; runtime dùng **pooled**. Init migration của
-> nature sẽ **fail ngay** nếu vô tình trỏ vào DB universe (bảng đã tồn tại) — đó
-> là hàng rào cố ý, không phải bug.
+Không bao giờ trỏ Nature vào database Universe. Mỗi service sở hữu migrations,
+worlds, variants, AI logs và shares của chính nó.
 
-## Bước 2 — Render: sync Blueprint lần đầu
+## Bước 2 — tạo Blueprint lần đầu
 
-1. Render Dashboard → **New → Blueprint** → chọn repo → nhánh có `render.yaml`.
-2. Render đọc `render.yaml`, hiện 3 service (`myunivokai-gateway`,
-   `myunivokai-api`, `myunivokai-nature`) + env group
-   `myunivokai-gateway-secrets` (tự sinh `GATEWAY_SHARED_SECRET`).
-3. **Apply** để tạo. Deploy đầu sẽ *chưa xanh* cho tới khi điền hết biến
-   `sync: false` ở Bước 3 — bình thường.
+1. Render Dashboard → **New → Blueprint**.
+2. Chọn repo và nhánh release `main` chứa `render.yaml`.
+3. Render hiển thị bốn service và env group
+   `myunivokai-gateway-secrets`.
+4. Trong luồng tạo Blueprint, Render hỏi giá trị cho các biến `sync: false`.
+   Nhập theo Bước 3 rồi Apply.
 
-## Bước 3 — Điền các biến `sync: false` trong Dashboard
+`GATEWAY_SHARED_SECRET` không nhập tay. Blueprint sinh một giá trị 256-bit duy
+nhất trong env group và gắn cùng giá trị đó vào gateway, Universe và Nature.
 
-`render.yaml` chỉ khai báo *tên* các biến bí mật; **giá trị phải nhập tay trong
-Dashboard** (không commit). Điền cho từng service:
+## Bước 3 — điền biến môi trường
+
+### `myunivokai-web`
+
+| Biến | Giá trị |
+| --- | --- |
+| `NEXT_PUBLIC_GATEWAY_BASE_URL` | origin HTTPS của gateway, ví dụ `https://myunivokai-gateway.onrender.com` |
+
+Đây là build-time public configuration, không phải secret. Render chuyển env
+của Docker service thành build argument, và Dockerfile khai báo đúng `ARG`
+tương ứng. Sau mọi lần đổi giá trị này phải **Save, rebuild, and deploy** để
+Next.js compile lại bundle. Docker build từ chối chạy nếu biến này rỗng, tránh
+deploy nhầm bundle đang trỏ về localhost.
 
 ### `myunivokai-gateway`
 
 | Biến | Giá trị |
 | --- | --- |
-| `API_ALLOWED_ORIGINS` | origin FE, không wildcard, vd `https://myunivokai.vercel.app` |
-| `UNIVERSE_SERVICE_URL` | URL public HTTPS của `myunivokai-api` (không kèm `/api/...`) |
-| `NATURE_SERVICE_URL` | URL public HTTPS của `myunivokai-nature` |
+| `API_ALLOWED_ORIGINS` | origin HTTPS của web, không wildcard, không path |
+| `UNIVERSE_SERVICE_URL` | public HTTPS origin của `myunivokai-api`, không `/api/...` |
+| `NATURE_SERVICE_URL` | public HTTPS origin của `myunivokai-nature`, không `/api/...` |
 
-(`APP_ENV=production`, `TRUST_PROXY=true`, `GATEWAY_SHARED_SECRET` từ group — đã
-có sẵn từ `render.yaml`.)
+`APP_ENV=production`, `TRUST_PROXY=true` và shared secret đã có từ Blueprint.
+Gateway từ chối khởi động production nếu origin/URL sai, upstream không dùng
+HTTPS, CORS rỗng/wildcard, hoặc shared secret ngắn hơn 32 ký tự.
 
-### `myunivokai-api` (universe)
+### `myunivokai-api`
 
 | Biến | Giá trị |
 | --- | --- |
-| `DATABASE_URL` | universe pooled |
-| `DATABASE_DIRECT_URL` | universe direct |
-| `PUBLIC_WEB_URL` | `https://myunivokai.vercel.app` (universe không có prefix) |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` | để trống nếu chạy mock; nhập khi bật AI thật |
+| `DATABASE_URL` | Universe pooled URL |
+| `DATABASE_DIRECT_URL` | Universe direct URL |
+| `PUBLIC_WEB_URL` | web origin, không path |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | để trống khi chạy mock; nhập khi bật provider thật |
 
 ### `myunivokai-nature`
 
 | Biến | Giá trị |
 | --- | --- |
-| `DATABASE_URL` | nature pooled (dbname `myunivokai_nature`) |
-| `DATABASE_DIRECT_URL` | nature direct (dbname `myunivokai_nature`) |
-| `PUBLIC_WEB_URL` | `https://myunivokai.vercel.app/nature` — **PHẢI kèm `/nature`** |
+| `DATABASE_URL` | Nature pooled URL |
+| `DATABASE_DIRECT_URL` | Nature direct URL |
+| `PUBLIC_WEB_URL` | `<web-origin>/nature` |
 
-> **Vì sao nature cần `/nature`:** web client phục vụ trang share của nature ở
-> `/nature/share/worlds/{slug}` (universe giữ route không prefix). `PUBLIC_WEB_URL`
-> quyết định `shareUrl` mà service in ra, nên prefix làm link share rơi đúng
-> trang — zero thay đổi code.
+Nature phải có `/nature` trong `PUBLIC_WEB_URL` để share URL rơi vào route
+`/nature/share/worlds/{slug}`. Blueprint hiện đặt cả hai service ở
+`AI_PROVIDER=mock`, `AI_FALLBACK_PROVIDER=mock` và
+`RUN_MIGRATIONS_ON_START=true`. Universe hỗ trợ provider thật; Nature hiện mới
+wire mock theo source.
 
-Cả 2 service có sẵn `AI_PROVIDER=mock`, `AI_FALLBACK_PROVIDER=mock`,
-`RUN_MIGRATIONS_ON_START=true` từ `render.yaml` → entrypoint tự chạy migration
-trên URL direct trước khi mở API.
+## Bước 4 — rollout theo thứ tự
 
-**Ràng buộc production** (không thoả thì service từ chối khởi động):
-- Gateway: 2 upstream URL phải là HTTPS tuyệt đối; `TRUST_PROXY=true`; CORS ≥1
-  origin và không wildcard; `GATEWAY_SHARED_SECRET` ≥ 32 ký tự.
-- 2 world service: `GATEWAY_SHARED_SECRET` ≥ 32 ký tự; từ chối fallback in-memory
-  (bắt buộc có DATABASE_URL).
+1. Kiểm tra lần cuối bốn Neon URL đúng logical database.
+2. Deploy Universe và Nature; entrypoint chạy migration bằng direct URL trước
+   khi mở API.
+3. Xác nhận peer liveness:
+   - `GET https://<universe>/api/v1/healthz` → 200;
+   - `GET https://<nature>/api/v1/healthz` → 200.
+4. Deploy gateway sau khi hai peer sống.
+5. Deploy/rebuild web sau khi gateway có hostname đúng.
 
-## Bước 4 — Rollout theo thứ tự + smoke test
+Nếu Blueprint deploy đồng thời ở lần đầu, gateway/web có thể đỏ tạm thời trong
+khi peer cold-start hoặc biến hostname chưa khớp. Sửa giá trị theo hostname
+Render thực cấp rồi redeploy theo thứ tự trên.
 
-1. Xác nhận 4 URL DB trỏ đúng logical database của nó.
-2. Deploy/redeploy cả 3 service (Render tự deploy sau khi điền biến).
-3. **Chờ upstream sống trực tiếp:** `GET https://<universe>/api/v1/healthz` và
-   `GET https://<nature>/api/v1/healthz` trả **200**.
-4. **Xác nhận business route bị chặn nếu không có key:** gọi thẳng
-   `GET https://<universe>/api/v1/readyz` và `.../api/v1/worlds` → phải **401**
-   khi thiếu `X-Gateway-Key` (nature tương tự).
-5. **Gateway sống:** `GET https://<gateway>/api/v1/healthz` → 200;
-   `GET https://<gateway>/api/v1/statusz` → 200 và báo cả 2 upstream ready (503
-   nếu 1 cái chưa sẵn — thường do cold start, thử lại).
-6. **Smoke qua gateway** cả 2 họ:
-   ```bash
-   curl -X POST https://<gateway>/api/universe/worlds -H "Content-Type: application/json" -d '{...}'
-   curl -X POST https://<gateway>/api/nature/worlds   -H "Content-Type: application/json" -d '{...}'
-   ```
-   (payload mẫu xem `services/nature-service/README.md`.) Kiểm tiếp get /
-   regenerate variant / publish / share.
+## Bước 5 — smoke test
 
-## Bước 5 — Vercel: trỏ FE vào gateway
+### Security boundary
 
-Vercel → Project → Settings → Environment Variables (giá trị inline lúc build,
-nên **phải redeploy KHÔNG dùng build cache** sau khi đổi):
+Gọi thẳng peer mà không có key:
 
-| Biến | Giá trị |
+```bash
+curl -i https://<universe>/api/v1/readyz
+curl -i https://<nature>/api/v1/worlds
+```
+
+Cả hai phải trả 401. Không gửi `GATEWAY_SHARED_SECRET` từ máy người dùng hoặc
+frontend để smoke test; secret chỉ sống trong Render.
+
+### Gateway health và routing
+
+```bash
+curl -i https://<gateway>/api/v1/healthz
+curl -i https://<gateway>/api/v1/statusz
+```
+
+`healthz` phải 200. `statusz` phải 200 và báo cả hai upstream ready; 503 trong
+lúc cold start là hợp lệ, chờ peer thức rồi gọi lại.
+
+Smoke create qua cả hai prefix bằng payload trong README của service:
+
+```bash
+curl -X POST https://<gateway>/api/universe/worlds \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+
+curl -X POST https://<gateway>/api/nature/worlds \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+```
+
+Sau create, test get, regenerate, select, publish và share qua gateway. Không
+smoke business route trực tiếp trên peer.
+
+### Web client
+
+1. Mở `https://<web>` và tạo một Universe world.
+2. Tạo một Nature world.
+3. Trong browser Network, xác nhận mọi API request chỉ đi tới một gateway host;
+   endpoint mang prefix `/api/universe` hoặc `/api/nature`.
+4. Kiểm tra cả hai share route và metadata.
+5. Kiểm tra response CORS từ gateway cho đúng web origin.
+
+## Cập nhật Blueprint đã tồn tại
+
+Khi thêm `sync: false` mới vào Blueprint đã có, Render không tự có giá trị để
+điền. Trước hoặc ngay sau khi sync branch này:
+
+1. Thêm `myunivokai-web` vào Blueprint.
+2. Nhập `NEXT_PUBLIC_GATEWAY_BASE_URL` cho web.
+3. Xác nhận gateway có đủ `API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL` và
+   `NATURE_SERVICE_URL`.
+4. Xác nhận env group sinh secret vẫn link đúng cả ba backend process.
+5. Rebuild web; sau đó rollout peer → gateway → web.
+
+## Bảng biến tổng hợp
+
+| Biến | web | gateway | universe | nature | Nguồn |
+| --- | :---: | :---: | :---: | :---: | --- |
+| `NEXT_PUBLIC_GATEWAY_BASE_URL` | ✓ | | | | Dashboard; public build arg |
+| `APP_ENV=production` | | ✓ | ✓ | ✓ | `render.yaml` |
+| `TRUST_PROXY=true` | | ✓ | | | `render.yaml` |
+| `RUN_MIGRATIONS_ON_START=true` | | | ✓ | ✓ | `render.yaml` |
+| `AI_PROVIDER` / `AI_FALLBACK_PROVIDER` | | | `mock` | `mock` | `render.yaml` |
+| `GATEWAY_SHARED_SECRET` | | ✓ | ✓ | ✓ | generated env group |
+| `API_ALLOWED_ORIGINS` | | ✓ | | | Dashboard |
+| `UNIVERSE_SERVICE_URL` / `NATURE_SERVICE_URL` | | ✓ | | | Dashboard |
+| `DATABASE_URL` / `DATABASE_DIRECT_URL` | | | ✓ | ✓ | Dashboard, Neon |
+| `PUBLIC_WEB_URL` | | | ✓ | ✓ + `/nature` | Dashboard |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | | | optional | N4 chưa wire | Dashboard |
+
+## Localhost theo cùng kiến trúc
+
+Từ root repo:
+
+```bash
+docker compose -f docker-compose-local.yml up --build
+```
+
+Compose khởi động hai PostgreSQL, hai migration job, hai peer, gateway, rồi web.
+FE chỉ nhận `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082`, giống production.
+Các URL mặc định:
+
+| Thành phần | URL |
 | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | `https://<gateway>/api/universe` |
-| `NEXT_PUBLIC_NATURE_API_BASE_URL` | `https://<gateway>/api/nature` |
+| web | `http://localhost:3000` |
+| gateway | `http://localhost:8082` |
+| gateway status | `http://localhost:8082/api/v1/statusz` |
+| Universe Swagger | `http://localhost:8080/swagger/index.html` |
+| Nature Swagger | `http://localhost:8081/swagger/index.html` |
 
-> Hai biến này mang sẵn prefix đầy đủ, nên FE chuyển từ gọi thẳng service sang
-> gọi qua gateway mà **không đổi code**. `NEXT_PUBLIC_NATURE_API_BASE_URL` là thứ
-> bật họ scene rừng trên FE (picker Universe/Forest).
->
-> **Vì sao 2 biến mà không phải 1?** Gateway chỉ cần 1 origin (tự forward theo
-> path prefix); 2 biến ở đây thực chất là **cùng 1 gateway host**, chỉ khác
-> suffix — di sản từ thời universe/nature còn là 2 host thật khác nhau. Xem đề
-> xuất gộp còn 1 biến ở
-> [frontend-gateway-consolidation.md](../vision/frontend-gateway-consolidation.md)
-> (chưa triển khai).
+Dừng stack nhưng giữ volume database:
 
-## Cập nhật một Blueprint đã tồn tại (gotcha quan trọng)
+```bash
+docker compose -f docker-compose-local.yml down
+```
 
-Khi sync lại `render.yaml` lên Blueprint **đã có sẵn**, Render **KHÔNG tự điền**
-các biến `sync: false` mới thêm. Vì vậy khi thêm service/biến mới (vd lần thêm
-gateway + nature):
+## Free-tier và production thực
 
-1. Vào Dashboard **thêm trước** các biến `sync: false` mới (đặc biệt 3 biến
-   gateway: `API_ALLOWED_ORIGINS`, `UNIVERSE_SERVICE_URL`, `NATURE_SERVICE_URL`).
-2. Rồi mới sync Blueprint.
-3. Kiểm env group tự sinh vẫn link đủ cả 3 service (đừng tạo 3 secret rời rạc —
-   phải là **một** giá trị chia sẻ).
+Blueprint đang để `plan: free` cho cả bốn web service để có thể thử/hobby deploy.
+Free instances sleep độc lập và cùng tiêu thụ quota giờ của workspace; một lượt
+lạnh có thể phải đánh thức web → gateway → peer. Render ghi rõ free plan không
+phù hợp formal production và free web service không nhận private-network
+traffic.
 
-## Bảng biến môi trường tổng hợp
+Dependency gate tại thời điểm 2026-07-18: `npm audit --omit=dev` báo một lỗ hổng
+mức high trên Next.js 14, còn hướng fix tự động yêu cầu nâng major lên Next 16.
+Đây là migration framework riêng, không được ép vào branch deploy bằng
+`npm audit fix --force`. Có thể dùng Blueprint free để test/hobby, nhưng không
+đánh dấu formal production cho tới khi branch nâng Next làm audit gate xanh.
 
-| Biến | gateway | universe | nature | Nguồn |
-| --- | :---: | :---: | :---: | --- |
-| `APP_ENV=production` | ✓ | ✓ | ✓ | render.yaml |
-| `TRUST_PROXY=true` | ✓ | | | render.yaml |
-| `RUN_MIGRATIONS_ON_START=true` | | ✓ | ✓ | render.yaml |
-| `AI_PROVIDER` / `AI_FALLBACK_PROVIDER` | | `mock` | `mock` | render.yaml |
-| `GATEWAY_SHARED_SECRET` | ✓ | ✓ | ✓ | env group (tự sinh) |
-| `API_ALLOWED_ORIGINS` | ✓ | | | Dashboard |
-| `UNIVERSE_SERVICE_URL` / `NATURE_SERVICE_URL` | ✓ | | | Dashboard |
-| `DATABASE_URL` / `DATABASE_DIRECT_URL` | | ✓ | ✓ | Dashboard (Neon) |
-| `PUBLIC_WEB_URL` | | ✓ | ✓ `/nature` | Dashboard |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` | | ✓ | (N4) | Dashboard (khi bật AI) |
-| `NEXT_PUBLIC_API_BASE_URL` | | | | Vercel |
-| `NEXT_PUBLIC_NATURE_API_BASE_URL` | | | | Vercel |
-
-## Bật AI thật (đổi khỏi mock)
-
-Mặc định cả 2 service chạy `mock` (universe prod cũng mock hôm nay). Để bật thật:
-
-1. Nhập `GEMINI_API_KEY` hoặc `OPENAI_API_KEY` (Dashboard, `sync: false`).
-2. Đổi `AI_PROVIDER=gemini|openai` (giữ `AI_FALLBACK_PROVIDER=mock` để an toàn).
-3. Redeploy. **Universe** hỗ trợ gemini/openai/mock; **nature** hiện chỉ wire mock
-   (cổng gemini/openai là việc round N4 — xem
-   [../vision/nature-service-plan.md](../vision/nature-service-plan.md)).
-
-> **Không bao giờ commit API key/secret.** Chúng chỉ sống trong Dashboard
-> (`sync: false`). `render.yaml` chỉ khai báo tên biến.
-
-## Rollback, free-tier, quan sát
-
-- **Rollback nature** = tắt/không deploy service nature; universe không bị ảnh
-  hưởng (2 service độc lập, không đọc chéo DB).
-- **Free-tier:** mỗi service ngủ độc lập; request lạnh có thể mất ~1 phút để đánh
-  thức gateway rồi upstream. Timeout create 120s khớp ngân sách sinh AI; read/share
-  timeout thấp hơn. Circuit breaker chặn upstream chết ngốn slot, nhưng không
-  giấu được cold start.
-- **Health/log:** gateway `/api/v1/healthz` (process), `/api/v1/statusz` (đọc
-  song song 2 upstream, 503 nếu 1 cái chưa sẵn); upstream `/api/v1/healthz`
-  (public cho Render) vs `/api/v1/readyz` (cần gateway key); 1 `X-Request-Id` an
-  toàn được log ở gateway và truyền suốt; không log secret hay body nghiệp vụ.
-
-Chi tiết lý do (vì sao public upstream, khi nào lên paid/private) ở
-[../vision/deployment.md](../vision/deployment.md).
+Khi có traffic thật, nâng plan gateway và peer trước khi đặt SLO. Việc chuyển
+peer sang private service cần một migration hạ tầng riêng và thay validation
+upstream HTTP nội bộ trong gateway; không tự đổi chỉ bằng URL dashboard trên
+branch này.
 
 ## Checklist nhanh
 
-- [ ] Neon: 2 logical DB, 4 URL (pooled+direct mỗi cái), `sslmode=require`.
-- [ ] Blueprint synced; env group `myunivokai-gateway-secrets` link đủ 3 service.
-- [ ] Biến `sync: false` đã nhập đủ (gateway 3, mỗi world service DB×2 +
-      PUBLIC_WEB_URL; nature PUBLIC_WEB_URL có `/nature`).
-- [ ] `healthz` 200 trên cả 3; `statusz` báo 2 upstream ready.
-- [ ] Business route trực tiếp trả 401 khi thiếu `X-Gateway-Key`.
-- [ ] Smoke create/get/regenerate/publish/share qua `/api/universe` và
-      `/api/nature`.
-- [ ] Vercel `NEXT_PUBLIC_*` trỏ gateway; redeploy KHÔNG build cache.
+- [ ] Hai logical Neon DB, bốn URL pooled/direct đúng database.
+- [ ] Blueprint có đủ bốn service và một shared-secret env group.
+- [ ] Web chỉ có một `NEXT_PUBLIC_GATEWAY_BASE_URL`, không kèm `/api/...`.
+- [ ] Gateway CORS đúng web origin; hai upstream là public HTTPS origin.
+- [ ] `healthz` xanh trên ba backend process; `statusz` báo hai peer ready.
+- [ ] Direct peer business route trả 401 khi thiếu key.
+- [ ] Universe và Nature create/get/share thành công qua gateway.
+- [ ] Browser Network chỉ xuất hiện gateway host cho API calls.
+- [ ] Trước formal production: `npm audit --omit=dev --audit-level=high` xanh.
+- [ ] Không có API key, DB URL hay shared secret trong git hoặc frontend bundle.

@@ -20,7 +20,7 @@ folder; operations, design mockups, and finished plans have their own folders.
 | [be/source-overview.md](be/source-overview.md) | How all three Go modules work: gateway flow, peer APIs, AI, storage, security | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | BE production upgrade plan | When doing BE refactor work |
 | [vision/](vision/README.md) | Active peer-service platform plan: Universe, Nature, API Gateway, deployment rationale, contracts, roadmap | Before any architecture decision |
-| [ops/render-deployment.md](ops/render-deployment.md) | **Step-by-step Render deploy runbook** (gateway + 2 peers + Neon + Vercel) | When deploying or changing infra |
+| [ops/render-deployment.md](ops/render-deployment.md) | **Step-by-step Render deploy runbook** (web + gateway + 2 peers, backed by Neon) | When deploying or changing infra |
 | [design/](design/) | Stitch UI mockups (v1, v2) | When polishing UI |
 | [archive/](archive/) | Finished/historical plans (original implementation plan, perf, sky-from-DB, visual-diversity, 3D next-steps) | Reference only |
 

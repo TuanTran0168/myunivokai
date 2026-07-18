@@ -47,7 +47,7 @@ fail immediately (its tables already exist there), by design.
 ## PUBLIC_WEB_URL (share links)
 
 Set `PUBLIC_WEB_URL` WITH the `/nature` prefix, e.g.
-`https://myunivokai.vercel.app/nature`. The web client serves nature share
+`https://myunivokai-web.onrender.com/nature`. The web client serves nature share
 pages under `/nature/share/worlds/{slug}` (universe keeps the unprefixed
 route), so the prefix makes the `shareUrl` this service prints resolve to the
 right page with zero backend changes.

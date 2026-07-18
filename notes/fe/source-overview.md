@@ -7,10 +7,11 @@ Every page is a client component because of WebGL and localStorage.
 
 The client renders two scene families from the **same source**:
 `WorldFamily = "universe" | "nature"`. The create form (`/`) has a Universe /
-Forest picker; each family talks to its own backend base URL
-(`NEXT_PUBLIC_API_BASE_URL` vs `NEXT_PUBLIC_NATURE_API_BASE_URL`). The family is
-plumbed through `api.ts`, gallery localStorage ids, the `?family=` query param,
-and a twin nature share route. See
+Forest picker. The client receives one `NEXT_PUBLIC_GATEWAY_BASE_URL`; a shared
+gateway helper appends `/api/universe` or `/api/nature` from the family. Peer
+service hosts never enter the frontend. The family is plumbed through `api.ts`,
+gallery localStorage ids, the `?family=` query param, and a twin nature share
+route. See
 [forest-render-mechanism.md](forest-render-mechanism.md) for the forest renderer
 itself.
 
@@ -27,13 +28,17 @@ itself.
 ## The lib layer — every piece of data passes through here
 
 - `lib/api.ts` — the single API client, now **family-aware**: `request(family,
-  path, init)` picks the base URL by `WorldFamily`
+  path, init)` picks the gateway route by `WorldFamily`
   (`API_BASE_URLS_BY_FAMILY`), and every method takes a family. The `normalize*`
   functions matter most: the BE returns `{ world, selectedVariant, variants }`
   (variant list at the response ROOT) and normalize maps everything onto the
   unified `World` / `WorldVariant` types. **The FE's worst historical bug lived
   here** (reading the wrong location sent the canvas into fallback mode). If a BE
   response shape changes, fix normalize first.
+- `lib/gateway.ts` — validates the one configured gateway origin and owns the
+  family-to-public-prefix map. Browser requests and both server-rendered share
+  metadata routes use this same helper. It deliberately has no direct-service
+  fallback.
 - `lib/types.ts` — mirrors the BE JSON contract. `WorldSceneConfig` (universe,
   `services/universe-service/internal/models/scene.go`) **and** the forest scene
   sections + `sceneType`. Change them together with the matching BE model.
@@ -83,6 +88,7 @@ npm run build
 ```
 
 For integrated local development, root `docker-compose-local.yml` builds this
-client with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/api/universe` and
-starts it after the API Gateway is healthy. The default VS Code build task
-starts that full stack.
+client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082` and starts it
+after the API Gateway is healthy. The default VS Code build task starts that
+full stack. The production Docker image uses Next.js standalone output and a
+non-root runtime user; the same image is declared in the Render Blueprint.
