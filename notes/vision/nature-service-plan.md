@@ -230,7 +230,11 @@ season's weather/ground; the FE lerps tint/particle counts by the blend.
 
 Unchanged from v1 of this plan — the quality ceiling is **assets + art
 direction** (option B of
-[3d-development-limitations.md](../3d-development-limitations.md)):
+[3d-development-limitations.md](../fe/3d-development-limitations.md)). The
+**as-built** asset pipeline (real paths, the gltf-transform recipe actually
+used, and the Sketchfab download constraint) is documented in
+[../fe/forest-render-mechanism.md](../fe/forest-render-mechanism.md); this table
+is the original sourcing intent:
 
 | Pack | License | Gives us |
 | --- | --- | --- |
@@ -241,9 +245,10 @@ direction** (option B of
 | Birds (flapping, low-poly) | **TBD in N5** | Verify a CC0 animated bird; CC-BY fallback with attribution |
 
 Rules: CC0 preferred, CC-BY with `ATTRIBUTION.md`; **never hotlink** — all
-assets self-hosted under `clients/web-client/public/models/nature/` etc.
-Pipeline: `gltf-transform optimize --compress draco --texture-compress webp
---texture-size 1024`. Budgets: GLB ≤ 500 KB, HDRI ≤ 2 MB, forest route lazy
+assets self-hosted. As built, they live under
+`clients/web-client/public/assets/nature/` (`models/` + `hdri/`, with
+`ATTRIBUTION.md`), optimized with `gltf-transform optimize --compress draco
+--texture-size 256|512`. Budgets: GLB ≤ 500 KB, HDRI ≤ 2 MB, forest route lazy
 payload ≤ 8 MB, forest JS chunk ≤ 300 KB gzip. The BE `assets` section only
 emits keys from a versioned catalog table; a FE vitest later asserts every key
 resolves to a real file (pattern: `planetTextureCatalog.test.ts`).

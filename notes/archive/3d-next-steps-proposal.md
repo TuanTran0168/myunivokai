@@ -1,7 +1,7 @@
 # Đề xuất phát triển tiếp từ memo "Giới hạn 3D" (chưa duyệt)
 
 > Trả lời cho câu hỏi "có thể phát triển gì thêm không?" sau khi đọc
-> `notes/3d-development-limitations.md` + khảo sát thực tế (repo, kit CC0,
+> `notes/fe/3d-development-limitations.md` + khảo sát thực tế (repo, kit CC0,
 > kỹ thuật three.js). Kết luận: **có 3 đợt**, xếp từ rẻ đến đắt, và đợt rẻ
 > nhất là thứ memo chưa nói tới.
 

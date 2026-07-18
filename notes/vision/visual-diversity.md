@@ -53,7 +53,7 @@ bump):
 - `sun`: scale màu nhiệt độ (đỏ lạnh ↔ trắng xanh) + cường độ — chi phí gần
   0 vì chỉ là tint + HDR multiplier.
 - Vị trí đưa vào: `schemaVersion 1.2` cùng đợt promote `postFX` grade (đã
-  ghi trong `notes/3d-next-steps-proposal.md` đợt 1 mục 8).
+  ghi trong `notes/archive/3d-next-steps-proposal.md` đợt 1 mục 8).
 
 ### Bậc 2 — Nở catalog (asset mới, cơ chế cũ)
 
@@ -108,7 +108,7 @@ scene-agnostic** và tái dùng nguyên vẹn:
 
 | Đã có (solar-system) | Dùng lại cho family mới |
 |---|---|
-| Catalog + `targetSize` + Box3 normalize | Kit nội thất/cây/nhà CC0 (KayKit, Kenney, Quaternius — license đã verify trong `notes/3d-next-steps-proposal.md`) |
+| Catalog + `targetSize` + Box3 normalize | Kit nội thất/cây/nhà CC0 (KayKit, Kenney, Quaternius — license đã verify trong `notes/archive/3d-next-steps-proposal.md`) |
 | meshopt + webp pipeline, no-CDN | y hệt, `--texture-size 512` cho kit flat-color |
 | `InstancedMesh` + noise displacement | rừng cây, đá núi, toà nhà |
 | `PlanetPositionTracker` + CameraRig | click-focus đồ vật/toà nhà, 0 sửa CameraRig |
@@ -136,7 +136,7 @@ trong monolith.
 ## Thứ tự đề xuất
 
 > Bản break-task chi tiết theo round/branch (kèm trạng thái thực thi) nằm ở
-> [../visual-diversity-implementation-plan.md](../visual-diversity-implementation-plan.md).
+> [../archive/visual-diversity-implementation-plan.md](../archive/visual-diversity-implementation-plan.md).
 
 1. **Bậc 1 + promote postFX** gộp 1 round schema 1.2 (BE quay lại scope khi
    user cho phép) — rẻ nhất, mở khoá "world tĩnh lặng khác world hỗn loạn".

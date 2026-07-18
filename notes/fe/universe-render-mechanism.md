@@ -107,7 +107,7 @@ sinh procedural, KHÔNG có ảnh tải về:
   mây chọn variant + xoay ngẫu nhiên seeded, chế độ "nhiều sprite alpha thấp".
 - **`MilkyWayBand` / `ConstellationField`** — hình dạng dải Ngân Hà (vĩ độ
   band, Great Rift, bụi) và chòm sao đều đọc từ `scene.sky` do **BE sinh và
-  lưu DB** (schemaVersion 1.1) — xem `notes/sky-db-and-realism-plan.md`.
+  lưu DB** (schemaVersion 1.1) — xem `notes/archive/sky-db-and-realism-plan.md`.
 
 Quy tắc riêng tầng sky: mọi material thuộc sky phải `fog={false}` —
 `PointsMaterial`/`lineBasicMaterial` MẶC ĐỊNH bị fog ăn, sky ở bán kính xa sẽ

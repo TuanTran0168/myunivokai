@@ -150,6 +150,6 @@ all; no gateway and no FE work yet — just build the service. Full detail in
 | D2–D4 | Approved: Go for all scene services; gateway stays a Phase-3 item; forest/mountain/lake share the one `nature-service`. |
 | D5 | **Obsolete:** with peer services there is no remote compose call to fall back from; rollback = don't deploy the nature service. |
 | D6 | **Microservices immediately, as peers:** nature-service clones the universe-service mechanism end-to-end and never lives in the monolith. |
-| D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../3d-development-limitations.md)), all assets self-hosted. |
+| D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../fe/3d-development-limitations.md)), all assets self-hosted. |
 | D8 | Backend first: rounds N1–N5 before the frontend forest renderer (F1–F5). |
 | D9 | **Gateway implemented (2026-07-17):** `/api/universe/*` and `/api/nature/*`; edge CORS/rate limit, shared upstream credential, aggregate readiness; user auth remains deferred. |

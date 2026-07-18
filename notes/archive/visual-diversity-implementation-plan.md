@@ -1,7 +1,7 @@
 # Kế hoạch triển khai "vẽ đa dạng hơn" — 5 rounds
 
 > Bản triển khai của định hướng
-> [vision/visual-diversity.md](vision/visual-diversity.md) (thang 5 bậc).
+> [vision/visual-diversity.md](../vision/visual-diversity.md) (thang 5 bậc).
 > Ghi đủ chi tiết để nếu phiên làm việc đứt giữa chừng, phiên sau (hoặc người
 > khác) đọc file này là tiếp tục được đúng chỗ.
 >
@@ -37,7 +37,7 @@ kỹ thuật (stream PRNG riêng cho từng feature, file gần như không ch�
 — thứ tự này thuần túy là quyết định FE-trước-BE-sau của owner, đổi được nếu
 owner mở scope BE sớm hơn.
 Bậc 5 (scene family mới) KHÔNG thuộc chuỗi này — đi theo roadmap
-[vision/README.md](vision/README.md), chặn bởi duyệt D1–D5.
+[vision/README.md](../vision/README.md), chặn bởi duyệt D1–D5.
 
 ## R1 — Procedural gas giants (`feat/fe/procedural-gas-giants`) — ĐÃ MERGE
 
@@ -182,7 +182,7 @@ suất trong khoảng cho phép); owner duyệt mắt.
 
 **Round duy nhất đụng BE — owner mở scope BE 2026-07-16.**
 Làm y tiền lệ round sky-from-database (schema 1.1, xem
-`notes/sky-db-and-realism-plan.md`).
+`notes/archive/sky-db-and-realism-plan.md`).
 
 Quyết định kỹ thuật khi triển khai (BE `4d58ef6`, FE `3b88d9f`):
 
@@ -255,7 +255,7 @@ DoD: gates BE (test + build) + 4 gates FE xanh; world cũ pixel-y-hệt
 - Hằng số đặt tên cho mọi giá trị tune; không hardcode.
 - Texture màu → `applyColorTextureQuality`; data map →
   `applyDataTextureQuality` (xem
-  [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md)).
+  [fe/universe-render-mechanism.md](../fe/universe-render-mechanism.md)).
 - Scenery mới → `raycast={() => null}`.
 - 4 gates FE sau mỗi cụm: typecheck, lint, vitest, build.
 - Commit format `[ACTION][SCOPE][branch]: message` + trailer Co-Authored-By.

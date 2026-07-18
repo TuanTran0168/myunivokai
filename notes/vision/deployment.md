@@ -1,5 +1,10 @@
 # Deployment — gateway plus two peer APIs
 
+> **Step-by-step operator runbook:**
+> [../ops/render-deployment.md](../ops/render-deployment.md) (the "how" — Neon
+> setup, Blueprint sync, every env value, rollout smoke tests, Vercel). **This**
+> document is the architecture/rationale companion (the "why").
+
 Status: `render.yaml` describes the architecture currently present in source.
 The web client remains on Vercel and the databases remain on Neon.
 
@@ -27,58 +32,23 @@ The shared value is created once by the Blueprint environment group
 `myunivokai-gateway-secrets` with `generateValue: true` and linked to all three
 services. Never create three independent secret values.
 
-## Required Render values
+## Required values and rollout
 
-Gateway:
+The full env-var tables (per service), the Neon two-logical-database setup, the
+first-time Blueprint sync, the existing-Blueprint `sync: false` gotcha, the
+ordered rollout with smoke tests, and the Vercel step all live in the runbook:
+[../ops/render-deployment.md](../ops/render-deployment.md). Two facts worth
+keeping here because they shape the architecture:
 
-```txt
-API_ALLOWED_ORIGINS=https://myunivokai.vercel.app
-UNIVERSE_SERVICE_URL=https://<universe-service-host>
-NATURE_SERVICE_URL=https://<nature-service-host>
-```
+- The Blueprint defaults both AI providers to `mock`. Nature only wires mock
+  today; its Gemini/OpenAI port remains N4 work.
+- When updating an **existing** Blueprint, Render does not populate newly added
+  `sync: false` variables — they must be entered in the dashboard before syncing.
+  The generated secret environment group is managed by the Blueprint.
 
-Universe service:
-
-```txt
-DATABASE_URL=<universe pooled Neon URL>
-DATABASE_DIRECT_URL=<universe direct Neon URL>
-PUBLIC_WEB_URL=https://myunivokai.vercel.app
-```
-
-Nature service:
-
-```txt
-DATABASE_URL=<nature pooled Neon URL using its own logical database>
-DATABASE_DIRECT_URL=<nature direct Neon URL using its own logical database>
-PUBLIC_WEB_URL=https://myunivokai.vercel.app
-```
-
-The Blueprint defaults both AI providers to mock. Nature only wires mock today;
-its Gemini/OpenAI port remains N4 work.
-
-Important Blueprint behavior: when updating an existing Blueprint, Render does
-not populate newly added `sync: false` variables. Add the three gateway values
-in the dashboard before/while syncing this change. The generated environment
-group is managed by the Blueprint.
-
-## Rollout order
-
-1. Confirm both database URL pairs point at their own logical database.
-2. Add the gateway's three `sync: false` values in Render.
-3. Sync `render.yaml`; verify the generated secret group is linked to all three
-   services.
-4. Wait for direct upstream liveness:
-   `/api/v1/healthz` must return 200 on Universe and Nature.
-5. Verify direct `/api/v1/readyz` and `/api/v1/worlds` return 401 without
-   `X-Gateway-Key`.
-6. Verify gateway `/api/v1/healthz` returns 200 and `/api/v1/statusz` reports
-   both services ready.
-7. Smoke create/get/regenerate/publish/share through both public prefixes.
-8. Set Vercel `NEXT_PUBLIC_API_BASE_URL` to
-   `https://<gateway-host>/api/universe` and redeploy without build cache.
-
-The current frontend is Universe-only, so it uses the Universe prefix. The
-Nature prefix is ready for the later frontend family picker.
+The frontend now ships a Universe/Forest picker, so it uses **both** the
+`/api/universe` and `/api/nature` gateway prefixes (via `NEXT_PUBLIC_API_BASE_URL`
+and `NEXT_PUBLIC_NATURE_API_BASE_URL`).
 
 ## Health and observability
 
