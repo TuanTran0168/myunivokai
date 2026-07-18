@@ -144,6 +144,13 @@ nên **phải redeploy KHÔNG dùng build cache** sau khi đổi):
 > Hai biến này mang sẵn prefix đầy đủ, nên FE chuyển từ gọi thẳng service sang
 > gọi qua gateway mà **không đổi code**. `NEXT_PUBLIC_NATURE_API_BASE_URL` là thứ
 > bật họ scene rừng trên FE (picker Universe/Forest).
+>
+> **Vì sao 2 biến mà không phải 1?** Gateway chỉ cần 1 origin (tự forward theo
+> path prefix); 2 biến ở đây thực chất là **cùng 1 gateway host**, chỉ khác
+> suffix — di sản từ thời universe/nature còn là 2 host thật khác nhau. Xem đề
+> xuất gộp còn 1 biến ở
+> [frontend-gateway-consolidation.md](../vision/frontend-gateway-consolidation.md)
+> (chưa triển khai).
 
 ## Cập nhật một Blueprint đã tồn tại (gotcha quan trọng)
 
