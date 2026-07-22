@@ -7,7 +7,8 @@
 > being reverse-proxy destinations and become public gateway contracts backed
 > by NATS commands/queries; the browser still receives no domain-service URL.
 
-Status: **IMPLEMENTED** on `feat/repo/render-gateway-deployment` (2026-07-18).
+Status: **IMPLEMENTED**, then migrated from HTTP proxying to NATS in Sprint 1
+on 2026-07-22.
 
 ## Contract
 
@@ -21,16 +22,16 @@ This value is an origin only: no credentials, path, query, or fragment. The
 frontend fails its build for an explicitly malformed value instead of shipping
 an unusable API client.
 
-`clients/web-client/src/lib/gateway.ts` owns the public family prefixes:
+`apps/myunivokai-web/src/lib/gateway.ts` owns the public family prefixes:
 
 ```txt
 universe -> <gateway-origin>/api/universe
 nature   -> <gateway-origin>/api/nature
 ```
 
-The gateway remains the only component that knows `UNIVERSE_SERVICE_URL` and
-`NATURE_SERVICE_URL`. It rewrites those public prefixes to the peers' common
-`/api/v1/*` contract. The frontend never stores or calls a peer-service host.
+The gateway validates the family path and translates public HTTP requests into
+versioned NATS commands or queries. It has no domain-service URL and the
+frontend never stores or calls a peer-service host.
 
 ## Source integration
 
@@ -38,17 +39,17 @@ The same helper is used by:
 
 - the family-aware browser API client in `src/lib/api.ts`;
 - server-side metadata fetches for both share routes;
-- the header's gateway route-index link;
 - local Docker builds and the Render web-client build.
 
 `gateway.test.ts` verifies URL validation and both family routes. Adding a
-third family requires one new prefix in the helper and one matching gateway
-route; it does not require another frontend environment variable.
+third family requires one new prefix in the helper, a supported gateway family,
+and matching NATS contracts; it does not require another frontend environment
+variable.
 
 ## Deployment and local development
 
 `render.yaml` declares the Next.js client as `myunivokai-web`, a Docker web
-service alongside the gateway and two peer APIs. During Blueprint creation,
+service alongside the gateway and three private background services. During Blueprint creation,
 set `NEXT_PUBLIC_GATEWAY_BASE_URL` to the gateway's public HTTPS origin. Render
 passes service environment variables to Docker as build arguments, which is
 required because `NEXT_PUBLIC_*` values are compiled into the Next.js bundle.
@@ -58,12 +59,13 @@ Render image from silently embedding the localhost development fallback.
 The root `docker-compose-local.yml` uses the same contract:
 
 ```txt
-NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082
+NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080
 ```
 
 All browser business traffic therefore exercises Gateway CORS, rate limiting,
-request verification, routing, and the upstream shared-secret boundary in both
-local and deployed environments.
+request validation, Redis-backed caches, and NATS routing in both local and
+deployed environments. Domain services have no public HTTP listeners; NATS
+credentials and subject ACLs enforce the internal boundary.
 
 ## Historical reason for the change
 

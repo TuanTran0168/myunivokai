@@ -1,27 +1,20 @@
-# Solution architecture — event-driven platform target
+# Solution architecture — event-driven platform V1
 
-> **Document status:** Approved target; migration not implemented
+> **Document status:** Implemented in source; local container and deployed verification pending
 > **Vision version:** v1-2026-07-22
 > **Decision date:** 2026-07-22
 > **Last source review:** 2026-07-22
 
-This document is the architecture source of truth for the next Myunivokai
-platform. It deliberately separates the repository state reviewed on
-2026-07-22 from the approved target. Sprint 1 owns the complete migration; no
-part of this target may be described as implemented until its acceptance and
-deployment evidence exist.
+This document is the architecture source of truth for Myunivokai V1. Sprint 1
+implemented its service boundaries, contracts, persistence baselines, local
+configuration, frontend flow, and Render Blueprint. Managed deployment remains
+an operator verification gate rather than an inferred source-code result.
 
-## 1. Source baseline and approved change
+## 1. Implemented source baseline
 
-The current source contains three Go modules: `api-gateway`,
-`universe-service`, and `nature-service`. The gateway reverse-proxies HTTP to
-the two domain APIs. Both domain APIs synchronously call their own AI
-orchestrator, own near-identical world lifecycles, and store family-specific
-DNA in separate PostgreSQL databases. Gateway rate-limit buckets, share cache,
-and circuit-breaker state are process-local. There is no NATS, Redis, shared
-DNA service, or asynchronous generation job in source.
-
-The approved target replaces that runtime completely:
+The source contains four Go modules plus the shared contract module. The old
+HTTP peer handlers/proxy and duplicated family AI implementations have been
+removed. The implemented runtime is:
 
 - the browser still has one public HTTP origin: `api-gateway`;
 - the gateway publishes durable work to NATS JetStream;

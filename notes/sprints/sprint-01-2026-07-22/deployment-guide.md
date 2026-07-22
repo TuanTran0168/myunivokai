@@ -1,12 +1,11 @@
 # Sprint 01 deployment guide — event-driven cutover
 
-> **Document status:** Target runbook; execute only after Sprint 1 source/config exists
+> **Document status:** Executable runbook; managed deployment evidence pending
 > **Sprint starts:** 2026-07-22
 > **Last source review:** 2026-07-22
 
-This guide defines the required production deployment evidence. Commands and
-dashboard fields must be reconciled with the final Sprint 1 `render.yaml`,
-`docker-compose-local.yml`, provider dashboards and generated contract before execution.
+This guide defines the required production deployment evidence and matches the
+Sprint 1 `render.yaml`, local Compose, component Dockerfiles and contracts.
 Never paste secrets into this document, issues, logs or screenshots.
 
 ## 1. Target inventory
@@ -133,10 +132,13 @@ APP_ENV=production
 TRUST_PROXY=true
 API_ALLOWED_ORIGINS=<exact web origins>
 NATS_URL=<TLS URL>
-NATS_CREDENTIALS=<gateway secret/credential reference>
+NATS_USERNAME=<gateway credential user>
+NATS_PASSWORD=<gateway credential secret>
 REDIS_URL=<TLS URL>
 RATE_LIMIT_*=<reviewed values>
-CACHE_*=<reviewed values>
+JOB_CACHE_TTL=<reviewed duration>
+WORLD_CACHE_TTL=<reviewed duration>
+SHARE_CACHE_TTL=<reviewed duration>
 NATS_REQUEST_TIMEOUT=<reviewed duration>
 ```
 
@@ -147,10 +149,11 @@ APP_ENV=production
 DATABASE_URL=<myunivokai_dna pooled URL>
 DATABASE_DIRECT_URL=<myunivokai_dna direct URL>
 NATS_URL=<TLS URL>
-NATS_CREDENTIALS=<DNA credential reference>
+NATS_USERNAME=<DNA credential user>
+NATS_PASSWORD=<DNA credential secret>
 AI_PROVIDER=<mock|gemini|openai>
 AI_FALLBACK_PROVIDER=<reviewed provider>
-AI_TIMEOUT_SECONDS=<reviewed value>
+AI_TIMEOUT=<reviewed duration>
 GEMINI_API_KEY=<secret when used>
 OPENAI_API_KEY=<secret when used>
 ```
@@ -162,8 +165,12 @@ APP_ENV=production
 DATABASE_URL=<myunivokai_universe pooled URL>
 DATABASE_DIRECT_URL=<myunivokai_universe direct URL>
 NATS_URL=<TLS URL>
-NATS_CREDENTIALS=<Universe credential reference>
-CONSUMER_*=<reviewed values>
+NATS_USERNAME=<Universe credential user>
+NATS_PASSWORD=<Universe credential secret>
+NATS_ACK_WAIT=<reviewed duration>
+NATS_MAX_DELIVER=<reviewed count>
+NATS_QUERY_TIMEOUT=<less than gateway request timeout>
+OUTBOX_*=<reviewed poll interval and batch size>
 ```
 
 ### `myunivokai-nature`

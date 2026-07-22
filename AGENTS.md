@@ -44,7 +44,7 @@ go test ./...
 go vet ./...
 
 # Frontend
-cd clients/web-client
+cd apps/myunivokai-web
 npm run typecheck
 npm run lint
 npm run build

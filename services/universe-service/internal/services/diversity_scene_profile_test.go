@@ -12,7 +12,7 @@ import (
 func buildDiversityTestInput(seedValue string, theme string, mood string) BuildWorldConfigInput {
 	return BuildWorldConfigInput{
 		Seed:  seedValue,
-		Input: models.WorldInput{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
+		Input: models.VisualIntent{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
 		DNA: models.PersonalityDNA{
 			Archetype:   "Builder Explorer",
 			SceneName:   "Galaxy",

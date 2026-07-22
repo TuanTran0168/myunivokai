@@ -3,15 +3,16 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE worlds (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_job_id TEXT NOT NULL UNIQUE,
+  profile_id UUID NOT NULL,
+  dna_version_id UUID NOT NULL,
   nickname TEXT NOT NULL,
   role TEXT,
-  input JSONB NOT NULL,
-  personality_dna JSONB NOT NULL,
+  visual_intent JSONB NOT NULL,
+  dna_snapshot JSONB NOT NULL,
   archetype TEXT NOT NULL,
   scene_name TEXT NOT NULL,
   quote TEXT NOT NULL,
-  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
-  share_slug TEXT UNIQUE,
   selected_variant_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -32,49 +33,41 @@ CREATE TABLE world_variants (
 
 ALTER TABLE worlds
   ADD CONSTRAINT worlds_selected_variant_fk
-  FOREIGN KEY (selected_variant_id)
-  REFERENCES world_variants(id)
-  ON DELETE SET NULL;
+  FOREIGN KEY (selected_variant_id) REFERENCES world_variants(id) ON DELETE SET NULL;
 
-CREATE TABLE ai_generations (
+CREATE TABLE world_shares (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider TEXT NOT NULL,
-  model TEXT NOT NULL,
-  task TEXT NOT NULL,
-  prompt_version TEXT NOT NULL,
-  input_hash TEXT NOT NULL,
-  request_json JSONB,
-  response_json JSONB,
-  usage_json JSONB,
-  latency_ms INTEGER,
-  status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
-  error TEXT,
+  world_id UUID NOT NULL UNIQUE REFERENCES worlds(id) ON DELETE CASCADE,
+  share_slug TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  world_a_id UUID NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-  world_b_id UUID NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
-  match_seed TEXT NOT NULL,
-  compatibility_score INTEGER NOT NULL CHECK (compatibility_score >= 0 AND compatibility_score <= 100),
-  match_archetype TEXT NOT NULL,
-  analysis JSONB NOT NULL,
-  scene_config JSONB NOT NULL,
-  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
-  share_slug TEXT UNIQUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE inbox_messages (
+  message_id TEXT PRIMARY KEY,
+  subject TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_worlds_share_slug ON worlds(share_slug);
+CREATE TABLE outbox_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id TEXT NOT NULL UNIQUE,
+  subject TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_worlds_profile_id ON worlds(profile_id);
 CREATE INDEX idx_worlds_created_at ON worlds(created_at DESC);
 CREATE INDEX idx_world_variants_world_id ON world_variants(world_id);
-CREATE INDEX idx_matches_share_slug ON matches(share_slug);
-CREATE INDEX idx_ai_generations_task_created_at ON ai_generations(task, created_at DESC);
+CREATE INDEX idx_world_shares_share_slug ON world_shares(share_slug);
+CREATE INDEX idx_outbox_messages_pending ON outbox_messages(created_at) WHERE published_at IS NULL;
 
 -- +goose Down
-DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS outbox_messages;
+DROP TABLE IF EXISTS inbox_messages;
+DROP TABLE IF EXISTS world_shares;
 ALTER TABLE worlds DROP CONSTRAINT IF EXISTS worlds_selected_variant_fk;
 DROP TABLE IF EXISTS world_variants;
-DROP TABLE IF EXISTS ai_generations;
 DROP TABLE IF EXISTS worlds;

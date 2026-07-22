@@ -69,12 +69,12 @@ const (
 // round) must resolve every key here to a self-hosted GLB file; the builder
 // tests assert nothing outside this vocabulary is ever emitted.
 const (
-	ModelKeyTreeBirch    = "tree-birch"
-	ModelKeyTreeOak      = "tree-oak"
-	ModelKeyTreePine     = "tree-pine"
-	ModelKeyTreePineSnow = "tree-pine-snow"
-	ModelKeyTreeDead     = "tree-dead"
-	ModelKeyTreeBlossom  = "tree-blossom"
+	ModelKeyTreeBirch      = "tree-birch"
+	ModelKeyTreeOak        = "tree-oak"
+	ModelKeyTreePine       = "tree-pine"
+	ModelKeyTreePineSnow   = "tree-pine-snow"
+	ModelKeyTreeDead       = "tree-dead"
+	ModelKeyTreeBlossom    = "tree-blossom"
 	ModelKeyAnimalDeer     = "animal-deer"
 	ModelKeyAnimalFox      = "animal-fox"
 	ModelKeyAnimalRabbit   = "animal-rabbit"
@@ -83,8 +83,8 @@ const (
 	ModelKeyAnimalStag     = "animal-stag"
 	ModelKeyAnimalBear     = "animal-bear"
 	ModelKeyAnimalSquirrel = "animal-squirrel"
-	ModelKeyBirdForest   = "bird-forest"
-	ModelKeyRockMossy    = "rock-mossy"
+	ModelKeyBirdForest     = "bird-forest"
+	ModelKeyRockMossy      = "rock-mossy"
 )
 
 var landmarkModelKeysByKind = map[string]string{

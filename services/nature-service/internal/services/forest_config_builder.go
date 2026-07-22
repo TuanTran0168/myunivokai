@@ -66,7 +66,7 @@ type BuildForestConfigInput struct {
 	DNA       models.NatureDNA
 	Seed      string
 	VariantNo int
-	Input     models.WorldInput
+	Input     models.VisualIntent
 }
 
 func (b *ForestConfigBuilder) Build(input BuildForestConfigInput) models.ForestSceneConfig {

@@ -1,0 +1,8 @@
+FROM golang:1.25-alpine
+
+WORKDIR /workspace/services/dna-service
+COPY contracts/go /workspace/contracts/go
+COPY services/dna-service/go.mod services/dna-service/go.sum ./
+RUN go mod download
+
+CMD ["go", "run", "./cmd/service"]

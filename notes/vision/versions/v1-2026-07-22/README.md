@@ -1,6 +1,6 @@
 # Vision V1 — event-driven foundation
 
-> **Document status:** Current approved vision baseline
+> **Document status:** Current implemented source baseline; deployment proof pending
 > **Vision version:** v1-2026-07-22
 > **Approved:** 2026-07-22
 > **Last source review:** 2026-07-22

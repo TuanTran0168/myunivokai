@@ -13,109 +13,113 @@ import (
 )
 
 const (
-	defaultAPIPort                      = "8082"
-	defaultGatewaySharedSecretMinLength = 32
+	defaultAPIPort                    = "8080"
+	defaultMaximumRequestBodyBytes    = 64 * 1024
+	defaultRateLimitRequestsPerSecond = 2
+	defaultRateLimitBurst             = 20
+	defaultNATSPublishTimeout         = 5 * time.Second
+	defaultNATSRequestTimeout         = 3 * time.Second
+	defaultJobCacheTimeToLive         = 30 * time.Second
+	defaultWorldCacheTimeToLive       = 60 * time.Second
+	defaultShareCacheTimeToLive       = 60 * time.Second
+	defaultShutdownTimeout            = 15 * time.Second
+	defaultRedisKeyPrefix             = "myunivokai"
 )
 
 type Config struct {
-	AppEnv                     string
+	AppEnvironment             string
 	AppName                    string
 	APIHost                    string
 	APIPort                    string
 	AllowedOrigins             []string
-	UniverseServiceURL         *url.URL
-	NatureServiceURL           *url.URL
-	GatewaySharedSecret        string
-	RateLimitRequestsPerSecond float64
-	RateLimitBurst             int
 	TrustProxyHeaders          bool
 	MaximumRequestBodyBytes    int64
-	StandardProxyTimeout       time.Duration
-	CreateWorldProxyTimeout    time.Duration
-	ShareProxyTimeout          time.Duration
-	StatusCheckTimeout         time.Duration
-	ShareCacheTTL              time.Duration
-	ShareCacheMaximumEntries   int
-	CircuitBreakerFailureLimit int
-	CircuitBreakerCooldown     time.Duration
+	RateLimitRequestsPerSecond float64
+	RateLimitBurst             int
+	NATSURL                    string
+	NATSUsername               string
+	NATSPassword               string
+	NATSCredentialsFile        string
+	NATSPublishTimeout         time.Duration
+	NATSRequestTimeout         time.Duration
+	RedisURL                   string
+	RedisKeyPrefix             string
+	JobCacheTimeToLive         time.Duration
+	WorldCacheTimeToLive       time.Duration
+	ShareCacheTimeToLive       time.Duration
 	ShutdownTimeout            time.Duration
 }
 
 func Load() (Config, error) {
-	loadEnv()
-	universeServiceURL, universeError := parseServiceURL("UNIVERSE_SERVICE_URL", get("UNIVERSE_SERVICE_URL", "http://localhost:8080"))
-	natureServiceURL, natureError := parseServiceURL("NATURE_SERVICE_URL", get("NATURE_SERVICE_URL", "http://localhost:8081"))
-	config := Config{
-		AppEnv:                     getAny([]string{"APP_ENV", "ENV"}, "development"),
+	loadEnvironmentFiles()
+	loadedConfig := Config{
+		AppEnvironment:             get("APP_ENV", "development"),
 		AppName:                    get("APP_NAME", "Myunivokai API Gateway"),
 		APIHost:                    get("API_HOST", "0.0.0.0"),
 		APIPort:                    getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
 		AllowedOrigins:             split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
-		UniverseServiceURL:         universeServiceURL,
-		NatureServiceURL:           natureServiceURL,
-		GatewaySharedSecret:        strings.TrimSpace(os.Getenv("GATEWAY_SHARED_SECRET")),
-		RateLimitRequestsPerSecond: getFloat("RATE_LIMIT_RPS", 2),
-		RateLimitBurst:             getInt("RATE_LIMIT_BURST", 20),
 		TrustProxyHeaders:          getBool("TRUST_PROXY", false),
-		MaximumRequestBodyBytes:    getInt64("MAX_REQUEST_BODY_BYTES", 64*1024),
-		StandardProxyTimeout:       getDuration("PROXY_TIMEOUT", 15*time.Second),
-		CreateWorldProxyTimeout:    getDuration("CREATE_WORLD_TIMEOUT", 120*time.Second),
-		ShareProxyTimeout:          getDuration("SHARE_TIMEOUT", 5*time.Second),
-		StatusCheckTimeout:         getDuration("STATUS_TIMEOUT", 5*time.Second),
-		ShareCacheTTL:              getDuration("SHARE_CACHE_TTL", 60*time.Second),
-		ShareCacheMaximumEntries:   getInt("SHARE_CACHE_MAX_ENTRIES", 1000),
-		CircuitBreakerFailureLimit: getInt("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 3),
-		CircuitBreakerCooldown:     getDuration("CIRCUIT_BREAKER_COOLDOWN", 30*time.Second),
-		ShutdownTimeout:            getDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		MaximumRequestBodyBytes:    getInt64("MAX_REQUEST_BODY_BYTES", defaultMaximumRequestBodyBytes),
+		RateLimitRequestsPerSecond: getFloat("RATE_LIMIT_REQUESTS_PER_SECOND", defaultRateLimitRequestsPerSecond),
+		RateLimitBurst:             getInt("RATE_LIMIT_BURST", defaultRateLimitBurst),
+		NATSURL:                    get("NATS_URL", "nats://localhost:4222"),
+		NATSUsername:               get("NATS_USERNAME", ""),
+		NATSPassword:               get("NATS_PASSWORD", ""),
+		NATSCredentialsFile:        get("NATS_CREDENTIALS", ""),
+		NATSPublishTimeout:         getDuration("NATS_PUBLISH_TIMEOUT", defaultNATSPublishTimeout),
+		NATSRequestTimeout:         getDuration("NATS_REQUEST_TIMEOUT", defaultNATSRequestTimeout),
+		RedisURL:                   get("REDIS_URL", "redis://localhost:6379/0"),
+		RedisKeyPrefix:             get("REDIS_KEY_PREFIX", defaultRedisKeyPrefix),
+		JobCacheTimeToLive:         getDuration("JOB_CACHE_TTL", defaultJobCacheTimeToLive),
+		WorldCacheTimeToLive:       getDuration("WORLD_CACHE_TTL", defaultWorldCacheTimeToLive),
+		ShareCacheTimeToLive:       getDuration("SHARE_CACHE_TTL", defaultShareCacheTimeToLive),
+		ShutdownTimeout:            getDuration("SERVICE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
 	}
-	if universeError != nil {
-		return Config{}, universeError
-	}
-	if natureError != nil {
-		return Config{}, natureError
-	}
-	if err := config.Validate(); err != nil {
+	if err := loadedConfig.Validate(); err != nil {
 		return Config{}, err
 	}
-	return config, nil
+	return loadedConfig, nil
 }
 
-func (config Config) Validate() error {
-	if config.UniverseServiceURL == nil || config.NatureServiceURL == nil {
-		return errors.New("both upstream service URLs are required")
-	}
-	if config.RateLimitRequestsPerSecond <= 0 || config.RateLimitBurst <= 0 {
-		return errors.New("rate limit values must be positive")
-	}
-	if config.MaximumRequestBodyBytes <= 0 {
-		return errors.New("MAX_REQUEST_BODY_BYTES must be positive")
-	}
-	if config.StandardProxyTimeout <= 0 || config.CreateWorldProxyTimeout <= 0 || config.ShareProxyTimeout <= 0 || config.StatusCheckTimeout <= 0 {
-		return errors.New("proxy and status timeouts must be positive")
-	}
-	if config.ShareCacheTTL < 0 || config.ShareCacheMaximumEntries <= 0 || config.CircuitBreakerCooldown <= 0 || config.CircuitBreakerFailureLimit <= 0 {
-		return errors.New("cache and circuit breaker values are invalid")
-	}
-	if len(config.AllowedOrigins) == 0 {
+func (loadedConfig Config) Validate() error {
+	if len(loadedConfig.AllowedOrigins) == 0 {
 		return errors.New("API_ALLOWED_ORIGINS must contain at least one origin")
 	}
-	if config.IsProduction() {
-		if len(config.GatewaySharedSecret) < defaultGatewaySharedSecretMinLength {
-			return fmt.Errorf("GATEWAY_SHARED_SECRET must contain at least %d characters in production", defaultGatewaySharedSecretMinLength)
+	if strings.TrimSpace(loadedConfig.NATSURL) == "" || strings.TrimSpace(loadedConfig.RedisURL) == "" {
+		return errors.New("NATS_URL and REDIS_URL are required")
+	}
+	if loadedConfig.MaximumRequestBodyBytes <= 0 || loadedConfig.RateLimitRequestsPerSecond <= 0 || loadedConfig.RateLimitBurst <= 0 {
+		return errors.New("request body and rate limit values must be positive")
+	}
+	if loadedConfig.NATSPublishTimeout <= 0 || loadedConfig.NATSRequestTimeout <= 0 || loadedConfig.ShutdownTimeout <= 0 {
+		return errors.New("NATS and shutdown timeouts must be positive")
+	}
+	if loadedConfig.JobCacheTimeToLive <= 0 || loadedConfig.WorldCacheTimeToLive <= 0 || loadedConfig.ShareCacheTimeToLive <= 0 {
+		return errors.New("cache TTL values must be positive")
+	}
+	if strings.TrimSpace(loadedConfig.RedisKeyPrefix) == "" {
+		return errors.New("REDIS_KEY_PREFIX is required")
+	}
+	if loadedConfig.isProduction() {
+		if !loadedConfig.TrustProxyHeaders {
+			return errors.New("TRUST_PROXY must be true in production")
 		}
-		if !config.TrustProxyHeaders {
-			return errors.New("TRUST_PROXY must be true in production behind the Render proxy")
-		}
-		if config.UniverseServiceURL.Scheme != "https" || config.NatureServiceURL.Scheme != "https" {
-			return errors.New("upstream service URLs must use https in production")
-		}
-		for _, origin := range config.AllowedOrigins {
+		for _, origin := range loadedConfig.AllowedOrigins {
 			if err := validateProductionOrigin(origin); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (loadedConfig Config) Address() string {
+	return loadedConfig.APIHost + ":" + loadedConfig.APIPort
+}
+
+func (loadedConfig Config) isProduction() bool {
+	normalizedEnvironment := strings.ToLower(strings.TrimSpace(loadedConfig.AppEnvironment))
+	return normalizedEnvironment == "production" || normalizedEnvironment == "prod"
 }
 
 func validateProductionOrigin(origin string) error {
@@ -132,63 +136,20 @@ func validateProductionOrigin(origin string) error {
 	return nil
 }
 
-func (config Config) Addr() string {
-	return config.APIHost + ":" + config.APIPort
-}
-
-func (config Config) IsProduction() bool {
-	normalized := strings.ToLower(strings.TrimSpace(config.AppEnv))
-	return normalized == "production" || normalized == "prod"
-}
-
-func parseServiceURL(key, value string) (*url.URL, error) {
-	parsedURL, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return nil, fmt.Errorf("%s must be an absolute http or https URL", key)
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, fmt.Errorf("%s must use http or https", key)
-	}
-	if parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
-		return nil, fmt.Errorf("%s must not contain credentials, a query, or a fragment", key)
-	}
-	parsedURL.Path = strings.TrimRight(parsedURL.Path, "/")
-	return parsedURL, nil
-}
-
-func loadEnv() {
-	original := snapshotEnv()
-	explicit := strings.TrimSpace(os.Getenv("MYUNIVOKAI_ENV_FILE"))
-	if explicit != "" {
-		loadEnvFiles(original, explicit)
+func loadEnvironmentFiles() {
+	originalEnvironment := snapshotEnvironment()
+	explicitFile := strings.TrimSpace(os.Getenv("MYUNIVOKAI_ENV_FILE"))
+	if explicitFile != "" {
+		_ = godotenv.Overload(explicitFile)
+		restoreEnvironment(originalEnvironment)
 		return
 	}
-	files := []string{".env", ".env.local"}
-	appEnvironment := strings.TrimSpace(os.Getenv("APP_ENV"))
-	if appEnvironment == "" {
-		appEnvironment = strings.TrimSpace(os.Getenv("ENV"))
-	}
-	for _, name := range envAliases(appEnvironment) {
-		files = append(files, ".env."+name, ".env."+name+".local")
-	}
-	loadEnvFiles(original, files...)
+	_ = godotenv.Overload(".env", ".env.local")
+	restoreEnvironment(originalEnvironment)
 }
 
-func envAliases(appEnvironment string) []string {
-	switch strings.ToLower(strings.TrimSpace(appEnvironment)) {
-	case "production", "prod":
-		return []string{"prod", "production"}
-	case "development", "dev", "":
-		return []string{"dev", "development"}
-	case "test":
-		return []string{"test"}
-	default:
-		return []string{strings.ToLower(strings.TrimSpace(appEnvironment))}
-	}
-}
-
-func snapshotEnv() map[string]string {
-	values := map[string]string{}
+func snapshotEnvironment() map[string]string {
+	values := make(map[string]string)
 	for _, pair := range os.Environ() {
 		key, value, found := strings.Cut(pair, "=")
 		if found {
@@ -198,11 +159,8 @@ func snapshotEnv() map[string]string {
 	return values
 }
 
-func loadEnvFiles(original map[string]string, files ...string) {
-	for _, file := range files {
-		_ = godotenv.Overload(file)
-	}
-	for key, value := range original {
+func restoreEnvironment(values map[string]string) {
+	for key, value := range values {
 		_ = os.Setenv(key, value)
 	}
 }
@@ -267,8 +225,8 @@ func split(value string) []string {
 	parts := strings.Split(value, ",")
 	values := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			values = append(values, trimmed)
+		if trimmedPart := strings.TrimSpace(part); trimmedPart != "" {
+			values = append(values, trimmedPart)
 		}
 	}
 	return values

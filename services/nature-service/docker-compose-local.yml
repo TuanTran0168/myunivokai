@@ -1,46 +1,52 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: myunivokai-nature-postgres
+  nature-migrate:
+    build:
+      context: ../..
+      dockerfile: services/nature-service/Dockerfile.local
+    command: ["go", "run", "./cmd/migrate"]
     environment:
-      POSTGRES_USER: myunivokai_nature
-      POSTGRES_PASSWORD: myunivokai_nature
-      POSTGRES_DB: myunivokai_nature
-    ports:
-      - "5433:5432"
+      DATABASE_URL: postgresql://${NATURE_DATABASE_USER:-myunivokai_nature_app}:${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}@postgres:5432/${NATURE_DATABASE_NAME:-myunivokai_nature}?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://${NATURE_DATABASE_USER:-myunivokai_nature_app}:${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}@postgres:5432/${NATURE_DATABASE_NAME:-myunivokai_nature}?sslmode=disable
+      MIGRATIONS_DIR: /workspace/services/nature-service/migrations
     volumes:
-      - myunivokai-nature-postgres-data:/var/lib/postgresql/data
+      - ../..:/workspace
+      - nature-service-go-cache:/go/pkg/mod
+    restart: on-failure
+    networks: [backend]
+
+  nature-service:
+    build:
+      context: ../..
+      dockerfile: services/nature-service/Dockerfile.local
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_WEB_URL: http://localhost:${WEB_PORT:-3000}/nature
+      DATABASE_URL: postgresql://${NATURE_DATABASE_USER:-myunivokai_nature_app}:${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}@postgres:5432/${NATURE_DATABASE_NAME:-myunivokai_nature}?sslmode=disable
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_USERNAME: ${NATS_NATURE_USERNAME:-myunivokai_nature}
+      NATS_PASSWORD: ${NATS_NATURE_PASSWORD:-myunivokai_local_nature}
+      NATS_ACK_WAIT: ${NATS_ACK_WAIT:-2m}
+      NATS_MAX_DELIVER: ${NATS_MAX_DELIVER:-5}
+      NATS_QUERY_TIMEOUT: ${NATS_QUERY_TIMEOUT:-2500ms}
+      OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-500ms}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
+      SERVICE_SHUTDOWN_TIMEOUT: ${SERVICE_SHUTDOWN_TIMEOUT:-15s}
+    volumes:
+      - ../..:/workspace
+      - nature-service-go-cache:/go/pkg/mod
+    depends_on:
+      nature-migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myunivokai_nature -d myunivokai_nature"]
-      interval: 5s
+      test: ["CMD", "sh", "-c", "kill -0 1"]
+      interval: 10s
       timeout: 3s
-      retries: 20
+      retries: 3
+    restart: unless-stopped
+    networks: [backend]
 
-  migrate:
-    build:
-      context: .
-    container_name: myunivokai-nature-migrate
-    volumes:
-      - ./.env.local:/app/.env.local:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["/app/migrate"]
-    restart: "no"
-
-  api:
-    build:
-      context: .
-    container_name: myunivokai-nature-api
-    volumes:
-      - ./.env.local:/app/.env.local:ro
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+networks:
+  backend:
+    name: myunivokai-local-backend
 
 volumes:
-  myunivokai-nature-postgres-data:
+  nature-service-go-cache:

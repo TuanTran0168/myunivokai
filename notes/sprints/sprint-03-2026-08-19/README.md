@@ -11,6 +11,8 @@ high-fidelity desktop vertical slice from canonical DNA through public share.
 
 Backlog epic: [EPIC-S3-CITY-001](../../user-stories/engineering-backlog.md#epic-s3-city-001--add-city-on-the-stable-platform)
 
+Sprint stories: [user-stories.md](user-stories.md)
+
 ## Scope
 
 - Freeze City mapping from family-neutral `ProfileDNA` and versioned

@@ -1,0 +1,14 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /workspace/services/api-gateway
+COPY contracts/go /workspace/contracts/go
+COPY services/api-gateway/go.mod services/api-gateway/go.sum ./
+RUN go mod download
+COPY services/api-gateway .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api-gateway ./cmd/gateway
+
+FROM alpine:3.22 AS runtime
+RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S -G app app
+COPY --from=builder --chown=app:app /out/api-gateway /app/api-gateway
+USER app:app
+EXPOSE 8080
+CMD ["/app/api-gateway"]

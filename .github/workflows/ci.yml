@@ -14,6 +14,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  contract-checks:
+    name: Contracts (lint + vet + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: contracts/go/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@2.20.0 lint contracts/openapi.yaml
+        working-directory: .
+
   backend-checks:
     name: Backend (go vet + test)
     runs-on: ubuntu-latest
@@ -56,6 +83,27 @@ jobs:
       - name: Build
         run: go build ./...
 
+  dna-service-checks:
+    name: DNA service (go vet + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/dna-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/dna-service/go.mod
+          cache-dependency-path: services/dna-service/go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+
   api-gateway-checks:
     name: API gateway (go vet + test + build)
     runs-on: ubuntu-latest
@@ -82,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: clients/web-client
+        working-directory: apps/myunivokai-web
     env:
       NEXT_TELEMETRY_DISABLED: 1
     steps:
@@ -91,7 +139,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: clients/web-client/package-lock.json
+          cache-dependency-path: apps/myunivokai-web/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Typecheck
@@ -102,3 +150,10 @@ jobs:
         run: npm run test
       - name: Build
         run: npm run build
+
+  local-compose-checks:
+    name: Local Compose configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --env-file .env.local -f docker-compose-local.yml config --quiet

@@ -2,13 +2,7 @@ package models
 
 import "time"
 
-type WorldInput struct {
-	Nickname            string   `json:"nickname"`
-	Role                string   `json:"role,omitempty"`
-	Interests           []string `json:"interests"`
-	Traits              []string `json:"traits"`
-	Goal                string   `json:"goal"`
-	Challenge           string   `json:"challenge,omitempty"`
+type VisualIntent struct {
 	Mood                string   `json:"mood"`
 	FavoriteColors      []string `json:"favoriteColors"`
 	PreferredWorldStyle string   `json:"preferredWorldStyle"`
@@ -16,9 +10,12 @@ type WorldInput struct {
 
 type World struct {
 	ID                string         `json:"id"`
+	SourceJobID       string         `json:"-"`
+	ProfileID         string         `json:"-"`
+	DNAVersionID      string         `json:"-"`
 	Nickname          string         `json:"nickname"`
 	Role              string         `json:"role,omitempty"`
-	Input             WorldInput     `json:"-"`
+	VisualIntent      VisualIntent   `json:"-"`
 	PersonalityDNA    PersonalityDNA `json:"-"`
 	Archetype         string         `json:"archetype"`
 	SceneName         string         `json:"sceneName"`
@@ -40,18 +37,4 @@ type WorldVariant struct {
 	ThumbnailURL string           `json:"thumbnailUrl,omitempty"`
 	IsSelected   bool             `json:"isSelected"`
 	CreatedAt    time.Time        `json:"createdAt"`
-}
-
-type AIGenerationLog struct {
-	Provider      string
-	Model         string
-	Task          string
-	PromptVersion string
-	InputHash     string
-	RequestJSON   []byte
-	ResponseJSON  []byte
-	UsageJSON     []byte
-	LatencyMS     int
-	Status        string
-	Error         string
 }

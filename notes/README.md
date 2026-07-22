@@ -29,18 +29,18 @@ date; it is not the original creation date.
 | [coding/git-convention.md](coding/git-convention.md) | Branch naming, commit message format, PR rules | Required before any commit |
 | [coding/coding-style.md](coding/coding-style.md) | Code style: no hardcoded values, no abbreviated names | Required before writing code |
 | [coding/ci-quality-gates.md](coding/ci-quality-gates.md) | GitHub Actions CI gate for every PR | Before refactor work |
-| [fe/source-overview.md](fe/source-overview.md) | How the FE source works (Next.js): routes, the family picker, data flow, state | When working in `clients/web-client` |
+| [fe/source-overview.md](fe/source-overview.md) | How the FE source works (Next.js): async job flow, routes, family picker, rendering | When working in `apps/myunivokai-web` |
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | three.js principles, the sceneType-first renderer registry, how to add a scene type | Before touching any 3D code |
 | [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md) | How the **universe** is drawn: 4 model layers, texture/GLB pipelines, determinism | Before adding a universe 3D asset |
 | [fe/forest-render-mechanism.md](fe/forest-render-mechanism.md) | How the **forest/nature** scene is drawn: instanced + animated GLBs, seasonal recolor, bird gotchas, **the Sketchfab constraint** | Before adding a forest 3D asset |
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
-| [be/source-overview.md](be/source-overview.md) | How all three Go modules work: gateway flow, peer APIs, AI, storage, security | For any backend task |
+| [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe and Nature communicate through NATS/Redis and own data | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
 | [vision/](vision/README.md) | Approved event-driven target plus source/target boundary, NATS, Redis, DNA/family ownership and scale roadmap | Before any architecture decision |
 | [vision/versions/v1-2026-07-22/](vision/versions/v1-2026-07-22/README.md) | **Current architecture baseline:** V1 approved 2026-07-22 | Before backend, messaging, data or deployment work |
 | [vision/city-service-plan.md](vision/city-service-plan.md) | Approved City peer plan and high-fidelity-first implementation phases; not implemented source | Before any City contract, BE, gateway, asset or FE branch |
-| [ops/render-deployment.md](ops/render-deployment.md) | Current HTTP-fleet Render runbook; superseded by Sprint 1 target guide at cutover | When diagnosing the pre-migration deployment |
+| [ops/render-deployment.md](ops/render-deployment.md) | Current Render background-worker deployment entry point | Before deploying |
 | [user-stories/](user-stories/README.md) | Source-grounded product stories and prioritized engineering tasks, with Given/When/Then acceptance | Before selecting the next feature branch |
 | [sprints/](sprints/README.md) | Dated Sprint 1–3 commitments, Definition of Done and Sprint 1 deployment guide | Before implementation or deployment scheduling |
 | [design/](design/) | Stitch UI mockups (v1, v2) | When polishing UI |
@@ -51,27 +51,27 @@ date; it is not the original creation date.
 
 | Document group | Status | Notes |
 | --- | --- | --- |
-| `coding/*.md` | Active | Matches branch/commit convention and the four CI jobs |
-| `be/source-overview.md` | Active | Matches gateway plus two peer services |
+| `coding/*.md` | Active | Matches branch/commit convention and the seven CI jobs |
+| `be/source-overview.md` | Implemented | Matches Gateway plus DNA/Universe/Nature NATS services |
 | `be/refactor-plan.md` | Historical | Old Universe-only sequence; current work moved to `user-stories/` |
-| `fe/source-overview.md` | Active | Matches the family-aware client and one gateway origin |
+| `fe/source-overview.md` | Active | Matches async polling/recovery, family renderers and one gateway origin |
 | `fe/threejs-scene-architecture.md` | Active | Registry exists; the lazy-loading upgrade is still pending |
 | `fe/universe-render-mechanism.md` | Active | Matches the solar-system renderer and asset catalogs |
 | `fe/forest-render-mechanism.md` | Active | Matches Forest schema 1.2 and current asset pipeline; decoder self-hosting is a pending task |
 | `fe/refactor-plan.md` | Needs re-baseline | Several unchecked items already exist in source; do not use its status table as backlog |
 | `fe/3d-development-limitations.md` | Reference | Principles remain useful; the room-demo branch references are historical |
-| `vision/README.md` | Active target | Approved NATS/Redis/DNA direction; current source remains clearly separated |
+| `vision/README.md` | Implemented V1 baseline | NATS/Redis/DNA architecture exists; live deployment verification remains |
 | `vision/versions/v1-2026-07-22/` | Current approved V1 | Versioned scale, ownership, messaging, data and deployment baseline |
-| `vision/api-gateway.md` | Current implementation record | Matches HTTP source; target replacement banner points to solution architecture |
+| `vision/api-gateway.md` | Historical | Old HTTP peer gateway; V1 versioned architecture is current |
 | `vision/versions/v1-2026-07-22/backend-plan.md` | Approved target | Sprint 1 full backend replacement boundary |
 | `vision/versions/v1-2026-07-22/contracts-and-roadmap.md` | Active target | New contract inventory, roadmap, risks and fitness checks |
-| `vision/versions/v1-2026-07-22/deployment.md` | Approved target | Current `render.yaml` remains legacy until Sprint 1 cutover |
+| `vision/versions/v1-2026-07-22/deployment.md` | Implemented configuration | `render.yaml` now defines Gateway plus three background workers |
 | `vision/frontend-gateway-consolidation.md` | Implemented | One frontend gateway origin exists in source and deployment config |
 | `vision/frontend-plan.md` | Active | Re-baselined: family registry exists, stronger contracts and lazy chunks remain |
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
 | `vision/city-service-plan.md` | Approved product plan with amendment | City moves to Sprint 3 and consumes canonical DNA/NATS |
-| `ops/render-deployment.md` | Current-platform runbook | Accurate for legacy HTTP source only; Sprint 1 has the target deployment guide |
+| `ops/render-deployment.md` | Active entry point | Routes operators to the Sprint 1 NATS/Redis deployment guide |
 | `sprints/` | Active schedule | Sprint 1 complete migration, Sprint 2 hardening, Sprint 3 City |
 | `design/**/DESIGN.md` | Superseded reference | Layout ideas remain; purple/cyan visual language is not the active design system |
 | `references/` | Reference catalog | External links are dated research inputs; re-check availability and asset-level licenses before use |
@@ -82,8 +82,8 @@ date; it is not the original creation date.
 1. Read `coding/` before writing any code or commit.
 2. Read `fe/` for FE tasks, `be/` for BE tasks; `vision/` before architecture
    decisions. Before deploying, choose the runbook that matches the runtime:
-   `ops/render-deployment.md` for current HTTP source or the dated Sprint 1
-   deployment guide for the approved NATS/Redis target.
+   `ops/render-deployment.md` and the dated Sprint 1 deployment guide for the
+   current NATS/Redis platform.
 3. Read `user-stories/` before choosing a branch; acceptance criteria use
    Given/When/Then and must cite source evidence.
 4. When you introduce a mechanism worth recording, update the matching overview

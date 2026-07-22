@@ -1,6 +1,6 @@
 # Sprint 01 local Docker environment contract
 
-> **Document status:** Target specification; local files pending Sprint 1 implementation
+> **Document status:** Implemented configuration; real container smoke pending
 > **Sprint starts:** 2026-07-22
 > **Last source review:** 2026-07-22
 
@@ -232,6 +232,7 @@ WORLD_CACHE_TTL=60s
 SHARE_CACHE_TTL=60s
 
 NATS_REQUEST_TIMEOUT=3s
+NATS_QUERY_TIMEOUT=2500ms
 NATS_ACK_WAIT=2m
 NATS_MAX_DELIVER=5
 SERVICE_SHUTDOWN_TIMEOUT=15s
@@ -239,7 +240,7 @@ SERVICE_SHUTDOWN_TIMEOUT=15s
 AI_PROVIDER=mock
 AI_FALLBACK_PROVIDER=mock
 AI_ENABLE_FALLBACK=true
-AI_TIMEOUT_SECONDS=35
+AI_TIMEOUT=35s
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 
@@ -321,9 +322,15 @@ docker compose --env-file .env.local -f docker-compose-local.yml down
 Standalone component example:
 
 ```powershell
+docker compose --env-file infra/.env.local `
+  -f infra/docker-compose-local.yml up -d
 docker compose --env-file services/universe-service/.env.local `
   -f services/universe-service/docker-compose-local.yml up --build
 ```
+
+The first command owns shared dependencies. Component Compose files remain
+valid independently and join the same named network, but do not duplicate or
+implicitly create NATS, Redis, or PostgreSQL.
 
 Volume reset is destructive and deliberately separate. Before running a reset,
 resolve and confirm the Compose project is exactly `myunivokai-local`; state
@@ -331,12 +338,12 @@ that local PostgreSQL, JetStream and Redis data will be removed.
 
 ## 9. Acceptance
 
-- [ ] Docker Compose 2.20+ is validated before using `include`.
-- [ ] `docker compose ... config` resolves every included file without
+- [x] Docker Compose 2.20+ is validated before using `include`.
+- [x] `docker compose ... config` resolves every included file without
       duplicate resource names or wrong relative paths.
 - [ ] Full stack and each component Compose path are documented and tested.
-- [ ] Local images use `Dockerfile.local`; production uses `Dockerfile.prod`.
-- [ ] Every production Dockerfile contains exactly builder/runtime stages.
+- [x] Local images use `Dockerfile.local`; production uses `Dockerfile.prod`.
+- [x] Every production Dockerfile contains exactly builder/runtime stages.
 - [ ] Production image inspection finds no compiler, package cache, source tree
       or real secret.
 - [ ] Hot reload/watch works for Go and Next.js local development.

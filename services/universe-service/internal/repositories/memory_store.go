@@ -2,10 +2,12 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/models"
 )
 
@@ -14,7 +16,8 @@ type MemoryStore struct {
 	worlds   map[string]models.World
 	variants map[string][]models.WorldVariant
 	slugs    map[string]string
-	logs     []models.AIGenerationLog
+	jobs     map[string]string
+	outbox   []OutboxMessage
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -22,12 +25,16 @@ func NewMemoryStore() *MemoryStore {
 		worlds:   map[string]models.World{},
 		variants: map[string][]models.WorldVariant{},
 		slugs:    map[string]string{},
+		jobs:     map[string]string{},
 	}
 }
 
-func (s *MemoryStore) CreateWorld(ctx context.Context, world models.World, variant models.WorldVariant, logs []models.AIGenerationLog) (WorldBundle, error) {
+func (s *MemoryStore) CreateWorld(ctx context.Context, world models.World, variant models.WorldVariant) (WorldBundle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if existingWorldID, found := s.jobs[world.SourceJobID]; found {
+		return WorldBundle{World: s.worlds[existingWorldID], Variants: cloneVariants(s.variants[existingWorldID])}, nil
+	}
 	now := time.Now().UTC()
 	if world.ID == "" {
 		world.ID = uuid.NewString()
@@ -43,7 +50,15 @@ func (s *MemoryStore) CreateWorld(ctx context.Context, world models.World, varia
 	world.SelectedVariantID = &variant.ID
 	s.worlds[world.ID] = world
 	s.variants[world.ID] = []models.WorldVariant{variant}
-	s.logs = append(s.logs, logs...)
+	s.jobs[world.SourceJobID] = world.ID
+	completedEnvelope := contracts.NewEnvelope(world.SourceJobID, contracts.FamilyCompletedData{
+		Family: contracts.WorldFamilyUniverse, ProfileID: world.ProfileID, DNAVersionID: world.DNAVersionID, WorldID: world.ID,
+	})
+	payload, err := json.Marshal(completedEnvelope)
+	if err != nil {
+		return WorldBundle{}, err
+	}
+	s.outbox = append(s.outbox, OutboxMessage{ID: uuid.NewString(), MessageID: world.SourceJobID + ":universe-completed", Subject: contracts.UniverseCompletedEventSubject, Payload: payload})
 	return WorldBundle{World: world, Variants: []models.WorldVariant{variant}}, nil
 }
 
@@ -98,18 +113,20 @@ func (s *MemoryStore) SelectVariant(ctx context.Context, worldID, variantID stri
 	if !ok {
 		return models.WorldVariant{}, ErrNotFound
 	}
-	var selected models.WorldVariant
-	found := false
+	selectedVariantIndex := -1
 	for i := range s.variants[worldID] {
-		s.variants[worldID][i].IsSelected = s.variants[worldID][i].ID == variantID
-		if s.variants[worldID][i].IsSelected {
-			selected = s.variants[worldID][i]
-			found = true
+		if s.variants[worldID][i].ID == variantID {
+			selectedVariantIndex = i
+			break
 		}
 	}
-	if !found {
+	if selectedVariantIndex < 0 {
 		return models.WorldVariant{}, ErrNotFound
 	}
+	for i := range s.variants[worldID] {
+		s.variants[worldID][i].IsSelected = i == selectedVariantIndex
+	}
+	selected := s.variants[worldID][selectedVariantIndex]
 	world.SelectedVariantID = &variantID
 	world.UpdatedAt = time.Now().UTC()
 	s.worlds[worldID] = world
@@ -154,21 +171,27 @@ func (s *MemoryStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (s *MemoryStore) SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.logs = append(s.logs, logs...)
-	return nil
-}
-
-// AIGenerationLogs returns a copy of all stored AI logs; used by tests to
-// assert that failed generations are recorded.
-func (s *MemoryStore) AIGenerationLogs() []models.AIGenerationLog {
+func (s *MemoryStore) PendingOutbox(ctx context.Context, maximumMessages int) ([]OutboxMessage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	logsCopy := make([]models.AIGenerationLog, len(s.logs))
-	copy(logsCopy, s.logs)
-	return logsCopy
+	if maximumMessages > len(s.outbox) {
+		maximumMessages = len(s.outbox)
+	}
+	messages := make([]OutboxMessage, maximumMessages)
+	copy(messages, s.outbox[:maximumMessages])
+	return messages, nil
+}
+
+func (s *MemoryStore) MarkOutboxPublished(ctx context.Context, outboxID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for messageIndex, message := range s.outbox {
+		if message.ID == outboxID {
+			s.outbox = append(s.outbox[:messageIndex], s.outbox[messageIndex+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 func cloneVariants(in []models.WorldVariant) []models.WorldVariant {

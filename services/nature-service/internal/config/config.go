@@ -1,12 +1,7 @@
-// Package config mirrors universe-service's config loader, trimmed to what
-// nature-service needs today: no real AI provider keys until the real-AI
-// round. DATABASE_URL must point to nature-service's OWN logical database —
-// a second database inside the same Neon project as universe-service (zero
-// extra cost), never the universe database itself.
 package config
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -15,149 +10,103 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	defaultDatabaseMaximumConnections = 10
+	defaultConsumerAckWait            = 2 * time.Minute
+	defaultConsumerMaximumDeliveries  = 5
+	defaultQueryTimeout               = 2500 * time.Millisecond
+	defaultShutdownTimeout            = 15 * time.Second
+	defaultOutboxPollInterval         = 500 * time.Millisecond
+	defaultOutboxBatchSize            = 50
+	defaultShareSlugLength            = 10
+)
+
 type Config struct {
-	AppEnv              string
-	AppName             string
-	PublicWebURL        string
-	PublicAPIURL        string
-	APIHost             string
-	APIPort             string
-	GatewaySharedSecret string
-	DatabaseURL         string
-	DatabaseDirectURL   string
-	// Pool sizing. Neon's pooler prefers short-lived connections, so the
-	// lifetime defaults stay conservative — and the compute endpoint is shared
-	// with universe-service (same Neon project), so stay modest.
-	DatabaseMaxConns        int
-	DatabaseMinConns        int
-	DatabaseMaxConnLifetime time.Duration
-	DatabaseMaxConnIdleTime time.Duration
-	AIProvider              string
-	AIFallbackProvider      string
-	AIEnableFallback        bool
-	AITimeout               time.Duration
-	// AITotalBudget caps one whole DNA generation (all repair retries and the
-	// fallback provider combined); AITimeout caps each individual call.
-	AITotalBudget   time.Duration
-	AIMaxRetries    int
-	AIPromptVersion string
-	ShareSlugLength int
+	AppEnvironment             string
+	PublicWebURL               string
+	DatabaseURL                string
+	DatabaseDirectURL          string
+	DatabaseMaximumConnections int
+	NATSURL                    string
+	NATSUsername               string
+	NATSPassword               string
+	NATSCredentialsFile        string
+	ConsumerAckWait            time.Duration
+	ConsumerMaximumDeliveries  int
+	QueryTimeout               time.Duration
+	ShutdownTimeout            time.Duration
+	OutboxPollInterval         time.Duration
+	OutboxBatchSize            int
+	ShareSlugLength            int
 }
 
-// defaultAITotalBudgetMultiplier derives the whole-generation budget from the
-// per-call timeout when AI_TOTAL_BUDGET is unset: enough for a primary call, a
-// repair retry, and the fallback, while staying under the server write timeout.
-const defaultAITotalBudgetMultiplier = 3
-const minimumGatewaySharedSecretLength = 32
-
-// defaultAPIPort deliberately differs from universe-service's 8080 so both
-// services can run side by side on one developer machine.
-const defaultAPIPort = "8081"
-
-func Load() Config {
-	LoadEnv()
-	cfg := Config{
-		AppEnv:       getAny([]string{"APP_ENV", "ENV"}, "development"),
-		AppName:      get("APP_NAME", "Myunivokai Nature"),
-		PublicWebURL: get("PUBLIC_WEB_URL", "http://localhost:3000"),
-		PublicAPIURL: get("PUBLIC_API_URL", "http://localhost:"+defaultAPIPort),
-		APIHost:      get("API_HOST", "0.0.0.0"),
-		// API_PORT wins locally; PORT is the platform-injected port on
-		// Render/Heroku-style hosts, so an unconfigured deploy still binds
-		// where the platform routes traffic.
-		APIPort:                 getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
-		GatewaySharedSecret:     strings.TrimSpace(os.Getenv("GATEWAY_SHARED_SECRET")),
-		DatabaseURL:             get("DATABASE_URL", ""),
-		DatabaseDirectURL:       get("DATABASE_DIRECT_URL", ""),
-		DatabaseMaxConns:        getInt("DATABASE_MAX_CONNS", 10),
-		DatabaseMinConns:        getInt("DATABASE_MIN_CONNS", 0),
-		DatabaseMaxConnLifetime: getDuration("DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
-		DatabaseMaxConnIdleTime: getDuration("DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
-		AIProvider:              get("AI_PROVIDER", "mock"),
-		AIFallbackProvider:      get("AI_FALLBACK_PROVIDER", "mock"),
-		AIEnableFallback:        getBool("AI_ENABLE_FALLBACK", true),
-		AITimeout:               time.Duration(getInt("AI_TIMEOUT_SECONDS", 35)) * time.Second,
-		// 0 means "derive from AI_TIMEOUT_SECONDS"; resolved right below so
-		// every consumer (orchestrator, server write timeout) sees one value.
-		AITotalBudget:   getDuration("AI_TOTAL_BUDGET", 0),
-		AIMaxRetries:    getInt("AI_MAX_RETRIES", 2),
-		AIPromptVersion: get("AI_PROMPT_VERSION", "forest-dna-v1"),
-		ShareSlugLength: getInt("SHARE_SLUG_LENGTH", 10),
+func Load() (Config, error) {
+	loadEnvironmentFiles()
+	loadedConfig := Config{
+		AppEnvironment:             get("APP_ENV", "development"),
+		PublicWebURL:               get("PUBLIC_WEB_URL", "http://localhost:3000/nature"),
+		DatabaseURL:                get("DATABASE_URL", ""),
+		DatabaseDirectURL:          get("DATABASE_DIRECT_URL", ""),
+		DatabaseMaximumConnections: getInt("DATABASE_MAX_CONNS", defaultDatabaseMaximumConnections),
+		NATSURL:                    get("NATS_URL", "nats://localhost:4222"),
+		NATSUsername:               get("NATS_USERNAME", ""),
+		NATSPassword:               get("NATS_PASSWORD", ""),
+		NATSCredentialsFile:        get("NATS_CREDENTIALS", ""),
+		ConsumerAckWait:            getDuration("NATS_ACK_WAIT", defaultConsumerAckWait),
+		ConsumerMaximumDeliveries:  getInt("NATS_MAX_DELIVER", defaultConsumerMaximumDeliveries),
+		QueryTimeout:               getDuration("NATS_QUERY_TIMEOUT", defaultQueryTimeout),
+		ShutdownTimeout:            getDuration("SERVICE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
+		OutboxPollInterval:         getDuration("OUTBOX_POLL_INTERVAL", defaultOutboxPollInterval),
+		OutboxBatchSize:            getInt("OUTBOX_BATCH_SIZE", defaultOutboxBatchSize),
+		ShareSlugLength:            getInt("SHARE_SLUG_LENGTH", defaultShareSlugLength),
 	}
-	if cfg.AITotalBudget <= 0 {
-		cfg.AITotalBudget = defaultAITotalBudgetMultiplier * cfg.AITimeout
+	if err := loadedConfig.Validate(); err != nil {
+		return Config{}, err
 	}
-	return cfg
+	return loadedConfig, nil
 }
 
-func LoadEnv() {
-	original := snapshotEnv()
-	explicit := strings.TrimSpace(os.Getenv("MYUNIVOKAI_ENV_FILE"))
-	if explicit != "" {
-		loadEnvFiles(original, explicit)
-		return
+func (loadedConfig Config) Validate() error {
+	if strings.TrimSpace(loadedConfig.DatabaseURL) == "" {
+		return errors.New("DATABASE_URL is required")
 	}
-
-	files := []string{".env", ".env.local"}
-	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
-	if appEnv == "" {
-		appEnv = strings.TrimSpace(os.Getenv("ENV"))
+	if strings.TrimSpace(loadedConfig.NATSURL) == "" {
+		return errors.New("NATS_URL is required")
 	}
-	for _, name := range envAliases(appEnv) {
-		files = append(files, ".env."+name, ".env."+name+".local")
+	if loadedConfig.DatabaseMaximumConnections <= 0 || loadedConfig.ConsumerAckWait <= 0 || loadedConfig.ConsumerMaximumDeliveries <= 0 {
+		return errors.New("database and consumer limits must be positive")
 	}
-	loadEnvFiles(original, files...)
-}
-
-func (c Config) Addr() string {
-	return c.APIHost + ":" + c.APIPort
-}
-
-// IsProduction reports whether the app runs with a production APP_ENV; used by
-// the prod-only startup guards (no in-memory store in production).
-func (c Config) IsProduction() bool {
-	normalized := strings.ToLower(strings.TrimSpace(c.AppEnv))
-	return normalized == "production" || normalized == "prod"
-}
-
-// ValidateProductionGatewayAccess prevents a public production service from
-// starting with business routes that callers could use to bypass the gateway.
-func (c Config) ValidateProductionGatewayAccess() error {
-	if c.IsProduction() && len(c.GatewaySharedSecret) < minimumGatewaySharedSecretLength {
-		return fmt.Errorf("GATEWAY_SHARED_SECRET must contain at least %d characters in production", minimumGatewaySharedSecretLength)
+	if loadedConfig.QueryTimeout <= 0 || loadedConfig.ShutdownTimeout <= 0 || loadedConfig.OutboxPollInterval <= 0 || loadedConfig.OutboxBatchSize <= 0 || loadedConfig.ShareSlugLength <= 0 {
+		return errors.New("query, shutdown, outbox, and share values must be positive")
 	}
 	return nil
 }
 
-func envAliases(appEnv string) []string {
-	switch strings.ToLower(strings.TrimSpace(appEnv)) {
-	case "production", "prod":
-		return []string{"prod", "production"}
-	case "development", "dev", "":
-		return []string{"dev", "development"}
-	case "test":
-		return []string{"test"}
-	default:
-		return []string{strings.ToLower(strings.TrimSpace(appEnv))}
+func loadEnvironmentFiles() {
+	originalEnvironment := snapshotEnvironment()
+	explicitFile := strings.TrimSpace(os.Getenv("MYUNIVOKAI_ENV_FILE"))
+	if explicitFile != "" {
+		_ = godotenv.Overload(explicitFile)
+		restoreEnvironment(originalEnvironment)
+		return
 	}
+	_ = godotenv.Overload(".env", ".env.local")
+	restoreEnvironment(originalEnvironment)
 }
 
-func snapshotEnv() map[string]string {
-	out := map[string]string{}
+func snapshotEnvironment() map[string]string {
+	values := make(map[string]string)
 	for _, pair := range os.Environ() {
-		key, value, ok := strings.Cut(pair, "=")
-		if ok {
-			out[key] = value
+		key, value, found := strings.Cut(pair, "=")
+		if found {
+			values[key] = value
 		}
 	}
-	return out
+	return values
 }
 
-func loadEnvFiles(original map[string]string, files ...string) {
-	for _, file := range files {
-		_ = godotenv.Overload(file)
-	}
-	for key, value := range original {
+func restoreEnvironment(values map[string]string) {
+	for key, value := range values {
 		_ = os.Setenv(key, value)
 	}
 }
@@ -165,15 +114,6 @@ func loadEnvFiles(original map[string]string, files ...string) {
 func get(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
-	}
-	return fallback
-}
-
-func getAny(keys []string, fallback string) string {
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
 	}
 	return fallback
 }
@@ -186,19 +126,10 @@ func getInt(key string, fallback int) int {
 	return value
 }
 
-// getDuration parses Go duration strings such as "30m" or "90s".
 func getDuration(key string, fallback time.Duration) time.Duration {
 	value, err := time.ParseDuration(get(key, ""))
 	if err != nil {
 		return fallback
 	}
 	return value
-}
-
-func getBool(key string, fallback bool) bool {
-	value := strings.ToLower(get(key, ""))
-	if value == "" {
-		return fallback
-	}
-	return value == "1" || value == "true" || value == "yes"
 }

@@ -1,22 +1,12 @@
 # yaml-language-server: $schema=https://render.com/schema/render.yaml.json
-# Render blueprint for the Myunivokai service fleet.
-# Secrets are `sync: false`: their values live ONLY in the Render dashboard
-# except the gateway credential, which Render generates once in the shared
-# environment group below.
-# The web client receives one public gateway origin at build time. Family path
-# prefixes remain source-owned; peer-service hosts are visible only to gateway.
-envVarGroups:
-  - name: myunivokai-gateway-secrets
-    envVars:
-      - key: GATEWAY_SHARED_SECRET
-        generateValue: true
-
+# Managed NATS, Redis, and three Neon URLs are supplied through the dashboard.
+# Domain names describe responsibilities; Render's `worker` type describes the process.
 services:
   - type: web
     name: myunivokai-web
     runtime: docker
-    rootDir: clients/web-client
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./apps/myunivokai-web/Dockerfile.prod
+    dockerContext: ./apps/myunivokai-web
     plan: free
     autoDeployTrigger: checksPass
     healthCheckPath: /
@@ -27,8 +17,8 @@ services:
   - type: web
     name: myunivokai-gateway
     runtime: docker
-    rootDir: services/api-gateway
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./services/api-gateway/Dockerfile.prod
+    dockerContext: .
     plan: free
     autoDeployTrigger: checksPass
     healthCheckPath: /api/v1/healthz
@@ -39,75 +29,109 @@ services:
         value: "true"
       - key: API_ALLOWED_ORIGINS
         sync: false
-      # Free Render web services cannot receive private-network requests.
-      # Public HTTPS upstream URLs plus the shared key prevent bypass.
-      - key: UNIVERSE_SERVICE_URL
+      - key: NATS_URL
         sync: false
-      - key: NATURE_SERVICE_URL
+      - key: NATS_USERNAME
         sync: false
-      - fromGroup: myunivokai-gateway-secrets
+      - key: NATS_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: myunivokai
+      - key: RATE_LIMIT_REQUESTS_PER_SECOND
+        value: "2"
+      - key: RATE_LIMIT_BURST
+        value: "20"
+      - key: JOB_CACHE_TTL
+        value: 30s
+      - key: WORLD_CACHE_TTL
+        value: 60s
+      - key: SHARE_CACHE_TTL
+        value: 60s
 
-  - type: web
-    name: myunivokai-api
+  - type: worker
+    name: myunivokai-dna
     runtime: docker
-    rootDir: services/universe-service
-    dockerfilePath: ./Dockerfile.render
-    plan: free
+    dockerfilePath: ./services/dna-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
     autoDeployTrigger: checksPass
-    healthCheckPath: /api/v1/healthz
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
-      - key: RUN_MIGRATIONS_ON_START
-        value: "true"
-      - fromGroup: myunivokai-gateway-secrets
-      # mock needs no key; switch to gemini/openai in the dashboard when a real
-      # key is configured.
-      - key: AI_PROVIDER
-        value: mock
-      - key: AI_FALLBACK_PROVIDER
-        value: mock
-      # Neon POOLED url (runtime) and DIRECT url (migrations), sslmode=require.
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
         sync: false
-      - key: PUBLIC_WEB_URL
+      - key: NATS_URL
         sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: AI_PROVIDER
+        value: mock
+      - key: AI_FALLBACK_PROVIDER
+        value: mock
+      - key: AI_ENABLE_FALLBACK
+        value: "true"
       - key: GEMINI_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
 
-  # nature-service: the forest world API, a full peer of myunivokai-api.
-  # Its DATABASE_URL/DATABASE_DIRECT_URL must point at nature-service's OWN
-  # logical database (e.g. myunivokai_nature) created inside the SAME Neon
-  # project as the universe database — a second database costs nothing and
-  # keeps the deployed universe data out of this service's blast radius.
-  - type: web
-    name: myunivokai-nature
+  - type: worker
+    name: myunivokai-universe
     runtime: docker
-    rootDir: services/nature-service
-    dockerfilePath: ./Dockerfile.render
-    plan: free
+    dockerfilePath: ./services/universe-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
     autoDeployTrigger: checksPass
-    healthCheckPath: /api/v1/healthz
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
-      - key: RUN_MIGRATIONS_ON_START
-        value: "true"
-      - fromGroup: myunivokai-gateway-secrets
-      # mock is the only wired provider until the real-AI round.
-      - key: AI_PROVIDER
-        value: mock
-      - key: AI_FALLBACK_PROVIDER
-        value: mock
-      # Neon POOLED url (runtime) and DIRECT url (migrations) of the dedicated
-      # nature database, sslmode=require.
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false
+
+  - type: worker
+    name: myunivokai-nature
+    runtime: docker
+    dockerfilePath: ./services/nature-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
+    autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
         sync: false
       - key: PUBLIC_WEB_URL
         sync: false

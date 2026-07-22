@@ -2,8 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "WorldSceneConfig",
   "type": "object",
-  "required": ["schemaVersion", "sceneName", "archetype", "quote", "theme", "palette", "core", "planets", "particles", "camera", "postFX", "hud"],
+  "required": ["schemaVersion", "sceneType", "sceneName", "archetype", "quote", "theme", "palette", "core", "planets", "particles", "camera", "postFX", "hud"],
   "properties": {
+    "sceneType": {
+      "const": "universe"
+    },
     "postFX": {
       "type": "object",
       "required": ["bloomIntensity"],

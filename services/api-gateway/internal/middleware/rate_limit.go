@@ -1,19 +1,28 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/time/rate"
 )
 
 const (
-	clientIdleTTL     = 10 * time.Minute
-	cleanupInterval   = time.Minute
-	retryAfterSeconds = "1"
+	clientIdleTimeToLive = 10 * time.Minute
+	cleanupInterval      = time.Minute
+	fallbackRetrySeconds = 1
+	globalRateLimitRoute = "global"
 )
+
+type DistributedLimiter interface {
+	Allow(context.Context, string, string, float64, int) (bool, time.Duration, error)
+}
 
 type clientLimiterEntry struct {
 	limiter      *rate.Limiter
@@ -28,8 +37,8 @@ type perClientRateLimiter struct {
 	lastCleanupTime   time.Time
 }
 
-func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Handler {
-	limiter := &perClientRateLimiter{
+func RateLimit(distributedLimiter DistributedLimiter, requestsPerSecond float64, burst int) func(http.Handler) http.Handler {
+	fallbackLimiter := &perClientRateLimiter{
 		requestsPerSecond: requestsPerSecond,
 		burst:             burst,
 		clients:           make(map[string]*clientLimiterEntry),
@@ -37,8 +46,15 @@ func RateLimit(requestsPerSecond float64, burst int) func(http.Handler) http.Han
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-			if !limiter.allow(httpx.ClientIP(request.Context())) {
-				responseWriter.Header().Set("Retry-After", retryAfterSeconds)
+			clientIdentifier := httpx.ClientIP(request.Context())
+			allowed, retryDelay, err := distributedLimiter.Allow(request.Context(), globalRateLimitRoute, clientIdentifier, requestsPerSecond, burst)
+			if err != nil {
+				log.Warn().Err(err).Msg("Redis rate limiter unavailable; using local fallback")
+				allowed = fallbackLimiter.allow(clientIdentifier)
+				retryDelay = fallbackRetrySeconds * time.Second
+			}
+			if !allowed {
+				responseWriter.Header().Set("Retry-After", strconv.Itoa(edge.RetryAfterSeconds(retryDelay)))
 				httpx.WriteError(responseWriter, request, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests. Please slow down.")
 				return
 			}
@@ -71,7 +87,7 @@ func (limiter *perClientRateLimiter) removeIdleClientsLocked(now time.Time) {
 	}
 	limiter.lastCleanupTime = now
 	for clientIP, entry := range limiter.clients {
-		if now.Sub(entry.lastSeenTime) > clientIdleTTL {
+		if now.Sub(entry.lastSeenTime) > clientIdleTimeToLive {
 			delete(limiter.clients, clientIP)
 		}
 	}

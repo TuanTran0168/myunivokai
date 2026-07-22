@@ -3,9 +3,8 @@
 > **Document status:** Active index
 > **Last source review:** 2026-07-22
 
-This folder translates source-grounded product behavior and technical gaps into
-branch-sized work. It does not replace architecture docs: each story links to
-the source and vision contract it exercises.
+This folder is the cross-sprint index and product backlog. Delivery status and
+acceptance evidence live beside each dated sprint in `notes/sprints/*/user-stories.md`.
 
 ## Documents
 
@@ -13,6 +12,9 @@ the source and vision contract it exercises.
 | --- | --- |
 | [implemented-capabilities.md](implemented-capabilities.md) | What the current product already supports, expressed as verifiable stories |
 | [engineering-backlog.md](engineering-backlog.md) | Approved event-driven migration, scale and City epics with Given/When/Then acceptance |
+| [Sprint 1 stories](../sprints/sprint-01-2026-07-22/user-stories.md) | Migration implementation and pending environment evidence |
+| [Sprint 2 stories](../sprints/sprint-02-2026-08-05/user-stories.md) | Resilience and scale commitments |
+| [Sprint 3 stories](../sprints/sprint-03-2026-08-19/user-stories.md) | City vertical-slice commitments |
 
 The dated delivery commitments live in [../sprints/](../sprints/README.md).
 Sprint 1 is the complete platform migration, including local and production
