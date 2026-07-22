@@ -5,18 +5,6 @@ themselves once; the platform creates canonical ProfileDNA and composes either
 a Universe (Solar System) or a Nature (Forest) world without exposing AI, databases,
 NATS, Redis, or domain services directly to the browser.
 
-## Tech Stack
-
-| Layer | Technologies |
-| --- | --- |
-| **Frontend / Web** | Next.js 14, React 18, React Three Fiber (R3F), Three.js, Tailwind CSS, TypeScript |
-| **Backend Services** | Go, Chi Router, `pgxpool`, zerolog |
-| **Messaging & Events** | NATS (JetStream WorkQueue for Commands/Events + Core NATS Request-Reply for Queries) |
-| **Edge & Caching** | Redis (Distributed rate limiting & cache-aside state) |
-| **Persistence** | PostgreSQL on Neon (3 isolated databases: `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature`) |
-| **AI Integration** | Provider abstraction (`ai.Provider`) supporting Gemini, OpenAI, and deterministic Mock provider |
-| **DevOps & Containers** | Docker, Docker Compose, Render (Web Service & Background Workers) |
-
 ## Architecture
 
 ```mermaid
@@ -85,6 +73,18 @@ owner of its PostgreSQL database.
 - `services/nature-service`: deterministic forest worlds and variants.
 - `contracts`: public OpenAPI, JSON Schemas, NATS fixtures, and shared Go types.
 - `infra`: shared local PostgreSQL, JetStream NATS, Redis, ACL, and bootstrap.
+
+## Tech Stack
+
+| Layer | Technologies |
+| --- | --- |
+| **Frontend / Web** | Next.js 14, React 18, React Three Fiber (R3F), Three.js, Tailwind CSS, TypeScript |
+| **Backend Services** | Go, Chi Router, `pgxpool`, zerolog |
+| **Messaging & Events** | NATS (JetStream WorkQueue for Commands/Events + Core NATS Request-Reply for Queries) |
+| **Edge & Caching** | Redis (Distributed rate limiting & cache-aside state) |
+| **Persistence** | PostgreSQL on Neon (3 isolated databases: `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature`) |
+| **AI Integration** | Provider abstraction (`ai.Provider`) supporting Gemini, OpenAI, and deterministic Mock provider |
+| **DevOps & Containers** | Docker, Docker Compose, Render (Web Service & Background Workers) |
 
 ## Run locally
 
