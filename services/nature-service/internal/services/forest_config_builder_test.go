@@ -38,11 +38,7 @@ func buildTestInput(seedValue, mood string, landmarkCount int) BuildForestConfig
 		DNA:       buildTestNatureDNA(landmarkCount),
 		Seed:      seedValue,
 		VariantNo: 1,
-		Input: models.WorldInput{
-			Nickname:            "Tester",
-			Interests:           []string{"hiking", "music", "coding"},
-			Traits:              []string{"curious", "calm", "kind"},
-			Goal:                "Grow a quiet forest of my own.",
+		Input: models.VisualIntent{
 			Mood:                mood,
 			FavoriteColors:      []string{"#8B5CF6", "#06B6D4"},
 			PreferredWorldStyle: "aurora",
@@ -290,12 +286,12 @@ func TestWildlifeScalesWithMoodMultiplier(t *testing.T) {
 // vocabulary — the frontend asset catalog resolves exactly these keys.
 func TestModelKeysStayWithinCatalogVocabulary(t *testing.T) {
 	allowedModelKeys := map[string]bool{
-		ModelKeyTreeBirch:    true,
-		ModelKeyTreeOak:      true,
-		ModelKeyTreePine:     true,
-		ModelKeyTreePineSnow: true,
-		ModelKeyTreeDead:     true,
-		ModelKeyTreeBlossom:  true,
+		ModelKeyTreeBirch:      true,
+		ModelKeyTreeOak:        true,
+		ModelKeyTreePine:       true,
+		ModelKeyTreePineSnow:   true,
+		ModelKeyTreeDead:       true,
+		ModelKeyTreeBlossom:    true,
 		ModelKeyAnimalDeer:     true,
 		ModelKeyAnimalFox:      true,
 		ModelKeyAnimalRabbit:   true,
@@ -304,8 +300,8 @@ func TestModelKeysStayWithinCatalogVocabulary(t *testing.T) {
 		ModelKeyAnimalStag:     true,
 		ModelKeyAnimalBear:     true,
 		ModelKeyAnimalSquirrel: true,
-		ModelKeyBirdForest:   true,
-		ModelKeyRockMossy:    true,
+		ModelKeyBirdForest:     true,
+		ModelKeyRockMossy:      true,
 	}
 	for _, landmarkModelKey := range landmarkModelKeysByKind {
 		allowedModelKeys[landmarkModelKey] = true

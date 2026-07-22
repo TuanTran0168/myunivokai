@@ -1,86 +1,65 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/broker"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/middleware"
-	"github.com/myunivokai/myunivokai/services/api-gateway/internal/proxy"
-	"github.com/myunivokai/myunivokai/services/api-gateway/internal/routing"
 )
 
 const corsMaximumAgeSeconds = 300
 
-func NewRouter(gatewayConfig config.Config) http.Handler {
+type EdgeStore interface {
+	cacheStore
+	middleware.DistributedLimiter
+	Ping(context.Context) error
+	Close() error
+}
+
+func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore) http.Handler {
 	router := chi.NewRouter()
-	router.Use(middleware.RequestContext(gatewayConfig.TrustProxyHeaders))
+	router.Use(middleware.RequestContext(serviceConfig.TrustProxyHeaders))
 	router.Use(middleware.Recover)
 	router.Use(middleware.Logging)
 	router.Use(middleware.SecurityHeaders)
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   gatewayConfig.AllowedOrigins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-Id"},
-		ExposedHeaders:   []string{"Cache-Control", "Retry-After", "X-Cache", "X-Request-Id"},
-		AllowCredentials: false,
-		MaxAge:           corsMaximumAgeSeconds,
+		AllowedOrigins: serviceConfig.AllowedOrigins,
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-Id"},
+		ExposedHeaders: []string{"Cache-Control", "Retry-After", "X-Cache", "X-Request-Id"},
+		MaxAge:         corsMaximumAgeSeconds,
 	}))
-
-	healthHandler := NewHealthHandler(
-		gatewayConfig.AppName,
-		gatewayConfig.AppEnv,
-		gatewayConfig.GatewaySharedSecret,
-		gatewayConfig.StatusCheckTimeout,
-		gatewayConfig.UniverseServiceURL,
-		gatewayConfig.NatureServiceURL,
-	)
-	landing := landingHandler(gatewayConfig.AppName)
-	router.Get("/", landing)
-	router.Head("/", landing)
-	router.Get("/api/v1/healthz", healthHandler.Liveness)
-
-	rateLimit := middleware.RateLimit(gatewayConfig.RateLimitRequestsPerSecond, gatewayConfig.RateLimitBurst)
-	router.With(rateLimit).Get("/api/v1/statusz", healthHandler.Status)
-
-	timeouts := routing.Timeouts{
-		Standard:    gatewayConfig.StandardProxyTimeout,
-		CreateWorld: gatewayConfig.CreateWorldProxyTimeout,
-		Share:       gatewayConfig.ShareProxyTimeout,
+	healthHandler := NewHealthHandler(serviceConfig.AppName, brokerClient, edgeStore)
+	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore)
+	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
+	universeHandler := NewUniverseHandler(serviceConfig, brokerClient, rpcTransport)
+	natureHandler := NewNatureHandler(serviceConfig, brokerClient, rpcTransport)
+	landingHandler := func(responseWriter http.ResponseWriter, request *http.Request) {
+		httpx.WriteJSON(responseWriter, http.StatusOK, map[string]any{"service": serviceConfig.AppName, "status": "ok", "architecture": "nats-redis"})
 	}
-	universeProxy := proxy.NewHandler(proxy.Options{
-		UpstreamName:             "universe",
-		PublicPrefix:             routing.UniversePrefix,
-		Target:                   gatewayConfig.UniverseServiceURL,
-		SharedSecret:             gatewayConfig.GatewaySharedSecret,
-		TrustProxyHeaders:        gatewayConfig.TrustProxyHeaders,
-		Timeouts:                 timeouts,
-		ShareCacheTimeToLive:     gatewayConfig.ShareCacheTTL,
-		ShareCacheMaximumEntries: gatewayConfig.ShareCacheMaximumEntries,
-		CircuitFailureThreshold:  gatewayConfig.CircuitBreakerFailureLimit,
-		CircuitCooldown:          gatewayConfig.CircuitBreakerCooldown,
-	})
-	natureProxy := proxy.NewHandler(proxy.Options{
-		UpstreamName:             "nature",
-		PublicPrefix:             routing.NaturePrefix,
-		Target:                   gatewayConfig.NatureServiceURL,
-		SharedSecret:             gatewayConfig.GatewaySharedSecret,
-		TrustProxyHeaders:        gatewayConfig.TrustProxyHeaders,
-		Timeouts:                 timeouts,
-		ShareCacheTimeToLive:     gatewayConfig.ShareCacheTTL,
-		ShareCacheMaximumEntries: gatewayConfig.ShareCacheMaximumEntries,
-		CircuitFailureThreshold:  gatewayConfig.CircuitBreakerFailureLimit,
-		CircuitCooldown:          gatewayConfig.CircuitBreakerCooldown,
-	})
-	router.Group(func(proxyRouter chi.Router) {
-		proxyRouter.Use(rateLimit)
-		proxyRouter.Use(middleware.BodyLimit(gatewayConfig.MaximumRequestBodyBytes))
-		proxyRouter.Handle(routing.UniversePrefix, universeProxy)
-		proxyRouter.Handle(routing.UniversePrefix+"/*", universeProxy)
-		proxyRouter.Handle(routing.NaturePrefix, natureProxy)
-		proxyRouter.Handle(routing.NaturePrefix+"/*", natureProxy)
+	router.Get("/", landingHandler)
+	router.Head("/", landingHandler)
+	router.Get("/api/v1/healthz", healthHandler.Liveness)
+	router.Get("/api/v1/readyz", healthHandler.Readiness)
+	router.Get("/api/v1/statusz", healthHandler.Readiness)
+
+	rateLimitMiddleware := middleware.RateLimit(edgeStore, serviceConfig.RateLimitRequestsPerSecond, serviceConfig.RateLimitBurst)
+	router.Group(func(businessRouter chi.Router) {
+		businessRouter.Use(rateLimitMiddleware)
+		businessRouter.Use(middleware.BodyLimit(serviceConfig.MaximumRequestBodyBytes))
+		businessRouter.Get("/api/jobs/{jobID}", dnaJobHandler.GetJob)
+		businessRouter.Route("/api/universe", func(familyRouter chi.Router) {
+			registerWorldRoutes(familyRouter, universeHandler)
+		})
+		businessRouter.Route("/api/nature", func(familyRouter chi.Router) {
+			registerWorldRoutes(familyRouter, natureHandler)
+		})
+		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
 	router.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteError(responseWriter, request, http.StatusNotFound, "ROUTE_NOT_FOUND", "The requested gateway route was not found.")
@@ -91,17 +70,35 @@ func NewRouter(gatewayConfig config.Config) http.Handler {
 	return router
 }
 
-func landingHandler(appName string) http.HandlerFunc {
-	return func(responseWriter http.ResponseWriter, request *http.Request) {
-		httpx.WriteJSON(responseWriter, http.StatusOK, map[string]any{
-			"service": appName,
-			"status":  "ok",
-			"routes": map[string]string{
-				"universe": routing.UniversePrefix,
-				"nature":   routing.NaturePrefix,
-				"health":   "/api/v1/healthz",
-				"status":   "/api/v1/statusz",
-			},
-		})
+type worldRouteHandler interface {
+	CreateWorld(http.ResponseWriter, *http.Request)
+	GetWorlds(http.ResponseWriter, *http.Request)
+	GetWorld(http.ResponseWriter, *http.Request)
+	CreateVariant(http.ResponseWriter, *http.Request)
+	SelectVariant(http.ResponseWriter, *http.Request)
+	PublishWorld(http.ResponseWriter, *http.Request)
+	GetShare(http.ResponseWriter, *http.Request)
+}
+
+func registerWorldRoutes(router chi.Router, handler worldRouteHandler) {
+	router.Post("/worlds", handler.CreateWorld)
+	router.Get("/worlds", handler.GetWorlds)
+	router.Get("/worlds/{worldID}", handler.GetWorld)
+	router.Post("/worlds/{worldID}/variants", handler.CreateVariant)
+	router.Post("/worlds/{worldID}/variants/{variantID}/select", handler.SelectVariant)
+	router.Post("/worlds/{worldID}/publish", handler.PublishWorld)
+	router.Get("/share/worlds/{shareSlug}", handler.GetShare)
+}
+
+func registerUnsupportedFamilyRoutes(router chi.Router) {
+	unsupported := func(responseWriter http.ResponseWriter, request *http.Request) {
+		httpx.WriteError(responseWriter, request, http.StatusNotFound, "WORLD_FAMILY_NOT_FOUND", "The requested world family is not supported.")
 	}
+	router.Post("/worlds", unsupported)
+	router.Get("/worlds", unsupported)
+	router.Get("/worlds/{worldID}", unsupported)
+	router.Post("/worlds/{worldID}/variants", unsupported)
+	router.Post("/worlds/{worldID}/variants/{variantID}/select", unsupported)
+	router.Post("/worlds/{worldID}/publish", unsupported)
+	router.Get("/share/worlds/{shareSlug}", unsupported)
 }

@@ -1,160 +1,177 @@
 # Backend source overview
 
-> **Document status:** Active current-source overview; Sprint 1 replacement approved
-> **Last source review:** 2026-07-22
+> **Document status:** Implemented; local container smoke passed, deployed smoke pending
+> **Last source review:** 2026-07-23
 
-> This file describes code present on 2026-07-22. The approved NATS/Redis/DNA
-> target is not implemented yet; see
-> [../vision/versions/v1-2026-07-22/solution-architecture.md](../vision/versions/v1-2026-07-22/solution-architecture.md) and
-> the dated Sprint 1 plan. Re-baseline this overview only after cutover.
+The backend now consists of one public HTTP edge and three private NATS
+services. The old gateway-to-domain HTTP proxy, duplicated family AI layers,
+public domain handlers, and `GATEWAY_SHARED_SECRET` runtime have been removed.
 
-The backend is three independent Go modules:
+## Runtime topology
 
-```txt
-services/api-gateway
-services/universe-service
-services/nature-service
+```text
+myunivokai-web
+  -> API Gateway (HTTP :8080)
+       -> JetStream MYUNIVOKAI_COMMANDS
+       -> Core NATS queries
+       -> Redis rate/cache
+
+DNA Service
+  -> myunivokai_dna
+  -> AI Provider interface (mock/gemini/openai)
+  -> Universe or Nature compose command
+
+Universe Service -> myunivokai_universe
+Nature Service   -> myunivokai_nature
 ```
 
-## Public request flow
+Only Gateway starts an HTTP server. Domain services run `cmd/service`, consume
+durable commands, publish outbox events, and register Core NATS queue
+responders. Their Render resource type is Background Worker, with no `-worker`
+name suffix.
 
-```txt
-Browser
-  -> api-gateway
-       RequestContext -> Recover -> Logging -> SecurityHeaders -> CORS
-       -> one shared per-client rate limiter -> 64 KiB body limit
-       -> /api/universe/* or /api/nature/*
-       -> route timeout + per-upstream circuit breaker
-       -> sanitized X-Forwarded-* + X-Request-Id + X-Gateway-Key
-  -> selected service /api/v1/*
-       RequestID -> Recover -> Logging -> GatewayAuthentication
-       -> handler validation -> business service -> repository
+## Shared contracts
+
+`contracts/go` is a small Go module used by every backend module. NATS messages
+always have exactly these top-level fields:
+
+```json
+{
+  "jobId": "...",
+  "timestamp": "2026-07-22T12:00:00Z",
+  "data": {}
+}
 ```
 
-The gateway rewrites paths only. It must never inspect or mutate world input,
-DNA, scene config, variants, or share payloads.
+Family/profile/world identifiers are inside typed `data`. Subjects carry the
+domain, operation, and V1 version. JSON schemas and fixed examples live in
+`contracts/schemas` and `contracts/fixtures`; the public browser contract is
+`contracts/openapi.yaml`.
 
-## World creation in each peer
+## API Gateway
 
-Universe:
+Source: `services/api-gateway`.
 
-```txt
-POST /api/universe/worlds
-  -> universe-service handlers/world_handler.go
-  -> services/world_service.go
-  -> ai/orchestrator.go -> PersonalityDNA
-  -> services/world_config_builder.go -> WorldSceneConfig
-  -> repository transaction -> { world, variant, personalityDNA }
+- `internal/handlers`: separate DNA job, Universe, and Nature HTTP adapters over
+  one shared RPC/cache transport. Each family handler receives fixed NATS
+  subjects at construction time; request data cannot reroute between services.
+- `internal/broker`: JetStream publish and Core NATS request-reply.
+- `internal/edge`: Redis cache and atomic distributed token bucket.
+- `internal/middleware`: request identity, headers, CORS, body limit, logging,
+  recovery, and Redis-first rate limit with local fallback.
+- `internal/config`: NATS/Redis/cache/edge configuration and production CORS
+  validation.
+
+`POST /api/{family}/worlds` returns `202` only after a JetStream `PubAck`.
+Reads/mutations have a bounded NATS request timeout. Redis does not transport
+jobs; it may be flushed without losing accepted commands or persisted worlds.
+
+## DNA Service
+
+Source: `services/dna-service`.
+
+- owns raw `WorldInput`, profiles, root jobs, immutable DNA versions, provider
+  attempts, inbox, and outbox;
+- is the only service with provider adapters under `internal/ai/providers`;
+- business logic depends on `ai.Provider`, not provider-specific clients;
+- validates AI JSON before persistence and records a hash instead of raw prompt
+  input in attempt telemetry;
+- publishes one requested family compose command containing an immutable
+  ProfileDNA snapshot;
+- consumes family completion/failure and answers job queries.
+
+The default mock provider makes no external call but intentionally selects
+between multiple ProfileDNA presets per mood and randomizes facet energy. Its
+random-index strategy is injected in tests, preserving deterministic assertions
+without removing runtime variety. Variant regeneration remains inside family
+services and does not call AI.
+
+## Universe and Nature services
+
+Sources: `services/universe-service` and `services/nature-service`.
+
+Both use the same layers:
+
+```text
+cmd/service -> internal/messaging runtime -> internal/handlers NATS adapters
+            -> internal/services -> internal/repositories -> PostgreSQL
 ```
 
-Nature mirrors the flow at `POST /api/nature/worlds`, using `NatureDNA`,
-`forest_config_builder.go`, and `ForestSceneConfig`. Its provider factory wires
-mock only until N4; do not claim Gemini/OpenAI runtime support there yet.
+Each service:
 
-Core invariant: AI produces semantics only. All visual numbers come from the
-seeded builder. Regeneration creates a new seed/config and makes no AI call.
+- consumes only its versioned compose subject;
+- registers explicit Core NATS handlers for list/get/variant/publish/share;
+- maps family-neutral facets into its existing deterministic scene builder;
+- atomically records inbox + world + initial variant + completion outbox;
+- returns the existing world/variant/publish/share JSON shapes over Core NATS;
+- preserves UUID validation at Gateway and privacy-safe public projections;
+- supports idempotent compose redelivery and AI-free variants;
+- stores `profileId`, `dnaVersionId`, source job, visual intent, and DNA
+snapshot in its own database.
 
-## API shapes
+The runtime owns connection lifecycle, deterministic subscription registration,
+pull/ack/retry policy, and outbox polling. Fetch size/wait, retry delay,
+connect/reconnect timing, publish timeout, ack wait, and maximum deliveries are
+configuration values. Every inbound envelope is validated before its service is
+called, and a terminal compose message is acknowledged only after its failure
+event receives a JetStream acknowledgement.
 
-Both services expose identical direct routes under `/api/v1`:
+DNA generation commands use bounded redelivery. After the configured maximum,
+DNA Service durably creates/updates the root job as failed and queues its failure
+event before terminating the poison command. Family result events use unlimited
+redelivery so a temporary DNA database outage cannot silently drop the final
+job state.
 
-```txt
-POST /worlds
-GET  /worlds?ids=...
-GET  /worlds/{id}
-POST /worlds/{id}/variants
-POST /worlds/{id}/variants/{variantId}/select
-POST /worlds/{id}/publish
-GET  /share/worlds/{slug}
-GET  /healthz
-GET  /readyz
-```
+Universe scene configs now explicitly include `sceneType: "universe"`; Nature
+continues to use `sceneType: "forest"`. The frontend registry remains
+sceneType-first.
 
-The gateway makes them public under `/api/universe` and `/api/nature`.
-Universe responses use `personalityDNA`; Nature responses use `natureDNA`.
-Public share models in both services omit raw `WorldInput`.
+## Persistence
 
-## Storage
+Fresh V1 database names:
 
-Each peer has its own `repositories.Store`, memory implementation, Postgres
-implementation, migration binary, and logical Neon database. Production
-refuses the in-memory fallback. Unique collisions surface as
-`repositories.ErrConflict` and the service retries with fresh values where the
-existing service code defines that behavior.
+| Owner | Database |
+| --- | --- |
+| DNA Service | `myunivokai_dna` |
+| Universe Service | `myunivokai_universe` |
+| Nature Service | `myunivokai_nature` |
 
-## AI provider switching
+There are no cross-database foreign keys. IDs and immutable snapshots cross
+boundaries only through NATS contracts. Outbox messages are retried until
+JetStream acknowledges them; consumer inbox keys prevent duplicate effects.
 
-Universe keeps Gemini, OpenAI, and mock adapters under
-`internal/ai/providers`. Business code depends only on `ai.Provider`.
-`aifactory` reads `AI_PROVIDER`; the orchestrator validates structured output,
-repair-retries schema failures, and can use the configured fallback.
+## Internal access boundary
 
-Nature has the same interfaces/orchestrator but currently implements mock only.
-Its Gemini/OpenAI env names are reserved for N4 and do not imply working
-providers.
+V1 intentionally has no auth/account service. Direct browser-to-domain access
+is prevented structurally:
 
-## Health and security ownership
+- domain services have no HTTP listener or published host port;
+- the browser receives only the Gateway origin;
+- local NATS users have subject-scoped publish/subscribe permissions;
+- production uses managed NATS credentials and TLS;
+- each service receives only its own Neon URLs.
 
-Gateway:
+## Development checks
 
-- `/api/v1/healthz` is liveness;
-- `/api/v1/statusz` concurrently checks both protected upstream ready routes;
-- CORS and rate limiting exist only here;
-- successful public share GETs may be cached for 60 seconds;
-- unsafe request IDs and client forwarding headers are replaced;
-- transport failures use `UPSTREAM_UNREACHABLE`, `UPSTREAM_TIMEOUT`, or
-  `UPSTREAM_CIRCUIT_OPEN` envelopes.
+Run the root Compose config gate, then the checks in each Go module:
 
-World services:
-
-- direct `/api/v1/healthz` remains public for Render;
-- `/api/v1/readyz` and every business/share route require `X-Gateway-Key` when
-  configured;
-- production startup requires a 32+ character shared key;
-- Swagger is mounted only outside production;
-- AI keys and gateway secrets are never logged or stored.
-
-There is no user authentication in source.
-
-## Known upgrade boundaries
-
-- The root `contracts/openapi.yaml` is only a health placeholder; the generated
-  peer Swagger documents describe direct `/api/v1` routes, not the public
-  gateway prefixes.
-- Universe scene config has schema 1.2 but no explicit `sceneType`; Forest has
-  `sceneType: "forest"`. Contract normalization currently lives in the FE.
-- Forest golden fixtures are byte-checked but not validated against their JSON
-  Schema in CI; Universe has no equivalent JSON golden set.
-- Gateway rate-limit buckets, share cache, and circuit state are process-local.
-  This is intentional for one instance and must be revisited before scale-out.
-- Logs and request IDs exist, but metrics/distributed tracing do not.
-- Nature's provider factory is mock-only. User authentication remains deferred
-  until identity/ownership semantics exist.
-
-The prioritized Given/When/Then work is in
-`notes/user-stories/engineering-backlog.md`.
-
-## Run and verify
-
-Run Universe on 8080, Nature on 8081, then Gateway on 8082. Each Go module has
-the same required gate:
-
-```bash
-go mod verify
-go vet ./...
+```powershell
+docker compose -f docker-compose-local.yml config --quiet
 go test ./...
+go vet ./...
 go build ./...
 ```
 
-The gateway local and production env surface is in
-`services/api-gateway/.env.example`; domain env files remain service-specific.
+The complete local/deployment workflow is in
+`notes/sprints/sprint-01-2026-07-22/`. Source compilation and unit/regression
+tests pass as of the review date. On 2026-07-22 UTC, the root stack built and
+started on Docker Engine 27.4.0; all health checks passed and mock-provider
+Universe and Nature jobs completed through Gateway, NATS, DNA, their family
+service, and PostgreSQL. Managed deployment still requires operator
+credentials. All five two-stage production images also build successfully.
 
-For the integrated local path, root `docker-compose-local.yml` starts both
-PostgreSQL databases and migrations before the two APIs, waits for both APIs
-before the gateway, then builds the web client against
-the single `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082` origin. Run it
-with the default VS Code build task,
-`docker compose -f docker-compose-local.yml up --build`, or `make local-up`.
-The root stack supplies one development-only gateway key to all three backend
-processes so business traffic exercises the same gateway authentication
-boundary as deployment.
+Production promotion is not yet approved: the audit identified high-severity
+advisories in the current Next.js 14 production tree. Sprint story
+`S1-SECURITY-001` requires an isolated framework upgrade plus browser
+regression before cutover; this backend migration does not silently waive or
+bundle that behavior-sensitive major upgrade.

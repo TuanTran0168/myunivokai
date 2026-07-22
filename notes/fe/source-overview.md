@@ -1,7 +1,7 @@
-# FE Source Overview — clients/web-client
+# FE Source Overview — apps/myunivokai-web
 
 > **Document status:** Active
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-22
 
 Next.js 14 App Router + TypeScript + Tailwind + React Three Fiber.
 Every page is a client component because of WebGL and localStorage.
@@ -22,7 +22,7 @@ itself.
 
 | Route | File | Role |
 | --- | --- | --- |
-| `/` | `src/app/page.tsx` | Landing + create form (combined) with the **Universe/Forest family picker**. Submit -> POST /worlds (chosen family) -> redirect |
+| `/` | `src/app/page.tsx` | Landing + family picker. Submit -> `202 + jobId` -> queued/processing polling -> completed world redirect; pending polling resumes after refresh |
 | `/worlds/[worldId]` | `src/app/worlds/[worldId]/page.tsx` | Dashboard: 3D canvas, POI panel, variants, publish/share, PNG export. Reads `?family=` to pick the API + renderer |
 | `/gallery` | `src/app/gallery/page.tsx` | Worlds saved on this device (localStorage), family-aware, loaded in parallel |
 | `/share/worlds/[shareSlug]` | `src/app/share/worlds/[shareSlug]/page.tsx` | Public **universe** share page |
@@ -30,14 +30,16 @@ itself.
 
 ## The lib layer — every piece of data passes through here
 
-- `lib/api.ts` — the single API client, now **family-aware**: `request(family,
-  path, init)` picks the gateway route by `WorldFamily`
+- `lib/api.ts` — the single API client, now **family-aware and asynchronous**:
+  `request(family, path, init)` picks the gateway route by `WorldFamily`
   (`API_BASE_URLS_BY_FAMILY`), and every method takes a family. The `normalize*`
   functions matter most: the BE returns `{ world, selectedVariant, variants }`
   (variant list at the response ROOT) and normalize maps everything onto the
   unified `World` / `WorldVariant` types. **The FE's worst historical bug lived
   here** (reading the wrong location sent the canvas into fallback mode). If a BE
-  response shape changes, fix normalize first.
+  response shape changes, fix normalize first. Creation stores the pending job
+  in session storage, polls `/api/jobs/{jobId}` with bounded backoff/deadline,
+  supports `AbortSignal`, and loads the world only after completion.
 - `lib/gateway.ts` — validates the one configured gateway origin and owns the
   family-to-public-prefix map. Browser requests and both server-rendered share
   metadata routes use this same helper. It deliberately has no direct-service
@@ -102,14 +104,13 @@ See `notes/user-stories/engineering-backlog.md` for Given/When/Then acceptance.
 ## Required checks before committing
 
 ```bash
-cd clients/web-client
+cd apps/myunivokai-web
 npm run typecheck
 npm run lint
 npm run build
 ```
 
 For integrated local development, root `docker-compose-local.yml` builds this
-client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8082` and starts it
-after the API Gateway is healthy. The default VS Code build task starts that
-full stack. The production Docker image uses Next.js standalone output and a
-non-root runtime user; the same image is declared in the Render Blueprint.
+client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080`. The production
+Docker image uses exactly two stages, Next.js standalone output, and a non-root
+runtime user; the same image is declared in the Render Blueprint.

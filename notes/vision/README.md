@@ -1,6 +1,6 @@
 # Vision — Myunivokai as a scalable portrait platform
 
-> **Document status:** Active index and approved direction
+> **Document status:** Active index; V1 implemented in source, deployment verification pending
 > **Last source review:** 2026-07-22
 
 Myunivokai turns one person's semantic DNA into multiple deterministic 3D
@@ -9,9 +9,10 @@ they can evolve, deploy and scale separately. Canonical DNA and AI generation
 move to `dna-service`; the public gateway becomes a NATS edge; Redis supplies
 shared edge state.
 
-The target was approved on 2026-07-22 and is scheduled as a complete Sprint 1
-migration. Source still implements the older HTTP reverse-proxy architecture;
-never present the target as shipped until the Sprint 1 verification gates pass.
+The target was approved and implemented in source on 2026-07-22. Compilation,
+unit/regression tests, frontend production build, and Compose configuration pass.
+Do not describe the fleet as deployed until managed-environment evidence in the
+Sprint 1 runbook is recorded.
 
 ## Architecture source of truth
 
@@ -30,16 +31,9 @@ architecture revision.
 
 | Version | Status | Summary |
 | --- | --- | --- |
-| [v1-2026-07-22](versions/v1-2026-07-22/README.md) | Current approved target | NATS/Redis edge, canonical DNA, independent Universe/Nature services |
+| [v1-2026-07-22](versions/v1-2026-07-22/README.md) | Current implemented source baseline | NATS/Redis edge, canonical DNA, independent Universe/Nature services |
 
 ```txt
-Current source (reviewed 2026-07-22)
-
-web -> api-gateway -> HTTP universe-service -> old Universe database
-                  -> HTTP nature-service   -> old Nature database
-
-Approved target
-
 web -> api-gateway -> NATS -> dna-service      -> myunivokai_dna
                           -> universe-service -> myunivokai_universe
                           -> nature-service   -> myunivokai_nature
@@ -51,7 +45,7 @@ web -> api-gateway -> NATS -> dna-service      -> myunivokai_dna
 | Document | Role after the 2026-07-22 decision |
 | --- | --- |
 | [versions/v1-2026-07-22/](versions/v1-2026-07-22/README.md) | **Current versioned architecture baseline** |
-| [api-gateway.md](api-gateway.md) | Current implemented HTTP gateway plus target-amendment pointer |
+| [api-gateway.md](api-gateway.md) | Historical HTTP gateway record; versioned V1 is current |
 | [frontend-plan.md](frontend-plan.md) | Current renderer architecture and frontend gaps |
 | [visual-diversity.md](visual-diversity.md) | Visual/art direction that remains valid across the migration |
 | [city-service-plan.md](city-service-plan.md) | Approved City product plan, now dependent on the platform migration/hardening |

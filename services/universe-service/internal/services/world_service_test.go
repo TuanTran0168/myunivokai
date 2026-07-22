@@ -2,103 +2,120 @@ package services
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/myunivokai/myunivokai/services/universe-service/internal/ai"
-	"github.com/myunivokai/myunivokai/services/universe-service/internal/ai/providers"
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/models"
 	"github.com/myunivokai/myunivokai/services/universe-service/internal/repositories"
-	"github.com/myunivokai/myunivokai/services/universe-service/internal/validation"
 )
 
-type alwaysFailingProvider struct{}
-
-func (p *alwaysFailingProvider) Name() ai.ProviderName { return ai.ProviderName("failing") }
-
-func (p *alwaysFailingProvider) GenerateStructured(ctx context.Context, req ai.StructuredRequest) (*ai.StructuredResponse, error) {
-	return nil, errors.New("simulated provider outage")
+func newTestWorldService(store repositories.Store) *WorldService {
+	serviceConfig := config.Config{PublicWebURL: "http://localhost:3000", ShareSlugLength: 10}
+	return NewWorldService(serviceConfig, store, NewWorldConfigBuilder())
 }
 
-func validWorldInput() models.WorldInput {
-	return models.WorldInput{
-		Nickname:            "Tuan",
-		Role:                "Developer",
-		Interests:           []string{"coding", "travel", "photo"},
-		Traits:              []string{"curious", "builder", "focused"},
-		Goal:                "Build a beautiful AI product",
-		Mood:                "futuristic calm",
-		FavoriteColors:      []string{"#8B5CF6"},
-		PreferredWorldStyle: "cosmic-galaxy",
+func validComposeEnvelope() contracts.Envelope[contracts.ComposeWorldData] {
+	return contracts.NewEnvelope("01K0ABCDEF1234567890", contracts.ComposeWorldData{
+		Family:       contracts.WorldFamilyUniverse,
+		ProfileID:    "27ddcd8a-ea36-4f79-9b7f-b831e29d10c4",
+		DNAVersionID: "577c956d-83d6-4a1e-b09a-65f0a69d1c67",
+		Profile:      contracts.ProfileSummary{Nickname: "Tuan", Role: "Developer"},
+		VisualIntent: contracts.VisualIntent{Mood: "focused", FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, PreferredWorldStyle: "cosmic-galaxy"},
+		ProfileDNA: contracts.ProfileDNA{
+			SchemaVersion:  "1.0",
+			Archetype:      "Builder Explorer",
+			SceneName:      "The Cyan Builder",
+			Quote:          "I build worlds from curious ideas.",
+			ShortNarrative: "A curious builder who turns ideas into useful worlds.",
+			TraitScores:    contracts.TraitScores{Creativity: 90, Discipline: 86, Curiosity: 92, Energy: 80, Focus: 90},
+			EnergySignature: contracts.EnergySignature{
+				Primary: "builder", Secondary: "explorer", Intensity: 86,
+			},
+			Facets: []contracts.ProfileFacet{
+				{Key: "coding", Name: "Coding", Kind: "interest", Meaning: "Where ideas become useful systems.", Energy: 90},
+				{Key: "design", Name: "Design", Kind: "interest", Meaning: "Where clarity becomes form.", Energy: 82},
+				{Key: "focused", Name: "Focused", Kind: "trait", Meaning: "The discipline that compounds.", Energy: 88},
+			},
+			VisualHints: contracts.VisualHints{Theme: "cosmic-galaxy", CoreSymbol: "crystal", PaletteIntent: "purple cyan", MotionIntent: "calm orbiting"},
+		},
+	})
+}
+
+func TestComposeWorldPreservesUniverseResponseShape(t *testing.T) {
+	store := repositories.NewMemoryStore()
+	service := newTestWorldService(store)
+	response, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("compose world: %v", err)
+	}
+	if response.World.ID == "" || response.Variant.ID == "" {
+		t.Fatal("expected persisted world and variant identifiers")
+	}
+	if response.Variant.Config.SceneType != "universe" {
+		t.Fatalf("expected universe scene type, got %q", response.Variant.Config.SceneType)
+	}
+	if len(response.PersonalityDNA.Planets) != 3 || response.PersonalityDNA.Planets[0].Type != "Interest Planet" {
+		t.Fatalf("unexpected family DNA mapping: %#v", response.PersonalityDNA.Planets)
 	}
 }
 
-func newTestWorldService(store repositories.Store, provider ai.Provider) *WorldService {
-	cfg := config.Config{AIPromptVersion: "world-dna-v1"}
-	orchestrator := ai.NewOrchestrator(provider, nil, validation.ValidatePersonalityDNA, time.Second)
-	return NewWorldService(cfg, store, orchestrator, NewWorldConfigBuilder())
-}
-
-func TestCreateWorldPersistsFailedAttemptLogs(t *testing.T) {
-	memoryStore := repositories.NewMemoryStore()
-	service := newTestWorldService(memoryStore, &alwaysFailingProvider{})
-
-	_, err := service.CreateWorld(context.Background(), validWorldInput())
-	if err == nil {
-		t.Fatal("expected CreateWorld to fail when every provider fails")
+func TestComposeWorldIsIdempotentForRedelivery(t *testing.T) {
+	store := repositories.NewMemoryStore()
+	service := newTestWorldService(store)
+	first, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("first compose: %v", err)
 	}
-
-	savedLogs := memoryStore.AIGenerationLogs()
-	if len(savedLogs) != 1 {
-		t.Fatalf("expected 1 failed attempt log, got %d", len(savedLogs))
+	second, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("redelivered compose: %v", err)
 	}
-	if savedLogs[0].Status != "failed" {
-		t.Fatalf("expected failed status, got %q", savedLogs[0].Status)
+	if first.World.ID != second.World.ID {
+		t.Fatalf("redelivery created a second world: %s != %s", first.World.ID, second.World.ID)
 	}
-	if savedLogs[0].Error == "" {
-		t.Fatal("expected the provider error message to be recorded")
+	messages, err := store.PendingOutbox(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("read outbox: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected one completion event, got %d", len(messages))
 	}
 }
 
-// conflictOnFirstCallStore wraps a real store and simulates the race where a
-// concurrent request claims the same variant number or share slug first.
 type conflictOnFirstCallStore struct {
 	repositories.Store
 	variantConflictsRemaining int
 	publishConflictsRemaining int
 }
 
-func (s *conflictOnFirstCallStore) AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error) {
-	if s.variantConflictsRemaining > 0 {
-		s.variantConflictsRemaining--
+func (store *conflictOnFirstCallStore) AddVariant(ctx context.Context, worldID string, variant models.WorldVariant) (models.WorldVariant, error) {
+	if store.variantConflictsRemaining > 0 {
+		store.variantConflictsRemaining--
 		return models.WorldVariant{}, repositories.ErrConflict
 	}
-	return s.Store.AddVariant(ctx, worldID, variant)
+	return store.Store.AddVariant(ctx, worldID, variant)
 }
 
-func (s *conflictOnFirstCallStore) PublishWorld(ctx context.Context, worldID, slug string) (models.World, error) {
-	if s.publishConflictsRemaining > 0 {
-		s.publishConflictsRemaining--
+func (store *conflictOnFirstCallStore) PublishWorld(ctx context.Context, worldID, shareSlug string) (models.World, error) {
+	if store.publishConflictsRemaining > 0 {
+		store.publishConflictsRemaining--
 		return models.World{}, repositories.ErrConflict
 	}
-	return s.Store.PublishWorld(ctx, worldID, slug)
+	return store.Store.PublishWorld(ctx, worldID, shareSlug)
 }
 
-func TestRegenerateVariantRetriesOnConflict(t *testing.T) {
-	conflictingStore := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), variantConflictsRemaining: 1}
-	service := newTestWorldService(conflictingStore, providers.NewMock())
-
-	created, err := service.CreateWorld(context.Background(), validWorldInput())
+func TestRegenerateVariantRetriesWithoutAI(t *testing.T) {
+	store := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), variantConflictsRemaining: 1}
+	service := newTestWorldService(store)
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
 	if err != nil {
-		t.Fatalf("CreateWorld failed: %v", err)
+		t.Fatalf("compose world: %v", err)
 	}
-
 	response, err := service.RegenerateVariant(context.Background(), created.World.ID)
 	if err != nil {
-		t.Fatalf("expected variant creation to retry past the conflict: %v", err)
+		t.Fatalf("regenerate variant: %v", err)
 	}
 	if response.Variant.VariantNo != 2 {
 		t.Fatalf("expected variant number 2, got %d", response.Variant.VariantNo)
@@ -106,40 +123,17 @@ func TestRegenerateVariantRetriesOnConflict(t *testing.T) {
 }
 
 func TestPublishWorldRetriesOnSlugConflict(t *testing.T) {
-	conflictingStore := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), publishConflictsRemaining: 1}
-	service := newTestWorldService(conflictingStore, providers.NewMock())
-
-	created, err := service.CreateWorld(context.Background(), validWorldInput())
+	store := &conflictOnFirstCallStore{Store: repositories.NewMemoryStore(), publishConflictsRemaining: 1}
+	service := newTestWorldService(store)
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
 	if err != nil {
-		t.Fatalf("CreateWorld failed: %v", err)
+		t.Fatalf("compose world: %v", err)
 	}
-
 	response, err := service.PublishWorld(context.Background(), created.World.ID)
 	if err != nil {
-		t.Fatalf("expected publish to retry with a fresh slug: %v", err)
+		t.Fatalf("publish world: %v", err)
 	}
 	if !strings.HasPrefix(response.ShareSlug, "tuan-") {
-		t.Fatalf("expected slug built from nickname, got %q", response.ShareSlug)
-	}
-}
-
-func TestCreateWorldRecordsTokenUsage(t *testing.T) {
-	memoryStore := repositories.NewMemoryStore()
-	service := newTestWorldService(memoryStore, providers.NewMock())
-
-	_, err := service.CreateWorld(context.Background(), validWorldInput())
-	if err != nil {
-		t.Fatalf("CreateWorld with mock provider failed: %v", err)
-	}
-
-	savedLogs := memoryStore.AIGenerationLogs()
-	if len(savedLogs) != 1 {
-		t.Fatalf("expected 1 success log, got %d", len(savedLogs))
-	}
-	if savedLogs[0].Status != "success" {
-		t.Fatalf("expected success status, got %q", savedLogs[0].Status)
-	}
-	if len(savedLogs[0].UsageJSON) == 0 {
-		t.Fatal("expected usage_json to be recorded for the attempt")
+		t.Fatalf("expected slug based on nickname, got %q", response.ShareSlug)
 	}
 }

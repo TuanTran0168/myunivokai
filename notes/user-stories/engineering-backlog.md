@@ -1,12 +1,14 @@
 # Engineering backlog — event-driven platform
 
-> **Document status:** Active prioritized backlog
+> **Document status:** Cross-sprint planning baseline; execution status lives in sprint folders
 > **Last source review:** 2026-07-22
 
-This backlog implements the approved
-[Vision V1 solution architecture](../vision/versions/v1-2026-07-22/solution-architecture.md). The repository
-still contains the legacy synchronous HTTP topology; every target story remains
-Planned until code, automated checks and its named environment evidence exist.
+This backlog originated the approved
+[Vision V1 solution architecture](../vision/versions/v1-2026-07-22/solution-architecture.md).
+Sprint 1 source implementation now exists. Use
+[Sprint 1 user stories](../sprints/sprint-01-2026-07-22/user-stories.md) for
+current implementation and verification status; `Ready` labels below preserve
+the original planning baseline rather than overriding sprint evidence.
 
 ## EPIC-S1-MIGRATE-001 — Replace the platform completely in Sprint 1
 

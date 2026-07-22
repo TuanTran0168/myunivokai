@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal().Err(err).Msg("load universe service configuration")
+	}
 	databaseURL := cfg.DatabaseDirectURL
 	if databaseURL == "" {
 		databaseURL = cfg.DatabaseURL

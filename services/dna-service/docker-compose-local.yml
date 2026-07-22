@@ -1,0 +1,67 @@
+services:
+  dna-migrate:
+    build:
+      context: ../..
+      dockerfile: services/dna-service/Dockerfile.local
+    command: ["go", "run", "./cmd/migrate"]
+    environment:
+      DATABASE_URL: postgresql://${DNA_DATABASE_USER:-myunivokai_dna_app}:${DNA_DATABASE_PASSWORD:-myunivokai_local_dna}@postgres:5432/${DNA_DATABASE_NAME:-myunivokai_dna}?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://${DNA_DATABASE_USER:-myunivokai_dna_app}:${DNA_DATABASE_PASSWORD:-myunivokai_local_dna}@postgres:5432/${DNA_DATABASE_NAME:-myunivokai_dna}?sslmode=disable
+      MIGRATIONS_DIR: /workspace/services/dna-service/migrations
+    volumes:
+      - ../..:/workspace
+      - dna-service-go-cache:/go/pkg/mod
+    restart: on-failure
+    networks: [backend]
+
+  dna-service:
+    build:
+      context: ../..
+      dockerfile: services/dna-service/Dockerfile.local
+    env_file:
+      - ./.env.local
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql://${DNA_DATABASE_USER:-myunivokai_dna_app}:${DNA_DATABASE_PASSWORD:-myunivokai_local_dna}@postgres:5432/${DNA_DATABASE_NAME:-myunivokai_dna}?sslmode=disable
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_USERNAME: ${NATS_DNA_USERNAME:-myunivokai_dna}
+      NATS_PASSWORD: ${NATS_DNA_PASSWORD:-myunivokai_local_dna}
+      NATS_ACK_WAIT: ${NATS_ACK_WAIT:-2m}
+      NATS_MAX_DELIVER: ${NATS_MAX_DELIVER:-5}
+      NATS_FETCH_BATCH_SIZE: ${NATS_FETCH_BATCH_SIZE:-1}
+      NATS_FETCH_MAX_WAIT: ${NATS_FETCH_MAX_WAIT:-1s}
+      NATS_RETRY_DELAY: ${NATS_RETRY_DELAY:-2s}
+      NATS_CONNECT_TIMEOUT: ${NATS_CONNECT_TIMEOUT:-5s}
+      NATS_RECONNECT_WAIT: ${NATS_RECONNECT_WAIT:-2s}
+      NATS_PUBLISH_TIMEOUT: ${NATS_PUBLISH_TIMEOUT:-5s}
+      NATS_QUERY_TIMEOUT: ${NATS_QUERY_TIMEOUT:-2500ms}
+      OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-500ms}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-mock}
+      AI_ENABLE_FALLBACK: ${AI_ENABLE_FALLBACK:-true}
+      AI_TIMEOUT: ${AI_TIMEOUT:-35s}
+      AI_TOTAL_BUDGET: ${AI_TOTAL_BUDGET:-105s}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SERVICE_SHUTDOWN_TIMEOUT: ${SERVICE_SHUTDOWN_TIMEOUT:-15s}
+    volumes:
+      - ../..:/workspace
+      - dna-service-go-cache:/go/pkg/mod
+    depends_on:
+      dna-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "sh", "-c", "kill -0 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    networks: [backend]
+
+networks:
+  backend:
+    name: myunivokai-local-backend
+
+volumes:
+  dna-service-go-cache:

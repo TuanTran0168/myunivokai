@@ -12,6 +12,8 @@ Sprint 2 does not finish missing Sprint 1 migration work.
 
 Backlog epic: [EPIC-S2-SCALE-001](../../user-stories/engineering-backlog.md#epic-s2-scale-001--prove-resilience-and-horizontal-scale)
 
+Sprint stories: [user-stories.md](user-stories.md)
+
 ## Scope
 
 - Define representative generation/read/share workloads and target SLOs.

@@ -1,7 +1,7 @@
 # Sprint 01 — complete platform migration
 
 > **Starts:** 2026-07-22
-> **Status:** Planned and approved
+> **Status:** Implemented in source; local container and managed deployment verification pending
 > **Last source review:** 2026-07-22
 
 ## Sprint goal
@@ -13,6 +13,8 @@ configuration/runbook, smoke evidence, cutover and safe retirement planning.
 It is not complete when only infrastructure or service scaffolds exist.
 
 Architecture: [Vision V1 solution architecture](../../vision/versions/v1-2026-07-22/solution-architecture.md)
+
+Sprint acceptance: [user-stories.md](user-stories.md)
 
 Deployment guide: [deployment-guide.md](deployment-guide.md)
 
@@ -118,12 +120,12 @@ overwrites.
 
 ### Automated
 
-- [ ] All Go modules pass `go mod verify`, `go vet ./...`, `go test ./...`, and
+- [x] All Go modules pass `go mod verify`, `go vet ./...`, `go test ./...`, and
       `go build ./...`.
-- [ ] Frontend typecheck, lint, tests and production build pass.
+- [x] Frontend typecheck, lint, tests and production build pass.
 - [ ] Message/DNA/scene/OpenAPI schemas and fixed fixtures pass CI.
-- [ ] Duplicate delivery produces one logical DNA/world/result.
-- [ ] AI/provider tests use mock and no frontend/provider boundary is violated.
+- [x] Duplicate compose delivery produces one logical world/result in repository tests.
+- [x] AI/provider tests use mock and no frontend/provider boundary is violated.
 - [ ] Redis outage, NATS retry, consumer restart and database rollback tests pass.
 - [ ] A clean local environment starts and migrates with one documented command.
 - [ ] Every local Docker image supports the documented development watch flow;
@@ -152,10 +154,10 @@ overwrites.
 
 ### Documentation
 
-- [ ] `notes/be/source-overview.md`, deployment runbook, README, env tables and
+- [x] `notes/be/source-overview.md`, deployment runbook, README, env tables and
       diagrams are re-baselined to implemented source.
-- [ ] No document claims City or auth is implemented.
-- [ ] Old HTTP architecture docs are marked historical after cutover.
+- [x] No document claims City or auth is implemented.
+- [x] Old HTTP architecture docs are marked historical.
 
 ## Out of scope
 

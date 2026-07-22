@@ -11,6 +11,7 @@ import (
 type ErrorBody struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
+	Details   any    `json:"details,omitempty"`
 	RequestID string `json:"requestId,omitempty"`
 }
 
@@ -34,9 +35,21 @@ func WriteJSON(responseWriter http.ResponseWriter, status int, value any) {
 }
 
 func WriteError(responseWriter http.ResponseWriter, request *http.Request, status int, code, message string) {
+	WriteErrorWithDetails(responseWriter, request, status, code, message, nil)
+}
+
+func WriteErrorWithDetails(responseWriter http.ResponseWriter, request *http.Request, status int, code, message string, details any) {
 	WriteJSON(responseWriter, status, ErrorEnvelope{Error: ErrorBody{
 		Code:      code,
 		Message:   message,
+		Details:   details,
 		RequestID: RequestID(request.Context()),
 	}})
+}
+
+func WriteRawJSON(responseWriter http.ResponseWriter, status int, payload []byte) {
+	responseWriter.Header().Set("Content-Type", "application/json")
+	responseWriter.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+	responseWriter.WriteHeader(status)
+	_, _ = responseWriter.Write(payload)
 }

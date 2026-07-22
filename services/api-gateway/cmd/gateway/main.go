@@ -8,7 +8,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/broker"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/handlers"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -27,16 +29,30 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("load gateway configuration")
 	}
+	brokerClient, err := broker.NewNATSClient(gatewayConfig)
+	if err != nil {
+		log.Fatal().Err(err).Msg("connect gateway to NATS")
+	}
+	defer brokerClient.Close()
+	edgeStore, err := edge.NewRedisStore(gatewayConfig.RedisURL, gatewayConfig.RedisKeyPrefix)
+	if err != nil {
+		log.Fatal().Err(err).Msg("create gateway Redis client")
+	}
+	defer func() {
+		if closeError := edgeStore.Close(); closeError != nil {
+			log.Error().Err(closeError).Msg("close gateway Redis client")
+		}
+	}()
 	server := &http.Server{
-		Addr:              gatewayConfig.Addr(),
-		Handler:           handlers.NewRouter(gatewayConfig),
+		Addr:              gatewayConfig.Address(),
+		Handler:           handlers.NewRouter(gatewayConfig, brokerClient, edgeStore),
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
-		WriteTimeout:      gatewayConfig.CreateWorldProxyTimeout + serverWriteMargin,
+		WriteTimeout:      gatewayConfig.NATSPublishTimeout + gatewayConfig.NATSRequestTimeout + serverWriteMargin,
 		IdleTimeout:       serverIdleTimeout,
 	}
 	go func() {
-		log.Info().Str("addr", gatewayConfig.Addr()).Msg("api gateway listening")
+		log.Info().Str("addr", gatewayConfig.Address()).Msg("api gateway listening")
 		if serveError := server.ListenAndServe(); serveError != nil && serveError != http.ErrServerClosed {
 			log.Fatal().Err(serveError).Msg("api gateway failed")
 		}

@@ -1,175 +1,231 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 )
 
-const testGatewaySecret = "test-gateway-shared-secret"
+type fakeBroker struct {
+	mutex             sync.Mutex
+	publishedEnvelope contracts.Envelope[contracts.GenerateDNAData]
+	requestedSubject  string
+	response          contracts.Envelope[contracts.RPCResponseData]
+	publishError      error
+	requestError      error
+	pingError         error
+}
 
-func TestGatewayRoutesAndSanitizesForwardingHeaders(t *testing.T) {
-	requestReceived := make(chan *http.Request, 1)
-	upstream := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		requestReceived <- request.Clone(request.Context())
-		responseWriter.Header().Set("Content-Type", "application/json")
-		_, _ = responseWriter.Write([]byte(`{"ok":true}`))
-	}))
-	defer upstream.Close()
-	router := NewRouter(testGatewayConfig(t, upstream.URL, upstream.URL))
-	request := httptest.NewRequest(http.MethodGet, "/api/universe/worlds?ids=one", nil)
-	request.RemoteAddr = "192.0.2.10:4321"
-	request.Header.Set("X-Gateway-Key", "forged-client-value")
-	request.Header.Set("X-Request-Id", "trace_123")
+func (brokerClient *fakeBroker) PublishGeneration(_ context.Context, envelope contracts.Envelope[contracts.GenerateDNAData]) error {
+	brokerClient.mutex.Lock()
+	defer brokerClient.mutex.Unlock()
+	brokerClient.publishedEnvelope = envelope
+	return brokerClient.publishError
+}
+
+func (brokerClient *fakeBroker) Request(_ context.Context, subject string, _ any) (contracts.Envelope[contracts.RPCResponseData], error) {
+	brokerClient.mutex.Lock()
+	defer brokerClient.mutex.Unlock()
+	brokerClient.requestedSubject = subject
+	return brokerClient.response, brokerClient.requestError
+}
+
+func (brokerClient *fakeBroker) Ping(context.Context) error { return brokerClient.pingError }
+func (brokerClient *fakeBroker) Close()                     {}
+
+type fakeEdgeStore struct {
+	mutex        sync.Mutex
+	values       map[string][]byte
+	timeToLives  map[string]time.Duration
+	deleteCounts map[string]int
+	pingError    error
+}
+
+func newFakeEdgeStore() *fakeEdgeStore {
+	return &fakeEdgeStore{values: make(map[string][]byte), timeToLives: make(map[string]time.Duration), deleteCounts: make(map[string]int)}
+}
+
+func (store *fakeEdgeStore) Allow(context.Context, string, string, float64, int) (bool, time.Duration, error) {
+	return true, 0, nil
+}
+
+func (store *fakeEdgeStore) Get(_ context.Context, namespace, identifier string) ([]byte, error) {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	payload, found := store.values[namespace+":"+identifier]
+	if !found {
+		return nil, edge.ErrCacheMiss
+	}
+	return append([]byte(nil), payload...), nil
+}
+
+func (store *fakeEdgeStore) Set(_ context.Context, namespace, identifier string, payload []byte, timeToLive time.Duration) error {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	key := namespace + ":" + identifier
+	store.values[key] = append([]byte(nil), payload...)
+	store.timeToLives[key] = timeToLive
+	return nil
+}
+
+func (store *fakeEdgeStore) Delete(_ context.Context, namespace, identifier string) error {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	key := namespace + ":" + identifier
+	delete(store.values, key)
+	store.deleteCounts[key]++
+	return nil
+}
+
+func (store *fakeEdgeStore) Ping(context.Context) error { return store.pingError }
+func (store *fakeEdgeStore) Close() error               { return nil }
+
+func TestCreateWorldPublishesValidatedEnvelopeAndReturnsAcceptedJob(t *testing.T) {
+	brokerClient := &fakeBroker{}
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+	request := httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(validWorldInputJSON()))
+	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("gateway status = %d, body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("create status = %d, body=%s", response.Code, response.Body.String())
 	}
-	proxiedRequest := <-requestReceived
-	if proxiedRequest.URL.Path != "/api/v1/worlds" || proxiedRequest.URL.RawQuery != "ids=one" {
-		t.Fatalf("upstream target = %s?%s", proxiedRequest.URL.Path, proxiedRequest.URL.RawQuery)
+	if brokerClient.publishedEnvelope.JobID == "" || brokerClient.publishedEnvelope.Timestamp.IsZero() {
+		t.Fatalf("generation envelope is incomplete: %+v", brokerClient.publishedEnvelope)
 	}
-	if credential := proxiedRequest.Header.Get("X-Gateway-Key"); credential != testGatewaySecret {
-		t.Fatalf("gateway credential = %q, want configured secret", credential)
+	if brokerClient.publishedEnvelope.Data.Family != contracts.WorldFamilyUniverse || brokerClient.publishedEnvelope.Data.Input.Nickname != "Nova" {
+		t.Fatalf("unexpected generation data: %+v", brokerClient.publishedEnvelope.Data)
 	}
-	if forwardedFor := proxiedRequest.Header.Get("X-Forwarded-For"); forwardedFor != "192.0.2.10" {
-		t.Fatalf("X-Forwarded-For = %q, want sanitized client address", forwardedFor)
-	}
-	if response.Header().Get("X-Request-Id") != "trace_123" {
-		t.Fatalf("request ID was not propagated: %q", response.Header().Get("X-Request-Id"))
-	}
-	if values := response.Header().Values("X-Request-Id"); len(values) != 1 {
-		t.Fatalf("gateway returned duplicate request IDs: %v", values)
-	}
-	if response.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Fatal("security headers are missing")
-	}
-}
-
-func TestGatewayStatusAggregatesBothUpstreams(t *testing.T) {
-	readyService := func() *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-			if request.URL.Path != "/api/v1/readyz" || request.Header.Get("X-Gateway-Key") != testGatewaySecret {
-				responseWriter.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			responseWriter.WriteHeader(http.StatusOK)
-		}))
-	}
-	universe := readyService()
-	defer universe.Close()
-	nature := readyService()
-	defer nature.Close()
-	router := NewRouter(testGatewayConfig(t, universe.URL, nature.URL))
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/statusz", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("statusz = %d, body=%s", response.Code, response.Body.String())
-	}
-	var payload struct {
-		OK       bool `json:"ok"`
-		Services map[string]struct {
-			Ready bool `json:"ready"`
-		} `json:"services"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+	var job contracts.Job
+	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if !payload.OK || !payload.Services["universe"].Ready || !payload.Services["nature"].Ready {
-		t.Fatalf("unexpected aggregate payload: %+v", payload)
+	if job.JobID != brokerClient.publishedEnvelope.JobID || job.Status != contracts.JobStatusQueued {
+		t.Fatalf("unexpected accepted job: %+v", job)
 	}
 }
 
-func TestGatewayCachesOnlyPublicShareResponses(t *testing.T) {
-	var upstreamCalls atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		upstreamCalls.Add(1)
-		responseWriter.Header().Set("Content-Type", "application/json")
-		_, _ = responseWriter.Write([]byte(`{"world":"public"}`))
-	}))
-	defer upstream.Close()
-	router := NewRouter(testGatewayConfig(t, upstream.URL, upstream.URL))
-	for requestNumber := 0; requestNumber < 2; requestNumber++ {
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/nature/share/worlds/grove", nil))
-		if response.Code != http.StatusOK {
-			t.Fatalf("share response %d = %d", requestNumber, response.Code)
-		}
-		if requestNumber == 1 && response.Header().Get("X-Cache") != "HIT" {
-			t.Fatalf("second share request cache = %q, want HIT", response.Header().Get("X-Cache"))
-		}
-	}
-	if calls := upstreamCalls.Load(); calls != 1 {
-		t.Fatalf("upstream calls = %d, want one cached call", calls)
-	}
-}
-
-func TestGatewayRejectsOversizedBodyBeforeProxy(t *testing.T) {
-	var upstreamCalls atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		upstreamCalls.Add(1)
-		responseWriter.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	gatewayConfig := testGatewayConfig(t, upstream.URL, upstream.URL)
-	gatewayConfig.MaximumRequestBodyBytes = 4
-	router := NewRouter(gatewayConfig)
-	request := httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader("12345"))
+func TestCreateWorldRejectsTrailingJSONBeforePublishing(t *testing.T) {
+	brokerClient := &fakeBroker{}
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	if response.Code != http.StatusRequestEntityTooLarge || upstreamCalls.Load() != 0 {
-		t.Fatalf("status=%d upstreamCalls=%d", response.Code, upstreamCalls.Load())
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(validWorldInputJSON()+` {}`)))
+	if response.Code != http.StatusBadRequest || brokerClient.publishedEnvelope.JobID != "" {
+		t.Fatalf("status=%d publishedJob=%q", response.Code, brokerClient.publishedEnvelope.JobID)
 	}
 }
 
-func TestGatewayMapsTransportFailureAndOpensCircuit(t *testing.T) {
-	gatewayConfig := testGatewayConfig(t, "http://127.0.0.1:1", "http://127.0.0.1:1")
-	gatewayConfig.CircuitBreakerFailureLimit = 1
-	router := NewRouter(gatewayConfig)
-
-	firstResponse := httptest.NewRecorder()
-	router.ServeHTTP(firstResponse, httptest.NewRequest(http.MethodGet, "/api/universe/worlds", nil))
-	if firstResponse.Code != http.StatusBadGateway || !strings.Contains(firstResponse.Body.String(), "UPSTREAM_UNREACHABLE") {
-		t.Fatalf("first failure = %d %s", firstResponse.Code, firstResponse.Body.String())
+func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
+	worldID := "11111111-1111-4111-8111-111111111111"
+	testCases := []struct {
+		name            string
+		path            string
+		expectedSubject string
+	}{
+		{name: "universe", path: "/api/universe/worlds/" + worldID, expectedSubject: contracts.UniverseWorldGetQuerySubject},
+		{name: "nature", path: "/api/nature/worlds/" + worldID, expectedSubject: contracts.NatureWorldGetQuerySubject},
 	}
-	secondResponse := httptest.NewRecorder()
-	router.ServeHTTP(secondResponse, httptest.NewRequest(http.MethodGet, "/api/universe/worlds", nil))
-	if secondResponse.Code != http.StatusServiceUnavailable || !strings.Contains(secondResponse.Body.String(), "UPSTREAM_CIRCUIT_OPEN") {
-		t.Fatalf("open circuit = %d %s", secondResponse.Code, secondResponse.Body.String())
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			payload := json.RawMessage(`{"id":"` + worldID + `"}`)
+			responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, json.RawMessage(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			brokerClient := &fakeBroker{response: responseEnvelope}
+			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, testCase.path, nil))
+			if response.Code != http.StatusOK || brokerClient.requestedSubject != testCase.expectedSubject {
+				t.Fatalf("status=%d subject=%q body=%s", response.Code, brokerClient.requestedSubject, response.Body.String())
+			}
+		})
 	}
 }
 
-func TestGatewayMapsRouteDeadlineToGatewayTimeout(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		time.Sleep(50 * time.Millisecond)
-		responseWriter.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	gatewayConfig := testGatewayConfig(t, upstream.URL, upstream.URL)
-	gatewayConfig.StandardProxyTimeout = 5 * time.Millisecond
-	router := NewRouter(gatewayConfig)
+func TestUnsupportedFamilyKeepsGatewayErrorContract(t *testing.T) {
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/nature/worlds", nil))
-	if response.Code != http.StatusGatewayTimeout || !strings.Contains(response.Body.String(), "UPSTREAM_TIMEOUT") {
-		t.Fatalf("timeout = %d %s", response.Code, response.Body.String())
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/ocean/worlds", nil))
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"code":"WORLD_FAMILY_NOT_FOUND"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
-func TestGatewayCORSIsOwnedAtThePublicEdge(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		responseWriter.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	router := NewRouter(testGatewayConfig(t, upstream.URL, upstream.URL))
+func TestWorldMutationInvalidatesCacheBeforeAndAfterSuccess(t *testing.T) {
+	worldID := "11111111-1111-4111-8111-111111111111"
+	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusCreated, map[string]any{
+		"variant": map[string]any{"id": "22222222-2222-4222-8222-222222222222"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokerClient := &fakeBroker{response: responseEnvelope}
+	edgeStore := newFakeEdgeStore()
+	router := NewRouter(testGatewayConfig(), brokerClient, edgeStore)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants", strings.NewReader(`{}`)))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	cacheKey := worldCacheNamespace + ":" + edge.WorldCacheIdentifier(string(contracts.WorldFamilyUniverse), worldID)
+	if edgeStore.deleteCounts[cacheKey] != 2 {
+		t.Fatalf("cache delete count = %d, want 2", edgeStore.deleteCounts[cacheKey])
+	}
+}
+
+func TestActiveJobUsesShortCacheTTL(t *testing.T) {
+	job := contracts.Job{JobID: "job-1", Family: contracts.WorldFamilyNature, Status: contracts.JobStatusProcessing, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeEdgeStore()
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, store)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/job-1", nil))
+	if response.Code != http.StatusOK || store.timeToLives[jobCacheNamespace+":job-1"] != activeJobCacheTTL {
+		t.Fatalf("status=%d ttl=%s", response.Code, store.timeToLives[jobCacheNamespace+":job-1"])
+	}
+}
+
+func TestReadinessReportsNATSAndRedisFailures(t *testing.T) {
+	brokerClient := &fakeBroker{pingError: errors.New("nats unavailable")}
+	store := newFakeEdgeStore()
+	store.pingError = errors.New("redis unavailable")
+	router := NewRouter(testGatewayConfig(), brokerClient, store)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"nats":"unavailable"`) || !strings.Contains(response.Body.String(), `"redis":"unavailable"`) {
+		t.Fatalf("readiness=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestGatewayRejectsOversizedBodyBeforePublishing(t *testing.T) {
+	serviceConfig := testGatewayConfig()
+	serviceConfig.MaximumRequestBodyBytes = 4
+	brokerClient := &fakeBroker{}
+	router := NewRouter(serviceConfig, brokerClient, newFakeEdgeStore())
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader("12345")))
+	if response.Code != http.StatusRequestEntityTooLarge || brokerClient.publishedEnvelope.JobID != "" {
+		t.Fatalf("status=%d publishedJob=%q", response.Code, brokerClient.publishedEnvelope.JobID)
+	}
+}
+
+func TestGatewayCORSIsOwnedAtPublicEdge(t *testing.T) {
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 	request := httptest.NewRequest(http.MethodOptions, "/api/universe/worlds", nil)
 	request.Header.Set("Origin", "http://localhost:3000")
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
@@ -180,33 +236,15 @@ func TestGatewayCORSIsOwnedAtThePublicEdge(t *testing.T) {
 	}
 }
 
-func testGatewayConfig(t *testing.T, universeServiceURL, natureServiceURL string) config.Config {
-	t.Helper()
-	parsedUniverseURL, err := url.Parse(universeServiceURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsedNatureURL, err := url.Parse(natureServiceURL)
-	if err != nil {
-		t.Fatal(err)
-	}
+func testGatewayConfig() config.Config {
 	return config.Config{
-		AppEnv:                     "test",
-		AppName:                    "Gateway Test",
-		AllowedOrigins:             []string{"http://localhost:3000"},
-		UniverseServiceURL:         parsedUniverseURL,
-		NatureServiceURL:           parsedNatureURL,
-		GatewaySharedSecret:        testGatewaySecret,
-		RateLimitRequestsPerSecond: 1000,
-		RateLimitBurst:             1000,
-		MaximumRequestBodyBytes:    64 * 1024,
-		StandardProxyTimeout:       time.Second,
-		CreateWorldProxyTimeout:    time.Second,
-		ShareProxyTimeout:          time.Second,
-		StatusCheckTimeout:         time.Second,
-		ShareCacheTTL:              time.Minute,
-		ShareCacheMaximumEntries:   100,
-		CircuitBreakerFailureLimit: 3,
-		CircuitBreakerCooldown:     time.Minute,
+		AppEnvironment: "test", AppName: "Gateway Test", AllowedOrigins: []string{"http://localhost:3000"},
+		RateLimitRequestsPerSecond: 1000, RateLimitBurst: 1000, MaximumRequestBodyBytes: 64 * 1024,
+		NATSPublishTimeout: time.Second, NATSRequestTimeout: time.Second, JobCacheTimeToLive: time.Minute,
+		WorldCacheTimeToLive: time.Minute, ShareCacheTimeToLive: time.Minute,
 	}
+}
+
+func validWorldInputJSON() string {
+	return `{"nickname":" Nova ","role":"Builder","interests":["AI","music","space"],"traits":["curious","calm","focused"],"goal":"Build a meaningful creative universe","mood":"curious","favoriteColors":["#8B5CF6"],"preferredWorldStyle":"nebula"}`
 }

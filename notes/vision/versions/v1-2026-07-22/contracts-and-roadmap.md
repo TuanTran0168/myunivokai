@@ -1,27 +1,32 @@
 # Contracts, roadmap, and risks
 
-> **Document status:** Active for approved target
+> **Document status:** Active; Sprint 1 source inventory implemented
 > **Vision version:** v1-2026-07-22
-> **Last source review:** 2026-07-22
+> **Last source review:** 2026-07-23
 
 This roadmap is governed by
-[solution-architecture.md](solution-architecture.md). The source still uses
-synchronous HTTP peers; Sprint 1 is the full cutover.
+[solution-architecture.md](solution-architecture.md). Sprint 1 source now uses
+the event-driven V1 contracts; live cutover evidence is still pending.
 
 ## Contract inventory
 
-| Contract | Current source | Sprint 1 target |
+| Contract | Implemented source | Remaining verification |
 | --- | --- | --- |
-| Public API | Gateway-prefixed synchronous peer routes; root OpenAPI is health-only | versioned generation/job/family/share API; create returns `202 + jobId` |
-| Messaging | absent | generic `jobId/timestamp/data` envelope; versioned command/event/query schemas |
-| DNA | independent `PersonalityDNA` and `NatureDNA` | one family-neutral, versioned `ProfileDNA` owned by `dna-service` |
-| Universe scene | schema 1.2 without explicit `sceneType` | explicit `sceneType`, fixed fixtures and legacy reader policy |
-| Nature scene | Forest schema 1.2 and golden fixtures | retained, validated in the new consumer flow |
-| Edge state | in-memory limiter/share cache/circuit | Redis-backed distributed limiter and safe cache-aside |
-| Persistence | two old logical databases | fresh `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature` baselines |
-| Internal trust | public peers plus `X-Gateway-Key` | no domain HTTP API; NATS TLS credentials and subject ACLs |
-| Local runtime | monolithic root/per-service Compose, no NATS/Redis/DNA | root `docker-compose-local.yml` aggregator, shared `infra/`, component Compose files and `.env.local` |
-| Production | four free Render web services | gateway web + three always-on domain services + managed NATS/Redis/Neon |
+| Public API | versioned generation/job/family/share OpenAPI; create returns `202 + jobId` | deployed lifecycle smoke |
+| Messaging | generic `jobId/timestamp/data` envelope, typed V1 Go contracts/fixtures, explicit service NATS handlers, validated inbound envelopes, configurable fetch/retry/connect/publish policy | managed NATS compatibility/ACL negative smoke |
+| DNA | family-neutral `ProfileDNA` owned by `dna-service` | real-provider staging smoke when enabled |
+| Universe scene | explicit `sceneType: universe`, deterministic tests, local lifecycle smoke | browser regression |
+| Nature scene | Forest schema 1.2, golden tests, local lifecycle smoke | browser regression |
+| Edge state | Redis distributed limiter and cache-aside with fallback | two-Gateway/Redis outage smoke |
+| Persistence | fresh `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature` migrations; empty local migration smoke passed | empty Neon migration smoke |
+| Internal trust | no domain HTTP API; local NATS subject ACLs | managed credential and database negative checks |
+| Local runtime | root include aggregator, shared `infra/`, component Compose and `.env.local`; Docker full-stack/both-family smoke passed | standalone component and restart persistence smoke |
+| Production | Gateway web + DNA/Universe/Nature Background Workers | operator deploy/cutover/rollback evidence |
+
+Production cutover is additionally blocked on Sprint story `S1-SECURITY-001`:
+the current Next.js 14 runtime has high-severity production advisories whose
+available remediation is a framework major upgrade requiring browser
+regression, not a safe incidental dependency bump.
 
 ## Compatibility policy
 
@@ -62,6 +67,7 @@ Detailed acceptance criteria live in
 | Sensitive cache/message data | Raw questionnaire is personal | raw input stays in DNA DB; family commands carry validated DNA snapshot; public Redis caches use safe projections |
 | Old docs mistaken for target | Current source docs accurately describe reverse proxy | visible current-vs-target banners and re-baseline after cutover |
 | Service count/cost | Three always-on consumers require compute | cost is explicit; consolidate hosting only as a documented temporary deployment compromise, not a domain merge |
+| Vulnerable web runtime | `npm audit --omit=dev` reports a high-severity direct Next.js advisory set | complete the isolated Next.js major upgrade and browser regression gate before cutover |
 
 ## Architecture fitness checks
 
@@ -69,6 +75,8 @@ CI and deployed smoke must eventually prove:
 
 - a generation HTTP handler contains no provider call and returns after NATS
   `PubAck`;
+- Gateway Universe/Nature handlers have constructor-fixed subjects and cannot
+  route from a client-controlled family value;
 - `dna-service` is the only module importing provider adapters;
 - Universe/Nature build the same fixture deterministically after restart;
 - duplicate delivery creates one logical result;

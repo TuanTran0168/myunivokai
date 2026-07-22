@@ -1,8 +1,8 @@
 # Sprint 01 local Docker environment contract
 
-> **Document status:** Target specification; local files pending Sprint 1 implementation
+> **Document status:** Implemented and verified on a local Docker Engine
 > **Sprint starts:** 2026-07-22
-> **Last source review:** 2026-07-22
+> **Last source review:** 2026-07-23
 
 This contract preserves the repository's explicit local naming style while
 separating shared infrastructure from component-owned development containers.
@@ -35,7 +35,7 @@ infra/
   redis/
     redis.conf
   postgres/
-    init-databases.sql
+    init-databases.sh
 
 apps/
   myunivokai-web/
@@ -81,18 +81,33 @@ uses top-level `include`:
 name: myunivokai-local
 
 include:
-  - ./infra/docker-compose-local.yml
-  - ./services/api-gateway/docker-compose-local.yml
-  - ./services/dna-service/docker-compose-local.yml
-  - ./services/universe-service/docker-compose-local.yml
-  - ./services/nature-service/docker-compose-local.yml
-  - ./apps/myunivokai-web/docker-compose-local.yml
+  - path: ./infra/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/api-gateway/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/dna-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/universe-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/nature-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./apps/myunivokai-web/docker-compose-local.yml
+    env_file: ./.env.local
 ```
 
 `include` requires Docker Compose 2.20 or later. Unlike combining unrelated
 files with multiple `-f` flags, included files resolve build contexts, bind
 mounts and config paths relative to their own folder. The implementation must
 run `docker compose config` in CI to detect name/resource conflicts.
+
+The long syntax wires the root `.env.local` into interpolation for every
+included model. Therefore normal integrated commands do not need a repeated
+`--env-file` flag. Each application runtime also declares its component
+`.env.local` through service-level `env_file`; explicit `environment` entries
+remain the higher-precedence whitelist used by the integrated stack. Migration
+jobs and shared infrastructure intentionally keep explicit variable lists so a
+database initializer never receives AI keys and one infrastructure container
+never receives another component's credentials.
 
 Reference: [Docker Compose include](https://docs.docker.com/reference/compose-file/include/).
 
@@ -189,10 +204,10 @@ APP_ENV=development
 
 WEB_PORT=3000
 GATEWAY_PORT=8080
-POSTGRES_PORT=5432
-NATS_CLIENT_PORT=4222
-NATS_MONITOR_PORT=8222
-REDIS_PORT=6379
+POSTGRES_PORT=15432
+NATS_CLIENT_PORT=14222
+NATS_MONITOR_PORT=18222
+REDIS_PORT=16379
 
 POSTGRES_ADMIN_USER=myunivokai_admin
 POSTGRES_ADMIN_PASSWORD=<local-only-value>
@@ -232,14 +247,21 @@ WORLD_CACHE_TTL=60s
 SHARE_CACHE_TTL=60s
 
 NATS_REQUEST_TIMEOUT=3s
+NATS_QUERY_TIMEOUT=2500ms
 NATS_ACK_WAIT=2m
 NATS_MAX_DELIVER=5
+NATS_FETCH_BATCH_SIZE=1
+NATS_FETCH_MAX_WAIT=1s
+NATS_RETRY_DELAY=2s
+NATS_CONNECT_TIMEOUT=5s
+NATS_RECONNECT_WAIT=2s
+NATS_PUBLISH_TIMEOUT=5s
 SERVICE_SHUTDOWN_TIMEOUT=15s
 
 AI_PROVIDER=mock
 AI_FALLBACK_PROVIDER=mock
 AI_ENABLE_FALLBACK=true
-AI_TIMEOUT_SECONDS=35
+AI_TIMEOUT=35s
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 
@@ -290,10 +312,14 @@ Published developer ports:
 | ---: | --- |
 | 3000 | branded web app |
 | 8080 | gateway HTTP API |
-| 5432 | optional local PostgreSQL diagnostics |
-| 4222 | optional local NATS CLI/client diagnostics |
-| 8222 | local NATS monitoring |
-| 6379 | optional local Redis diagnostics |
+| 15432 | optional local PostgreSQL diagnostics; container port remains 5432 |
+| 14222 | optional local NATS CLI/client diagnostics; container port remains 4222 |
+| 18222 | local NATS monitoring; container port remains 8222 |
+| 16379 | optional local Redis diagnostics; container port remains 6379 |
+
+The non-default host ports avoid collisions with PostgreSQL, NATS, or Redis
+already installed on a developer machine. All container-to-container URLs keep
+their standard ports, so this does not change application behavior.
 
 Database/NATS/Redis diagnostic ports bind to localhost only where Compose
 supports the host binding syntax. Domain services publish no host port.
@@ -313,34 +339,82 @@ supports the host binding syntax. Domain services publish no host port.
 Integrated stack:
 
 ```powershell
-docker compose --env-file .env.local -f docker-compose-local.yml up --build
-docker compose --env-file .env.local -f docker-compose-local.yml ps
-docker compose --env-file .env.local -f docker-compose-local.yml down
+docker compose -f docker-compose-local.yml config
+docker compose -f docker-compose-local.yml up --build
+docker compose -f docker-compose-local.yml ps
+docker compose -f docker-compose-local.yml down
 ```
 
 Standalone component example:
 
 ```powershell
+docker compose --env-file infra/.env.local `
+  -f infra/docker-compose-local.yml up -d
 docker compose --env-file services/universe-service/.env.local `
   -f services/universe-service/docker-compose-local.yml up --build
 ```
+
+The first command owns shared dependencies. Component Compose files remain
+valid independently and join the same named network, but do not duplicate or
+implicitly create NATS, Redis, or PostgreSQL.
 
 Volume reset is destructive and deliberately separate. Before running a reset,
 resolve and confirm the Compose project is exactly `myunivokai-local`; state
 that local PostgreSQL, JetStream and Redis data will be removed.
 
-## 9. Acceptance
+## 9. Runtime evidence
 
-- [ ] Docker Compose 2.20+ is validated before using `include`.
-- [ ] `docker compose ... config` resolves every included file without
+Verified at `2026-07-22T17:23:50Z` on Docker Engine 27.4.0 using the root
+command without `--env-file`:
+
+- all local images built successfully;
+- PostgreSQL, NATS, Redis, Gateway, DNA, Universe, and Nature became healthy;
+- PostgreSQL/NATS bootstrap and all three migrations exited with code 0;
+- Web, Gateway liveness/readiness, and NATS monitor returned HTTP 200;
+- a Universe job completed as world
+  `a8783af6-6d68-4855-9498-811bbf652010` with `sceneType=universe`;
+- a Nature job completed as world
+  `bba11de8-46f2-49e4-8217-3e6b4aabf3d1` with `sceneType=forest`;
+- no fatal/error/panic entry appeared in the final two minutes of runtime.
+
+The smoke exposed and fixed two portability issues: standard dependency ports
+collided with host installations, and Windows CRLF broke Alpine shell scripts.
+Diagnostic host ports now use the documented project-specific range, while
+`.gitattributes` keeps container-mounted shell scripts on LF.
+
+Revalidated at `2026-07-22T17:52Z` after splitting Gateway/domain handlers and
+externalizing NATS runtime policy:
+
+- root and all component Compose config gates passed;
+- every required runtime was healthy and migrations/bootstrap exited 0;
+- Universe job `01KY5FBB9C45SY4YWE557Z02XT` completed as world
+  `0e382246-542c-4e16-a6c3-a5a77c4720d1` with `sceneType=universe`;
+- Nature job `01KY5FBCARRB79RQ3Q3JQ8PNFK` completed as world
+  `f2f46410-b8e4-4a20-af77-7af0d547c415` with `sceneType=forest`;
+- the same mock input produced different valid archetypes, confirming restored
+  random ProfileDNA preset selection;
+- no fatal/error/panic entry appeared in Gateway, domain, NATS, Redis, or
+  PostgreSQL logs;
+- shutdown used `down` without `-v`, so persisted local volumes were retained.
+- all five `Dockerfile.prod` targets built their final runtime images;
+- production dependency audit remains a separate failing gate because the
+  existing Next.js 14 tree has a high-severity advisory; see
+  `S1-SECURITY-001` before any production promotion.
+
+## 10. Acceptance
+
+- [x] Docker Compose 2.20+ is validated before using `include`.
+- [x] `docker compose ... config` resolves every included file without
       duplicate resource names or wrong relative paths.
+- [x] Root and component runtime `.env.local` files are referenced explicitly;
+      integrated commands no longer depend on an implicit CLI flag.
 - [ ] Full stack and each component Compose path are documented and tested.
-- [ ] Local images use `Dockerfile.local`; production uses `Dockerfile.prod`.
-- [ ] Every production Dockerfile contains exactly builder/runtime stages.
+- [x] Local images use `Dockerfile.local`; production uses `Dockerfile.prod`.
+- [x] Every production Dockerfile contains exactly builder/runtime stages.
 - [ ] Production image inspection finds no compiler, package cache, source tree
       or real secret.
 - [ ] Hot reload/watch works for Go and Next.js local development.
-- [ ] Fresh local volumes initialize databases, NATS and Redis automatically.
+- [x] Fresh local volumes initialize databases, NATS and Redis automatically.
 - [ ] Restart preserves pending JetStream work and local data volumes.
-- [ ] Domain services are unreachable through host HTTP.
-- [ ] No production credential exists in a tracked `.env.local`.
+- [x] Domain services are unreachable through host HTTP.
+- [x] No production credential exists in a tracked `.env.local`.

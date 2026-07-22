@@ -1,14 +1,14 @@
 # Backend plan — Sprint 1 event-driven migration
 
-> **Document status:** Approved target; implementation pending
+> **Document status:** Implemented migration record; environment verification pending
 > **Vision version:** v1-2026-07-22
 > **Last source review:** 2026-07-22
 
-This plan translates the approved
-[solution architecture](solution-architecture.md) into backend boundaries. It
-does not describe implemented source yet.
+This plan translated the approved
+[solution architecture](solution-architecture.md) into the implemented backend
+boundaries. Current source status is summarized in `notes/be/source-overview.md`.
 
-## Current source to replace
+## Replaced source baseline
 
 ```txt
 api-gateway

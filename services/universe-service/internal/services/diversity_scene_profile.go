@@ -9,7 +9,7 @@ import (
 // deterministically from the variant seed and the atmospheric mood, so the
 // frontend renders them purely from stored data (schemaVersion 1.2). The
 // frontend preview builder mirrors these tables and ranges
-// (clients/web-client/src/lib/scene.ts, buildPreviewBeltConfig /
+// (apps/myunivokai-web/src/lib/scene.ts, buildPreviewBeltConfig /
 // buildPreviewCometsConfig / buildPreviewSunConfig / sceneGradeForTheme) —
 // keep the two in sync when changing values here.
 

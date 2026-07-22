@@ -1,46 +1,60 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: myunivokai-postgres
+  universe-migrate:
+    build:
+      context: ../..
+      dockerfile: services/universe-service/Dockerfile.local
+    command: ["go", "run", "./cmd/migrate"]
     environment:
-      POSTGRES_USER: myunivokai
-      POSTGRES_PASSWORD: myunivokai
-      POSTGRES_DB: myunivokai
-    ports:
-      - "5432:5432"
+      DATABASE_URL: postgresql://${UNIVERSE_DATABASE_USER:-myunivokai_universe_app}:${UNIVERSE_DATABASE_PASSWORD:-myunivokai_local_universe}@postgres:5432/${UNIVERSE_DATABASE_NAME:-myunivokai_universe}?sslmode=disable
+      DATABASE_DIRECT_URL: postgresql://${UNIVERSE_DATABASE_USER:-myunivokai_universe_app}:${UNIVERSE_DATABASE_PASSWORD:-myunivokai_local_universe}@postgres:5432/${UNIVERSE_DATABASE_NAME:-myunivokai_universe}?sslmode=disable
+      MIGRATIONS_DIR: /workspace/services/universe-service/migrations
     volumes:
-      - myunivokai-postgres-data:/var/lib/postgresql/data
+      - ../..:/workspace
+      - universe-service-go-cache:/go/pkg/mod
+    restart: on-failure
+    networks: [backend]
+
+  universe-service:
+    build:
+      context: ../..
+      dockerfile: services/universe-service/Dockerfile.local
+    env_file:
+      - ./.env.local
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_WEB_URL: http://localhost:${WEB_PORT:-3000}
+      DATABASE_URL: postgresql://${UNIVERSE_DATABASE_USER:-myunivokai_universe_app}:${UNIVERSE_DATABASE_PASSWORD:-myunivokai_local_universe}@postgres:5432/${UNIVERSE_DATABASE_NAME:-myunivokai_universe}?sslmode=disable
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_USERNAME: ${NATS_UNIVERSE_USERNAME:-myunivokai_universe}
+      NATS_PASSWORD: ${NATS_UNIVERSE_PASSWORD:-myunivokai_local_universe}
+      NATS_ACK_WAIT: ${NATS_ACK_WAIT:-2m}
+      NATS_MAX_DELIVER: ${NATS_MAX_DELIVER:-5}
+      NATS_FETCH_BATCH_SIZE: ${NATS_FETCH_BATCH_SIZE:-1}
+      NATS_FETCH_MAX_WAIT: ${NATS_FETCH_MAX_WAIT:-1s}
+      NATS_RETRY_DELAY: ${NATS_RETRY_DELAY:-2s}
+      NATS_CONNECT_TIMEOUT: ${NATS_CONNECT_TIMEOUT:-5s}
+      NATS_RECONNECT_WAIT: ${NATS_RECONNECT_WAIT:-2s}
+      NATS_PUBLISH_TIMEOUT: ${NATS_PUBLISH_TIMEOUT:-5s}
+      NATS_QUERY_TIMEOUT: ${NATS_QUERY_TIMEOUT:-2500ms}
+      OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-500ms}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
+      SERVICE_SHUTDOWN_TIMEOUT: ${SERVICE_SHUTDOWN_TIMEOUT:-15s}
+    volumes:
+      - ../..:/workspace
+      - universe-service-go-cache:/go/pkg/mod
+    depends_on:
+      universe-migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myunivokai -d myunivokai"]
-      interval: 5s
+      test: ["CMD", "sh", "-c", "kill -0 1"]
+      interval: 10s
       timeout: 3s
-      retries: 20
+      retries: 3
+    restart: unless-stopped
+    networks: [backend]
 
-  migrate:
-    build:
-      context: .
-    container_name: myunivokai-migrate
-    volumes:
-      - ./.env.local:/app/.env.local:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["/app/migrate"]
-    restart: "no"
-
-  api:
-    build:
-      context: .
-    container_name: myunivokai-api
-    volumes:
-      - ./.env.local:/app/.env.local:ro
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+networks:
+  backend:
+    name: myunivokai-local-backend
 
 volumes:
-  myunivokai-postgres-data:
+  universe-service-go-cache:

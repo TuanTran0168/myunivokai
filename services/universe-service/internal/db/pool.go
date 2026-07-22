@@ -17,10 +17,7 @@ func Connect(ctx context.Context, cfg config.Config) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	poolConfig.MaxConns = int32(cfg.DatabaseMaxConns)
-	poolConfig.MinConns = int32(cfg.DatabaseMinConns)
-	poolConfig.MaxConnLifetime = cfg.DatabaseMaxConnLifetime
-	poolConfig.MaxConnIdleTime = cfg.DatabaseMaxConnIdleTime
+	poolConfig.MaxConns = int32(cfg.DatabaseMaximumConnections)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

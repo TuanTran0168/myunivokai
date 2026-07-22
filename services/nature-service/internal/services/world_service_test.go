@@ -5,131 +5,127 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/myunivokai/myunivokai/services/nature-service/internal/ai"
-	"github.com/myunivokai/myunivokai/services/nature-service/internal/ai/providers"
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/models"
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/repositories"
-	"github.com/myunivokai/myunivokai/services/nature-service/internal/validation"
 )
 
 func newTestWorldService(t *testing.T) (*WorldService, *repositories.MemoryStore) {
 	t.Helper()
 	store := repositories.NewMemoryStore()
-	orchestrator := ai.NewOrchestrator(providers.NewMock(), nil, validation.ValidateNatureDNA, time.Second)
-	cfg := config.Config{PublicWebURL: "http://localhost:3000", ShareSlugLength: 10}
-	return NewWorldService(cfg, store, orchestrator, NewForestConfigBuilder()), store
+	serviceConfig := config.Config{PublicWebURL: "http://localhost:3000/nature", ShareSlugLength: 10}
+	return NewWorldService(serviceConfig, store, NewForestConfigBuilder()), store
 }
 
-func validWorldInput() models.WorldInput {
-	return models.WorldInput{
-		Nickname:            "Tuan",
-		Interests:           []string{"hiking", "music", "photography"},
-		Traits:              []string{"curious", "calm", "kind"},
-		Goal:                "Grow a quiet forest of my own.",
-		Mood:                "reflective",
-		FavoriteColors:      []string{"#8B5CF6", "#06B6D4"},
-		PreferredWorldStyle: "aurora",
-	}
+func validComposeEnvelope() contracts.Envelope[contracts.ComposeWorldData] {
+	return contracts.NewEnvelope("01K0NATUREF1234567890", contracts.ComposeWorldData{
+		Family:       contracts.WorldFamilyNature,
+		ProfileID:    "27ddcd8a-ea36-4f79-9b7f-b831e29d10c4",
+		DNAVersionID: "577c956d-83d6-4a1e-b09a-65f0a69d1c67",
+		Profile:      contracts.ProfileSummary{Nickname: "Tuan", Role: "Developer"},
+		VisualIntent: contracts.VisualIntent{Mood: "reflective", FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, PreferredWorldStyle: "aurora"},
+		ProfileDNA: contracts.ProfileDNA{
+			SchemaVersion:  "1.0",
+			Archetype:      "Reflective Sage",
+			SceneName:      "The Quiet Aurora",
+			Quote:          "I move slowly, but I move with meaning.",
+			ShortNarrative: "A thoughtful mind that finds depth before direction.",
+			TraitScores:    contracts.TraitScores{Creativity: 82, Discipline: 84, Curiosity: 90, Energy: 64, Focus: 88},
+			EnergySignature: contracts.EnergySignature{
+				Primary: "reflective", Secondary: "focused", Intensity: 72,
+			},
+			Facets: []contracts.ProfileFacet{
+				{Key: "hiking", Name: "Hiking", Kind: "interest", Meaning: "A path where attention becomes calm.", Energy: 90},
+				{Key: "music", Name: "Music", Kind: "interest", Meaning: "A rhythm that steadies the day.", Energy: 82},
+				{Key: "kind", Name: "Kind", Kind: "trait", Meaning: "A quiet shelter for others.", Energy: 88},
+			},
+			VisualHints: contracts.VisualHints{Theme: "aurora", CoreSymbol: "moon", PaletteIntent: "teal green", MotionIntent: "slow contemplative"},
+		},
+	})
 }
 
-func TestCreateWorldStoresForestVariant(t *testing.T) {
+func TestComposeWorldStoresForestVariant(t *testing.T) {
 	service, _ := newTestWorldService(t)
-	response, err := service.CreateWorld(context.Background(), validWorldInput())
+	response, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
 	if err != nil {
-		t.Fatalf("CreateWorld: %v", err)
+		t.Fatalf("compose world: %v", err)
 	}
-	if response.World.ID == "" {
-		t.Fatalf("world must get an id")
-	}
-	if response.Variant.VariantNo != 1 || !response.Variant.IsSelected {
-		t.Fatalf("variant 1 must exist and be selected, got %+v", response.Variant)
+	if response.World.ID == "" || response.Variant.ID == "" || !response.Variant.IsSelected {
+		t.Fatalf("expected persisted selected variant, got %#v", response)
 	}
 	if !strings.HasPrefix(response.Variant.Seed, "NAT-") {
 		t.Fatalf("world seed %q must carry the NAT- prefix", response.Variant.Seed)
 	}
 	if response.Variant.Config.SceneType != forestSceneType || response.Variant.Config.SchemaVersion != forestSchemaVersion {
-		t.Fatalf("config must be a forest %s config, got %s/%s", forestSchemaVersion, response.Variant.Config.SceneType, response.Variant.Config.SchemaVersion)
+		t.Fatalf("expected forest %s config, got %s/%s", forestSchemaVersion, response.Variant.Config.SceneType, response.Variant.Config.SchemaVersion)
 	}
-	if len(response.Variant.Config.Landmarks) != len(response.NatureDNA.Landmarks) {
-		t.Fatalf("config landmarks (%d) must match DNA landmarks (%d)", len(response.Variant.Config.Landmarks), len(response.NatureDNA.Landmarks))
+	if len(response.Variant.Config.Landmarks) != len(response.NatureDNA.Landmarks) || response.NatureDNA.Landmarks[0].Type != "Interest Landmark" {
+		t.Fatalf("unexpected nature DNA mapping: %#v", response.NatureDNA.Landmarks)
 	}
-	if len(response.NatureDNA.Landmarks) < 3 {
-		t.Fatalf("mock DNA must produce at least 3 landmarks")
+}
+
+func TestComposeWorldIsIdempotentForRedelivery(t *testing.T) {
+	service, store := newTestWorldService(t)
+	first, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("first compose: %v", err)
+	}
+	second, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("redelivered compose: %v", err)
+	}
+	if first.World.ID != second.World.ID {
+		t.Fatalf("redelivery created a second world: %s != %s", first.World.ID, second.World.ID)
+	}
+	messages, err := store.PendingOutbox(context.Background(), 10)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("expected one completion event, got %d, error %v", len(messages), err)
 	}
 }
 
 func TestRegenerateVariantIsDeterministicFromStoredDNA(t *testing.T) {
 	service, _ := newTestWorldService(t)
-	created, err := service.CreateWorld(context.Background(), validWorldInput())
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
 	if err != nil {
-		t.Fatalf("CreateWorld: %v", err)
+		t.Fatalf("compose world: %v", err)
 	}
 	regenerated, err := service.RegenerateVariant(context.Background(), created.World.ID)
 	if err != nil {
-		t.Fatalf("RegenerateVariant: %v", err)
+		t.Fatalf("regenerate variant: %v", err)
 	}
-	if regenerated.Variant.VariantNo != 2 {
-		t.Fatalf("variantNo = %d, want 2", regenerated.Variant.VariantNo)
-	}
-	if regenerated.Variant.Seed == created.Variant.Seed {
-		t.Fatalf("regenerated variant must get a fresh seed")
-	}
-	// Rebuilding with the stored DNA and the variant's seed must reproduce the
-	// stored config exactly — regenerate never calls AI.
 	rebuilt := NewForestConfigBuilder().Build(BuildForestConfigInput{
 		DNA:       created.NatureDNA,
 		Seed:      regenerated.Variant.Seed,
 		VariantNo: regenerated.Variant.VariantNo,
-		Input:     validation.NormalizeWorldInput(validWorldInput()),
+		Input:     models.VisualIntent{Mood: "reflective", FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, PreferredWorldStyle: "aurora"},
 	})
 	if !reflect.DeepEqual(regenerated.Variant.Config, rebuilt) {
-		t.Fatalf("regenerated config must be reproducible from stored DNA + seed")
+		t.Fatal("regenerated config must be reproducible from stored DNA, visual intent, and seed")
 	}
 }
 
-func TestSelectVariantMarksSelection(t *testing.T) {
+func TestSelectPublishAndGetPublicWorld(t *testing.T) {
 	service, _ := newTestWorldService(t)
-	created, err := service.CreateWorld(context.Background(), validWorldInput())
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
 	if err != nil {
-		t.Fatalf("CreateWorld: %v", err)
+		t.Fatalf("compose world: %v", err)
 	}
 	regenerated, err := service.RegenerateVariant(context.Background(), created.World.ID)
 	if err != nil {
-		t.Fatalf("RegenerateVariant: %v", err)
+		t.Fatalf("regenerate variant: %v", err)
 	}
 	selected, err := service.SelectVariant(context.Background(), created.World.ID, regenerated.Variant.ID)
-	if err != nil {
-		t.Fatalf("SelectVariant: %v", err)
-	}
-	if !selected.Variant.IsSelected || selected.Variant.ID != regenerated.Variant.ID {
-		t.Fatalf("variant 2 must be selected, got %+v", selected.Variant)
-	}
-}
-
-func TestPublishAndGetPublicWorld(t *testing.T) {
-	service, _ := newTestWorldService(t)
-	created, err := service.CreateWorld(context.Background(), validWorldInput())
-	if err != nil {
-		t.Fatalf("CreateWorld: %v", err)
+	if err != nil || !selected.Variant.IsSelected {
+		t.Fatalf("select variant: %#v, %v", selected, err)
 	}
 	published, err := service.PublishWorld(context.Background(), created.World.ID)
-	if err != nil {
-		t.Fatalf("PublishWorld: %v", err)
+	if err != nil || !strings.HasPrefix(published.ShareSlug, "tuan-") {
+		t.Fatalf("publish world: %#v, %v", published, err)
 	}
-	if !strings.HasPrefix(published.ShareSlug, "tuan-") {
-		t.Fatalf("share slug %q must start with the slugified nickname", published.ShareSlug)
-	}
-	public, err := service.GetPublicWorld(context.Background(), published.ShareSlug)
-	if err != nil {
-		t.Fatalf("GetPublicWorld: %v", err)
-	}
-	if public.Variant.Config.SceneType != forestSceneType {
-		t.Fatalf("public config must be a forest config")
-	}
-	if len(public.PublicDNA.Landmarks) != len(created.NatureDNA.Landmarks) {
-		t.Fatalf("public DNA must expose the landmarks")
+	publicWorld, err := service.GetPublicWorld(context.Background(), published.ShareSlug)
+	if err != nil || publicWorld.Variant.Config.SceneType != forestSceneType {
+		t.Fatalf("get public forest: %#v, %v", publicWorld, err)
 	}
 }

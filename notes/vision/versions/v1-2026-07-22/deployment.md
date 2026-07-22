@@ -1,11 +1,11 @@
 # Deployment — target event-driven fleet
 
-> **Document status:** Approved target; current `render.yaml` is legacy until Sprint 1 cutover
+> **Document status:** Implemented deployment configuration; live cutover pending
 > **Vision version:** v1-2026-07-22
 > **Last source review:** 2026-07-22
 
-The current `render.yaml` still deploys a gateway and two public HTTP peers.
-Sprint 1 replaces it. The implementation checklist and operator commands belong
+The current `render.yaml` defines the Gateway and three private Background
+Workers using component `Dockerfile.prod` files. The operator checklist belongs
 in the Sprint 1 deployment guide; this document records deployment rationale.
 
 ## Target fleet
@@ -84,10 +84,10 @@ APP_ENV
 API_ALLOWED_ORIGINS
 TRUST_PROXY
 NATS_URL
-NATS_CREDENTIALS
+NATS_USERNAME / NATS_PASSWORD (or NATS_CREDENTIALS file)
 REDIS_URL
 RATE_LIMIT_*
-CACHE_*
+JOB_CACHE_TTL / WORLD_CACHE_TTL / SHARE_CACHE_TTL
 NATS_REQUEST_TIMEOUT
 ```
 
@@ -98,10 +98,10 @@ APP_ENV
 DATABASE_URL
 DATABASE_DIRECT_URL
 NATS_URL
-NATS_CREDENTIALS
+NATS_USERNAME / NATS_PASSWORD (or NATS_CREDENTIALS file)
 AI_PROVIDER
 AI_FALLBACK_PROVIDER
-AI_TIMEOUT_SECONDS
+AI_TIMEOUT
 GEMINI_API_KEY or OPENAI_API_KEY
 ```
 
@@ -112,7 +112,7 @@ APP_ENV
 DATABASE_URL
 DATABASE_DIRECT_URL
 NATS_URL
-NATS_CREDENTIALS
+NATS_USERNAME / NATS_PASSWORD (or NATS_CREDENTIALS file)
 CONSUMER_*
 ```
 

@@ -29,6 +29,11 @@ go.work.sum
 .env.*
 !.env.example
 !services/universe-service/.env.local
+!services/nature-service/.env.local
+!services/dna-service/.env.local
+!services/api-gateway/.env.local
+!apps/myunivokai-web/.env.local
+!infra/.env.local
 !.env.local
 
 # Node / Next.js
