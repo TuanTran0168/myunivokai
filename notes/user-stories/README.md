@@ -1,7 +1,7 @@
 # User stories and engineering tasks
 
 > **Document status:** Active index
-> **Last source review:** 2026-07-19
+> **Last source review:** 2026-07-22
 
 This folder translates source-grounded product behavior and technical gaps into
 branch-sized work. It does not replace architecture docs: each story links to
@@ -12,12 +12,18 @@ the source and vision contract it exercises.
 | Document | Purpose |
 | --- | --- |
 | [implemented-capabilities.md](implemented-capabilities.md) | What the current product already supports, expressed as verifiable stories |
-| [engineering-backlog.md](engineering-backlog.md) | Prioritized BE/FE/repo upgrades with Given/When/Then acceptance and tasks |
+| [engineering-backlog.md](engineering-backlog.md) | Approved event-driven migration, scale and City epics with Given/When/Then acceptance |
 
-Approved feature plans referenced by this backlog:
+The dated delivery commitments live in [../sprints/](../sprints/README.md).
+Sprint 1 is the complete platform migration, including local and production
+deployment; it is not a foundation-only sprint.
 
+Approved architecture/feature plans referenced by this backlog:
+
+- [Vision V1 solution architecture](../vision/versions/v1-2026-07-22/solution-architecture.md) — NATS, Redis,
+  DNA/family boundaries, data ownership and scale model.
 - [City Service implementation plan](../vision/city-service-plan.md) — third
-  family, independent peer, high-fidelity desktop first.
+  family, now implemented on the new platform only after Sprints 1–2.
 
 ## Story format
 

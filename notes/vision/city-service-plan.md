@@ -1,7 +1,15 @@
 # City Service — kế hoạch triển khai
 
+> **Platform amendment — 2026-07-22:** City remains an approved independent
+> bounded context, but the HTTP peer/gateway steps in this document are
+> superseded by [Vision V1 solution architecture](versions/v1-2026-07-22/solution-architecture.md). City is
+> scheduled for Sprint 3 only after the Sprint 1 NATS/Redis/DNA migration and
+> Sprint 2 hardening pass. Its deployment name is `myunivokai-city` (no
+> `-worker` suffix), it consumes NATS commands/queries, and it receives canonical
+> DNA snapshots from `dna-service` rather than owning another AI/DNA pipeline.
+
 > **Document status:** Approved implementation plan
-> **Last source review:** 2026-07-19
+> **Last source review:** 2026-07-22
 
 ## 1. Quyết định sản phẩm và kiến trúc
 

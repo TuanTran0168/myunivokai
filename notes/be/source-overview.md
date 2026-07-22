@@ -1,7 +1,12 @@
 # Backend source overview
 
-> **Document status:** Active
-> **Last source review:** 2026-07-18
+> **Document status:** Active current-source overview; Sprint 1 replacement approved
+> **Last source review:** 2026-07-22
+
+> This file describes code present on 2026-07-22. The approved NATS/Redis/DNA
+> target is not implemented yet; see
+> [../vision/versions/v1-2026-07-22/solution-architecture.md](../vision/versions/v1-2026-07-22/solution-architecture.md) and
+> the dated Sprint 1 plan. Re-baseline this overview only after cutover.
 
 The backend is three independent Go modules:
 

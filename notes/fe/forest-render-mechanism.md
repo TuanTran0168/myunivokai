@@ -57,6 +57,10 @@ presentation** (model nào, texture, ánh sáng, hậu kỳ). Giá trị FE đ�
 
 ## ⚠️ Nguồn asset & giới hạn Sketchfab (đọc trước khi tìm model mới)
 
+Danh mục nguồn tải, giấy phép, model tham chiếu và công cụ kiểm tra dùng chung
+được duy trì tại [threejs-assets.md](../references/threejs-assets.md). Phần dưới
+đây là các ràng buộc riêng của pipeline forest hiện tại.
+
 **Pipeline tải model của rừng là [poly.pizza](https://poly.pizza), KHÔNG phải
 Sketchfab.** Đây là trần chất lượng hiện tại và lý do:
 

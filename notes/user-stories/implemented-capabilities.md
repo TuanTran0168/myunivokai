@@ -1,7 +1,12 @@
 # Implemented product capabilities
 
-> **Document status:** Active source-backed inventory
-> **Last source review:** 2026-07-18
+> **Document status:** Active source-backed inventory of the pre-migration platform
+> **Last source review:** 2026-07-22
+
+> These stories remain accurate for source reviewed on 2026-07-22. They are not
+> the approved target. Sprint 1 replaces HTTP peer routing, local in-memory edge
+> state and the current local topology; see
+> [Vision V1 solution architecture](../vision/versions/v1-2026-07-22/solution-architecture.md).
 
 ## US-CURRENT-001 — One browser API origin
 

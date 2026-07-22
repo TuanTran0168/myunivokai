@@ -1,207 +1,135 @@
-# Vision — Myunivokai as a multi-scene platform
+# Vision — Myunivokai as a scalable portrait platform
 
-> **Document status:** Active
-> **Last source review:** 2026-07-19
+> **Document status:** Active index and approved direction
+> **Last source review:** 2026-07-22
 
-Status: **active, gateway amendment implemented, City peer approved for future
-implementation**. Universe and Nature exist in source today. On 2026-07-19 the
-owner selected City as the third family and `city-service` as its backend
-owner; this is an approved plan, not implemented source. See
-[city-service-plan.md](city-service-plan.md).
+Myunivokai turns one person's semantic DNA into multiple deterministic 3D
+portrait families. Universe and Nature remain independent bounded contexts so
+they can evolve, deploy and scale separately. Canonical DNA and AI generation
+move to `dna-service`; the public gateway becomes a NATS edge; Redis supplies
+shared edge state.
 
-## Documents in this folder
+The target was approved on 2026-07-22 and is scheduled as a complete Sprint 1
+migration. Source still implements the older HTTP reverse-proxy architecture;
+never present the target as shipped until the Sprint 1 verification gates pass.
 
-| Document | Content |
-| --- | --- |
-| [backend-plan.md](backend-plan.md) | Current peer-service backend boundaries and next source-grounded work |
-| [api-gateway.md](api-gateway.md) | Implemented Go gateway behavior, security boundary, route policies, failure taxonomy |
-| [frontend-plan.md](frontend-plan.md) | Implemented sceneType-first baseline plus pending lazy chunks, typed contracts, and performance tiers |
-| [deployment.md](deployment.md) | Current four-service Render blueprint, rollout, free-tier behavior, observability |
-| [contracts-and-roadmap.md](contracts-and-roadmap.md) | Current source gaps, schema compatibility policy, and prioritized roadmap |
-| [visual-diversity.md](visual-diversity.md) | Implemented diversity baseline, remaining delivery/performance gaps, and researched model sources |
-| [city-service-plan.md](city-service-plan.md) | **Approved plan.** Independent City peer, high-fidelity-first delivery phases, contracts and branch sequence |
-| [nature-service-plan.md](nature-service-plan.md) | **Historical decision/round log.** Current contracts live in the BE/FE source overviews |
-| [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | **Implemented.** One frontend gateway origin plus source-owned family prefixes |
+## Architecture source of truth
 
-## Current backend architecture
+[Vision V1 — 2026-07-22](versions/v1-2026-07-22/README.md) is the current
+approved baseline. Its
+[solution architecture](versions/v1-2026-07-22/solution-architecture.md) is the
+authoritative target for service ownership, NATS commands/events/queries,
+Redis, database names, local Compose, deployment, reliability and scale
+triggers.
 
-```txt
-web client
-  -> api-gateway
-       /api/universe/* -> universe-service -> universe Neon database
-       /api/nature/*   -> nature-service   -> nature Neon database
-```
+Architecture versions use `vN-YYYY-MM-DD` so folders sort chronologically.
+When a material architecture change is approved, copy only the core baseline
+into a new version folder, update this pointer, and freeze the previous version.
+`Last source review` remains separate: it records source verification, not an
+architecture revision.
 
-Universe and Nature are stateful full peers. The gateway owns the public HTTP
-edge but no business logic. There is no auth-service today; the shared gateway
-credential only prevents direct upstream bypass on public Render free URLs.
-
-Approved target after City implementation:
-
-```txt
-web client
-  -> api-gateway
-       /api/universe/* -> universe-service -> universe database
-       /api/nature/*   -> nature-service   -> nature database
-       /api/city/*     -> city-service     -> city database
-```
-
-The City line is a target contract only; it must not be documented as deployed
-until code, migrations, gateway routing and live smoke evidence exist.
-
-## The idea
-
-Today Myunivokai paints two kinds of portrait: a solar system and a living
-forest. The vision is a growing family of scene types, each a different
-"medium" for the same person:
-
-| Scene family | What the DNA drives |
-| --- | --- |
-| Universe (today) | Planets, orbits, palette, mood lighting |
-| City | Skyline shape, district density, neon vs. lantern light, traffic pulse |
-| Forest & mountains | Ridge silhouettes, tree density, fog banks, altitude |
-| Rivers & streams | Meander curvature, flow speed, banks, stones |
-| Lakes | Stillness, reflections, shore vegetation, weather |
-
-Long-term, each scene family has an explicit backend owner and its own frontend
-renderer. Source today does **not** generate one shared DNA record across
-services: Universe produces `PersonalityDNA`, while Nature independently
-produces `NatureDNA` from the same input shape. A future “portrait series” must
-define a cross-service identity/DNA contract before claiming one DNA powers
-many families.
-
-## Why the current architecture already points there
-
-Three rules are already enforced — every new family must keep honoring them:
-
-1. **AI output is semantic.** Each peer's DNA contains meanings, trait scores,
-   energy, and family entities — never visual numbers. The deterministic
-   builder owns visual values.
-2. **Determinism.** `seed.NewPRNG(seed)` drives every visual number inside
-   safe bounds; the same seed always renders the same scene, and regenerating
-   a variant costs zero AI calls.
-3. **Mirrored parameters.** Tunables live on both sides and must stay in sync
-   (today: `mood_scene_profile.go` ↔ `scene.ts` preview builder).
-
-Concrete anchors in today's code:
-
-| Piece | Where | Role in this plan |
+| Version | Status | Summary |
 | --- | --- | --- |
-| `WorldConfigBuilder.Build(...)` | `internal/services/world_config_builder.go` | Already a pure function `(DNA, seed, variantNo, input) -> scene config`. It IS the first SceneComposer — it just doesn't know it yet. |
-| Universe `WorldSceneConfig` envelope | `services/universe-service/internal/models/scene.go` | Has `schemaVersion` + `theme` but still lacks explicit `sceneType`; legacy FE handling relies on absence meaning solar-system. |
-| Nature `ForestSceneConfig` envelope | `services/nature-service/internal/models/scene.go` | Emits `sceneType: "forest"` and schema 1.2. |
-| FE renderer registry | `features/scene-renderers/registry.ts` | Already resolves `sceneType` first, then Universe theme; both renderers are still eagerly imported. |
-| `SceneRendererProps` contract | `features/scene-renderers/types.ts` | Every renderer already implements one shared prop shape. |
-| Shared 3D infra | `features/scene-renderers/shared/` | CameraRig, StarParticleField, PostEffects, CanvasLoader — scene-agnostic today, stays that way. |
-| Scene config JSON Schemas | `contracts/schemas/world-scene-config.schema.json`, `contracts/scenes/forest-scene-config.schema.json` | Forest follows the family folder; Universe still needs migration/aliasing into the same structure. |
-
-## Original three-phase proposal (historical, superseded for Nature)
+| [v1-2026-07-22](versions/v1-2026-07-22/README.md) | Current approved target | NATS/Redis edge, canonical DNA, independent Universe/Nature services |
 
 ```txt
-Phase 1 — modular monolith          Phase 2 — extracted services          Phase 3 — platform
- (theme registry, one deploy)        (scene services, facade routing)      (gateway, auth, async)
+Current source (reviewed 2026-07-22)
 
- ┌─────────────────────────┐         ┌─────────────────────────┐          ┌───────────────┐
- │    universe-service     │         │      world-service      │          │  api-gateway  │
- │  ┌───────────────────┐  │         │  (catalog: worlds, DNA, │          │ (routing, CORS│
- │  │ composer registry │  │         │   variants, share, DB)  │          │ rate limit,   │
- │  │  solar-system     │  │         └───────┬─────────┬───────┘          │ auth, retries)│
- │  │  city             │  │                 │  HTTP   │                  └──┬───┬───┬────┘
- │  │  nature           │  │         ┌───────┴──┐ ┌────┴───────┐             │   │   │
- │  └───────────────────┘  │         │scene-city│ │scene-nature│        world auth scene-*
- └─────────────────────────┘         │ (pure fn)│ │  (pure fn) │        svc  svc  services
-                                     └──────────┘ └────────────┘
+web -> api-gateway -> HTTP universe-service -> old Universe database
+                  -> HTTP nature-service   -> old Nature database
+
+Approved target
+
+web -> api-gateway -> NATS -> dna-service      -> myunivokai_dna
+                          -> universe-service -> myunivokai_universe
+                          -> nature-service   -> myunivokai_nature
+                    Redis: distributed rate limits and safe caches
 ```
 
-Phase transitions have explicit triggers (see
-[contracts-and-roadmap.md](contracts-and-roadmap.md)) — we never split
-"because microservices".
+## Documents
 
-## Product ideas to make it delightful
-
-- **The AI picks your medium.** Map DNA archetypes to a default family — a
-  contemplative archetype becomes a lake, an ambitious one a skyline, an
-  adventurous one a mountain range. The user can always override.
-- **Portrait series.** One DNA rendered as universe + city + lake; the share
-  page becomes a small gallery of the same soul in three mediums (enabled by
-  decision D1: scene type per variant).
-- **Cross-scene consistency.** The same palette and mood tokens drive every
-  family, so your city glows in the same colors as your universe.
-- **Time and seasons as variant dimensions.** For terrestrial scenes,
-  "regenerate variant" can also move time-of-day or season — still
-  seed-deterministic.
-- **Sound signatures.** A per-family ambient audio bed derived from
-  `energySignature` (city hum, forest birdsong, lake water) — muted by default.
-
-## What NOT to do yet
-
-- ~~**Do not split services before a second family exists in code.**~~
-  **Superseded 2026-07-16** (owner decision): the second family is born as its
-  own full peer service (`nature-service`), accepting the free-tier cold-start
-  tradeoff consciously — see [nature-service-plan.md](nature-service-plan.md)
-  section 4. The guardrail still applies to the next family: mountain/river/
-  lake belongs in `nature-service` (D4). **Superseded for City on 2026-07-19:**
-  the owner approved City as a separate peer after choosing its product and
-  ownership boundary. Implementation follows
-  [city-service-plan.md](city-service-plan.md), not an automatic clone.
-- **Keep provider calls behind each peer's AI interface.** AI produces semantic
-  DNA only; seeded builders remain deterministic and provider-free.
-- **Do not pretend the DNA schemas are shared.** They are family-specific in
-  source. Reuse semantic concepts intentionally, and introduce a shared
-  identity/portrait contract only when a real cross-family product story needs it.
-
-## Source-grounded next upgrades
-
-The prioritized acceptance criteria and tasks live in
-[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).
-The vision-level order is:
-
-1. Prove the current four-service Render deployment with live smoke evidence.
-2. Remove the known frontend dependency audit blocker by migrating Next.js
-   through supported majors, without using `npm audit fix --force` blindly.
-3. Make scene contracts executable across BE and FE: explicit Universe
-   `sceneType`, per-family schemas, a real public Gateway OpenAPI contract,
-   discriminated FE types, and CI validation.
-4. Implement the approved City contracts and stateful `city-service`, then add
-   gateway/local/Render topology while preserving one public gateway origin.
-5. Build and approve the City desktop high-fidelity scene before reducing its
-   art quality for weak-device budgets; complete the product lifecycle and
-   production verification.
-6. Only after City is feature complete, add measured mobile/weak-device tiers,
-   LOD and adaptive quality without regressing the approved high tier.
-7. Add metrics/traces and shared gateway state only before horizontal scaling.
-
-## Original decision points (historical)
-
-This table records the first proposal. The dated owner-decision table below is
-newer: D1 is deferred and D5 is obsolete under the peer-service architecture.
-
-| # | Decision | Recommendation |
-| --- | --- | --- |
-| D1 | `scene_type` lives on world_variants (enables "portrait series": one world, variants in different mediums) vs. on worlds | **variants** |
-| D2 | Language: Go for all scene services; Rust only when p95 compose > 50 ms or server-side asset baking appears | **Go now, Rust by trigger** |
-| D3 | Gateway trigger | **Satisfied by the second public peer; Go gateway implemented without auth-service** |
-| D4 | Forest/mountain/river/lake ownership | **one stateful `nature-service`, not a stateless composer** |
-| D5 | Phase 2 ships with an embedded/remote per-family flag so extraction is reversible on the free tier | **yes** |
-
-## Owner decisions (2026-07-16)
-
-Recorded from the owner's direction, in two messages: (1) "the vision must
-become microservices immediately"; forest scenery service; Go backend first;
-gateway later; FE gets a universe/forest picker. (2) **Architecture
-correction:** `nature-service` is a **full peer** of universe-service — same
-mechanism (AI DNA → seeded builder → store → share), only the DNA layer
-differs (landmarks instead of planets); universe-service is not modified at
-all; no gateway and no FE work yet — just build the service. Full detail in
-[nature-service-plan.md](nature-service-plan.md) section 1.
-
-| # | Decision |
+| Document | Role after the 2026-07-22 decision |
 | --- | --- |
-| D1 | **Deferred:** `scene_type` on world_variants is moot while each service owns its own worlds; revisit when a gateway or cross-service "portrait series" becomes real. |
-| D2–D4 | Approved: Go for all scene services; gateway stays a Phase-3 item; forest/mountain/lake share the one `nature-service`. |
-| D5 | **Obsolete:** with peer services there is no remote compose call to fall back from; rollback = don't deploy the nature service. |
-| D6 | **Microservices immediately, as peers:** nature-service clones the universe-service mechanism end-to-end and never lives in the monolith. |
-| D7 | Beauty-first asset strategy: curated CC0 GLB kits + art-direction pass (option B of [3d-development-limitations.md](../fe/3d-development-limitations.md)), all assets self-hosted. |
-| D8 | Backend first: rounds N1–N5 before the frontend forest renderer (F1–F5). |
-| D9 | **Gateway implemented (2026-07-17):** `/api/universe/*` and `/api/nature/*`; edge CORS/rate limit, shared upstream credential, aggregate readiness; user auth remains deferred. |
-| D10 | **City peer approved (2026-07-19):** City is the third family and will use an independent stateful `city-service`, its own database/contracts and `/api/city/*` gateway prefix. Delivery is high-fidelity desktop first; mobile/weak-device optimization starts only after feature completion and production verification. |
+| [versions/v1-2026-07-22/](versions/v1-2026-07-22/README.md) | **Current versioned architecture baseline** |
+| [api-gateway.md](api-gateway.md) | Current implemented HTTP gateway plus target-amendment pointer |
+| [frontend-plan.md](frontend-plan.md) | Current renderer architecture and frontend gaps |
+| [visual-diversity.md](visual-diversity.md) | Visual/art direction that remains valid across the migration |
+| [city-service-plan.md](city-service-plan.md) | Approved City product plan, now dependent on the platform migration/hardening |
+| [nature-service-plan.md](nature-service-plan.md) | Historical Nature implementation record |
+| [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | Implemented single-origin frontend baseline |
+
+## Product model
+
+One canonical, family-neutral DNA version can produce multiple media:
+
+| Family | Deterministic interpretation |
+| --- | --- |
+| Universe | planets, orbits, palette, lighting and cosmic atmosphere |
+| Nature | terrain, landmarks, vegetation, water, weather and season |
+| City, future | districts, skyline, roads, traffic and urban lighting |
+
+The same DNA is snapshotted into every generated world. Family services never
+read `dna-service` tables and never receive the raw questionnaire. A saved
+world remains renderable even when DNA later gets a new version.
+
+## Platform principles
+
+1. **One public edge.** The browser calls only `api-gateway`.
+2. **Durable asynchronous generation.** Long-running commands use NATS
+   JetStream and return `202`; fast queries use Core NATS request-reply.
+3. **Clear ownership.** DNA, Universe and Nature own separate PostgreSQL
+   databases and migrations.
+4. **AI produces semantics.** Only `dna-service` calls providers. Family
+   builders own seeded visual values.
+5. **Deterministic regeneration.** New variants do not call AI by default.
+6. **Redis is shared ephemeral state.** It owns rate-limit counters and safe
+   caches, never durable jobs or domain records.
+7. **At-least-once is explicit.** Inbox/outbox and idempotent consumers are
+   required; `jobId` is the correlation/deduplication anchor.
+8. **Names express domains.** Deployments are `myunivokai-dna`,
+   `myunivokai-universe`, and `myunivokai-nature`; runtime type is not appended
+   to the name.
+9. **No placeholder auth.** User authentication stays deferred. NATS
+   credentials and subject ACLs protect internal service traffic.
+10. **Scale by measured bottleneck.** Gateway, DNA, Universe and Nature scale
+    independently; database and stream partitioning happen only on evidence.
+
+## Delivery order
+
+The dated execution plans live under [../sprints/](../sprints/README.md).
+
+1. **Sprint 1, starts 2026-07-22:** complete replacement—contracts,
+   NATS, Redis, fresh databases, DNA service, converted family services,
+   frontend async flow, Compose, Render configuration/runbook and live cutover.
+2. **Sprint 2, starts 2026-08-05:** load/resilience hardening,
+   observability, horizontal-scale proof and operational SLOs.
+3. **Sprint 3, starts 2026-08-19:** introduce City contracts/service and
+   high-fidelity vertical slice on the stable platform.
+
+## Decisions recorded 2026-07-22
+
+| ID | Decision |
+| --- | --- |
+| D11 | Keep Universe and Nature as independent services for domain ownership and future independent scaling. |
+| D12 | Add `dna-service` as the only AI/canonical-DNA owner. |
+| D13 | Gateway publishes durable generation commands to JetStream; it does not proxy create requests to domain HTTP APIs. |
+| D14 | Services return long-running results as events; query paths use Core NATS request-reply. |
+| D15 | Redis is mandatory for distributed rate limiting and cache-aside, but never replaces NATS or PostgreSQL. |
+| D16 | No `-worker` suffix in service/deployment names. Render Background Worker is only a resource type. |
+| D17 | Use fresh databases `myunivokai_dna`, `myunivokai_universe`, and `myunivokai_nature`; no legacy-data migration is required. |
+| D18 | Sprint 1 must deliver the entire migration plus local and production deployment guides; partial scaffolding is not its exit. |
+| D19 | User auth remains out of scope; internal trust uses NATS credentials and subject permissions. |
+| D20 | Keep domain folder suffixes such as `universe-service`; rename only the frontend boundary to `apps/myunivokai-web`. |
+| D21 | Shared local dependencies live in `infra/docker-compose-local.yml`; root and component `docker-compose-local.yml` files compose the full/standalone workflows. |
+| D22 | Local runtime uses `.env.local` and `Dockerfile.local`; production uses explicit two-stage `Dockerfile.prod` images. |
+
+## What must not happen
+
+- Do not use both Redis and NATS as competing queues.
+- Do not wait synchronously for AI in the gateway.
+- Do not let domain services share a database or read each other's database.
+- Do not move family composition rules into `dna-service` or the gateway.
+- Do not expose raw input or full sensitive DNA in public share/cache payloads.
+- Do not delete old databases before the new deployed smoke suite passes and
+  the exact destructive targets are confirmed.
+- Do not start City implementation before the platform migration is complete.

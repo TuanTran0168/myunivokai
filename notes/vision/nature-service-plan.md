@@ -1,7 +1,13 @@
 # Nature family — `nature-service` plan (v2, peer service)
 
+> **Platform amendment — 2026-07-22:** This remains a historical record of the
+> shipped HTTP peer. Sprint 1 preserves its deterministic builder and product
+> lifecycle but replaces its local AI/DNA orchestration and HTTP business API
+> with canonical DNA plus NATS commands/queries. The approved target is
+> [Vision V1 solution architecture](versions/v1-2026-07-22/solution-architecture.md).
+
 > **Document status:** Historical decision log — implementation details below contain superseded round-state
-> **Last source review:** 2026-07-18
+> **Last source review:** 2026-07-22
 > **Current source:** [../be/source-overview.md](../be/source-overview.md) and [../fe/forest-render-mechanism.md](../fe/forest-render-mechanism.md)
 
 Part of the [vision folder](README.md). Written 2026-07-16 against commit

@@ -1,7 +1,11 @@
 # Frontend plan — scene-family renderers
 
-> **Document status:** Active after source re-baseline
-> **Last source review:** 2026-07-19
+> **Document status:** Active current-source renderer plan; async API migration pending
+> **Last source review:** 2026-07-22
+
+> Sprint 1 additionally replaces synchronous create with `202 + jobId` polling
+> while preserving the renderer registry and one gateway origin. The target API
+> flow is defined in [Vision V1 solution architecture](versions/v1-2026-07-22/solution-architecture.md).
 
 Part of the [vision folder](README.md). This plan describes the source that
 exists now and the smallest upgrades needed next.

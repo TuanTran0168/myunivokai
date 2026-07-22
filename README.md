@@ -263,7 +263,7 @@ After all four services are configured:
 - `notes/vision/api-gateway.md`: implemented gateway design and operations;
 - `notes/vision/frontend-gateway-consolidation.md`: the one-gateway-origin frontend contract;
 - `notes/ops/render-deployment.md`: step-by-step Render deploy runbook;
-- `notes/vision/deployment.md`: deployment architecture/rationale;
+- `notes/vision/versions/v1-2026-07-22/deployment.md`: current approved deployment architecture/rationale;
 - `notes/vision/nature-service-plan.md`: nature-service roadmap and decision log;
 - `notes/user-stories/implemented-capabilities.md`: source-backed current product stories;
 - `notes/user-stories/engineering-backlog.md`: prioritized BE/FE/repo tasks with Given/When/Then acceptance;
