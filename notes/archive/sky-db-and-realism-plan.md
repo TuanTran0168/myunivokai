@@ -1,5 +1,8 @@
 # Sky-from-database + photoreal sky v2 + cursor + header link
 
+> **Document status:** Archived historical implementation record
+> **Last source review:** 2026-07-18
+
 > **TL;DR (VN):** Mọi thông số vẽ Milky Way / chòm sao (số lượng sao, bảng màu,
 > độ mờ mây, tốc độ xoay, seed, số chòm sao…) chuyển thành section `sky` trong
 > `WorldSceneConfig` do **backend sinh deterministic và lưu vào Postgres**;

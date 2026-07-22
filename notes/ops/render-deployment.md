@@ -1,8 +1,18 @@
 # Hướng dẫn deploy toàn bộ Myunivokai lên Render
 
-> Đây là runbook thao tác. Thiết kế và lý do kiến trúc nằm ở
-> [../vision/deployment.md](../vision/deployment.md); nguồn sự thật của hạ tầng
-> là `render.yaml` ở gốc repo.
+> **Document status:** Current HTTP-platform runbook; target replacement approved
+> **Last source review:** 2026-07-22
+
+> **Do not use this runbook for the approved NATS/Redis migration.** It remains
+> accurate for source and `render.yaml` reviewed on 2026-07-22. Sprint 1 replaces
+> it at cutover; use
+> [../sprints/sprint-01-2026-07-22/deployment-guide.md](../sprints/sprint-01-2026-07-22/deployment-guide.md)
+> for the target fleet.
+
+> Nội dung bên dưới là runbook thao tác cho kiến trúc HTTP cũ và `render.yaml`
+> hiện tại vẫn là nguồn sự thật của hạ tầng đã có trong source. Thiết kế deploy
+> đích nằm ở [Vision V1 deployment](../vision/versions/v1-2026-07-22/deployment.md); không trộn hai
+> quy trình trước khi Sprint 1 cutover.
 
 Tài liệu nền tảng đã đối chiếu: [Blueprint YAML Reference](https://render.com/docs/blueprint-spec),
 [Docker on Render](https://render.com/docs/docker),
@@ -258,11 +268,13 @@ lạnh có thể phải đánh thức web → gateway → peer. Render ghi rõ f
 phù hợp formal production và free web service không nhận private-network
 traffic.
 
-Dependency gate tại thời điểm 2026-07-18: `npm audit --omit=dev` báo một lỗ hổng
-mức high trên Next.js 14, còn hướng fix tự động yêu cầu nâng major lên Next 16.
-Đây là migration framework riêng, không được ép vào branch deploy bằng
-`npm audit fix --force`. Có thể dùng Blueprint free để test/hobby, nhưng không
-đánh dấu formal production cho tới khi branch nâng Next làm audit gate xanh.
+Dependency gate được chạy lại ngày 2026-07-18:
+`npm audit --omit=dev --audit-level=high` thất bại với **2 advisory** trong cây
+production (1 high trên Next.js 14 và 1 moderate trên PostCSS kéo theo bởi
+Next); npm đề xuất Next 16.2.10 bằng một breaking major. Đây là migration
+framework riêng, không được ép vào branch deploy bằng `npm audit fix --force`.
+Có thể dùng Blueprint free để test/hobby, nhưng không đánh dấu formal
+production cho tới khi branch nâng Next làm audit gate xanh.
 
 Khi có traffic thật, nâng plan gateway và peer trước khi đặt SLO. Việc chuyển
 peer sang private service cần một migration hạ tầng riêng và thay validation

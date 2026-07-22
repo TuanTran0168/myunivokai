@@ -1,5 +1,12 @@
 # FE chỉ biết một URL gateway
 
+> **Document status:** Implemented and active
+> **Last source review:** 2026-07-22
+
+> The one-origin invariant remains active after Sprint 1. Family prefixes stop
+> being reverse-proxy destinations and become public gateway contracts backed
+> by NATS commands/queries; the browser still receives no domain-service URL.
+
 Status: **IMPLEMENTED** on `feat/repo/render-gateway-deployment` (2026-07-18).
 
 ## Contract

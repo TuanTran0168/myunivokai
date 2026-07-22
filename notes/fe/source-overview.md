@@ -1,5 +1,8 @@
 # FE Source Overview — clients/web-client
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 Next.js 14 App Router + TypeScript + Tailwind + React Three Fiber.
 Every page is a client component because of WebGL and localStorage.
 
@@ -77,6 +80,24 @@ itself.
 No Redux/Zustand. Each page owns its state with `useState`/`useMemo`; planet
 selection syncs between canvas and panel via props (`selectedPlanetKey` +
 `onSelectPlanet`). Reach for a store only if state starts spanning pages.
+
+## Known upgrade boundaries
+
+- `SceneConfig` is a broad optional interface and API normalization still uses
+  `any`; it is not yet a schema-derived discriminated union with runtime
+  validation.
+- Both family renderers are statically imported by `registry.ts`; lazy family
+  chunks remain pending.
+- The main canvas allows DPR up to 3 and has no adaptive quality profile or
+  recoverable WebGL error boundary.
+- Nature GLBs are self-hosted, but Drei still uses its default external Draco
+  decoder because no local decoder path is configured.
+- Catalog tests do not yet validate every asset path, attribution entry, and
+  byte budget.
+- The production dependency audit fails on the current Next 14 tree; framework
+  migration is a separate P0 task.
+
+See `notes/user-stories/engineering-backlog.md` for Given/When/Then acceptance.
 
 ## Required checks before committing
 

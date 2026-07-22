@@ -1,5 +1,16 @@
 # FE Production Refactor Plan — clients/web-client
 
+> **Document status:** Needs re-baseline — several unchecked items already exist in source
+> **Last source review:** 2026-07-18
+> **Current backlog:** [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md)
+
+> **Known stale status rows:** Vitest and its CI step are implemented; Sonner
+> toast/loading UI exists; both share families implement server-rendered
+> metadata; the Vitrine/Liquid-Glass tokens/layout are present in source. The
+> old unchecked table is preserved as a decision/history record, not as proof
+> that those features are missing. Typed runtime contracts, adaptive mobile 3D
+> quality, and a complete accessibility/recovery pass remain real gaps.
+
 Goal: end the MVP phase. Each item is **one branch + one separate PR**, in
 order. Every branch must pass `npm run typecheck && npm run lint && npm run build`,
 and from the testing setup onward must ship with unit tests (vitest).

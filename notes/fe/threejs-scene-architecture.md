@@ -1,10 +1,14 @@
 # three.js in Myunivokai — Principles and scene renderer architecture
 
+> **Document status:** Active
+> **Last source review:** 2026-07-19
+
 This document explains how three.js works, how this repo uses it, and how to
 customize/extend it. The registry pattern below is no longer hypothetical: the
 **forest/nature family is the real second renderer** (see
-[forest-render-mechanism.md](forest-render-mechanism.md)), and a mountain or
-city scene would join the same way.
+[forest-render-mechanism.md](forest-render-mechanism.md)). City is now the
+approved third family, but remains planned source; its contract and delivery
+order are in [../vision/city-service-plan.md](../vision/city-service-plan.md).
 
 ## 1. three.js fundamentals
 
@@ -82,8 +86,8 @@ tree nodes. React manages the tree; three.js does the drawing. On top of that:
 ## 2. The repo's scene renderer architecture
 
 Principle: **one scene = one renderer**, plugged in through a registry. The
-universe is just the first renderer; a future mountain or city scene is a new
-renderer, never a modification of the old one.
+universe is just the first renderer; City will be a new renderer, never a
+modification of the old one.
 
 ```txt
 clients/web-client/src/
@@ -163,7 +167,7 @@ entry to `planetTextureCatalog.ts` (with `axialTiltRadians`, plus
 `ringTextureUrl` for ringed planets). Textures come from Solar System Scope
 (CC BY 4.0) — keep the credit in `ATTRIBUTION.md`.
 
-### Adding a new scene type (mountains, city, countryside, ...)
+### Adding a new scene type (City is the approved next implementation)
 
 The forest/nature family is the worked example — follow its shape:
 
@@ -188,7 +192,19 @@ on the create form.
 
 ### Performance
 
-- `dpr={[1, 1.8]}` on the Canvas caps render density on retina screens.
-- Mobile particle counts are lower than desktop (the BE sends both numbers; the FE picks by viewport).
-- 2k textures are enough; convert to `.webp` or use 1k versions to go lighter.
+- The main Canvas currently allows `dpr={[1, 3]}` for quality-first rendering;
+  weak-device adaptation is **not implemented**. Per owner decision, City first
+  establishes and ships its desktop high-fidelity baseline. A measured
+  `PerformanceMonitor`/adaptive-DPR and effect/LOD tier follows after City is
+  feature complete and must not degrade the approved high tier.
+- Mobile particle counts are lower than desktop where the renderer reads the
+  paired config values.
+- Choose texture resolution by screen-space role and measured sharpness. City
+  hero assets may justify higher source resolution than repeated background
+  props; compression/tiering comes after the high-fidelity reference is locked.
 - Many repeated objects (asteroids, buildings) -> use `InstancedMesh`: one draw call for thousands of objects.
+
+The registry is sceneType-first but not lazy: `registry.ts` statically imports
+both renderers. A visitor who only needs one family still receives both family
+code graphs. Dynamic family chunks are tracked in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

@@ -1,5 +1,16 @@
 # API Gateway — implemented production design
 
+> **Document status:** Implemented current source; target replacement approved
+> **Last source review:** 2026-07-22
+
+> **Target amendment — 2026-07-22:** This file remains the accurate contract
+> for the HTTP reverse-proxy code currently in the repository. It is not the
+> forward architecture. Sprint 1 replaces upstream HTTP, shared gateway headers
+> and process-local edge state with NATS commands/queries plus Redis-backed
+> rate limiting/cache. See
+> [Vision V1 solution architecture](versions/v1-2026-07-22/solution-architecture.md). Do not delete this
+> source record or claim the replacement is implemented before cutover.
+
 Status: implemented on `feat/be/api-gateway` for the two peer services that
 exist in source: `universe-service` and `nature-service`. User authentication
 is deliberately absent because there is no auth-service or identity contract.

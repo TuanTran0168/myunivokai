@@ -1,5 +1,8 @@
 # Git Convention — Myunivokai
 
+> **Document status:** Active policy
+> **Last source review:** 2026-07-18
+
 ## Branch naming
 
 Format:
