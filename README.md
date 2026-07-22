@@ -9,51 +9,61 @@ domain services to the browser.
 
 ```mermaid
 flowchart TB
-  subgraph clientLayer["Layer 1 - Client"]
-    direction TB
-    browser["Browser"]
-    web["Myunivokai Web<br/>apps/myunivokai-web"]
-    browser --> web
+  %% Class Definitions & Styling
+  classDef clientStyle fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af;
+  classDef edgeStyle fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534;
+  classDef infraStyle fill:#fffbe6,stroke:#d97706,stroke-width:2px,color:#92400e;
+  classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
+  classDef aiStyle fill:#fdf2f8,stroke:#db2777,stroke-width:2px,color:#9d174d;
+  classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
+
+  subgraph Client ["🌐 Client Layer"]
+    web["<b>Myunivokai Web</b><br/><code>apps/myunivokai-web</code> (Next.js)"]:::clientStyle
   end
 
-  subgraph edgeLayer["Layer 2 - Edge"]
-    gateway["API Gateway<br/>only public backend"]
+  subgraph Edge ["⚡ Public Edge Gateway"]
+    gateway["<b>API Gateway</b><br/><code>services/api-gateway</code><br/><i>(Only Public HTTP Port :8080)</i>"]:::edgeStyle
   end
 
-  subgraph infrastructureLayer["Layer 3 - Shared infrastructure"]
-    direction LR
-    redis["Redis<br/>distributed rate limit<br/>bounded cache"]
-    nats["NATS<br/>JetStream commands and events<br/>Core NATS request-reply"]
+  subgraph Infra ["🚀 Shared Platform Infrastructure"]
+    redis[("<b>Redis Engine</b><br/>Rate Limiting & Cache-Aside")]:::infraStyle
+    nats["<b>NATS Event Broker</b><br/>JetStream WorkQueue & Core NATS Req-Reply"]:::infraStyle
   end
 
-  subgraph domainLayer["Layer 4 - Domain services"]
-    direction LR
-    dna["DNA Service<br/>AI orchestration and root jobs"]
-    universe["Universe Service<br/>solar-system composition"]
-    nature["Nature Service<br/>forest composition"]
+  subgraph Domains ["🧠 Domain Microservices (NATS Workers)"]
+    dna["<b>DNA Service</b><br/><code>services/dna-service</code><br/><i>AI Orchestration & Root Jobs</i>"]:::domainStyle
+    universe["<b>Universe Service</b><br/><code>services/universe-service</code><br/><i>Solar System Composition</i>"]:::domainStyle
+    nature["<b>Nature Service</b><br/><code>services/nature-service</code><br/><i>Forest Composition</i>"]:::domainStyle
   end
 
-  subgraph integrationLayer["Layer 5 - AI integration"]
-    providers["AI Providers<br/>mock / Gemini / OpenAI"]
+  subgraph Integration ["🤖 AI Integration"]
+    providers["<b>AI Provider Abstraction</b><br/><code>ai.Provider</code> (Mock / Gemini / OpenAI)"]:::aiStyle
   end
 
-  subgraph persistenceLayer["Layer 6 - Service-owned persistence"]
-    direction LR
-    dnaDatabase[("PostgreSQL<br/>myunivokai_dna")]
-    universeDatabase[("PostgreSQL<br/>myunivokai_universe")]
-    natureDatabase[("PostgreSQL<br/>myunivokai_nature")]
+  subgraph Persistence ["🗄️ Service-Owned Databases (Neon PostgreSQL)"]
+    dnaDb[("<b>myunivokai_dna</b><br/>Profiles & Root Jobs")]:::dbStyle
+    universeDb[("<b>myunivokai_universe</b><br/>Universe Worlds & Variants")]:::dbStyle
+    natureDb[("<b>myunivokai_nature</b><br/>Nature Worlds & Variants")]:::dbStyle
   end
 
-  web -->|HTTPS| gateway
-  gateway -->|rate limit and cache| redis
-  gateway -->|commands, queries, and mutations| nats
-  nats -->|generate DNA and track root jobs| dna
-  nats -->|compose and manage universe worlds| universe
-  nats -->|compose and manage nature worlds| nature
-  dna -->|ai.Provider interface| providers
-  dna -->|owns| dnaDatabase
-  universe -->|owns| universeDatabase
-  nature -->|owns| natureDatabase
+  %% Relationships & Flow
+  web -->|"HTTPS REST API"| gateway
+  gateway <-->|"Distributed Rate Limit & Cache"| redis
+  gateway -->|"Pub Commands / Request-Reply"| nats
+
+  nats <-->|"1. Generate DNA Command / Job Queries"| dna
+  dna -->|"2. Call Provider"| providers
+  dna -->|"3. Publish Family Compose Cmd"| nats
+
+  nats <-->|"4a. Compose Universe Cmd / Queries"| universe
+  nats <-->|"4b. Compose Nature Cmd / Queries"| nature
+
+  universe -->|"5a. Event: Universe Completed/Failed"| nats
+  nature -->|"5b. Event: Nature Completed/Failed"| nats
+
+  dna -->|"Owns DB"| dnaDb
+  universe -->|"Owns DB"| universeDb
+  nature -->|"Owns DB"| natureDb
 ```
 
 The diagram is an ownership and communication tree, not a request sequence.
