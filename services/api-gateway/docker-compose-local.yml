@@ -3,6 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: services/api-gateway/Dockerfile.local
+    env_file:
+      - ./.env.local
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_NAME: Myunivokai API Gateway
@@ -14,6 +16,8 @@ services:
       NATS_PASSWORD: ${NATS_GATEWAY_PASSWORD:-myunivokai_local_gateway}
       NATS_REQUEST_TIMEOUT: ${NATS_REQUEST_TIMEOUT:-3s}
       NATS_PUBLISH_TIMEOUT: ${NATS_PUBLISH_TIMEOUT:-5s}
+      NATS_CONNECT_TIMEOUT: ${NATS_CONNECT_TIMEOUT:-5s}
+      NATS_RECONNECT_WAIT: ${NATS_RECONNECT_WAIT:-2s}
       REDIS_URL: ${REDIS_URL:-redis://:myunivokai_local_redis@redis:6379/0}
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-myunivokai}
       RATE_LIMIT_REQUESTS_PER_SECOND: ${RATE_LIMIT_REQUESTS_PER_SECOND:-2}

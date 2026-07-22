@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-myunivokai_local_admin}
       POSTGRES_DB: postgres
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
     volumes:
       - myunivokai-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -55,8 +55,8 @@ services:
       NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
       NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
     ports:
-      - "127.0.0.1:${NATS_CLIENT_PORT:-4222}:4222"
-      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
+      - "127.0.0.1:${NATS_CLIENT_PORT:-14222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-18222}:8222"
     volumes:
       - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
       - myunivokai-nats-data:/data/jetstream
@@ -84,7 +84,7 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD:-myunivokai_local_redis}"]
     ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
     volumes:
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - myunivokai-redis-data:/data

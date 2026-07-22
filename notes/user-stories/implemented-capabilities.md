@@ -1,7 +1,7 @@
 # Implemented product capabilities
 
 > **Document status:** Active source-backed inventory of the current platform
-> **Last source review:** 2026-07-22
+> **Last source review:** 2026-07-23
 
 Sprint-specific acceptance and verification stay with each dated sprint. This
 file is only a compact inventory of capabilities that now exist in source; the
@@ -28,7 +28,10 @@ Source evidence:
 - `apps/myunivokai-web/src/lib/gateway.ts`
 - `apps/myunivokai-web/src/lib/api.ts`
 - `services/api-gateway/internal/handlers/router.go`
-- `services/api-gateway/internal/handlers/api_handler.go`
+- `services/api-gateway/internal/handlers/dna_job_handler.go`
+- `services/api-gateway/internal/handlers/universe_handler.go`
+- `services/api-gateway/internal/handlers/nature_handler.go`
+- `services/api-gateway/internal/handlers/rpc_transport.go`
 - `render.yaml`
 
 ## US-CURRENT-002 — Create both portrait families asynchronously
@@ -51,8 +54,11 @@ Source evidence:
 
 - `apps/myunivokai-web/src/app/page.tsx`
 - `apps/myunivokai-web/src/lib/api.ts`
-- `services/api-gateway/internal/handlers/api_handler.go`
+- `services/api-gateway/internal/handlers/world_handler.go`
+- `services/api-gateway/internal/handlers/universe_handler.go`
+- `services/api-gateway/internal/handlers/nature_handler.go`
 - `services/dna-service/internal/services/generation_service.go`
+- `services/dna-service/internal/ai/providers/mock_presets.go`
 - both family services' `internal/services/world_service.go`
 
 ## US-CURRENT-003 — Regenerate without another AI call
@@ -95,7 +101,8 @@ And only the public gateway exposes business HTTP routes.
 Source evidence:
 
 - `infra/nats/nats-server.conf`
-- all three domain services' `internal/messaging/runtime.go`
+- all three domain services' `internal/messaging/runtime.go` and
+  `internal/handlers/nats_handler.go`
 - `services/api-gateway/internal/handlers/router.go`
 - `render.yaml`
 
@@ -116,13 +123,13 @@ And the public response model omits raw `WorldInput` and the private DNA snapsho
 
 Source evidence:
 
-- both family services' `internal/messaging/runtime.go`
+- both family services' `internal/handlers/nats_handler.go`
 - both family services' `internal/models/responses.go`
 - both frontend share routes under `apps/myunivokai-web/src/app/`
 
 ## US-CURRENT-006 — Start the full local topology once
 
-Status: Implemented configuration; runtime smoke pending Docker Engine
+Status: Verified on local Docker Engine
 
 As a developer,
 I want one local command to run web, gateway, three domain services, migrations,
@@ -132,7 +139,7 @@ so that localhost exercises the production request boundary.
 Scenario: Start the integrated stack
 
 Given Docker is running
-When the developer runs `docker compose --env-file .env.local -f docker-compose-local.yml up --build`
+When the developer runs `docker compose -f docker-compose-local.yml up --build`
 Then PostgreSQL initializes three owned databases and migrations complete
 And NATS JetStream/ACL bootstrap and Redis become available to the fleet
 And domain services expose no host HTTP ports
@@ -144,3 +151,4 @@ Source evidence:
 - `infra/docker-compose-local.yml`
 - root `Makefile`
 - each component's `docker-compose-local.yml`
+- both family lifecycle smoke records in the Sprint 1 local environment guide

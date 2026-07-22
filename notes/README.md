@@ -1,7 +1,7 @@
 # Notes — Myunivokai internal documentation
 
 > **Document status:** Active index
-> **Last source review:** 2026-07-22
+> **Last source review:** 2026-07-23
 
 This folder is the project's single knowledge base for both humans and AI agents.
 Shared docs live in the shared folder; FE/BE-specific docs live in their own
@@ -52,7 +52,7 @@ date; it is not the original creation date.
 | Document group | Status | Notes |
 | --- | --- | --- |
 | `coding/*.md` | Active | Matches branch/commit convention and the seven CI jobs |
-| `be/source-overview.md` | Implemented | Matches Gateway plus DNA/Universe/Nature NATS services |
+| `be/source-overview.md` | Implemented | Matches Gateway plus DNA/Universe/Nature NATS services; local container lifecycle verified |
 | `be/refactor-plan.md` | Historical | Old Universe-only sequence; current work moved to `user-stories/` |
 | `fe/source-overview.md` | Active | Matches async polling/recovery, family renderers and one gateway origin |
 | `fe/threejs-scene-architecture.md` | Active | Registry exists; the lazy-loading upgrade is still pending |

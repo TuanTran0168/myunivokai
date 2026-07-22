@@ -1,9 +1,18 @@
 name: myunivokai-local
 
+# Each included Compose model keeps paths relative to its owning component.
+# The root environment is loaded explicitly for interpolation, so the integrated
+# stack does not depend on callers remembering `--env-file .env.local`.
 include:
-  - ./infra/docker-compose-local.yml
-  - ./services/api-gateway/docker-compose-local.yml
-  - ./services/dna-service/docker-compose-local.yml
-  - ./services/universe-service/docker-compose-local.yml
-  - ./services/nature-service/docker-compose-local.yml
-  - ./apps/myunivokai-web/docker-compose-local.yml
+  - path: ./infra/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/api-gateway/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/dna-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/universe-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./services/nature-service/docker-compose-local.yml
+    env_file: ./.env.local
+  - path: ./apps/myunivokai-web/docker-compose-local.yml
+    env_file: ./.env.local

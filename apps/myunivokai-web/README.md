@@ -1,6 +1,6 @@
 # Myunivokai Web
 
-The Next.js client for My Unique Ok (AI). It knows one public origin through
+The Next.js client for Myunivokai. It knows one public origin through
 `NEXT_PUBLIC_GATEWAY_BASE_URL` (local default `http://localhost:8080`) and never
 receives AI, NATS, Redis, database, or domain-service credentials.
 

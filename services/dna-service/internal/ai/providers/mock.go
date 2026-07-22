@@ -14,6 +14,8 @@ import (
 const (
 	minimumFacetCount  = 3
 	maximumFacetCount  = 7
+	minimumFacetName   = 2
+	maximumFacetName   = 40
 	minimumFacetEnergy = 60
 	facetEnergyRange   = 36
 	defaultTheme       = "cosmic-galaxy"
@@ -30,74 +32,18 @@ var allowedThemes = map[string]struct{}{
 
 var fallbackFacetNames = []string{"Core", "Drive", "Spark", "Origin"}
 
-type preset struct {
-	Archetype       string
-	SceneName       string
-	Quote           string
-	ShortNarrative  string
-	TraitScores     contracts.TraitScores
-	EnergySignature contracts.EnergySignature
-	CoreSymbol      string
-	PaletteIntent   string
-	MotionIntent    string
-	FacetMeanings   []string
-}
+type randomIndexGenerator func(int) int
 
-var presetsByMood = map[string]preset{
-	"focused": {
-		Archetype:       "Builder Explorer",
-		SceneName:       "The Cyan Builder",
-		Quote:           "I build worlds from curious ideas.",
-		ShortNarrative:  "A curious builder who turns ideas into useful worlds.",
-		TraitScores:     contracts.TraitScores{Creativity: 90, Discipline: 86, Curiosity: 92, Energy: 80, Focus: 90},
-		EnergySignature: contracts.EnergySignature{Primary: "builder", Secondary: "explorer", Intensity: 86},
-		CoreSymbol:      "crystal",
-		PaletteIntent:   "purple cyan premium",
-		MotionIntent:    "calm deliberate energy",
-		FacetMeanings:   []string{"A place where your builder mindset solves real problems.", "Where your focus turns scattered ideas into direction.", "A frontier your curiosity keeps pushing further.", "The discipline that quietly compounds into mastery."},
-	},
-	"dreamy": {
-		Archetype:       "Dreaming Artist",
-		SceneName:       "The Violet Reverie",
-		Quote:           "I paint meaning across quiet skies.",
-		ShortNarrative:  "A dreamer who turns feeling into color and form.",
-		TraitScores:     contracts.TraitScores{Creativity: 97, Discipline: 62, Curiosity: 88, Energy: 70, Focus: 66},
-		EnergySignature: contracts.EnergySignature{Primary: "dreamy", Secondary: "creative", Intensity: 74},
-		CoreSymbol:      "orb",
-		PaletteIntent:   "violet magenta soft glow",
-		MotionIntent:    "slow drifting",
-		FacetMeanings:   []string{"Where emotion becomes imagery only you can make.", "The rhythm that guides your inner world.", "A story you keep weaving to make sense of things.", "The quiet center you always return to."},
-	},
-	"energetic": {
-		Archetype:       "Energetic Creator",
-		SceneName:       "The Solar Forge",
-		Quote:           "I turn momentum into things that matter.",
-		ShortNarrative:  "A high-energy maker who ships fast and bright.",
-		TraitScores:     contracts.TraitScores{Creativity: 89, Discipline: 76, Curiosity: 84, Energy: 96, Focus: 80},
-		EnergySignature: contracts.EnergySignature{Primary: "energetic", Secondary: "builder", Intensity: 94},
-		CoreSymbol:      "prism",
-		PaletteIntent:   "gold amber high energy",
-		MotionIntent:    "fast confident motion",
-		FacetMeanings:   []string{"Your drive to ship and create at full speed.", "A fascination that pulls you toward the new.", "Your sense for shape, clarity, and craft.", "The intensity you bring to every goal."},
-	},
-	"reflective": {
-		Archetype:       "Reflective Sage",
-		SceneName:       "The Quiet Aurora",
-		Quote:           "I move slowly, but I move with meaning.",
-		ShortNarrative:  "A thoughtful mind that finds depth before direction.",
-		TraitScores:     contracts.TraitScores{Creativity: 82, Discipline: 84, Curiosity: 90, Energy: 64, Focus: 88},
-		EnergySignature: contracts.EnergySignature{Primary: "reflective", Secondary: "focused", Intensity: 72},
-		CoreSymbol:      "moon",
-		PaletteIntent:   "teal green calm depth",
-		MotionIntent:    "slow contemplative motion",
-		FacetMeanings:   []string{"Where thinking deeply becomes its own strength.", "The patience that lets understanding arrive.", "A quiet curiosity that asks better questions.", "The calm you carry into noisy moments."},
-	},
+type MockProvider struct {
+	randomIndex randomIndexGenerator
 }
-
-type MockProvider struct{}
 
 func NewMock() *MockProvider {
-	return &MockProvider{}
+	return newMock(rand.IntN)
+}
+
+func newMock(randomIndex randomIndexGenerator) *MockProvider {
+	return &MockProvider{randomIndex: randomIndex}
 }
 
 func (provider *MockProvider) Name() ai.ProviderName {
@@ -106,10 +52,7 @@ func (provider *MockProvider) Name() ai.ProviderName {
 
 func (provider *MockProvider) GenerateStructured(_ context.Context, request ai.StructuredRequest) (*ai.StructuredResponse, error) {
 	profile := parsePrompt(request.UserPrompt)
-	selectedPreset, found := presetsByMood[profile.Mood]
-	if !found {
-		selectedPreset = presetsByMood["focused"]
-	}
+	selectedPreset := selectPreset(profile.Mood, provider.randomIndex)
 	profileDNA := contracts.ProfileDNA{
 		SchemaVersion:   contracts.SchemaVersionV1,
 		Archetype:       selectedPreset.Archetype,
@@ -118,7 +61,7 @@ func (provider *MockProvider) GenerateStructured(_ context.Context, request ai.S
 		ShortNarrative:  selectedPreset.ShortNarrative,
 		TraitScores:     selectedPreset.TraitScores,
 		EnergySignature: selectedPreset.EnergySignature,
-		Facets:          buildFacets(profile, selectedPreset.FacetMeanings),
+		Facets:          buildFacets(profile, selectedPreset.FacetMeanings, provider.randomIndex),
 		VisualHints: contracts.VisualHints{
 			Theme:         supportedTheme(profile.PreferredWorldStyle),
 			CoreSymbol:    selectedPreset.CoreSymbol,
@@ -174,7 +117,7 @@ func splitPromptList(value string) []string {
 	return items
 }
 
-func buildFacets(profile promptProfile, meanings []string) []contracts.ProfileFacet {
+func buildFacets(profile promptProfile, meanings []string, randomIndex randomIndexGenerator) []contracts.ProfileFacet {
 	type facetSource struct {
 		name string
 		kind string
@@ -184,7 +127,7 @@ func buildFacets(profile promptProfile, meanings []string) []contracts.ProfileFa
 	appendSource := func(name, kind string) {
 		trimmedName := strings.TrimSpace(name)
 		nameKey := strings.ToLower(trimmedName)
-		if len([]rune(trimmedName)) < 2 || len([]rune(trimmedName)) > 40 {
+		if len([]rune(trimmedName)) < minimumFacetName || len([]rune(trimmedName)) > maximumFacetName {
 			return
 		}
 		if _, found := seenNames[nameKey]; found {
@@ -212,7 +155,7 @@ func buildFacets(profile promptProfile, meanings []string) []contracts.ProfileFa
 			Name:    source.name,
 			Kind:    source.kind,
 			Meaning: meanings[sourceIndex%len(meanings)],
-			Energy:  minimumFacetEnergy + rand.IntN(facetEnergyRange),
+			Energy:  minimumFacetEnergy + randomIndex(facetEnergyRange),
 		})
 	}
 	return facets

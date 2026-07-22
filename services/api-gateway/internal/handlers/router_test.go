@@ -128,17 +128,38 @@ func TestCreateWorldRejectsTrailingJSONBeforePublishing(t *testing.T) {
 
 func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
 	worldID := "11111111-1111-4111-8111-111111111111"
-	payload := json.RawMessage(`{"id":"` + worldID + `"}`)
-	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, json.RawMessage(payload))
-	if err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		name            string
+		path            string
+		expectedSubject string
+	}{
+		{name: "universe", path: "/api/universe/worlds/" + worldID, expectedSubject: contracts.UniverseWorldGetQuerySubject},
+		{name: "nature", path: "/api/nature/worlds/" + worldID, expectedSubject: contracts.NatureWorldGetQuerySubject},
 	}
-	brokerClient := &fakeBroker{response: responseEnvelope}
-	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			payload := json.RawMessage(`{"id":"` + worldID + `"}`)
+			responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, json.RawMessage(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			brokerClient := &fakeBroker{response: responseEnvelope}
+			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, testCase.path, nil))
+			if response.Code != http.StatusOK || brokerClient.requestedSubject != testCase.expectedSubject {
+				t.Fatalf("status=%d subject=%q body=%s", response.Code, brokerClient.requestedSubject, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestUnsupportedFamilyKeepsGatewayErrorContract(t *testing.T) {
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/nature/worlds/"+worldID, nil))
-	if response.Code != http.StatusOK || brokerClient.requestedSubject != contracts.NatureWorldGetQuerySubject {
-		t.Fatalf("status=%d subject=%q body=%s", response.Code, brokerClient.requestedSubject, response.Body.String())
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/ocean/worlds", nil))
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"code":"WORLD_FAMILY_NOT_FOUND"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

@@ -19,6 +19,8 @@ const (
 	defaultRateLimitBurst             = 20
 	defaultNATSPublishTimeout         = 5 * time.Second
 	defaultNATSRequestTimeout         = 3 * time.Second
+	defaultNATSConnectTimeout         = 5 * time.Second
+	defaultNATSReconnectWait          = 2 * time.Second
 	defaultJobCacheTimeToLive         = 30 * time.Second
 	defaultWorldCacheTimeToLive       = 60 * time.Second
 	defaultShareCacheTimeToLive       = 60 * time.Second
@@ -42,6 +44,8 @@ type Config struct {
 	NATSCredentialsFile        string
 	NATSPublishTimeout         time.Duration
 	NATSRequestTimeout         time.Duration
+	NATSConnectTimeout         time.Duration
+	NATSReconnectWait          time.Duration
 	RedisURL                   string
 	RedisKeyPrefix             string
 	JobCacheTimeToLive         time.Duration
@@ -68,6 +72,8 @@ func Load() (Config, error) {
 		NATSCredentialsFile:        get("NATS_CREDENTIALS", ""),
 		NATSPublishTimeout:         getDuration("NATS_PUBLISH_TIMEOUT", defaultNATSPublishTimeout),
 		NATSRequestTimeout:         getDuration("NATS_REQUEST_TIMEOUT", defaultNATSRequestTimeout),
+		NATSConnectTimeout:         getDuration("NATS_CONNECT_TIMEOUT", defaultNATSConnectTimeout),
+		NATSReconnectWait:          getDuration("NATS_RECONNECT_WAIT", defaultNATSReconnectWait),
 		RedisURL:                   get("REDIS_URL", "redis://localhost:6379/0"),
 		RedisKeyPrefix:             get("REDIS_KEY_PREFIX", defaultRedisKeyPrefix),
 		JobCacheTimeToLive:         getDuration("JOB_CACHE_TTL", defaultJobCacheTimeToLive),
@@ -91,7 +97,7 @@ func (loadedConfig Config) Validate() error {
 	if loadedConfig.MaximumRequestBodyBytes <= 0 || loadedConfig.RateLimitRequestsPerSecond <= 0 || loadedConfig.RateLimitBurst <= 0 {
 		return errors.New("request body and rate limit values must be positive")
 	}
-	if loadedConfig.NATSPublishTimeout <= 0 || loadedConfig.NATSRequestTimeout <= 0 || loadedConfig.ShutdownTimeout <= 0 {
+	if loadedConfig.NATSPublishTimeout <= 0 || loadedConfig.NATSRequestTimeout <= 0 || loadedConfig.NATSConnectTimeout <= 0 || loadedConfig.NATSReconnectWait <= 0 || loadedConfig.ShutdownTimeout <= 0 {
 		return errors.New("NATS and shutdown timeouts must be positive")
 	}
 	if loadedConfig.JobCacheTimeToLive <= 0 || loadedConfig.WorldCacheTimeToLive <= 0 || loadedConfig.ShareCacheTimeToLive <= 0 {

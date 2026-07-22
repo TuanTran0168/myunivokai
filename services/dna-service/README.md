@@ -9,6 +9,12 @@ It consumes the durable DNA generation command, publishes the selected family
 compose command through an outbox, consumes family result events, and answers
 job queries over Core NATS. It exposes no HTTP server.
 
+`internal/handlers/NATSHandler` validates and dispatches inbound envelopes;
+`internal/messaging` owns connection, subscription, retry/ack, and outbox
+lifecycle. The local mock keeps runtime DNA varied by selecting among mood
+presets and randomizing facet energy, while tests inject a deterministic random
+strategy.
+
 ```powershell
 go test ./...
 go vet ./...

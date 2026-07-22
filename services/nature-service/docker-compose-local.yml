@@ -18,6 +18,8 @@ services:
     build:
       context: ../..
       dockerfile: services/nature-service/Dockerfile.local
+    env_file:
+      - ./.env.local
     environment:
       APP_ENV: ${APP_ENV:-development}
       PUBLIC_WEB_URL: http://localhost:${WEB_PORT:-3000}/nature
@@ -27,6 +29,12 @@ services:
       NATS_PASSWORD: ${NATS_NATURE_PASSWORD:-myunivokai_local_nature}
       NATS_ACK_WAIT: ${NATS_ACK_WAIT:-2m}
       NATS_MAX_DELIVER: ${NATS_MAX_DELIVER:-5}
+      NATS_FETCH_BATCH_SIZE: ${NATS_FETCH_BATCH_SIZE:-1}
+      NATS_FETCH_MAX_WAIT: ${NATS_FETCH_MAX_WAIT:-1s}
+      NATS_RETRY_DELAY: ${NATS_RETRY_DELAY:-2s}
+      NATS_CONNECT_TIMEOUT: ${NATS_CONNECT_TIMEOUT:-5s}
+      NATS_RECONNECT_WAIT: ${NATS_RECONNECT_WAIT:-2s}
+      NATS_PUBLISH_TIMEOUT: ${NATS_PUBLISH_TIMEOUT:-5s}
       NATS_QUERY_TIMEOUT: ${NATS_QUERY_TIMEOUT:-2500ms}
       OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-500ms}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}

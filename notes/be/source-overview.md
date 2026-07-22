@@ -1,7 +1,7 @@
 # Backend source overview
 
-> **Document status:** Implemented; container/deployed smoke evidence pending
-> **Last source review:** 2026-07-22
+> **Document status:** Implemented; local container smoke passed, deployed smoke pending
+> **Last source review:** 2026-07-23
 
 The backend now consists of one public HTTP edge and three private NATS
 services. The old gateway-to-domain HTTP proxy, duplicated family AI layers,
@@ -52,7 +52,9 @@ domain, operation, and V1 version. JSON schemas and fixed examples live in
 
 Source: `services/api-gateway`.
 
-- `internal/handlers`: async generation and family-neutral public routes.
+- `internal/handlers`: separate DNA job, Universe, and Nature HTTP adapters over
+  one shared RPC/cache transport. Each family handler receives fixed NATS
+  subjects at construction time; request data cannot reroute between services.
 - `internal/broker`: JetStream publish and Core NATS request-reply.
 - `internal/edge`: Redis cache and atomic distributed token bucket.
 - `internal/middleware`: request identity, headers, CORS, body limit, logging,
@@ -78,9 +80,11 @@ Source: `services/dna-service`.
   ProfileDNA snapshot;
 - consumes family completion/failure and answers job queries.
 
-The default mock provider keeps local tests deterministic at the contract level
-without external calls. Variant regeneration remains inside family services and
-does not call AI.
+The default mock provider makes no external call but intentionally selects
+between multiple ProfileDNA presets per mood and randomizes facet energy. Its
+random-index strategy is injected in tests, preserving deterministic assertions
+without removing runtime variety. Variant regeneration remains inside family
+services and does not call AI.
 
 ## Universe and Nature services
 
@@ -89,20 +93,34 @@ Sources: `services/universe-service` and `services/nature-service`.
 Both use the same layers:
 
 ```text
-cmd/service -> internal/messaging -> internal/services
-            -> internal/repositories -> PostgreSQL
+cmd/service -> internal/messaging runtime -> internal/handlers NATS adapters
+            -> internal/services -> internal/repositories -> PostgreSQL
 ```
 
 Each service:
 
 - consumes only its versioned compose subject;
+- registers explicit Core NATS handlers for list/get/variant/publish/share;
 - maps family-neutral facets into its existing deterministic scene builder;
 - atomically records inbox + world + initial variant + completion outbox;
 - returns the existing world/variant/publish/share JSON shapes over Core NATS;
 - preserves UUID validation at Gateway and privacy-safe public projections;
 - supports idempotent compose redelivery and AI-free variants;
 - stores `profileId`, `dnaVersionId`, source job, visual intent, and DNA
-  snapshot in its own database.
+snapshot in its own database.
+
+The runtime owns connection lifecycle, deterministic subscription registration,
+pull/ack/retry policy, and outbox polling. Fetch size/wait, retry delay,
+connect/reconnect timing, publish timeout, ack wait, and maximum deliveries are
+configuration values. Every inbound envelope is validated before its service is
+called, and a terminal compose message is acknowledged only after its failure
+event receives a JetStream acknowledgement.
+
+DNA generation commands use bounded redelivery. After the configured maximum,
+DNA Service durably creates/updates the root job as failed and queues its failure
+event before terminating the poison command. Family result events use unlimited
+redelivery so a temporary DNA database outage cannot silently drop the final
+job state.
 
 Universe scene configs now explicitly include `sceneType: "universe"`; Nature
 continues to use `sceneType: "forest"`. The frontend registry remains
@@ -138,7 +156,7 @@ is prevented structurally:
 Run the root Compose config gate, then the checks in each Go module:
 
 ```powershell
-docker compose --env-file .env.local -f docker-compose-local.yml config --quiet
+docker compose -f docker-compose-local.yml config --quiet
 go test ./...
 go vet ./...
 go build ./...
@@ -146,5 +164,14 @@ go build ./...
 
 The complete local/deployment workflow is in
 `notes/sprints/sprint-01-2026-07-22/`. Source compilation and unit/regression
-tests pass as of the review date. A real container smoke requires a running
-Docker engine; managed deployment additionally requires operator credentials.
+tests pass as of the review date. On 2026-07-22 UTC, the root stack built and
+started on Docker Engine 27.4.0; all health checks passed and mock-provider
+Universe and Nature jobs completed through Gateway, NATS, DNA, their family
+service, and PostgreSQL. Managed deployment still requires operator
+credentials. All five two-stage production images also build successfully.
+
+Production promotion is not yet approved: the audit identified high-severity
+advisories in the current Next.js 14 production tree. Sprint story
+`S1-SECURITY-001` requires an isolated framework upgrade plus browser
+regression before cutover; this backend migration does not silently waive or
+bundle that behavior-sensitive major upgrade.

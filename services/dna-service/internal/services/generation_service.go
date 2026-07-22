@@ -18,6 +18,8 @@ const (
 	invalidProviderOutputCode  = "AI_OUTPUT_INVALID"
 	providerUnavailableMessage = "The profile could not be generated right now. Please try again."
 	invalidProviderOutputText  = "The generated profile did not pass validation. Please try again."
+	processingFailedCode       = "DNA_PROCESSING_FAILED"
+	processingFailedMessage    = "The profile could not be processed right now. Please try again."
 	profileDNASchemaName       = "profile_dna"
 	profileDNATemperature      = 0.7
 	profileDNAMaximumTokens    = 1600
@@ -84,6 +86,33 @@ func (service *GenerationService) Generate(ctx context.Context, envelope contrac
 	}
 	_, err = service.store.StoreDNAAndQueueComposition(ctx, envelope.JobID, input, result.ProfileDNA, result.Attempts)
 	return err
+}
+
+// FailGeneration creates the root job if necessary and moves a repeatedly
+// failing command to a durable terminal state with an outbox event.
+func (service *GenerationService) FailGeneration(ctx context.Context, envelope contracts.Envelope[contracts.GenerateDNAData]) error {
+	if err := envelope.Validate(); err != nil {
+		return err
+	}
+	if !envelope.Data.Family.Valid() {
+		return fmt.Errorf("invalid world family %q", envelope.Data.Family)
+	}
+	normalizedInput := envelope.Data.Input.Normalize()
+	if validationDetails := normalizedInput.Validate(); len(validationDetails) > 0 {
+		return fmt.Errorf("invalid world input: %s", validationDetails[0].Message)
+	}
+	normalizedEnvelope := contracts.Envelope[contracts.GenerateDNAData]{
+		JobID: envelope.JobID, Timestamp: envelope.Timestamp,
+		Data: contracts.GenerateDNAData{Family: envelope.Data.Family, Input: normalizedInput},
+	}
+	jobRecord, err := service.store.EnsureJob(ctx, normalizedEnvelope)
+	if err != nil {
+		return err
+	}
+	if jobRecord.Job.Status == contracts.JobStatusCompleted || jobRecord.Job.Status == contracts.JobStatusFailed {
+		return nil
+	}
+	return service.store.FailDNAJob(ctx, envelope.JobID, envelope.Data.Family, processingFailedCode, processingFailedMessage, nil)
 }
 
 func (service *GenerationService) CompleteFamily(ctx context.Context, messageID, subject string, envelope contracts.Envelope[contracts.FamilyCompletedData]) error {

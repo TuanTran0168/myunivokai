@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: My Unique Ok (AI) Gateway API
+  title: Myunivokai Gateway API
   version: 1.0.0
   description: The browser-facing API. Domain services are reachable only through NATS.
   license:

@@ -125,6 +125,11 @@ Verify:
 
 ## 6. Render environment matrix
 
+Before creating or promoting Render services, run
+`npm audit --omit=dev --audit-level=high` in `apps/myunivokai-web`. Production
+cutover remains blocked until Sprint story `S1-SECURITY-001` passes; a green
+image build alone does not waive a vulnerable runtime dependency.
+
 ### `myunivokai-gateway`
 
 ```txt
@@ -140,6 +145,9 @@ JOB_CACHE_TTL=<reviewed duration>
 WORLD_CACHE_TTL=<reviewed duration>
 SHARE_CACHE_TTL=<reviewed duration>
 NATS_REQUEST_TIMEOUT=<reviewed duration>
+NATS_PUBLISH_TIMEOUT=<reviewed duration>
+NATS_CONNECT_TIMEOUT=<reviewed duration>
+NATS_RECONNECT_WAIT=<reviewed duration>
 ```
 
 ### `myunivokai-dna`
@@ -156,6 +164,16 @@ AI_FALLBACK_PROVIDER=<reviewed provider>
 AI_TIMEOUT=<reviewed duration>
 GEMINI_API_KEY=<secret when used>
 OPENAI_API_KEY=<secret when used>
+NATS_ACK_WAIT=<longer than the maximum AI processing window>
+NATS_MAX_DELIVER=<reviewed count>
+NATS_FETCH_BATCH_SIZE=1
+NATS_FETCH_MAX_WAIT=<reviewed duration>
+NATS_RETRY_DELAY=<reviewed duration>
+NATS_CONNECT_TIMEOUT=<reviewed duration>
+NATS_RECONNECT_WAIT=<reviewed duration>
+NATS_PUBLISH_TIMEOUT=<reviewed duration>
+NATS_QUERY_TIMEOUT=<less than gateway request timeout>
+OUTBOX_*=<reviewed poll interval and batch size>
 ```
 
 ### `myunivokai-universe`
@@ -170,6 +188,12 @@ NATS_PASSWORD=<Universe credential secret>
 NATS_ACK_WAIT=<reviewed duration>
 NATS_MAX_DELIVER=<reviewed count>
 NATS_QUERY_TIMEOUT=<less than gateway request timeout>
+NATS_FETCH_BATCH_SIZE=1
+NATS_FETCH_MAX_WAIT=<reviewed duration>
+NATS_RETRY_DELAY=<reviewed duration>
+NATS_CONNECT_TIMEOUT=<reviewed duration>
+NATS_RECONNECT_WAIT=<reviewed duration>
+NATS_PUBLISH_TIMEOUT=<reviewed duration>
 OUTBOX_*=<reviewed poll interval and batch size>
 ```
 

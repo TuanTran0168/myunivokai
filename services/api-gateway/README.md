@@ -3,6 +3,9 @@
 The gateway is the only public backend. It owns HTTP validation, request IDs,
 CORS/security headers, Redis rate limiting/cache, JetStream publication, and
 bounded Core NATS request-reply. It does not call AI or domain HTTP APIs.
+DNA job, Universe, and Nature routes have separate handlers. Universe/Nature
+subjects are fixed when each handler is constructed; shared RPC/cache mechanics
+remain centralized in `RPCTransport`.
 
 Generation flow:
 

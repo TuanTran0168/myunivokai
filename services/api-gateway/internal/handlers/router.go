@@ -35,7 +35,10 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		MaxAge:         corsMaximumAgeSeconds,
 	}))
 	healthHandler := NewHealthHandler(serviceConfig.AppName, brokerClient, edgeStore)
-	apiHandler := NewAPIHandler(serviceConfig, brokerClient, edgeStore)
+	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore)
+	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
+	universeHandler := NewUniverseHandler(serviceConfig, brokerClient, rpcTransport)
+	natureHandler := NewNatureHandler(serviceConfig, brokerClient, rpcTransport)
 	landingHandler := func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteJSON(responseWriter, http.StatusOK, map[string]any{"service": serviceConfig.AppName, "status": "ok", "architecture": "nats-redis"})
 	}
@@ -49,16 +52,14 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 	router.Group(func(businessRouter chi.Router) {
 		businessRouter.Use(rateLimitMiddleware)
 		businessRouter.Use(middleware.BodyLimit(serviceConfig.MaximumRequestBodyBytes))
-		businessRouter.Get("/api/jobs/{jobID}", apiHandler.GetJob)
-		businessRouter.Route("/api/{family}", func(familyRouter chi.Router) {
-			familyRouter.Post("/worlds", apiHandler.CreateWorld)
-			familyRouter.Get("/worlds", apiHandler.GetWorlds)
-			familyRouter.Get("/worlds/{worldID}", apiHandler.GetWorld)
-			familyRouter.Post("/worlds/{worldID}/variants", apiHandler.CreateVariant)
-			familyRouter.Post("/worlds/{worldID}/variants/{variantID}/select", apiHandler.SelectVariant)
-			familyRouter.Post("/worlds/{worldID}/publish", apiHandler.PublishWorld)
-			familyRouter.Get("/share/worlds/{shareSlug}", apiHandler.GetShare)
+		businessRouter.Get("/api/jobs/{jobID}", dnaJobHandler.GetJob)
+		businessRouter.Route("/api/universe", func(familyRouter chi.Router) {
+			registerWorldRoutes(familyRouter, universeHandler)
 		})
+		businessRouter.Route("/api/nature", func(familyRouter chi.Router) {
+			registerWorldRoutes(familyRouter, natureHandler)
+		})
+		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
 	router.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteError(responseWriter, request, http.StatusNotFound, "ROUTE_NOT_FOUND", "The requested gateway route was not found.")
@@ -67,4 +68,37 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		httpx.WriteError(responseWriter, request, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The request method is not allowed for this route.")
 	})
 	return router
+}
+
+type worldRouteHandler interface {
+	CreateWorld(http.ResponseWriter, *http.Request)
+	GetWorlds(http.ResponseWriter, *http.Request)
+	GetWorld(http.ResponseWriter, *http.Request)
+	CreateVariant(http.ResponseWriter, *http.Request)
+	SelectVariant(http.ResponseWriter, *http.Request)
+	PublishWorld(http.ResponseWriter, *http.Request)
+	GetShare(http.ResponseWriter, *http.Request)
+}
+
+func registerWorldRoutes(router chi.Router, handler worldRouteHandler) {
+	router.Post("/worlds", handler.CreateWorld)
+	router.Get("/worlds", handler.GetWorlds)
+	router.Get("/worlds/{worldID}", handler.GetWorld)
+	router.Post("/worlds/{worldID}/variants", handler.CreateVariant)
+	router.Post("/worlds/{worldID}/variants/{variantID}/select", handler.SelectVariant)
+	router.Post("/worlds/{worldID}/publish", handler.PublishWorld)
+	router.Get("/share/worlds/{shareSlug}", handler.GetShare)
+}
+
+func registerUnsupportedFamilyRoutes(router chi.Router) {
+	unsupported := func(responseWriter http.ResponseWriter, request *http.Request) {
+		httpx.WriteError(responseWriter, request, http.StatusNotFound, "WORLD_FAMILY_NOT_FOUND", "The requested world family is not supported.")
+	}
+	router.Post("/worlds", unsupported)
+	router.Get("/worlds", unsupported)
+	router.Get("/worlds/{worldID}", unsupported)
+	router.Post("/worlds/{worldID}/variants", unsupported)
+	router.Post("/worlds/{worldID}/variants/{variantID}/select", unsupported)
+	router.Post("/worlds/{worldID}/publish", unsupported)
+	router.Get("/share/worlds/{shareSlug}", unsupported)
 }

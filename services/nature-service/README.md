@@ -8,6 +8,10 @@ ProfileDNA, builds the existing Forest SceneConfig, persists inbox/world/variant
 and completion outbox atomically, and answers versioned Core NATS queries for
 get/list/variant/select/publish/share.
 
+`internal/handlers/NATSHandler` owns compose and world-lifecycle transport
+handling; `internal/messaging` owns NATS connection, subscription, retry/ack,
+and outbox lifecycle.
+
 ```powershell
 go test ./...
 go vet ./...

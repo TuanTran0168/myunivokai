@@ -53,6 +53,8 @@ func validTestConfig() Config {
 		NATSURL:                    "nats://localhost:4222",
 		NATSPublishTimeout:         time.Second,
 		NATSRequestTimeout:         time.Second,
+		NATSConnectTimeout:         time.Second,
+		NATSReconnectWait:          time.Second,
 		RedisURL:                   "redis://localhost:6379/0",
 		RedisKeyPrefix:             "test",
 		JobCacheTimeToLive:         time.Minute,

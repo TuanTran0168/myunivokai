@@ -35,6 +35,14 @@ services:
         sync: false
       - key: NATS_PASSWORD
         sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_REQUEST_TIMEOUT
+        value: 3s
       - key: REDIS_URL
         sync: false
       - key: REDIS_KEY_PREFIX
@@ -73,6 +81,28 @@ services:
         sync: false
       - key: NATS_PASSWORD
         sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
       - key: AI_PROVIDER
         value: mock
       - key: AI_FALLBACK_PROVIDER
@@ -107,6 +137,28 @@ services:
         sync: false
       - key: NATS_PASSWORD
         sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
       - key: PUBLIC_WEB_URL
         sync: false
 
@@ -133,5 +185,27 @@ services:
         sync: false
       - key: NATS_PASSWORD
         sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
       - key: PUBLIC_WEB_URL
         sync: false

@@ -25,7 +25,12 @@ type NATSClient struct {
 }
 
 func NewNATSClient(serviceConfig config.Config) (*NATSClient, error) {
-	connectionOptions := []nats.Option{nats.Name("myunivokai-gateway")}
+	connectionOptions := []nats.Option{
+		nats.Name("myunivokai-gateway"),
+		nats.Timeout(serviceConfig.NATSConnectTimeout),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(serviceConfig.NATSReconnectWait),
+	}
 	if serviceConfig.NATSCredentialsFile != "" {
 		connectionOptions = append(connectionOptions, nats.UserCredentials(serviceConfig.NATSCredentialsFile))
 	} else if serviceConfig.NATSUsername != "" {

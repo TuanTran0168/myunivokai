@@ -1,4 +1,5 @@
 #!/bin/sh
+# Keep this script POSIX-compatible because nats-box runs Alpine sh.
 set -eu
 
 NATS_SERVER_URL="nats://${NATS_BOOTSTRAP_USERNAME}:${NATS_BOOTSTRAP_PASSWORD}@nats:4222"

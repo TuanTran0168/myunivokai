@@ -1,4 +1,5 @@
 #!/bin/sh
+# Keep this script POSIX-compatible because the PostgreSQL image runs Alpine sh.
 set -eu
 
 export PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}"
