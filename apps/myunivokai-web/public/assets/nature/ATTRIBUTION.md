@@ -65,6 +65,18 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 | nature-hdri-golden-hour.hdr | `industrial_sunset_puresky` |
 | nature-hdri-dusk.hdr | `evening_road_01_puresky` |
 
+## PBR textures — Poly Haven, CC0
+
+1k tiling PBR maps under `textures/`, from [Poly Haven](https://polyhaven.com) (CC0).
+Used as the forest ground's surface RELIEF only (normal + roughness); the ground
+albedo stays vertex-colored and season-driven, so the maps add unevenness without
+overriding the grass/leaf-litter/snow color logic.
+
+| File | Source asset | Channel used |
+| --- | --- | --- |
+| forest-floor-normal-1k.jpg | `forest_floor` (nor_gl) | normal map |
+| forest-floor-arm-1k.jpg | `forest_floor` (arm) | roughness (green channel) |
+
 ## Experimental — Sketchfab CC-BY 4.0 (under `models/experimental/`, NOT yet wired)
 
 Baked whole-scene meshes downloaded from Sketchfab for visual evaluation only.
