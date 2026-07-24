@@ -12,7 +12,7 @@ import type { SceneConfig } from "@/lib/types";
  * via RareFeatureBadge whenever a feature is present.
  */
 
-export type RareFeatureKey = "meteor-shower" | "binary-sun";
+export type RareFeatureKey = "meteor-shower" | "binary-sun" | "black-hole";
 
 export type RareFeatureDefinition = {
   key: RareFeatureKey;
@@ -23,7 +23,8 @@ export type RareFeatureDefinition = {
 
 export const RARE_FEATURE_PROBABILITIES: RareFeatureDefinition[] = [
   { key: "meteor-shower", displayName: "Meteor Shower", probability: 0.05 },
-  { key: "binary-sun", displayName: "Binary Suns", probability: 0.03 }
+  { key: "binary-sun", displayName: "Binary Suns", probability: 0.03 },
+  { key: "black-hole", displayName: "Black Hole", probability: 0.06 }
 ];
 
 export function resolveRareFeatures(seed: string): RareFeatureDefinition[] {
