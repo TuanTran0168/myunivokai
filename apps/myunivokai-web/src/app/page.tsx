@@ -107,18 +107,20 @@ export default function HomePage() {
       })
       .then((result) => {
         if (!result) {
+          // Nothing pending to resume — make sure the overlay is not shown.
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
           return;
         }
         addWorldIdentifierToGallery(result.world.id, result.family);
+        // Success: keep the overlay up through navigation (same reason as
+        // onSubmit); do NOT clear loading here.
         router.push(worldPagePath(result.world.id, result.family));
       })
       .catch((resumeError) => {
         if (!controller.signal.aborted) {
           setError(apiErrorMessage(resumeError));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
           setLoading(false);
         }
       });
@@ -190,10 +192,16 @@ export default function HomePage() {
         onProgress: (job) => setGenerationStatus(job.status)
       });
       addWorldIdentifierToGallery(world.id, worldFamily);
+      // Keep the overlay up THROUGH the navigation. router.push is async: it
+      // returns before the world route mounts and its scene renders. Clearing
+      // loading here (the old `finally`) hid the overlay while this create page
+      // — the live preview — was still on screen, so it looked "done" before
+      // the world appeared. The loading state is discarded when this page
+      // unmounts on navigation; it is only reset if navigation never happens
+      // (the catch below).
       router.push(worldPagePath(world.id, worldFamily));
     } catch (err) {
       setError(apiErrorMessage(err));
-    } finally {
       setLoading(false);
     }
   }
