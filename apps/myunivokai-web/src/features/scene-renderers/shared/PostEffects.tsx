@@ -6,6 +6,7 @@ import {
   ChromaticAberration,
   EffectComposer,
   HueSaturation,
+  N8AO,
   Noise,
   Vignette
 } from "@react-three/postprocessing";
@@ -24,6 +25,15 @@ const BLOOM_LUMINANCE_SMOOTHING = 0.2;
 // Pinned explicitly (the library default is also 8 on WebGL2) so a dependency
 // update can never silently drop edge anti-aliasing.
 const COMPOSER_MULTISAMPLING = 8;
+
+// Ground-contact ambient occlusion for the forest family (universe scenes are
+// emissive-lit and have no ground, so they skip it). Softly darkens the creases
+// where trees/rocks/animals meet the floor — the single biggest cue that pulls
+// the scene out of "flat cartoon" toward grounded realism. Radius is in world
+// units (~2 = the base of a trunk); values tuned for the forest's 6-8u trees.
+const FOREST_AO_RADIUS = 2;
+const FOREST_AO_INTENSITY = 2.2;
+const FOREST_AO_DISTANCE_FALLOFF = 1;
 
 // Cinematic finish: gentle edge darkening, film grain blended soft-light, and
 // a sub-pixel radial chromatic fringe. All of these merge into the composer's
@@ -67,29 +77,39 @@ function resolveSceneGrade(gradeConfig: ScenePostFXGradeConfig | undefined, them
 type PostEffectsProps = {
   postFX?: ScenePostFXConfig;
   theme?: string;
+  /** Forest family opts in to ground-contact ambient occlusion. */
+  ambientOcclusion?: boolean;
 };
 
-export function PostEffects({ postFX, theme }: PostEffectsProps) {
+export function PostEffects({ postFX, theme, ambientOcclusion = false }: PostEffectsProps) {
   const bloomIntensity = postFX?.bloomIntensity ?? DEFAULT_BLOOM_INTENSITY;
   const grade = resolveSceneGrade(postFX?.grade, theme);
 
-  return (
-    <EffectComposer multisampling={COMPOSER_MULTISAMPLING}>
-      <Bloom
-        intensity={bloomIntensity}
-        luminanceThreshold={BLOOM_LUMINANCE_THRESHOLD}
-        luminanceSmoothing={BLOOM_LUMINANCE_SMOOTHING}
-        mipmapBlur
-      />
-      <HueSaturation hue={grade.hueRadians} saturation={grade.saturation} />
-      <BrightnessContrast brightness={grade.brightness} contrast={grade.contrast} />
-      <ChromaticAberration
-        offset={CHROMATIC_ABERRATION_OFFSET}
-        radialModulation
-        modulationOffset={CHROMATIC_ABERRATION_MODULATION_OFFSET}
-      />
-      <Vignette eskil={false} offset={VIGNETTE_OFFSET} darkness={VIGNETTE_DARKNESS} />
-      <Noise premultiply opacity={FILM_GRAIN_OPACITY} blendFunction={BlendFunction.SOFT_LIGHT} />
-    </EffectComposer>
-  );
+  // Built as a filtered array so the AO effect can be conditionally present
+  // (EffectComposer's children type rejects a literal null child). AO goes
+  // first, so it darkens the lit color before bloom/grade read it.
+  const effects = [
+    ambientOcclusion ? (
+      <N8AO key="n8ao" aoRadius={FOREST_AO_RADIUS} intensity={FOREST_AO_INTENSITY} distanceFalloff={FOREST_AO_DISTANCE_FALLOFF} />
+    ) : null,
+    <Bloom
+      key="bloom"
+      intensity={bloomIntensity}
+      luminanceThreshold={BLOOM_LUMINANCE_THRESHOLD}
+      luminanceSmoothing={BLOOM_LUMINANCE_SMOOTHING}
+      mipmapBlur
+    />,
+    <HueSaturation key="hue-saturation" hue={grade.hueRadians} saturation={grade.saturation} />,
+    <BrightnessContrast key="brightness-contrast" brightness={grade.brightness} contrast={grade.contrast} />,
+    <ChromaticAberration
+      key="chromatic-aberration"
+      offset={CHROMATIC_ABERRATION_OFFSET}
+      radialModulation
+      modulationOffset={CHROMATIC_ABERRATION_MODULATION_OFFSET}
+    />,
+    <Vignette key="vignette" eskil={false} offset={VIGNETTE_OFFSET} darkness={VIGNETTE_DARKNESS} />,
+    <Noise key="noise" premultiply opacity={FILM_GRAIN_OPACITY} blendFunction={BlendFunction.SOFT_LIGHT} />
+  ].filter((effect): effect is JSX.Element => effect !== null);
+
+  return <EffectComposer multisampling={COMPOSER_MULTISAMPLING}>{effects}</EffectComposer>;
 }

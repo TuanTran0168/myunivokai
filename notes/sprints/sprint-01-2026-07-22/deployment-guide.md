@@ -28,7 +28,7 @@ so cost approval is a prerequisite.
 ## 2. Pre-deploy gate
 
 - [ ] Release commit is on `main` through `staging`; CI is green.
-- [ ] Root `docker-compose-local.yml` include stack passes from empty volumes.
+- [ ] Root `docker-compose-local.yaml` include stack passes from empty volumes.
 - [ ] Every production deployment references its component-owned two-stage
       `Dockerfile.prod`, never `Dockerfile.local`.
 - [ ] Contract fixtures and OpenAPI validation pass.

@@ -101,8 +101,8 @@ ports.
 
 Tasks:
 
-- [ ] Keep root `docker-compose-local.yml` as an `include` aggregator and add
-      shared `infra/docker-compose-local.yml`.
+- [ ] Keep root `docker-compose-local.yaml` as an `include` aggregator and add
+      shared `infra/docker-compose-local.yaml`.
 - [ ] Keep `.env.local` for root/component local development; prohibit real
       production credentials in tracked local files.
 - [ ] Give every app/service its own local Compose plus `Dockerfile.local` and

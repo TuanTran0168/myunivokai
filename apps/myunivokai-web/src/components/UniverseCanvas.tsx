@@ -148,7 +148,7 @@ export function UniverseCanvas({
                 onHoverPlanet={setHoveredPlanet}
                 onSelectPlanet={onSelectPlanet}
               />
-              <PostEffects postFX={scene?.postFX} theme={scene?.theme} />
+              <PostEffects postFX={scene?.postFX} theme={scene?.theme} ambientOcclusion={isForestFamilyScene} />
               <SceneReadySignal onSceneReady={() => setLastReadyCanvasKey(canvasRemountKey)} />
             </Suspense>
             <CameraRig

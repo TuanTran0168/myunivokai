@@ -2,8 +2,19 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
-import { Color, Float32BufferAttribute, Matrix4, MeshStandardMaterial, PlaneGeometry, Quaternion, Vector3 } from "three";
+import { useGLTF, useTexture } from "@react-three/drei";
+import {
+  Color,
+  Float32BufferAttribute,
+  Matrix4,
+  MeshStandardMaterial,
+  NoColorSpace,
+  PlaneGeometry,
+  Quaternion,
+  RepeatWrapping,
+  Vector2,
+  Vector3
+} from "three";
 import type { ForestSeasonConfig, ForestTerrainConfig, ForestTreesConfig } from "@/lib/types";
 import { randomFromSeed } from "@/lib/scene";
 import {
@@ -63,6 +74,19 @@ const SNOW_GRASS_COLOR = "#B9A87C";
 
 const MOBILE_VIEWPORT_MAXIMUM_WIDTH = 768;
 
+// PBR forest-floor relief (Poly Haven CC0, see public/assets/nature/ATTRIBUTION.md). The maps
+// add surface RELIEF only — the albedo still comes from the season-driven
+// vertex colors (so grass/leaf-litter/snow stay correct), while the tiling
+// normal + roughness break the dead-flat plane under raking sunlight. One tile
+// covers this many world units; the repeat count derives from the ground size.
+const GROUND_TEXTURE_BASE_PATH = "/assets/nature/textures/";
+const GROUND_NORMAL_MAP_URL = `${GROUND_TEXTURE_BASE_PATH}forest-floor-normal-1k.jpg`;
+const GROUND_ARM_MAP_URL = `${GROUND_TEXTURE_BASE_PATH}forest-floor-arm-1k.jpg`;
+const GROUND_TILE_WORLD_SIZE = 4;
+// Kept below 1 so the relief reads as gentle ground unevenness, not a bumpy
+// plastic sheet (over-strong normals on a flat plane look fake).
+const GROUND_NORMAL_STRENGTH = 0.6;
+
 type ForestTerrainProps = {
   terrain?: ForestTerrainConfig;
   season?: ForestSeasonConfig;
@@ -99,6 +123,9 @@ export function ForestTerrain({
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const placementSeed = terrain?.placementSeed ?? "forest-terrain";
   const groundKind = season?.groundKind ?? "grass";
+
+  // Relief maps for the ground (albedo stays vertex-color, season-driven).
+  const [groundNormalMap, groundArmMap] = useTexture([GROUND_NORMAL_MAP_URL, GROUND_ARM_MAP_URL]);
 
   const groundMesh = useMemo(() => {
     const groundRadius = treelineRadius * GROUND_RADIUS_BEYOND_TREELINE_MULTIPLIER;
@@ -158,13 +185,40 @@ export function ForestTerrain({
     geometry.setAttribute("color", new Float32BufferAttribute(vertexColors, 3));
     geometry.computeVertexNormals();
 
+    // Tile the relief maps across the ground. Normal/roughness are DATA, not
+    // color, so they must stay in linear space (NoColorSpace) or the lighting
+    // reads wrong. The arm map's green channel drives roughness; metalness
+    // stays 0 so its blue channel is ignored.
+    const repeatCount = (groundRadius * 2) / GROUND_TILE_WORLD_SIZE;
+    for (const reliefMap of [groundNormalMap, groundArmMap]) {
+      reliefMap.wrapS = RepeatWrapping;
+      reliefMap.wrapT = RepeatWrapping;
+      reliefMap.repeat.set(repeatCount, repeatCount);
+      reliefMap.colorSpace = NoColorSpace;
+      reliefMap.needsUpdate = true;
+    }
+
     const material = new MeshStandardMaterial({
       vertexColors: true,
       roughness: groundKind === "snow" ? 0.75 : 1,
-      metalness: 0
+      metalness: 0,
+      normalMap: groundNormalMap,
+      normalScale: new Vector2(GROUND_NORMAL_STRENGTH, GROUND_NORMAL_STRENGTH),
+      roughnessMap: groundArmMap
     });
     return { geometry, material };
-  }, [clearingRadius, groundKind, horizonColor, pathLateralDistanceSampler, placementSeed, season, terrainHeightSampler, treelineRadius]);
+  }, [
+    clearingRadius,
+    groundArmMap,
+    groundKind,
+    groundNormalMap,
+    horizonColor,
+    pathLateralDistanceSampler,
+    placementSeed,
+    season,
+    terrainHeightSampler,
+    treelineRadius
+  ]);
 
   // Real mossy rocks (Quaternius MegaKit), instanced across the seeded
   // scatter. Draw order per rock: angle, radius, scale, yaw, variant pick.

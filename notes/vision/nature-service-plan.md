@@ -295,8 +295,8 @@ services/nature-service/
     world_service.go                  # create/get/batch/regenerate/select/publish/share — same flow as universe
   internal/handlers/                  # router, world_handler, share_handler, health_handler, landing (JSON)
   docs/                               # generated Swagger docs; UI is development-only
-  Dockerfile                          # local image used by docker-compose-local.yml
-  docker-compose-local.yml            # Postgres + migration + API on ports 5433/8081
+  Dockerfile                          # local image used by docker-compose-local.yaml
+  docker-compose-local.yaml            # Postgres + migration + API on ports 5433/8081
   .dockerignore                       # keeps env files and build artifacts out of the context
   Dockerfile.render                   # Render image; entrypoint optionally runs migrations
   go.mod

@@ -20,8 +20,8 @@ go run ./cmd/migrate
 go run ./cmd/service
 ```
 
-Local integrated startup is owned by root `docker-compose-local.yml`. Standalone
-component startup expects `infra/docker-compose-local.yml` to already be running.
+Local integrated startup is owned by root `docker-compose-local.yaml`. Standalone
+component startup expects `infra/docker-compose-local.yaml` to already be running.
 Production uses the two-stage `Dockerfile.prod` and Render Background Worker
 name `myunivokai-nature`—the runtime type is intentionally not appended to the
 name.

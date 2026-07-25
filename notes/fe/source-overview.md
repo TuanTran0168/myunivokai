@@ -110,7 +110,7 @@ npm run lint
 npm run build
 ```
 
-For integrated local development, root `docker-compose-local.yml` builds this
+For integrated local development, root `docker-compose-local.yaml` builds this
 client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080`. The production
 Docker image uses exactly two stages, Next.js standalone output, and a non-root
 runtime user; the same image is declared in the Render Blueprint.

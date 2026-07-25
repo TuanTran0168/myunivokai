@@ -114,7 +114,7 @@ The dated execution plans live under [../sprints/](../sprints/README.md).
 | D18 | Sprint 1 must deliver the entire migration plus local and production deployment guides; partial scaffolding is not its exit. |
 | D19 | User auth remains out of scope; internal trust uses NATS credentials and subject permissions. |
 | D20 | Keep domain folder suffixes such as `universe-service`; rename only the frontend boundary to `apps/myunivokai-web`. |
-| D21 | Shared local dependencies live in `infra/docker-compose-local.yml`; root and component `docker-compose-local.yml` files compose the full/standalone workflows. |
+| D21 | Shared local dependencies live in `infra/docker-compose-local.yaml`; root and component `docker-compose-local.yaml` files compose the full/standalone workflows. |
 | D22 | Local runtime uses `.env.local` and `Dockerfile.local`; production uses explicit two-stage `Dockerfile.prod` images. |
 
 ## What must not happen

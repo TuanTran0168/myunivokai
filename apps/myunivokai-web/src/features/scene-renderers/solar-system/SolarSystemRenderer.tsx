@@ -10,6 +10,7 @@ import { StarParticleField } from "../shared/StarParticleField";
 import { AsteroidBelt } from "./AsteroidBelt";
 import { BinarySun } from "./BinarySun";
 import { Comet, resolveCometsConfig } from "./Comet";
+import { DistantBlackHole } from "./DistantBlackHole";
 import { MeteorShower } from "./MeteorShower";
 import { hasRareFeature, resolveRareFeatures } from "./rareFeatures";
 import { ConstellationField } from "./ConstellationField";
@@ -185,6 +186,13 @@ export function SolarSystemRenderer({
       <Suspense fallback={null}>
         <OrbitingSpacecraft scene={scene} seed={seed} />
       </Suspense>
+      {/* Rare distant black hole: its own boundary so only the ~6% of worlds
+          that roll it ever pay the download. */}
+      {hasRareFeature(rareFeatures, "black-hole") ? (
+        <Suspense fallback={null}>
+          <DistantBlackHole seed={seed} />
+        </Suspense>
+      ) : null}
       <Sun coreConfig={scene.core} sun={scene.sun} />
       {hasRareFeature(rareFeatures, "binary-sun") ? <BinarySun seed={seed} coreConfig={scene.core} /> : null}
       {planets.map((planet, planetIndex) => {

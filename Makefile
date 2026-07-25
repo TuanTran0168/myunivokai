@@ -1,4 +1,4 @@
-DOCKER_COMPOSE := docker compose -f docker-compose-local.yml
+DOCKER_COMPOSE := docker compose -f docker-compose-local.yaml
 .DEFAULT_GOAL := local-up
 
 .PHONY: local-up local-up-detached local-down local-logs local-status

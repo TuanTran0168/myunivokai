@@ -320,7 +320,7 @@ and [Render Free limitations](https://render.com/docs/free).
 ## 11. Local runtime contract
 
 Sprint 1 keeps the explicit local convention already familiar in the repo:
-root `docker-compose-local.yml` plus `.env.local`. The root Compose file is an
+root `docker-compose-local.yaml` plus `.env.local`. The root Compose file is an
 aggregator. Shared dependencies live under `infra/`; each app/service owns its
 local Compose file and Dockerfiles.
 
@@ -330,22 +330,22 @@ the dated [Sprint 1 local environment contract](../../../sprints/sprint-01-2026-
 Target layout:
 
 ```txt
-docker-compose-local.yml
+docker-compose-local.yaml
 .env.local
 
 infra/
-  docker-compose-local.yml       # NATS, Redis, PostgreSQL and bootstrap
+  docker-compose-local.yaml       # NATS, Redis, PostgreSQL and bootstrap
   nats/
   redis/
   postgres/
 
 apps/myunivokai-web/
-  docker-compose-local.yml
+  docker-compose-local.yaml
   Dockerfile.local
   Dockerfile.prod
 
 services/<service-name>/
-  docker-compose-local.yml
+  docker-compose-local.yaml
   Dockerfile.local
   Dockerfile.prod
 ```

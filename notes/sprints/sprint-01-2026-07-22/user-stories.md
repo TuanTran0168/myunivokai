@@ -45,7 +45,7 @@ and no domain HTTP port.
 
 Evidence:
 
-- root `.env.local` and `docker-compose-local.yml`;
+- root `.env.local` and `docker-compose-local.yaml`;
 - `infra/` PostgreSQL/NATS/Redis configuration;
 - component Compose and exactly two-stage production Dockerfiles;
 - `docker compose ... config --quiet` passes;

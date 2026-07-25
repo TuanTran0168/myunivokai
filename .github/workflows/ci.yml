@@ -156,4 +156,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose -f docker-compose-local.yml config --quiet
+      - run: docker compose -f docker-compose-local.yaml config --quiet

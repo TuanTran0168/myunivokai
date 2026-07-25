@@ -85,5 +85,5 @@ CI and deployed smoke must eventually prove:
 - direct public access exists only for web/gateway;
 - each service credential is denied outside its allowed NATS subjects;
 - no service can connect to another service's database;
-- a fresh environment starts from root `docker-compose-local.yml` and the three version-one
+- a fresh environment starts from root `docker-compose-local.yaml` and the three version-one
   migrations without manual hidden steps.
