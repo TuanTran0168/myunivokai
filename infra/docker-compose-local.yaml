@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-myunivokai_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-myunivokai_local_admin}
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - myunivokai-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-myunivokai_admin} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  postgres-init:
+    image: postgres:17-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-myunivokai_admin}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-myunivokai_local_admin}
+      DNA_DATABASE_NAME: ${DNA_DATABASE_NAME:-myunivokai_dna}
+      DNA_DATABASE_USER: ${DNA_DATABASE_USER:-myunivokai_dna_app}
+      DNA_DATABASE_PASSWORD: ${DNA_DATABASE_PASSWORD:-myunivokai_local_dna}
+      UNIVERSE_DATABASE_NAME: ${UNIVERSE_DATABASE_NAME:-myunivokai_universe}
+      UNIVERSE_DATABASE_USER: ${UNIVERSE_DATABASE_USER:-myunivokai_universe_app}
+      UNIVERSE_DATABASE_PASSWORD: ${UNIVERSE_DATABASE_PASSWORD:-myunivokai_local_universe}
+      NATURE_DATABASE_NAME: ${NATURE_DATABASE_NAME:-myunivokai_nature}
+      NATURE_DATABASE_USER: ${NATURE_DATABASE_USER:-myunivokai_nature_app}
+      NATURE_DATABASE_PASSWORD: ${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}
+    volumes:
+      - ./postgres/init-databases.sh:/scripts/init-databases.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/init-databases.sh"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    networks: [backend]
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_GATEWAY_USERNAME: ${NATS_GATEWAY_USERNAME:-myunivokai_gateway}
+      NATS_GATEWAY_PASSWORD: ${NATS_GATEWAY_PASSWORD:-myunivokai_local_gateway}
+      NATS_DNA_USERNAME: ${NATS_DNA_USERNAME:-myunivokai_dna}
+      NATS_DNA_PASSWORD: ${NATS_DNA_PASSWORD:-myunivokai_local_dna}
+      NATS_UNIVERSE_USERNAME: ${NATS_UNIVERSE_USERNAME:-myunivokai_universe}
+      NATS_UNIVERSE_PASSWORD: ${NATS_UNIVERSE_PASSWORD:-myunivokai_local_universe}
+      NATS_NATURE_USERNAME: ${NATS_NATURE_USERNAME:-myunivokai_nature}
+      NATS_NATURE_PASSWORD: ${NATS_NATURE_PASSWORD:-myunivokai_local_nature}
+      NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
+      NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
+    ports:
+      - "127.0.0.1:${NATS_CLIENT_PORT:-14222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-18222}:8222"
+    volumes:
+      - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - myunivokai-nats-data:/data/jetstream
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  nats-bootstrap:
+    image: natsio/nats-box:0.19.2
+    environment:
+      NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
+      NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
+    volumes:
+      - ./nats/bootstrap.sh:/scripts/bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/bootstrap.sh"]
+    depends_on:
+      nats: { condition: service_healthy }
+    restart: "no"
+    networks: [backend]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD:-myunivokai_local_redis}"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - myunivokai-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-myunivokai_local_redis}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+networks:
+  edge:
+    name: myunivokai-local-edge
+  backend:
+    name: myunivokai-local-backend
+
+volumes:
+  myunivokai-postgres-data:
+    name: myunivokai-local-postgres-data
+  myunivokai-nats-data:
+    name: myunivokai-local-nats-data
+  myunivokai-redis-data:
+    name: myunivokai-local-redis-data

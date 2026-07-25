@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myunivokai.local/contracts/profile-dna-v1-alias.schema.json",
+  "$ref": "./personality-dna.schema.json"
+}

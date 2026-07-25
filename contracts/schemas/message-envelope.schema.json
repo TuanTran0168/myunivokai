@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myunivokai.local/contracts/message-envelope-v1.schema.json",
+  "title": "Myunivokai NATS Envelope V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jobId", "timestamp", "data"],
+  "properties": {
+    "jobId": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "forest",
   "sceneName": "The Amberfall Sanctuary",
   "archetype": "Grove Keeper",
@@ -87,24 +87,38 @@
     "groundAnimals": [
       {
         "modelKey": "animal-deer",
-        "count": 2,
+        "count": 1,
         "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-0",
         "walkSpeed": 0.35,
         "scale": 1.1
       },
       {
         "modelKey": "animal-rabbit",
-        "count": 2,
+        "count": 3,
         "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-1",
         "walkSpeed": 0.35,
         "scale": 1.07
       },
       {
-        "modelKey": "animal-fox",
-        "count": 2,
+        "modelKey": "animal-squirrel",
+        "count": 1,
         "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-2",
         "walkSpeed": 0.45,
         "scale": 1.07
+      },
+      {
+        "modelKey": "animal-fox",
+        "count": 1,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-3",
+        "walkSpeed": 0.64,
+        "scale": 0.99
+      },
+      {
+        "modelKey": "animal-fox",
+        "count": 3,
+        "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-animal-4",
+        "walkSpeed": 0.49,
+        "scale": 1.01
       }
     ],
     "birdFlocks": [
@@ -112,18 +126,18 @@
         "modelKey": "bird-forest",
         "birdCount": 7,
         "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-birds-0",
-        "altitudeMin": 12.69,
-        "altitudeMax": 20.97,
-        "flightSpeed": 0.62,
+        "altitudeMin": 12.87,
+        "altitudeMax": 19.48,
+        "flightSpeed": 0.69,
         "pattern": "crossing"
       },
       {
         "modelKey": "bird-forest",
-        "birdCount": 4,
+        "birdCount": 6,
         "pathSeed": "NAT-GOLDEN-ENERGETIC-forest-birds-1",
-        "altitudeMin": 14.03,
-        "altitudeMax": 21.8,
-        "flightSpeed": 0.74,
+        "altitudeMin": 14.7,
+        "altitudeMax": 23.05,
+        "flightSpeed": 0.67,
         "pattern": "circling"
       }
     ]
@@ -202,6 +216,7 @@
       "rock-mossy",
       "animal-deer",
       "animal-rabbit",
+      "animal-squirrel",
       "animal-fox",
       "bird-forest",
       "landmark-heart-tree",

@@ -1,5 +1,8 @@
 # Cơ chế vẽ vũ trụ bằng models — Myunivokai FE
 
+> **Document status:** Active
+> **Last source review:** 2026-07-18
+
 > Tài liệu này ghi lại **cơ chế thực tế** đang chạy trên nhánh
 > `feat/fe/universe-visual-quality` (07/2026): vũ trụ được vẽ từ những "model"
 > nào, mỗi loại đi qua pipeline gì, và quy tắc bắt buộc khi thêm model mới.
@@ -58,6 +61,11 @@ texture trong `public/textures/solar-system/` (Solar System Scope, CC BY 4.0,
 ghi công trong `ATTRIBUTION.md` cùng thư mục). Độ phân giải: 8K cho
 sun/skybox/earth/jupiter/saturn, 4K mercury/venus/mars, 2K phần còn lại.
 
+Tại lần review 2026-07-18, thư mục này có 22 file khoảng **31.3 MB**. Đây là
+source budget đáng kể, không phải “free” chỉ vì geometry là primitive. Trước
+khi thêm texture mới phải triển khai/đo quality tier hoặc KTX2/WebP phù hợp,
+bao gồm network bytes, decode/upload time, GPU memory và frame time.
+
 ### Pipeline chất lượng texture — bắt buộc cho MỌI texture mới
 
 `shared/textureQuality.ts` có 2 helper, chọn đúng loại:
@@ -107,7 +115,7 @@ sinh procedural, KHÔNG có ảnh tải về:
   mây chọn variant + xoay ngẫu nhiên seeded, chế độ "nhiều sprite alpha thấp".
 - **`MilkyWayBand` / `ConstellationField`** — hình dạng dải Ngân Hà (vĩ độ
   band, Great Rift, bụi) và chòm sao đều đọc từ `scene.sky` do **BE sinh và
-  lưu DB** (schemaVersion 1.1) — xem `notes/sky-db-and-realism-plan.md`.
+  lưu DB** (schemaVersion 1.1) — xem `notes/archive/sky-db-and-realism-plan.md`.
 
 Quy tắc riêng tầng sky: mọi material thuộc sky phải `fog={false}` —
 `PointsMaterial`/`lineBasicMaterial` MẶC ĐỊNH bị fog ăn, sky ở bán kính xa sẽ

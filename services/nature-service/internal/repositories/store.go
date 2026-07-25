@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/models"
@@ -18,11 +19,18 @@ type WorldBundle struct {
 	Variants []models.WorldVariant
 }
 
+type OutboxMessage struct {
+	ID        string
+	MessageID string
+	Subject   string
+	Payload   json.RawMessage
+}
+
 // Store is the same persistence contract as universe-service's; the postgres
 // implementation arrives with the dedicated Neon database in the persistence
 // round. Until then only MemoryStore exists.
 type Store interface {
-	CreateWorld(ctx context.Context, world models.World, variant models.WorldVariant, logs []models.AIGenerationLog) (WorldBundle, error)
+	CreateWorld(ctx context.Context, world models.World, variant models.WorldVariant) (WorldBundle, error)
 	GetWorld(ctx context.Context, worldID string) (WorldBundle, error)
 	// GetWorldsByIDs returns the bundles for every id that exists, in the same
 	// order as the requested ids; unknown ids are skipped rather than failing
@@ -32,9 +40,8 @@ type Store interface {
 	SelectVariant(ctx context.Context, worldID, variantID string) (models.WorldVariant, error)
 	PublishWorld(ctx context.Context, worldID, slug string) (models.World, error)
 	GetPublicWorld(ctx context.Context, slug string) (WorldBundle, error)
-	// SaveAIGenerationLogs persists AI attempt logs outside the world-creation
-	// transaction, so failed generations are still recorded for debugging.
-	SaveAIGenerationLogs(ctx context.Context, logs []models.AIGenerationLog) error
+	PendingOutbox(ctx context.Context, maximumMessages int) ([]OutboxMessage, error)
+	MarkOutboxPublished(ctx context.Context, outboxID string) error
 	// Ping reports whether the backing storage is reachable; used by /readyz.
 	Ping(ctx context.Context) error
 }

@@ -1,0 +1,26 @@
+{
+  "jobId": "01K0EXAMPLE000000000000001",
+  "timestamp": "2026-07-22T12:00:01Z",
+  "data": {
+    "family": "universe",
+    "profileId": "01K0EXAMPLE000000000000002",
+    "dnaVersionId": "01K0EXAMPLE000000000000003",
+    "profile": { "nickname": "Nova", "role": "Builder" },
+    "visualIntent": { "mood": "curious", "favoriteColors": ["#8B5CF6"], "preferredWorldStyle": "nebula" },
+    "profileDNA": {
+      "schemaVersion": "1.0",
+      "archetype": "Curious Builder",
+      "sceneName": "Nova's Living Horizon",
+      "quote": "Curiosity creates new orbits.",
+      "shortNarrative": "A focused maker turning questions into meaningful systems.",
+      "traitScores": { "creativity": 82, "discipline": 76, "curiosity": 91, "energy": 70, "focus": 84 },
+      "energySignature": { "primary": "curiosity", "secondary": "focus", "intensity": 84 },
+      "facets": [
+        { "key": "ai", "name": "AI", "kind": "interest", "meaning": "Explores intelligent tools", "energy": 90 },
+        { "key": "music", "name": "Music", "kind": "interest", "meaning": "Finds patterns through sound", "energy": 76 },
+        { "key": "space", "name": "Space", "kind": "interest", "meaning": "Looks beyond familiar boundaries", "energy": 86 }
+      ],
+      "visualHints": { "theme": "nebula", "coreSymbol": "compass", "paletteIntent": "violet depth", "motionIntent": "steady orbit" }
+    }
+  }
+}

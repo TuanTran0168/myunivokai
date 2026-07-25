@@ -1,6 +1,68 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PersonalityDNA",
+  "$id": "https://myunivokai.local/contracts/profile-dna-v1.schema.json",
+  "title": "ProfileDNA V1",
   "type": "object",
-  "required": ["schemaVersion", "archetype", "sceneName", "quote", "shortNarrative", "traitScores", "energySignature", "planets", "visualHints"]
+  "additionalProperties": false,
+  "required": ["schemaVersion", "archetype", "sceneName", "quote", "shortNarrative", "traitScores", "energySignature", "facets", "visualHints"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "archetype": { "type": "string", "minLength": 2, "maxLength": 40 },
+    "sceneName": { "type": "string", "minLength": 3, "maxLength": 80 },
+    "quote": { "type": "string", "maxLength": 100 },
+    "shortNarrative": { "type": "string", "maxLength": 240 },
+    "traitScores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["creativity", "discipline", "curiosity", "energy", "focus"],
+      "properties": {
+        "creativity": { "$ref": "#/$defs/score" },
+        "discipline": { "$ref": "#/$defs/score" },
+        "curiosity": { "$ref": "#/$defs/score" },
+        "energy": { "$ref": "#/$defs/score" },
+        "focus": { "$ref": "#/$defs/score" }
+      }
+    },
+    "energySignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "secondary", "intensity"],
+      "properties": {
+        "primary": { "type": "string", "minLength": 1 },
+        "secondary": { "type": "string", "minLength": 1 },
+        "intensity": { "$ref": "#/$defs/score" }
+      }
+    },
+    "facets": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "name", "kind", "meaning", "energy"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 2, "maxLength": 40 },
+          "kind": { "type": "string", "minLength": 1 },
+          "meaning": { "type": "string", "maxLength": 180 },
+          "energy": { "$ref": "#/$defs/score" }
+        }
+      }
+    },
+    "visualHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["theme", "coreSymbol", "paletteIntent", "motionIntent"],
+      "properties": {
+        "theme": { "enum": ["cosmic-galaxy", "nebula", "crystal", "aurora", "cyber-orbit"] },
+        "coreSymbol": { "type": "string" },
+        "paletteIntent": { "type": "string" },
+        "motionIntent": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 }
+  }
 }

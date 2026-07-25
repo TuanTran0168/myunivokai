@@ -1,5 +1,8 @@
 # Git Convention — Myunivokai
 
+> **Document status:** Active policy
+> **Last source review:** 2026-07-18
+
 ## Branch naming
 
 Format:
@@ -10,7 +13,7 @@ fix/<scope>/<kebab-case-topic>
 refactor/<scope>/<kebab-case-topic>
 ```
 
-- `<scope>`: `fe` (frontend, clients/web-client), `be` (backend, services/universe-service), `docs`, `ci`, or `repo` (repo-wide changes).
+- `<scope>`: `fe` (frontend, apps/myunivokai-web), `be` (backend services), `docs`, `ci`, or `repo` (repo-wide changes).
 - Branch from `staging`, merge back into `staging` via Pull Request.
 - `main` is the release branch and only receives merges from `staging`.
 

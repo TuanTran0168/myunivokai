@@ -1,71 +1,115 @@
-# Frontend plan — sceneType-first renderers
+# Frontend plan — scene-family renderers
 
-Part of the [vision folder](README.md).
+> **Document status:** Active current-source renderer plan; async API migration pending
+> **Last source review:** 2026-07-22
 
-## Types — discriminated union on `sceneType`
+> Sprint 1 additionally replaces synchronous create with `202 + jobId` polling
+> while preserving the renderer registry and one gateway origin. The target API
+> flow is defined in [Vision V1 solution architecture](versions/v1-2026-07-22/solution-architecture.md).
 
-`lib/types.ts` evolves (additive; today's `SceneConfig` becomes the
-solar-system member):
+Part of the [vision folder](README.md). This plan describes the source that
+exists now and the smallest upgrades needed next.
+
+## Implemented baseline
+
+- `WorldFamily = "universe" | "nature"` selects the public gateway prefix,
+  API calls, gallery reference, world query parameter, share route, preview,
+  and renderer.
+- `registry.ts` resolves `sceneType` before Universe `theme`; Forest config
+  therefore cannot fall into the solar-system renderer.
+- The create form offers Universe and Forest and builds a family-specific,
+  deterministic preview.
+- Both share routes generate server-side metadata through the same one-gateway
+  helper used by browser requests.
+- Vitest covers the API normalizer, gateway URL mapping, preview builders, and
+  deterministic procedural recipes.
+
+## Gaps proven by source
+
+### 1. The type model is not yet a discriminated union
+
+`lib/types.ts` exposes one broad `SceneConfig`: almost every field is optional,
+`sceneType` is `string`, and an index signature permits unknown keys. Universe
+configs omit `sceneType` entirely while Forest emits `"forest"`. This keeps old
+worlds rendering, but it cannot make invalid family/section combinations fail
+at compile time.
+
+Target, after the backend contract adds an explicit Universe discriminator:
 
 ```ts
-type SceneConfigBase = { schemaVersion: string; sceneType: SceneType; theme?: string; palette: Palette; camera: CameraConfig; postFX: PostFXConfig; };
-type SolarSystemSceneConfig = SceneConfigBase & { sceneType: "solar-system"; core: CoreConfig; planets: PlanetSceneConfig[]; particles: ParticleConfig; };
-type CitySceneConfig       = SceneConfigBase & { sceneType: "city"; skyline: SkylineConfig; districts: DistrictConfig[]; traffic: TrafficConfig; };
-type SceneConfig = SolarSystemSceneConfig | CitySceneConfig; // grows per family
-```
-
-Configs stored before `sceneType` existed normalize to `"solar-system"` in
-`normalizeVariant` — the same defensive-normalization spot that exists today.
-
-## Registry — sceneType-first, lazily loaded
-
-`registry.ts` becomes two-level and dynamic:
-
-```ts
-const SCENE_FAMILY_REGISTRY: Record<SceneType, () => Promise<SceneRendererComponent>> = {
-  "solar-system": () => import("./solar-system/SolarSystemRenderer").then(m => m.SolarSystemRenderer),
-  city:           () => import("./city/CityRenderer").then(m => m.CityRenderer),
+type SolarSystemSceneConfig = SceneConfigBase & {
+  sceneType: "solar-system";
+  planets: PlanetSceneConfig[];
 };
+
+type ForestSceneConfig = SceneConfigBase & {
+  sceneType: "forest";
+  landmarks: ForestLandmarkConfig[];
+};
+
+type CitySceneConfig = SceneConfigBase & {
+  sceneType: "city";
+  districts: CityDistrictConfig[];
+};
+
+type SceneConfig =
+  | SolarSystemSceneConfig
+  | ForestSceneConfig
+  | CitySceneConfig;
 ```
 
-- `next/dynamic` + the existing `CanvasLoader` torus rings as the Suspense
-  fallback — a visitor who only ever sees solar systems never downloads city
-  geometry or textures (three.js scene code is the heaviest thing we ship).
-- `resolveSceneRenderer(theme)` keeps working for old data: unknown/missing
-  `sceneType` → solar-system; `theme` keeps selecting style within a family.
-- `SceneRendererProps` stays the contract; the planet-focused parts
-  (`selectedPlanetKey`, `onSelectPlanet`) generalize to "points of interest"
-  (a city's districts, a lake's landmarks) under the same prop names first —
-  a rename is a separate, mechanical refactor later.
+Legacy configs without `sceneType` must normalize to `"solar-system"` before
+renderer resolution. Do not delete compatibility for already stored worlds.
 
-## Mirror discipline at family scale
+### 2. Scene renderers are eagerly bundled
 
-Today one pair must stay in sync (`mood_scene_profile.go` ↔ `scene.ts`).
-With N families that discipline needs structure, not memory:
+`registry.ts` statically imports both `SolarSystemRenderer` and
+`ForestRenderer`. The original lazy-registry goal was never implemented.
+Each family should become a client-only dynamic chunk with the existing
+`CanvasLoader` as fallback. Acceptance must be based on build output and a
+browser network trace, not only a source-level dynamic import.
 
-- BE: `internal/scenes/<family>/<family>_scene_profile.go`
-- FE: `src/features/scene-renderers/<family>/sceneProfile.ts`
-- Each pair carries a `PROFILE_VERSION` constant asserted equal by one unit
-  test on each side — drift fails CI instead of shipping a mismatched preview.
-- Longer term (deferred): generate TS types from
-  `contracts/scenes/*.schema.json` (`json-schema-to-typescript`) so the
-  envelope cannot drift at all.
+### 3. API responses are trusted at runtime
 
-## Create form and preview
+`lib/api.ts` parses JSON, normalizes through `any`, and casts payloads to the
+requested generic. The defensive normalizer is valuable for legacy response
+shapes, but malformed gateway/service output is not validated against a
+runtime schema. Generate or hand-maintain one validated boundary; do not spread
+schema checks through components.
 
-- "World Style" grows into a **scene family picker** (family cards, then the
-  existing style chips within the family). Default stays solar-system.
-- Or the charming option: the AI picks the medium from the DNA (archetype →
-  family mapping in the DNA prompt's visualHints), user can override. Both
-  fit the `preferredSceneType` API field from the
-  [backend plan](backend-plan.md).
-- Live preview: each family ships a `buildPreviewSceneConfig` sibling — the
-  same mirror rule as above; the preview must visibly react to mood/colors
-  exactly like the real composer.
+### 4. Mobile quality is deliberately missing and now scheduled post-City
 
-## Assets
+The main canvas allows DPR up to 3 and source comments explicitly put weak
+devices out of scope. There is no `PerformanceMonitor`, adaptive DPR,
+family-level quality profile, LOD policy, or WebGL error boundary. The owner
+decided on 2026-07-19 that City reaches a desktop high-fidelity baseline and
+feature completion first. Measured mobile/weak-device tiers follow afterward
+and must preserve that approved high tier. Basic load/WebGL failure containment
+remains required during City implementation.
 
-- Textures per family under `public/textures/<family>/`, each with its own
-  `ATTRIBUTION.md` (the solar-system one already sets the pattern).
-- Budget per family bundle: ≤ 300 KB JS (gzip) + lazy textures; enforced by
-  reviewing `next build` output per route until we automate it.
+### 5. Asset delivery has two concrete gaps
+
+- Nature's Draco-compressed GLBs use Drei's default Google-hosted decoder
+  because no local decoder path is configured. This conflicts with the repo's
+  self-hosted-runtime policy.
+- Catalog tests verify deterministic selection, but do not verify that every
+  referenced model/HDRI/texture exists, has attribution metadata, and remains
+  below its budget.
+
+## Next sequence
+
+1. Migrate Next.js 14 through supported majors and make the production audit
+   gate green.
+2. Harden the contract from BE schema to FE discriminated union plus runtime
+   validation.
+3. Lazy-load renderer families and publish per-family JS/asset budgets.
+4. Self-host the Draco decoder and add catalog/file/license/budget tests.
+5. Implement City contracts, `city-service`, gateway/deployment and the
+   high-fidelity desktop renderer/product flow defined in
+   [city-service-plan.md](city-service-plan.md).
+6. Verify City locally and on Render against the initial desktop support matrix.
+7. Only then add adaptive DPR/LOD/texture/shadow/reflection/effect tiers for
+   mobile and weak devices; keep the approved high tier unchanged.
+
+Given/When/Then acceptance and branch-sized tasks are maintained in
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).

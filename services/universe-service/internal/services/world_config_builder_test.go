@@ -11,7 +11,7 @@ func TestWorldConfigBuilderDeterministic(t *testing.T) {
 	builder := NewWorldConfigBuilder()
 	input := BuildWorldConfigInput{
 		Seed:  "WLD-ABC1234567",
-		Input: models.WorldInput{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}},
+		Input: models.VisualIntent{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}},
 		DNA: models.PersonalityDNA{
 			Archetype:   "Builder Explorer",
 			SceneName:   "Galaxy",
@@ -42,7 +42,7 @@ func TestWorldConfigBuilderMoodAffectsScene(t *testing.T) {
 	buildForMood := func(mood string) models.WorldSceneConfig {
 		return builder.Build(BuildWorldConfigInput{
 			Seed:  "WLD-ABC1234567",
-			Input: models.WorldInput{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
+			Input: models.VisualIntent{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
 			DNA: models.PersonalityDNA{
 				Archetype:   "Builder Explorer",
 				SceneName:   "Galaxy",
@@ -81,7 +81,7 @@ func TestWorldConfigBuilderMoodAffectsScene(t *testing.T) {
 func buildSkyTestInput(theme string, mood string) BuildWorldConfigInput {
 	return BuildWorldConfigInput{
 		Seed:  "WLD-ABC1234567",
-		Input: models.WorldInput{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
+		Input: models.VisualIntent{FavoriteColors: []string{"#8B5CF6", "#06B6D4"}, Mood: mood},
 		DNA: models.PersonalityDNA{
 			Archetype:   "Builder Explorer",
 			SceneName:   "Galaxy",

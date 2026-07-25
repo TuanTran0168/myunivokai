@@ -11,6 +11,7 @@ import (
 // comets, sun, postFX grade). Both bumps are additive: older configs without
 // the new keys stay valid and the frontend falls back to built-in defaults.
 const sceneConfigSchemaVersion = "1.2"
+const universeSceneType = "universe"
 
 type WorldConfigBuilder struct{}
 
@@ -18,7 +19,7 @@ type BuildWorldConfigInput struct {
 	DNA       models.PersonalityDNA
 	Seed      string
 	VariantNo int
-	Input     models.WorldInput
+	Input     models.VisualIntent
 }
 
 func NewWorldConfigBuilder() *WorldConfigBuilder {
@@ -42,6 +43,7 @@ func (b *WorldConfigBuilder) Build(input BuildWorldConfigInput) models.WorldScen
 	shapes := []string{"sphere", "octahedron", "torus", "box"}
 	config := models.WorldSceneConfig{
 		SchemaVersion: sceneConfigSchemaVersion,
+		SceneType:     universeSceneType,
 		SceneName:     input.DNA.SceneName,
 		Archetype:     input.DNA.Archetype,
 		Quote:         input.DNA.Quote,

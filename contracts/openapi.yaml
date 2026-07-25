@@ -1,10 +1,308 @@
 openapi: 3.1.0
 info:
-  title: Myunivokai API
-  version: 0.1.0
+  title: Myunivokai Gateway API
+  version: 1.0.0
+  description: The browser-facing API. Domain services are reachable only through NATS.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: "{protocol}://{host}"
+    description: Configurable gateway endpoint
+    variables:
+      protocol:
+        default: http
+        enum: [http, https]
+      host:
+        default: localhost:8080
+security: []
 paths:
   /api/v1/healthz:
     get:
+      summary: Check gateway liveness
+      operationId: getGatewayLiveness
+      responses:
+        "200": { description: Gateway process is alive }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/readyz:
+    get:
+      summary: Check gateway readiness
+      operationId: getGatewayReadiness
+      responses:
+        "200": { description: NATS and Redis are ready }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { description: A required edge dependency is unavailable }
+  /api/jobs/{jobId}:
+    get:
+      summary: Get an asynchronous generation job
+      operationId: getGenerationJob
+      parameters:
+        - $ref: "#/components/parameters/JobId"
       responses:
         "200":
-          description: API health
+          description: Current generation state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/worlds:
+    post:
+      summary: Queue a world generation job
+      operationId: createWorld
+      parameters:
+        - $ref: "#/components/parameters/Family"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "./schemas/world-input.schema.json" }
+      responses:
+        "202":
+          description: Durable generation command accepted by JetStream
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    get:
+      summary: Get worlds by identifiers
+      operationId: getWorlds
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - name: ids
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Requested world bundles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [worlds]
+                properties:
+                   worlds:
+                     type: array
+                     items: { $ref: "#/components/schemas/WorldBundle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/worlds/{worldId}:
+    get:
+      summary: Get a world and its variants
+      operationId: getWorld
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - $ref: "#/components/parameters/WorldId"
+      responses:
+        "200":
+          description: World and variants
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldBundle" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/worlds/{worldId}/variants:
+    post:
+      summary: Create a deterministic world variant
+      operationId: createWorldVariant
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - $ref: "#/components/parameters/WorldId"
+      responses:
+        "201":
+          description: Deterministic AI-free variant created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant]
+                properties:
+                  variant: { $ref: "#/components/schemas/WorldVariant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/worlds/{worldId}/variants/{variantId}/select:
+    post:
+      summary: Select a world variant
+      operationId: selectWorldVariant
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - $ref: "#/components/parameters/WorldId"
+        - $ref: "#/components/parameters/VariantId"
+      responses:
+        "200":
+          description: Selected variant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VariantEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/worlds/{worldId}/publish:
+    post:
+      summary: Publish a world for public sharing
+      operationId: publishWorld
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - $ref: "#/components/parameters/WorldId"
+      responses:
+        "200":
+          description: Public share reference
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shareSlug, shareUrl]
+                properties:
+                   shareSlug: { type: string }
+                   shareUrl: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/{family}/share/worlds/{shareSlug}:
+    get:
+      summary: Get a privacy-safe public world
+      operationId: getPublicWorld
+      parameters:
+        - $ref: "#/components/parameters/Family"
+        - name: shareSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Privacy-safe public projection
+          content:
+             application/json:
+              schema: { $ref: "#/components/schemas/PublicWorldResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+components:
+  parameters:
+    Family:
+      name: family
+      in: path
+      required: true
+      schema: { type: string, enum: [universe, nature] }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+    WorldId:
+      name: worldId
+      in: path
+      required: true
+      schema: { type: string }
+    VariantId:
+      name: variantId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Job:
+      type: object
+      additionalProperties: false
+      required: [jobId, family, status, createdAt, updatedAt]
+      properties:
+        jobId: { type: string }
+        family: { type: string, enum: [universe, nature] }
+        status: { type: string, enum: [queued, processing, completed, failed] }
+        profileId: { type: string }
+        dnaVersionId: { type: string }
+        worldId: { type: string }
+        error: { $ref: "#/components/schemas/ErrorBody" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    World:
+      type: object
+      required: [id, nickname, archetype, sceneName, quote, visibility, shareSlug, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        nickname: { type: string }
+        role: { type: string }
+        archetype: { type: string }
+        sceneName: { type: string }
+        quote: { type: string }
+        shortNarrative: { type: string }
+        visibility: { type: string, enum: [private, public] }
+        shareSlug: { type: [string, "null"] }
+        selectedVariantId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorldVariant:
+      type: object
+      required: [id, variantNo, seed, config, isSelected, createdAt]
+      properties:
+        id: { type: string }
+        worldId: { type: string }
+        variantNo: { type: integer, minimum: 1 }
+        seed: { type: string }
+        config: { type: object }
+        thumbnailUrl: { type: string }
+        isSelected: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    VariantEnvelope:
+      type: object
+      required: [variant]
+      properties:
+        variant: { $ref: "#/components/schemas/WorldVariant" }
+    WorldBundle:
+      type: object
+      required: [world, selectedVariant, variants]
+      properties:
+        world: { $ref: "#/components/schemas/World" }
+        selectedVariant: { $ref: "#/components/schemas/WorldVariant" }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/WorldVariant" }
+        personalityDNA: { type: object }
+        natureDNA: { type: object }
+    PublicWorldResponse:
+      type: object
+      required: [world, variant, publicDNA]
+      properties:
+        world:
+          type: object
+          required: [nickname, archetype, sceneName, quote, shortNarrative]
+          properties:
+            nickname: { type: string }
+            archetype: { type: string }
+            sceneName: { type: string }
+            quote: { type: string }
+            shortNarrative: { type: string }
+        variant:
+          type: object
+          required: [seed, config]
+          properties:
+            seed: { type: string }
+            config: { type: object }
+        publicDNA: { type: object }
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: array, items: { type: object } }
+        requestId: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unavailable:
+      description: NATS or domain responder unavailable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }

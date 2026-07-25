@@ -2,6 +2,7 @@ package models
 
 type WorldSceneConfig struct {
 	SchemaVersion string              `json:"schemaVersion"`
+	SceneType     string              `json:"sceneType"`
 	SceneName     string              `json:"sceneName"`
 	Archetype     string              `json:"archetype"`
 	Quote         string              `json:"quote"`

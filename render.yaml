@@ -1,77 +1,211 @@
-# Render blueprint for the Myunivokai API (https://render.com/docs/blueprint-spec).
-# Secrets are `sync: false`: their values live ONLY in the Render dashboard
-# (templates with placeholders: services/universe-service/.env.render, untracked).
-# The web client deploys separately (Vercel per README, or a Render static site)
-# with NEXT_PUBLIC_API_BASE_URL pointing at this service.
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Managed NATS, Redis, and three Neon URLs are supplied through the dashboard.
+# Domain names describe responsibilities; Render's `worker` type describes the process.
 services:
   - type: web
-    name: myunivokai-api
+    name: myunivokai-web
     runtime: docker
-    rootDir: services/universe-service
-    dockerfilePath: ./Dockerfile.render
+    dockerfilePath: ./apps/myunivokai-web/Dockerfile.prod
+    dockerContext: ./apps/myunivokai-web
     plan: free
+    autoDeployTrigger: checksPass
+    healthCheckPath: /
+    envVars:
+      - key: NEXT_PUBLIC_GATEWAY_BASE_URL
+        sync: false
+
+  - type: web
+    name: myunivokai-gateway
+    runtime: docker
+    dockerfilePath: ./services/api-gateway/Dockerfile.prod
+    dockerContext: .
+    plan: free
+    autoDeployTrigger: checksPass
     healthCheckPath: /api/v1/healthz
     envVars:
       - key: APP_ENV
         value: production
-      - key: RUN_MIGRATIONS_ON_START
-        value: "true"
-      # Render's proxy appends the real client IP to X-Forwarded-For; without
-      # this flag the rate limiter ignores the header and keys on RemoteAddr.
       - key: TRUST_PROXY
         value: "true"
-      # mock needs no key; switch to gemini/openai in the dashboard when a real
-      # key is configured.
-      - key: AI_PROVIDER
-        value: mock
-      - key: AI_FALLBACK_PROVIDER
-        value: mock
-      # Neon POOLED url (runtime) and DIRECT url (migrations), sslmode=require.
+      - key: API_ALLOWED_ORIGINS
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_REQUEST_TIMEOUT
+        value: 3s
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: myunivokai
+      - key: RATE_LIMIT_REQUESTS_PER_SECOND
+        value: "2"
+      - key: RATE_LIMIT_BURST
+        value: "20"
+      - key: JOB_CACHE_TTL
+        value: 30s
+      - key: WORLD_CACHE_TTL
+        value: 60s
+      - key: SHARE_CACHE_TTL
+        value: 60s
+
+  - type: worker
+    name: myunivokai-dna
+    runtime: docker
+    dockerfilePath: ./services/dna-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
+    autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
         sync: false
-      # The real web origin, e.g. https://myunivokai.vercel.app
-      - key: API_ALLOWED_ORIGINS
+      - key: NATS_URL
         sync: false
-      - key: PUBLIC_WEB_URL
+      - key: NATS_USERNAME
         sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
+      - key: AI_PROVIDER
+        value: mock
+      - key: AI_FALLBACK_PROVIDER
+        value: mock
+      - key: AI_ENABLE_FALLBACK
+        value: "true"
       - key: GEMINI_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
 
-  # nature-service: the forest world API, a full peer of myunivokai-api.
-  # Its DATABASE_URL/DATABASE_DIRECT_URL must point at nature-service's OWN
-  # logical database (e.g. myunivokai_nature) created inside the SAME Neon
-  # project as the universe database — a second database costs nothing and
-  # keeps the deployed universe data out of this service's blast radius.
-  - type: web
-    name: myunivokai-nature
+  - type: worker
+    name: myunivokai-universe
     runtime: docker
-    rootDir: services/nature-service
-    dockerfilePath: ./Dockerfile.render
-    plan: free
-    healthCheckPath: /api/v1/healthz
+    dockerfilePath: ./services/universe-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
+    autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
-      - key: RUN_MIGRATIONS_ON_START
-        value: "true"
-      - key: TRUST_PROXY
-        value: "true"
-      # mock is the only wired provider until the real-AI round.
-      - key: AI_PROVIDER
-        value: mock
-      - key: AI_FALLBACK_PROVIDER
-        value: mock
-      # Neon POOLED url (runtime) and DIRECT url (migrations) of the dedicated
-      # nature database, sslmode=require.
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_DIRECT_URL
         sync: false
-      - key: API_ALLOWED_ORIGINS
+      - key: NATS_URL
         sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
+      - key: PUBLIC_WEB_URL
+        sync: false
+
+  - type: worker
+    name: myunivokai-nature
+    runtime: docker
+    dockerfilePath: ./services/nature-service/Dockerfile.prod
+    dockerContext: .
+    plan: starter
+    autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
       - key: PUBLIC_WEB_URL
         sync: false

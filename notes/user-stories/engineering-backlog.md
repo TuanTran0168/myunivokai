@@ -1,0 +1,379 @@
+# Engineering backlog — event-driven platform
+
+> **Document status:** Cross-sprint planning baseline; execution status lives in sprint folders
+> **Last source review:** 2026-07-22
+
+This backlog originated the approved
+[Vision V1 solution architecture](../vision/versions/v1-2026-07-22/solution-architecture.md).
+Sprint 1 source implementation now exists. Use
+[Sprint 1 user stories](../sprints/sprint-01-2026-07-22/user-stories.md) for
+current implementation and verification status; `Ready` labels below preserve
+the original planning baseline rather than overriding sprint evidence.
+
+## EPIC-S1-MIGRATE-001 — Replace the platform completely in Sprint 1
+
+Status: Ready
+Priority: P0
+Sprint: [Sprint 1 — starts 2026-07-22](../sprints/sprint-01-2026-07-22/README.md)
+
+As the product owner,
+I want the existing synchronous peer architecture replaced in one complete
+sprint,
+so that the deployed product starts from the scalable NATS/Redis/DNA design
+without carrying two production paths.
+
+Scenario: Complete the new generation lifecycle
+
+Given a fresh environment with NATS, Redis and the three new databases
+When a visitor requests a Universe or Nature generation
+Then the gateway returns `202` after JetStream accepts the command
+And `dna-service` creates validated canonical DNA
+And the selected family stores a deterministic world from the DNA snapshot
+And job polling returns the completed family/world result through the gateway.
+
+Scenario: Retire the legacy runtime safely
+
+Given local and deployed migration smoke tests pass
+When traffic is cut to the new gateway contract
+Then no deployed domain service exposes an HTTP business API
+And the old shared gateway key and upstream URLs are unused
+And the old services remain recoverable until the observation window passes
+And old databases are deleted only by a separately confirmed operator action.
+
+Epic exit:
+
+- [ ] Every Sprint 1 story below is Verified.
+- [ ] Local one-command startup and production deployment guide both pass.
+- [ ] Source overview, vision, OpenAPI and environment docs match implemented
+      code rather than the migration plan.
+
+### S1-CONTRACT-001 — Freeze public and messaging contracts
+
+Status: Ready
+Priority: P0
+
+As a service developer,
+I want executable HTTP, NATS and canonical-DNA contracts,
+so that independently deployed services cannot drift silently.
+
+Scenario: Validate a message at every boundary
+
+Given a versioned command, event or query fixture
+When CI validates and decodes it in the owning Go modules
+Then its body has only `jobId`, `timestamp` and typed `data`
+And its subject carries operation and version
+And invalid or incompatible data fails before business persistence.
+
+Scenario: Describe the asynchronous browser API
+
+Given the browser uses only the gateway
+When the public OpenAPI contract is validated
+Then generation returns `202 + jobId`
+And job/world/variant/publish/share routes and errors are complete
+And no direct domain-service URL appears.
+
+Tasks:
+
+- [ ] Define canonical `ProfileDNA` without planet/landmark/render fields.
+- [ ] Add schemas/fixtures for the generic envelope and every Sprint 1 subject.
+- [ ] Replace the health-only root OpenAPI with the new public API.
+- [ ] Add Go/TypeScript contract drift and scene-schema tests.
+
+### S1-LOCAL-001 — Run the complete target locally
+
+Status: Ready
+Priority: P0
+
+As a developer,
+I want one documented local command to start the target fleet,
+so that NATS, Redis, migrations and service boundaries are tested before
+deployment.
+
+Scenario: Start from an empty machine state
+
+Given Docker and a copied root `.env`
+When the developer runs the documented Compose command
+Then PostgreSQL, NATS JetStream and Redis become healthy
+And three fresh databases and least-privilege roles are initialized
+And all migrations/services start in dependency order
+And only web/gateway plus explicitly documented local diagnostics publish host
+ports.
+
+Tasks:
+
+- [ ] Keep root `docker-compose-local.yaml` as an `include` aggregator and add
+      shared `infra/docker-compose-local.yaml`.
+- [ ] Keep `.env.local` for root/component local development; prohibit real
+      production credentials in tracked local files.
+- [ ] Give every app/service its own local Compose plus `Dockerfile.local` and
+      two-stage `Dockerfile.prod`.
+- [ ] Add PostgreSQL database/role initialization, NATS ACL/bootstrap, Redis,
+      named volumes, health checks, reset instructions and one smoke command.
+- [ ] Rename the frontend to `apps/myunivokai-web` and update all path consumers.
+
+### S1-EDGE-001 — Convert Gateway to NATS and Redis
+
+Status: Ready
+Priority: P0
+
+As a visitor,
+I want the gateway to accept work quickly and protect the shared edge,
+so that AI latency does not hold HTTP requests and scaled gateway instances
+enforce one policy.
+
+Scenario: Accept durable work
+
+Given NATS is ready and a generation request is valid
+When the gateway publishes the command
+Then it waits for JetStream `PubAck`
+And returns `202` with the generated `jobId`
+And never calls a domain HTTP API or AI provider.
+
+Scenario: Apply shared rate limits and cache
+
+Given two gateway instances share Redis
+When one client crosses its configured budget across both instances
+Then the combined requests receive the documented `429`
+And safe world/share/job reads use cache-aside with bounded TTL/invalidation
+And a Redis outage activates the documented conservative limiter/cache bypass.
+
+Tasks:
+
+- [ ] Remove reverse-proxy/upstream URL routing from the target runtime.
+- [ ] Add JetStream publisher and Core NATS request-reply client.
+- [ ] Replace in-memory limiter/share cache with Redis implementations and
+      explicit degraded behavior.
+- [ ] Keep circuit/no-responder state local unless a measured need proves it
+      must be shared.
+- [ ] Add NATS/Redis health, timeouts, metrics and tests.
+
+### S1-DNA-001 — Establish canonical DNA and job ownership
+
+Status: Ready
+Priority: P0
+
+As a visitor,
+I want one semantic profile to drive different scene families,
+so that another family can be generated without another independent reading
+of my questionnaire.
+
+Scenario: Generate canonical DNA once
+
+Given a valid DNA command
+When `dna-service` handles it
+Then it records an idempotent root job and profile input
+And the configured provider returns schema-valid family-neutral DNA
+And a versioned immutable snapshot is sent to only the requested family
+And provider failures finish the job with a stable safe error.
+
+Scenario: Reuse DNA
+
+Given a completed profile DNA version
+When a second family is requested from that version
+Then `dna-service` publishes the second family compose command
+And no AI provider is called again.
+
+Tasks:
+
+- [ ] Create `services/dna-service` and `myunivokai_dna` migration baseline.
+- [ ] Move/adapt provider adapters and orchestration out of family services.
+- [ ] Implement inbox/outbox, root jobs, AI attempts and query responder.
+- [ ] Test mock, repair/fallback, retry, duplicate and restart behavior.
+
+### S1-FAMILY-001 — Convert Universe and Nature to independent NATS services
+
+Status: Ready
+Priority: P0
+
+As a platform operator,
+I want Universe and Nature independently deployable and scalable,
+so that load or failure in one family does not require scaling the other.
+
+Scenario: Compose a family world idempotently
+
+Given a valid family command with canonical DNA snapshot
+When the family service receives the message one or more times
+Then exactly one logical world/result is created
+And the existing seeded builder remains deterministic
+And an immutable `profileId`, `dnaVersion` and DNA snapshot are stored
+And a completed/failed event is published transactionally.
+
+Scenario: Query without a public peer API
+
+Given a world/share request reaches the gateway
+When it issues the versioned Core NATS query
+Then the owning family replies from its own database within the deadline
+And the service has no public HTTP business endpoint.
+
+Tasks:
+
+- [ ] Create fresh `myunivokai_universe` and `myunivokai_nature` baselines.
+- [ ] Preserve builders, variants, selection, publish/share privacy and tests.
+- [ ] Replace AI and HTTP business layers with command/query/event handlers.
+- [ ] Add inbox/outbox, duplicate delivery, redelivery and graceful shutdown.
+- [ ] Prove each service credential/database permission is isolated.
+
+### S1-FE-001 — Adopt the asynchronous gateway flow
+
+Status: Ready
+Priority: P0
+
+As a visitor,
+I want visible reliable generation progress,
+so that an asynchronous AI job does not look frozen or fail on an HTTP timeout.
+
+Scenario: Generate and navigate to a world
+
+Given the gateway accepts a request with `202`
+When the frontend receives `jobId`
+Then it polls with bounded backoff and a total deadline
+And renders queued/processing/failed states accessibly
+And navigates to the returned family/world only after completion
+And every API request still uses one gateway origin.
+
+Tasks:
+
+- [ ] Replace synchronous create assumptions with typed job state.
+- [ ] Preserve family selection, renderer registry, variants and share flows.
+- [ ] Add polling cancellation/retry/error tests and refresh recovery.
+- [ ] Update runtime validation/types from executable contracts.
+
+### S1-DEPLOY-001 — Deploy and prove the complete fleet
+
+Status: Ready
+Priority: P0
+
+As a platform operator,
+I want a reproducible deployment and rollback guide,
+so that the new architecture is verified rather than inferred from config.
+
+Scenario: Deploy the production topology
+
+Given managed NATS/Redis, three Neon databases and Render credentials
+When the operator follows the Sprint 1 deployment guide
+Then `myunivokai-gateway` runs as the public web service
+And `myunivokai-dna`, `myunivokai-universe` and `myunivokai-nature` run as
+always-on background services without `-worker` in their names
+And credentials/subject/database boundaries pass negative tests
+And both family lifecycles pass through the public gateway.
+
+Tasks:
+
+- [ ] Replace `render.yaml` with the target service types/names/env groups.
+- [ ] Document managed NATS, Redis and three Neon database provisioning.
+- [ ] Document migrations, rollout, smoke, observation, rollback and retirement.
+- [ ] Record commit SHA/timestamp/pass-fail evidence without secrets.
+
+### S1-CUTOVER-001 — Retire old services and data deliberately
+
+Status: Planned after S1-DEPLOY-001 smoke
+Priority: P0
+
+As a platform operator,
+I want an explicit cutover and retirement checkpoint,
+so that accepting a fresh baseline does not cause an accidental unrecoverable
+deletion.
+
+Scenario: Retire the legacy fleet
+
+Given the new fleet has passed the observation window and rollback evidence is
+captured
+When the owner confirms the exact legacy Render services and database names
+Then those targets are retired without wildcard or inferred deletion
+And the action and recoverability are recorded
+And no new-platform resource is included.
+
+## EPIC-S2-SCALE-001 — Prove resilience and horizontal scale
+
+Status: Planned after Sprint 1
+Priority: P1
+Sprint: [Sprint 2 — starts 2026-08-05](../sprints/sprint-02-2026-08-05/README.md)
+
+As a platform operator,
+I want measured capacity, recovery behavior and end-to-end observability,
+so that scaling decisions are based on bottlenecks rather than service count.
+
+Scenario: Scale one bottleneck independently
+
+Given a reproducible mixed workload
+When gateway, DNA, Universe or Nature reaches its threshold
+Then only that component is scaled
+And durable consumers distribute work without duplicate business effects
+And shared rate/cache semantics remain stable.
+
+Scenario: Diagnose and recover from dependency failure
+
+Given NATS, Redis, provider or one database is interrupted
+When the platform degrades and recovers
+Then metrics/traces identify the failed stage
+And accepted jobs are recovered, completed or explicitly failed
+And no raw profile input or secret is logged.
+
+Tasks:
+
+- [ ] Define load model, SLOs and per-component scale triggers.
+- [ ] Add RED, consumer lag/redelivery, outbox age, Redis and DB-pool metrics.
+- [ ] Prove two-gateway and multi-consumer behavior.
+- [ ] Run fault injection for NATS, Redis, AI and PostgreSQL.
+- [ ] Document capacity results and update deployment sizing.
+
+## EPIC-S3-CITY-001 — Add City on the stable platform
+
+Status: Planned after Sprint 2 gates
+Priority: P1
+Sprint: [Sprint 3 — starts 2026-08-19](../sprints/sprint-03-2026-08-19/README.md)
+
+As a returning visitor,
+I want the same DNA rendered as a high-fidelity personal city,
+so that Myunivokai adds a genuinely new portrait medium.
+
+Scenario: Add a bounded context without changing existing consumers
+
+Given the versioned canonical DNA and subject conventions
+When City is introduced
+Then `myunivokai-city` owns `myunivokai_city`, City commands/queries/events and
+its deterministic builder
+And DNA dispatch adds City without modifying Universe/Nature behavior
+And the gateway selects City through its subject registry
+And the frontend lazy-loads `sceneType: city`.
+
+Scenario: Approve a high-fidelity desktop vertical slice
+
+Given a fixed City fixture and approved visual references
+When the desktop review flow creates, views and shares a City
+Then layout, roads, districts, buildings, landmark, lighting and atmosphere are
+deterministic and coherent
+And self-hosted assets/licenses/contracts pass
+And owner-approved screenshots establish the baseline before low-end tuning.
+
+Tasks:
+
+- [ ] Finalize CityDNA mapping from canonical DNA and CitySceneConfig schema.
+- [ ] Add `city-service`, database, subjects, inbox/outbox and queries.
+- [ ] Add deterministic high-fidelity renderer and complete public flow.
+- [ ] Extend Compose/deployment/monitoring and pass production smoke.
+
+## DEFERRED-AUTH-001 — Define identity before authentication
+
+Status: Deferred by owner decision on 2026-07-22
+Priority: Discovery
+
+As a future account holder,
+I want worlds owned and authorized consistently,
+so that login adds actual privacy rather than a placeholder auth service.
+
+Scenario: Approve identity later
+
+Given Sprint 1 intentionally has no user identity
+When authentication is reconsidered
+Then issuer, account mapping, object ownership, anonymous claim/migration,
+public share, deletion/export and service authorization are approved first
+And internal NATS credentials are not confused with user authentication.
+
+## Deferred product work retained from the previous backlog
+
+The supported Next.js major upgrade, lazy renderer chunks, self-hosted Draco,
+asset/license budgets, adaptive weak-device quality and full City breadth remain
+valid product/engineering work. They must be re-estimated after Sprint 1 because
+the public API, runtime contracts and deployment topology change. Do not execute
+the old HTTP-peer City edge stories as written; the target uses NATS.

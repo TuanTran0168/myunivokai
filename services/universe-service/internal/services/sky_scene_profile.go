@@ -11,7 +11,7 @@ import (
 // from the variant seed, the world style (theme) and the atmospheric mood, so
 // the frontend renders the night sky purely from stored data. The frontend
 // preview builder mirrors these tables and ranges
-// (clients/web-client/src/lib/scene.ts, buildPreviewSkyConfig) — keep the two
+// (apps/myunivokai-web/src/lib/scene.ts, buildPreviewSkyConfig) — keep the two
 // in sync when changing values here.
 
 // Seed suffixes derive independent PRNG streams so adding the sky section does

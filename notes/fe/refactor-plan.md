@@ -1,5 +1,16 @@
 # FE Production Refactor Plan — clients/web-client
 
+> **Document status:** Needs re-baseline — several unchecked items already exist in source
+> **Last source review:** 2026-07-18
+> **Current backlog:** [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md)
+
+> **Known stale status rows:** Vitest and its CI step are implemented; Sonner
+> toast/loading UI exists; both share families implement server-rendered
+> metadata; the Vitrine/Liquid-Glass tokens/layout are present in source. The
+> old unchecked table is preserved as a decision/history record, not as proof
+> that those features are missing. Typed runtime contracts, adaptive mobile 3D
+> quality, and a complete accessibility/recovery pass remain real gaps.
+
 Goal: end the MVP phase. Each item is **one branch + one separate PR**, in
 order. Every branch must pass `npm run typecheck && npm run lint && npm run build`,
 and from the testing setup onward must ship with unit tests (vitest).
@@ -170,7 +181,7 @@ and the MD3 token vocabulary are still deleted.
 
 Goal: a premium, professional interface where the **3D canvas is the hero**, not a
 boxed-in widget — the "futuristic command deck" feel of the Stitch reference
-(`notes/stitch_personal_universe_3d_v2`), benchmarked against the restraint of
+(`notes/design/stitch_personal_universe_3d_v2`), benchmarked against the restraint of
 Apple / supercar / interior-design sites. **Pure presentation: no logic or
 behavior change.** Same form state, same payload, same API calls, same scene
 builder (`buildPreviewSceneConfig` / `sceneFromVariant`), same handlers — only
@@ -178,7 +189,7 @@ layout, spacing, and chrome change. Every U-branch must keep all existing tests
 green (`npm run typecheck && lint && build && test`).
 
 Design language is already half-built and stays the single source of truth — see
-`notes/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md`:
+`notes/design/stitch_personal_universe_3d_v2/personal_universe_3d/DESIGN.md`:
 deep-space navy `#050816`, glassmorphism (20px backdrop blur, 1px white/10
 border, brighter top edge), gradient CTA (purple→cyan), Space Grotesk headlines /
 Inter body / JetBrains Mono data-labels. The tokens and fonts already exist in

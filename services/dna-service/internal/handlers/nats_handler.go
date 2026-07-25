@@ -1,0 +1,176 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
+	"github.com/myunivokai/myunivokai/services/dna-service/internal/repositories"
+	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog/log"
+)
+
+const invalidRequestJobID = "invalid-request"
+
+var ErrInvalidGenerateCommand = errors.New("invalid DNA generation command")
+
+type GenerationService interface {
+	Generate(context.Context, contracts.Envelope[contracts.GenerateDNAData]) error
+	FailGeneration(context.Context, contracts.Envelope[contracts.GenerateDNAData]) error
+	CompleteFamily(context.Context, string, string, contracts.Envelope[contracts.FamilyCompletedData]) error
+	FailFamily(context.Context, string, string, contracts.Envelope[contracts.FamilyFailedData]) error
+	GetJob(context.Context, string) (contracts.Job, error)
+}
+
+type ResponsePublisher interface {
+	Publish(string, []byte) error
+}
+
+// NATSHandler is the inbound transport adapter for DNA commands, events, and queries.
+// It depends on narrow interfaces so transport behavior can be tested independently.
+type NATSHandler struct {
+	generationService GenerationService
+	responsePublisher ResponsePublisher
+	queryTimeout      time.Duration
+}
+
+func NewNATSHandler(generationService GenerationService, responsePublisher ResponsePublisher, queryTimeout time.Duration) *NATSHandler {
+	return &NATSHandler{
+		generationService: generationService,
+		responsePublisher: responsePublisher,
+		queryTimeout:      queryTimeout,
+	}
+}
+
+func (handler *NATSHandler) HandleGenerate(ctx context.Context, message *nats.Msg) error {
+	var envelope contracts.Envelope[contracts.GenerateDNAData]
+	if err := decodeEnvelope(message.Data, &envelope); err != nil {
+		return fmt.Errorf("decode DNA command: %w", err)
+	}
+	return handler.generationService.Generate(ctx, envelope)
+}
+
+func (handler *NATSHandler) HandleGenerationFailure(ctx context.Context, message *nats.Msg) error {
+	var envelope contracts.Envelope[contracts.GenerateDNAData]
+	if err := decodeEnvelope(message.Data, &envelope); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidGenerateCommand, err)
+	}
+	if !envelope.Data.Family.Valid() {
+		return fmt.Errorf("%w: unsupported family %q", ErrInvalidGenerateCommand, envelope.Data.Family)
+	}
+	normalizedInput := envelope.Data.Input.Normalize()
+	if validationDetails := normalizedInput.Validate(); len(validationDetails) > 0 {
+		return fmt.Errorf("%w: %s", ErrInvalidGenerateCommand, validationDetails[0].Message)
+	}
+	envelope.Data.Input = normalizedInput
+	return handler.generationService.FailGeneration(ctx, envelope)
+}
+
+func (handler *NATSHandler) HandleFamilyResult(ctx context.Context, message *nats.Msg) error {
+	messageID, err := resultMessageID(message)
+	if err != nil {
+		return err
+	}
+	expectedFamily, err := familyForResultSubject(message.Subject)
+	if err != nil {
+		return err
+	}
+
+	switch message.Subject {
+	case contracts.UniverseCompletedEventSubject, contracts.NatureCompletedEventSubject:
+		var envelope contracts.Envelope[contracts.FamilyCompletedData]
+		if err := decodeEnvelope(message.Data, &envelope); err != nil {
+			return fmt.Errorf("decode family completion: %w", err)
+		}
+		if envelope.Data.Family != expectedFamily || strings.TrimSpace(envelope.Data.WorldID) == "" {
+			return errors.New("family completion data does not match its subject")
+		}
+		return handler.generationService.CompleteFamily(ctx, messageID, message.Subject, envelope)
+	case contracts.UniverseFailedEventSubject, contracts.NatureFailedEventSubject:
+		var envelope contracts.Envelope[contracts.FamilyFailedData]
+		if err := decodeEnvelope(message.Data, &envelope); err != nil {
+			return fmt.Errorf("decode family failure: %w", err)
+		}
+		if envelope.Data.Family != expectedFamily || strings.TrimSpace(envelope.Data.Code) == "" || strings.TrimSpace(envelope.Data.Message) == "" {
+			return errors.New("family failure data does not match its subject")
+		}
+		return handler.generationService.FailFamily(ctx, messageID, message.Subject, envelope)
+	default:
+		return fmt.Errorf("unsupported family result subject %q", message.Subject)
+	}
+}
+
+func familyForResultSubject(subject string) (contracts.WorldFamily, error) {
+	switch subject {
+	case contracts.UniverseCompletedEventSubject, contracts.UniverseFailedEventSubject:
+		return contracts.WorldFamilyUniverse, nil
+	case contracts.NatureCompletedEventSubject, contracts.NatureFailedEventSubject:
+		return contracts.WorldFamilyNature, nil
+	default:
+		return "", fmt.Errorf("unsupported family result subject %q", subject)
+	}
+}
+
+func (handler *NATSHandler) HandleJobQuery(message *nats.Msg) {
+	if strings.TrimSpace(message.Reply) == "" {
+		return
+	}
+
+	var envelope contracts.Envelope[contracts.JobQueryData]
+	if err := decodeEnvelope(message.Data, &envelope); err != nil {
+		handler.respond(message, contracts.ErrorRPCEnvelope(invalidRequestJobID, http.StatusBadRequest, "INVALID_REQUEST", "The job query is invalid."))
+		return
+	}
+
+	queryContext, cancel := context.WithTimeout(context.Background(), handler.queryTimeout)
+	defer cancel()
+	job, err := handler.generationService.GetJob(queryContext, envelope.Data.JobID)
+	if errors.Is(err, repositories.ErrNotFound) {
+		handler.respond(message, contracts.ErrorRPCEnvelope(envelope.JobID, http.StatusNotFound, "JOB_NOT_FOUND", "The requested job was not found."))
+		return
+	}
+	if err != nil {
+		handler.respond(message, contracts.ErrorRPCEnvelope(envelope.JobID, http.StatusServiceUnavailable, "JOB_QUERY_UNAVAILABLE", "The job could not be loaded."))
+		return
+	}
+	responseEnvelope, err := contracts.SuccessRPCEnvelope(envelope.JobID, http.StatusOK, job)
+	if err != nil {
+		handler.respond(message, contracts.ErrorRPCEnvelope(envelope.JobID, http.StatusInternalServerError, "INTERNAL_ERROR", "The response could not be created."))
+		return
+	}
+	handler.respond(message, responseEnvelope)
+}
+
+func decodeEnvelope[DataType any](payload []byte, envelope *contracts.Envelope[DataType]) error {
+	if err := json.Unmarshal(payload, envelope); err != nil {
+		return err
+	}
+	return envelope.Validate()
+}
+
+func resultMessageID(message *nats.Msg) (string, error) {
+	if messageID := message.Header.Get(nats.MsgIdHdr); messageID != "" {
+		return messageID, nil
+	}
+	metadata, err := message.Metadata()
+	if err != nil {
+		return "", fmt.Errorf("read family result metadata: %w", err)
+	}
+	return fmt.Sprintf("%s:%d", message.Subject, metadata.Sequence.Stream), nil
+}
+
+func (handler *NATSHandler) respond(message *nats.Msg, response any) {
+	payload, err := json.Marshal(response)
+	if err != nil {
+		log.Error().Err(err).Msg("marshal DNA NATS query response")
+		return
+	}
+	if err := handler.responsePublisher.Publish(message.Reply, payload); err != nil {
+		log.Error().Err(err).Msg("publish DNA NATS query response")
+	}
+}

@@ -1,81 +1,177 @@
-# BE Source Overview — services/universe-service
+# Backend source overview
 
-Go + chi router + pgxpool. One binary `cmd/api`, one migration tool `cmd/migrate`.
+> **Document status:** Implemented; local container smoke passed, deployed smoke pending
+> **Last source review:** 2026-07-23
 
-## World creation request flow
+The backend now consists of one public HTTP edge and three private NATS
+services. The old gateway-to-domain HTTP proxy, duplicated family AI layers,
+public domain handlers, and `GATEWAY_SHARED_SECRET` runtime have been removed.
 
-```txt
-POST /api/v1/worlds
-  -> handlers/world_handler.go   decode + validate request (validation/world.go)
-  -> services/world_service.go   orchestrates everything
-      -> ai/orchestrator.go      call primary provider, validate JSON, repair-retry, fallback
-      -> seed/seed.go             generate WLD-XXXXXXXXXX seed (crypto random)
-      -> services/world_config_builder.go
-                                 DNA + seed -> WorldSceneConfig (deterministic PRNG, seed/prng.go)
-  -> repositories (store)         save world + variant + AI logs in one transaction
-  -> returns { world, variant, personalityDNA }
+## Runtime topology
+
+```text
+myunivokai-web
+  -> API Gateway (HTTP :8080)
+       -> JetStream MYUNIVOKAI_COMMANDS
+       -> Core NATS queries
+       -> Redis rate/cache
+
+DNA Service
+  -> myunivokai_dna
+  -> AI Provider interface (mock/gemini/openai)
+  -> Universe or Nature compose command
+
+Universe Service -> myunivokai_universe
+Nature Service   -> myunivokai_nature
 ```
 
-Core principle: **AI only generates Personality DNA** (semantics). Every 3D
-number (orbit, size, speed) is produced by `world_config_builder` from the seed
-within safe bounds. Regenerating a variant therefore makes NO AI call — just a
-new seed + rebuilt config.
+Only Gateway starts an HTTP server. Domain services run `cmd/service`, consume
+durable commands, publish outbox events, and register Core NATS queue
+responders. Their Render resource type is Background Worker, with no `-worker`
+name suffix.
 
-## AI provider switching
+## Shared contracts
 
-- `ai/provider.go` — `Provider.GenerateStructured()` interface. Business code only knows this interface.
-- `ai/providers/` — Gemini + OpenAI adapters (plain REST in `rest.go`), `mock.go` for tests/dev.
-- `aifactory/factory.go` — reads `AI_PROVIDER` (gemini | openai | mock) and builds the provider.
-- `ai/orchestrator.go` — repair-prompt retry on schema-invalid JSON (AI_MAX_RETRIES),
-  fallback to `AI_FALLBACK_PROVIDER` on technical failures.
-- Switching providers = changing env, never code. Provider request shapes must
-  not leak outside the `providers/` folder.
-- Gemini accepts only an OpenAPI-style schema subset, while OpenAI strict mode
-  REQUIRES `additionalProperties:false`; `sanitizeSchemaForGemini` in rest.go
-  reconciles this, with tests locking both invariants.
+`contracts/go` is a small Go module used by every backend module. NATS messages
+always have exactly these top-level fields:
 
-## Store
-
-`repositories/store.go` is the interface; two implementations:
-
-- `postgres_store.go` — real Neon/Postgres (`DATABASE_URL`), pool tuned via
-  `DATABASE_MAX_CONNS` / `MIN_CONNS` / `MAX_CONN_LIFETIME` / `MAX_CONN_IDLE_TIME`.
-- `memory_store.go` — auto-selected when `DATABASE_URL` is empty. FE dev needs no database.
-  It enforces the same uniqueness rules as Postgres so behavior never diverges.
-
-Unique-constraint collisions surface as `repositories.ErrConflict`; the service
-retries with fresh values (variant numbers, share slug suffixes).
-
-## Response shapes (the FE depends on these directly)
-
-Defined in `models/responses.go`:
-
-```txt
-POST /worlds            -> { world, variant, personalityDNA }
-GET  /worlds/{id}       -> { world, selectedVariant, variants, personalityDNA }   <- variants at ROOT
-GET  /share/worlds/{s}  -> { world, variant, publicDNA }                          <- world has no id/input
+```json
+{
+  "jobId": "...",
+  "timestamp": "2026-07-22T12:00:00Z",
+  "data": {}
+}
 ```
 
-If you change a shape here, update `clients/web-client/src/lib/api.ts`
-(normalize functions) in the same PR.
+Family/profile/world identifiers are inside typed `data`. Subjects carry the
+domain, operation, and V1 version. JSON schemas and fixed examples live in
+`contracts/schemas` and `contracts/fixtures`; the public browser contract is
+`contracts/openapi.yaml`.
 
-## Health & security
+## API Gateway
 
-- `GET /api/v1/healthz` — liveness, touches no dependency.
-- `GET /api/v1/readyz` — pings the store (3s timeout), 503 when unreachable.
-- Share APIs never return raw `input` (user goal/challenge) — see `PublicWorld`.
-- Rate limiting is per client IP (X-Forwarded-For behind the proxy).
-- Swagger UI is mounted only outside production.
-- No API keys are ever logged or stored. AI request/response/usage go to `ai_generations`.
+Source: `services/api-gateway`.
 
-## Run locally & checks
+- `internal/handlers`: separate DNA job, Universe, and Nature HTTP adapters over
+  one shared RPC/cache transport. Each family handler receives fixed NATS
+  subjects at construction time; request data cannot reroute between services.
+- `internal/broker`: JetStream publish and Core NATS request-reply.
+- `internal/edge`: Redis cache and atomic distributed token bucket.
+- `internal/middleware`: request identity, headers, CORS, body limit, logging,
+  recovery, and Redis-first rate limit with local fallback.
+- `internal/config`: NATS/Redis/cache/edge configuration and production CORS
+  validation.
 
-```bash
-cd services/universe-service
-go run ./cmd/api        # empty DATABASE_URL -> memory store, AI_PROVIDER=mock by default
+`POST /api/{family}/worlds` returns `202` only after a JetStream `PubAck`.
+Reads/mutations have a bounded NATS request timeout. Redis does not transport
+jobs; it may be flushed without losing accepted commands or persisted worlds.
+
+## DNA Service
+
+Source: `services/dna-service`.
+
+- owns raw `WorldInput`, profiles, root jobs, immutable DNA versions, provider
+  attempts, inbox, and outbox;
+- is the only service with provider adapters under `internal/ai/providers`;
+- business logic depends on `ai.Provider`, not provider-specific clients;
+- validates AI JSON before persistence and records a hash instead of raw prompt
+  input in attempt telemetry;
+- publishes one requested family compose command containing an immutable
+  ProfileDNA snapshot;
+- consumes family completion/failure and answers job queries.
+
+The default mock provider makes no external call but intentionally selects
+between multiple ProfileDNA presets per mood and randomizes facet energy. Its
+random-index strategy is injected in tests, preserving deterministic assertions
+without removing runtime variety. Variant regeneration remains inside family
+services and does not call AI.
+
+## Universe and Nature services
+
+Sources: `services/universe-service` and `services/nature-service`.
+
+Both use the same layers:
+
+```text
+cmd/service -> internal/messaging runtime -> internal/handlers NATS adapters
+            -> internal/services -> internal/repositories -> PostgreSQL
+```
+
+Each service:
+
+- consumes only its versioned compose subject;
+- registers explicit Core NATS handlers for list/get/variant/publish/share;
+- maps family-neutral facets into its existing deterministic scene builder;
+- atomically records inbox + world + initial variant + completion outbox;
+- returns the existing world/variant/publish/share JSON shapes over Core NATS;
+- preserves UUID validation at Gateway and privacy-safe public projections;
+- supports idempotent compose redelivery and AI-free variants;
+- stores `profileId`, `dnaVersionId`, source job, visual intent, and DNA
+snapshot in its own database.
+
+The runtime owns connection lifecycle, deterministic subscription registration,
+pull/ack/retry policy, and outbox polling. Fetch size/wait, retry delay,
+connect/reconnect timing, publish timeout, ack wait, and maximum deliveries are
+configuration values. Every inbound envelope is validated before its service is
+called, and a terminal compose message is acknowledged only after its failure
+event receives a JetStream acknowledgement.
+
+DNA generation commands use bounded redelivery. After the configured maximum,
+DNA Service durably creates/updates the root job as failed and queues its failure
+event before terminating the poison command. Family result events use unlimited
+redelivery so a temporary DNA database outage cannot silently drop the final
+job state.
+
+Universe scene configs now explicitly include `sceneType: "universe"`; Nature
+continues to use `sceneType: "forest"`. The frontend registry remains
+sceneType-first.
+
+## Persistence
+
+Fresh V1 database names:
+
+| Owner | Database |
+| --- | --- |
+| DNA Service | `myunivokai_dna` |
+| Universe Service | `myunivokai_universe` |
+| Nature Service | `myunivokai_nature` |
+
+There are no cross-database foreign keys. IDs and immutable snapshots cross
+boundaries only through NATS contracts. Outbox messages are retried until
+JetStream acknowledges them; consumer inbox keys prevent duplicate effects.
+
+## Internal access boundary
+
+V1 intentionally has no auth/account service. Direct browser-to-domain access
+is prevented structurally:
+
+- domain services have no HTTP listener or published host port;
+- the browser receives only the Gateway origin;
+- local NATS users have subject-scoped publish/subscribe permissions;
+- production uses managed NATS credentials and TLS;
+- each service receives only its own Neon URLs.
+
+## Development checks
+
+Run the root Compose config gate, then the checks in each Go module:
+
+```powershell
+docker compose -f docker-compose-local.yaml config --quiet
 go test ./...
 go vet ./...
+go build ./...
 ```
 
-Swagger (non-production): http://localhost:8080/swagger/index.html — regenerate with
-`swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal`.
+The complete local/deployment workflow is in
+`notes/sprints/sprint-01-2026-07-22/`. Source compilation and unit/regression
+tests pass as of the review date. On 2026-07-22 UTC, the root stack built and
+started on Docker Engine 27.4.0; all health checks passed and mock-provider
+Universe and Nature jobs completed through Gateway, NATS, DNA, their family
+service, and PostgreSQL. Managed deployment still requires operator
+credentials. All five two-stage production images also build successfully.
+
+Production promotion is not yet approved: the audit identified high-severity
+advisories in the current Next.js 14 production tree. Sprint story
+`S1-SECURITY-001` requires an isolated framework upgrade plus browser
+regression before cutover; this backend migration does not silently waive or
+bundle that behavior-sensitive major upgrade.
