@@ -58,12 +58,12 @@ services:
       - key: SHARE_CACHE_TTL
         value: 60s
 
-  - type: worker
+  - type: web
     name: myunivokai-dna
     runtime: docker
     dockerfilePath: ./services/dna-service/Dockerfile.prod
     dockerContext: .
-    plan: starter
+    plan: free
     autoDeployTrigger: checksPass
     preDeployCommand: /app/migrate
     envVars:
@@ -114,12 +114,12 @@ services:
       - key: OPENAI_API_KEY
         sync: false
 
-  - type: worker
+  - type: web
     name: myunivokai-universe
     runtime: docker
     dockerfilePath: ./services/universe-service/Dockerfile.prod
     dockerContext: .
-    plan: starter
+    plan: free
     autoDeployTrigger: checksPass
     preDeployCommand: /app/migrate
     envVars:
@@ -162,12 +162,12 @@ services:
       - key: PUBLIC_WEB_URL
         sync: false
 
-  - type: worker
+  - type: web
     name: myunivokai-nature
     runtime: docker
     dockerfilePath: ./services/nature-service/Dockerfile.prod
     dockerContext: .
-    plan: starter
+    plan: free
     autoDeployTrigger: checksPass
     preDeployCommand: /app/migrate
     envVars:
