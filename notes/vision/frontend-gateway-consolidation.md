@@ -56,7 +56,7 @@ required because `NEXT_PUBLIC_*` values are compiled into the Next.js bundle.
 The production Docker build fails when this argument is missing, preventing a
 Render image from silently embedding the localhost development fallback.
 
-The root `docker-compose-local.yml` uses the same contract:
+The root `docker-compose-local.yaml` uses the same contract:
 
 ```txt
 NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080

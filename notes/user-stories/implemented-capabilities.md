@@ -139,7 +139,7 @@ so that localhost exercises the production request boundary.
 Scenario: Start the integrated stack
 
 Given Docker is running
-When the developer runs `docker compose -f docker-compose-local.yml up --build`
+When the developer runs `docker compose -f docker-compose-local.yaml up --build`
 Then PostgreSQL initializes three owned databases and migrations complete
 And NATS JetStream/ACL bootstrap and Redis become available to the fleet
 And domain services expose no host HTTP ports
@@ -147,8 +147,8 @@ And the web client uses only `http://localhost:8080`.
 
 Source evidence:
 
-- root `docker-compose-local.yml`
-- `infra/docker-compose-local.yml`
+- root `docker-compose-local.yaml`
+- `infra/docker-compose-local.yaml`
 - root `Makefile`
-- each component's `docker-compose-local.yml`
+- each component's `docker-compose-local.yaml`
 - both family lifecycle smoke records in the Sprint 1 local environment guide

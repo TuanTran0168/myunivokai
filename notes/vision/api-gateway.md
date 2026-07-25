@@ -157,5 +157,5 @@ services/api-gateway/
   internal/proxy/           reverse proxy, header sanitation, share cache, circuit breaker
   internal/routing/         family prefixes + timeout policy
   Dockerfile
-  docker-compose-local.yml
+  docker-compose-local.yaml
 ```

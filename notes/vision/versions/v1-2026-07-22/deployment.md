@@ -148,8 +148,8 @@ part of the automatic deploy command.
 
 ## Local parity
 
-Sprint 1 keeps root `docker-compose-local.yml` and `.env.local`, adds shared
-`infra/docker-compose-local.yml`, and gives every component its own local
+Sprint 1 keeps root `docker-compose-local.yaml` and `.env.local`, adds shared
+`infra/docker-compose-local.yaml`, and gives every component its own local
 Compose plus `Dockerfile.local`/two-stage `Dockerfile.prod`. Local uses
 containers for NATS, Redis and PostgreSQL while production uses managed
 equivalents. Subjects, stream names, database names, migrations and failure

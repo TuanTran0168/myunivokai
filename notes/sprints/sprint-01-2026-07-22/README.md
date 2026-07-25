@@ -36,9 +36,9 @@ Backlog epic: [EPIC-S1-MIGRATE-001](../../user-stories/engineering-backlog.md#ep
 
 ### Track B — local platform
 
-- Keep root `docker-compose-local.yml` as an integrated aggregator using
+- Keep root `docker-compose-local.yaml` as an integrated aggregator using
   Compose `include`.
-- Add `infra/docker-compose-local.yml` for PostgreSQL, JetStream-enabled NATS,
+- Add `infra/docker-compose-local.yaml` for PostgreSQL, JetStream-enabled NATS,
   Redis and bootstrap containers only.
 - Initialize `myunivokai_dna`, `myunivokai_universe`, and
   `myunivokai_nature` plus least-privilege roles.
@@ -46,7 +46,7 @@ Backlog epic: [EPIC-S1-MIGRATE-001](../../user-stories/engineering-backlog.md#ep
 - Keep root/component `.env.local` conventions; allow only local/mock values in
   tracked files and keep every real credential out of Git.
 - Give each deployable `Dockerfile.local`, `Dockerfile.prod`, and its own
-  `docker-compose-local.yml`; production Dockerfiles have builder/runtime
+  `docker-compose-local.yaml`; production Dockerfiles have builder/runtime
   stages only.
 - Add migrations and health/dependency ordering for every service.
 

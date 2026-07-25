@@ -9,11 +9,11 @@ separating shared infrastructure from component-owned development containers.
 
 ## 1. Decisions
 
-- Keep root filename `docker-compose-local.yml`.
+- Keep root filename `docker-compose-local.yaml`.
 - Use `.env.local` as the active local environment filename.
-- Keep a `docker-compose-local.yml` inside every app/service for standalone
+- Keep a `docker-compose-local.yaml` inside every app/service for standalone
   development.
-- Put only shared dependencies in `infra/docker-compose-local.yml`.
+- Put only shared dependencies in `infra/docker-compose-local.yaml`.
 - Keep domain folder suffixes: `dna-service`, `universe-service`,
   `nature-service`, and future `city-service`.
 - Rename `clients/web-client` to `apps/myunivokai-web` during Sprint 1.
@@ -24,11 +24,11 @@ separating shared infrastructure from component-owned development containers.
 ## 2. Target tree
 
 ```txt
-docker-compose-local.yml          # integrated stack aggregator
+docker-compose-local.yaml          # integrated stack aggregator
 .env.local                        # integrated local values
 
 infra/
-  docker-compose-local.yml        # shared dependencies only
+  docker-compose-local.yaml        # shared dependencies only
   .env.local                      # standalone infra values
   nats/
     nats-server.conf
@@ -39,31 +39,31 @@ infra/
 
 apps/
   myunivokai-web/
-    docker-compose-local.yml
+    docker-compose-local.yaml
     .env.local
     Dockerfile.local
     Dockerfile.prod
 
 services/
   api-gateway/
-    docker-compose-local.yml
+    docker-compose-local.yaml
     .env.local
     Dockerfile.local
     Dockerfile.prod
   dna-service/
-    docker-compose-local.yml
+    docker-compose-local.yaml
     .env.local
     Dockerfile.local
     Dockerfile.prod
     migrations/
   universe-service/
-    docker-compose-local.yml
+    docker-compose-local.yaml
     .env.local
     Dockerfile.local
     Dockerfile.prod
     migrations/
   nature-service/
-    docker-compose-local.yml
+    docker-compose-local.yaml
     .env.local
     Dockerfile.local
     Dockerfile.prod
@@ -74,24 +74,24 @@ services/
 
 ### Root aggregator
 
-Root `docker-compose-local.yml` contains no duplicated service definition. It
+Root `docker-compose-local.yaml` contains no duplicated service definition. It
 uses top-level `include`:
 
 ```yaml
 name: myunivokai-local
 
 include:
-  - path: ./infra/docker-compose-local.yml
+  - path: ./infra/docker-compose-local.yaml
     env_file: ./.env.local
-  - path: ./services/api-gateway/docker-compose-local.yml
+  - path: ./services/api-gateway/docker-compose-local.yaml
     env_file: ./.env.local
-  - path: ./services/dna-service/docker-compose-local.yml
+  - path: ./services/dna-service/docker-compose-local.yaml
     env_file: ./.env.local
-  - path: ./services/universe-service/docker-compose-local.yml
+  - path: ./services/universe-service/docker-compose-local.yaml
     env_file: ./.env.local
-  - path: ./services/nature-service/docker-compose-local.yml
+  - path: ./services/nature-service/docker-compose-local.yaml
     env_file: ./.env.local
-  - path: ./apps/myunivokai-web/docker-compose-local.yml
+  - path: ./apps/myunivokai-web/docker-compose-local.yaml
     env_file: ./.env.local
 ```
 
@@ -113,7 +113,7 @@ Reference: [Docker Compose include](https://docs.docker.com/reference/compose-fi
 
 ### Shared infra
 
-`infra/docker-compose-local.yml` owns only:
+`infra/docker-compose-local.yaml` owns only:
 
 ```txt
 postgres
@@ -140,11 +140,11 @@ source mounts, health check and service-specific dependency declarations.
 
 | Compose file | Owned containers |
 | --- | --- |
-| `apps/myunivokai-web/docker-compose-local.yml` | `myunivokai-web` |
-| `services/api-gateway/docker-compose-local.yml` | `api-gateway` |
-| `services/dna-service/docker-compose-local.yml` | `dna-migrate`, `dna-service` |
-| `services/universe-service/docker-compose-local.yml` | `universe-migrate`, `universe-service` |
-| `services/nature-service/docker-compose-local.yml` | `nature-migrate`, `nature-service` |
+| `apps/myunivokai-web/docker-compose-local.yaml` | `myunivokai-web` |
+| `services/api-gateway/docker-compose-local.yaml` | `api-gateway` |
+| `services/dna-service/docker-compose-local.yaml` | `dna-migrate`, `dna-service` |
+| `services/universe-service/docker-compose-local.yaml` | `universe-migrate`, `universe-service` |
+| `services/nature-service/docker-compose-local.yaml` | `nature-migrate`, `nature-service` |
 
 Domain services expose no host HTTP business port after the NATS migration.
 Migration jobs remain component-owned even though PostgreSQL is shared infra.
@@ -339,19 +339,19 @@ supports the host binding syntax. Domain services publish no host port.
 Integrated stack:
 
 ```powershell
-docker compose -f docker-compose-local.yml config
-docker compose -f docker-compose-local.yml up --build
-docker compose -f docker-compose-local.yml ps
-docker compose -f docker-compose-local.yml down
+docker compose -f docker-compose-local.yaml config
+docker compose -f docker-compose-local.yaml up --build
+docker compose -f docker-compose-local.yaml ps
+docker compose -f docker-compose-local.yaml down
 ```
 
 Standalone component example:
 
 ```powershell
 docker compose --env-file infra/.env.local `
-  -f infra/docker-compose-local.yml up -d
+  -f infra/docker-compose-local.yaml up -d
 docker compose --env-file services/universe-service/.env.local `
-  -f services/universe-service/docker-compose-local.yml up --build
+  -f services/universe-service/docker-compose-local.yaml up --build
 ```
 
 The first command owns shared dependencies. Component Compose files remain
