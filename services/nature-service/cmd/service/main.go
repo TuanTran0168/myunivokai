@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/myunivokai/myunivokai/services/nature-service/internal/config"
@@ -14,7 +16,29 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const defaultMigrationsDirectory = "migrations"
+const (
+	defaultMigrationsDirectory = "migrations"
+	defaultHealthCheckPort     = "8080"
+)
+
+func startHealthServer() *http.Server {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = defaultHealthCheckPort
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.WriteHeader(http.StatusOK)
+	})
+	server := &http.Server{Addr: ":" + port, Handler: mux}
+	go func() {
+		log.Info().Str("addr", server.Addr).Msg("nature health server listening")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("nature health server failed")
+		}
+	}()
+	return server
+}
 
 func main() {
 	serviceConfig, err := config.Load()
@@ -33,6 +57,8 @@ func main() {
 		log.Fatal().Err(err).Msg("run nature database migrations")
 	}
 	log.Info().Msg("nature database migrations complete")
+	healthServer := startHealthServer()
+	defer func() { _ = healthServer.Close() }()
 	runtimeContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	databasePool, err := db.Connect(runtimeContext, serviceConfig)

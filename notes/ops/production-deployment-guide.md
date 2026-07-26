@@ -1,6 +1,6 @@
 # Hướng Dẫn Triển Khai Lên Môi Trường Production (Production Deployment Guide)
 
-> **Cập nhật lần cuối:** 2026-07-26
+> **Cập nhật lần cuối:** 2026-07-26 (thêm mục 5.4–5.6: auto-migrate, connection limit do thiếu port, healthz server)
 > **Trạng thái:** Active & Tested trên Production
 
 Tài liệu này hướng dẫn chi tiết từng bước (step-by-step) cách cấu hình và triển khai (deploy) toàn bộ hệ thống Microservices của dự án MyUnivokai lên các nền tảng đám mây (Cloud).
@@ -104,35 +104,23 @@ Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image t�
 
 ---
 
-## 5. Chạy Database Migrations Thủ Công (Dành Cho Gói Free)
+## 5. Database Migrations (Tự Động Chạy Khi Service Khởi Động)
 
-> ⚠️ **LƯU Ý QUAN TRỌNG:** Gói Free của Render **không hỗ trợ** tính năng `preDeployCommand`. Do đó, hệ thống sẽ không tự động tạo bảng trong Database Neon được. Bạn bắt buộc phải chạy Migrations thủ công từ máy tính cá nhân cho lần đầu tiên.
+> **Cập nhật 2026-07-26:** Phiên bản trước của tài liệu này yêu cầu chạy `go run cmd/migrate/main.go` thủ công.
+> - Lý do trước đây phải chạy tay: Render Free tier không hỗ trợ `preDeployCommand`.
+> - Từ commit `7aa4053`, mỗi service (`dna-service`, `universe-service`, `nature-service`) tự gọi `db.Migrate(...)` ngay trong `cmd/service/main.go`.
+> - Lệnh migrate chạy trước khi service kết nối pool và trước khi start messaging runtime.
+> - Migrate dùng `DATABASE_DIRECT_URL`, fallback về `DATABASE_URL` nếu biến đó thiếu.
+> - Nếu migrate lỗi, service gọi `log.Fatal` và không start. Đây là fail-fast, thay cho việc chạy ngầm với bảng thiếu.
 
-### Bước 5.1: Chạy Migrate Cho DNA Service
-1. Mở Terminal trên máy tính local.
-2. Trỏ biến môi trường `DATABASE_DIRECT_URL` tới database `myunivokai_dna` trên Neon.
-3. Chạy lệnh:
-   ```bash
-   cd services/dna-service
-   set DATABASE_DIRECT_URL="postgres://..." # (Hoặc export nếu dùng Mac/Linux)
-   go run cmd/migrate/main.go
-   ```
+Điều kiện tiên quyết duy nhất: `DATABASE_DIRECT_URL` phải được điền đúng trên Render cho cả 3 service (theo Bước 4.2). Khi điều kiện đó được đáp ứng, migrate chạy tự động mỗi lần deploy. Không còn bước thủ công nào cần thực hiện.
 
-### Bước 5.2: Chạy Migrate Cho Universe Service
-Làm tương tự với `services/universe-service` và trỏ vào DB `myunivokai_universe`.
-   ```bash
-   cd services/universe-service
-   set DATABASE_DIRECT_URL="postgres://..."
-   go run cmd/migrate/main.go
-   ```
-
-### Bước 5.3: Chạy Migrate Cho Nature Service
-Làm tương tự với `services/nature-service` và trỏ vào DB `myunivokai_nature`.
-   ```bash
-   cd services/nature-service
-   set DATABASE_DIRECT_URL="postgres://..."
-   go run cmd/migrate/main.go
-   ```
+Binary `cmd/migrate/main.go` vẫn tồn tại độc lập, dùng cho debug hoặc chạy migrate ngoài luồng deploy:
+```bash
+cd services/dna-service   # hoặc universe-service / nature-service
+set DATABASE_DIRECT_URL="postgres://..." # (hoặc export trên Mac/Linux)
+go run cmd/migrate/main.go
+```
 
 ---
 
@@ -149,3 +137,49 @@ Làm tương tự với `services/nature-service` và trỏ vào DB `myunivokai_
 ### 5.3. Giới Hạn Thời Gian Miễn Phí (750 Giờ/Tháng Của Render)
 - Gateway service được thiết lập đường dẫn kiểm tra sức khỏe tại `/api/v1/healthz`. Render sẽ liên tục "ping" vào đường dẫn này 5s/lần. Điều này khiến Gateway không bao giờ "ngủ đông" (spin down) và sẽ ngốn sạch 744 giờ/tháng.
 - Hãy chú ý giám sát giới hạn Free Hours của Render nếu bạn không nâng cấp lên các gói trả phí. Do mô hình Microservices phân mảnh, tài khoản Free có thể cạn kiệt tài nguyên rất nhanh.
+
+### 5.4. Lỗi `relation "outbox_messages" does not exist` + `prepared statement name is already in use` (DNA/Universe/Nature)
+- **Triệu chứng:**
+  - Outbox publisher loop báo lỗi bảng không tồn tại.
+  - Lỗi đó xen kẽ với `FATAL: prepared statement name is already in use (SQLSTATE 08P01)`.
+  - Cả hai lặp liên tục mỗi ~500ms, theo chu kỳ `OUTBOX_POLL_INTERVAL`.
+- **Nguyên nhân gốc:**
+  - Bảng chưa được tạo trên Neon DB production, vì migration chưa từng chạy (xem mục 5).
+  - Lỗi `prepared statement...` nhiều khả năng chỉ là hệ quả phụ của lỗi thiếu bảng, xảy ra trên cùng connection pool (pgx statement cache).
+  - Đây không phải lỗi độc lập về PgBouncer.
+  - Bằng chứng: sau khi migrate chạy xong (tự động, theo mục 5), lỗi này biến mất hoàn toàn trong log thực tế.
+- **Cách xử lý:**
+  - Xác nhận migrate đã chạy, tự động từ commit `7aa4053` hoặc thủ công theo mục 5.
+  - Nếu lỗi `prepared statement` vẫn còn sau khi bảng đã tồn tại, đó là dấu hiệu khác: xung đột giữa pgx (extended/prepared-statement protocol) và Neon pooled connection (PgBouncer transaction-mode).
+  - Trong trường hợp đó, cần sửa `internal/db/pool.go` để tắt statement cache, hoặc chuyển sang `QueryExecModeSimpleProtocol`.
+  - Tính đến 2026-07-26, chưa cần sửa `pool.go`, vì lỗi đã biến mất sau khi migrate tự động chạy.
+
+### 5.5. Lỗi `nats: maximum account active connections exceeded`
+- **Triệu chứng:** Ngay sau khi build xong và Render hiển thị "Deploying...", service crash ngay lập tức với lỗi này.
+- **Nguyên nhân gốc:**
+  - Không phải do tài khoản Synadia vượt hạn mức connection thật.
+  - DNA/Universe/Nature được khai báo `type: web` trong `render.yaml`, bắt buộc vì Free tier không hỗ trợ `type: worker`.
+  - Bản chất 3 service này chỉ là NATS consumer thuần, không mở HTTP port nào.
+  - Do đó Render báo "No open ports detected" và restart service liên tục.
+  - Mỗi lần restart mở một connection NATS mới, trong khi connection cũ chưa kịp đóng sạch.
+  - Connection dồn lại cho tới khi vượt hạn mức account.
+- **Cách xử lý:** Xem mục 5.6. HTTP health server bind `$PORT` khiến Render ngừng coi service là "chết" và ngừng restart-loop. Sau khi áp dụng mục 5.6, lỗi này không còn xuất hiện lại trong log thực tế.
+
+### 5.6. Lỗi `No open ports detected, continuing to scan...`
+- **Triệu chứng:** Log Render lặp lại cảnh báo này vô hạn sau khi deploy DNA/Universe/Nature, kèm restart-loop (xem mục 5.5).
+- **Nguyên nhân:** Render `type: web` yêu cầu container bind vào biến `$PORT` trong vài phút đầu, để deploy được coi là thành công. Ba service này không có HTTP server nên không đáp ứng được điều kiện đó.
+- **Cách xử lý (Commit `3b8b71f`):**
+  - Mỗi service (`dna-service`, `universe-service`, `nature-service`) mở thêm một `http.Server` tối thiểu.
+  - Server đó chỉ có route `/healthz`, trả `200 OK`.
+  - Server bind vào biến `PORT`, fallback về `8080` khi chạy local không có biến `PORT`.
+  - Server chạy trong goroutine riêng, song song với vòng lặp consume NATS.
+  - Không có xung đột port giữa các service: mỗi service là container riêng biệt, cả trên Render lẫn qua `docker-compose-local.yaml` (xem `include:` ở root `docker-compose-local.yaml`).
+  - Port bên trong container không lộ ra host, trừ khi có mục `ports:` publish tường minh. Hiện chỉ `api-gateway` publish `8080:8080` ra host local.
+- **Quyết định:** `healthCheckPath` trong `render.yaml` không được bật cho 3 service này.
+  - Lý do: bật `healthCheckPath` khiến Render tự ping liên tục, khoảng 5s/lần (giống mục 5.3), để giữ service luôn thức.
+  - Việc đó ngốn giờ Free tier (750h/tháng) rất nhanh, nếu áp dụng cho cả 3 worker cộng thêm gateway.
+  - Đổi lại, bind port mà không bật `healthCheckPath` chỉ đủ để pass port detection lúc deploy.
+  - Nó không ngăn được Render tự ngủ đông service sau ~15 phút không có HTTP traffic.
+  - Hệ quả: DNA/Universe/Nature có thể ngủ đông và tạm ngừng xử lý job NATS.
+  - Đây là đánh đổi có chủ đích, ưu tiên tiết kiệm giờ Free tier hơn uptime 24/7.
+  - Xử lý job real-time liên tục đòi hỏi nâng cấp plan trả phí, hoặc bật lại `healthCheckPath` kèm ngân sách giờ tương ứng.
