@@ -87,6 +87,7 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 		nats.ManualAck(),
 		nats.AckWait(runtime.config.ConsumerAckWait),
 		nats.MaxDeliver(-1),
+		nats.MaxAckPending(1000),
 	)
 	if err != nil {
 		runtime.unsubscribeAll()
