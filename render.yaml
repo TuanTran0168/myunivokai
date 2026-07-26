@@ -25,7 +25,7 @@ services:
     dockerContext: .
     plan: free
     autoDeployTrigger: checksPass
-    healthCheckPath: /api/v1/healthz
+#    healthCheckPath: /api/v1/healthz
     envVars:
       - key: APP_ENV
         value: production

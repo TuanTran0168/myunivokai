@@ -20,6 +20,7 @@ and use three independent Neon databases. Gateway also requires managed Redis.
 
 Use the complete dated runbook:
 
+- [Production Deployment Guide](./production-deployment-guide.md) (Hướng dẫn Step-by-Step)
 - [Sprint 1 deployment guide](../sprints/sprint-01-2026-07-22/deployment-guide.md)
 - [Vision V1 deployment rationale](../vision/versions/v1-2026-07-22/deployment.md)
 

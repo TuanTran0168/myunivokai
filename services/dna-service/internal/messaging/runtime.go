@@ -68,6 +68,7 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 		nats.ManualAck(),
 		nats.AckWait(runtime.config.ConsumerAckWait),
 		nats.MaxDeliver(runtime.config.ConsumerMaximumDeliveries),
+		nats.MaxAckPending(1000),
 	)
 	if err != nil {
 		return fmt.Errorf("subscribe dna commands: %w", err)
