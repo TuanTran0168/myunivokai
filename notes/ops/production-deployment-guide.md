@@ -104,7 +104,39 @@ Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image t�
 
 ---
 
-## 5. Các Chú Ý Quan Trọng & Xử Lý Sự Cố (Troubleshooting)
+## 5. Chạy Database Migrations Thủ Công (Dành Cho Gói Free)
+
+> ⚠️ **LƯU Ý QUAN TRỌNG:** Gói Free của Render **không hỗ trợ** tính năng `preDeployCommand`. Do đó, hệ thống sẽ không tự động tạo bảng trong Database Neon được. Bạn bắt buộc phải chạy Migrations thủ công từ máy tính cá nhân cho lần đầu tiên.
+
+### Bước 5.1: Chạy Migrate Cho DNA Service
+1. Mở Terminal trên máy tính local.
+2. Trỏ biến môi trường `DATABASE_DIRECT_URL` tới database `myunivokai_dna` trên Neon.
+3. Chạy lệnh:
+   ```bash
+   cd services/dna-service
+   set DATABASE_DIRECT_URL="postgres://..." # (Hoặc export nếu dùng Mac/Linux)
+   go run cmd/migrate/main.go
+   ```
+
+### Bước 5.2: Chạy Migrate Cho Universe Service
+Làm tương tự với `services/universe-service` và trỏ vào DB `myunivokai_universe`.
+   ```bash
+   cd services/universe-service
+   set DATABASE_DIRECT_URL="postgres://..."
+   go run cmd/migrate/main.go
+   ```
+
+### Bước 5.3: Chạy Migrate Cho Nature Service
+Làm tương tự với `services/nature-service` và trỏ vào DB `myunivokai_nature`.
+   ```bash
+   cd services/nature-service
+   set DATABASE_DIRECT_URL="postgres://..."
+   go run cmd/migrate/main.go
+   ```
+
+---
+
+## 6. Các Chú Ý Quan Trọng & Xử Lý Sự Cố (Troubleshooting)
 
 ### 5.1. Lỗi Xác Thực NATS (`nats: Authorization Violation`)
 - **Triệu chứng:** Xem log trên Render thấy gateway hoặc các service khác báo lỗi này liên tục rồi crash.
