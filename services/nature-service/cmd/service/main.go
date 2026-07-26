@@ -14,11 +14,25 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const defaultMigrationsDirectory = "migrations"
+
 func main() {
 	serviceConfig, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("load nature service configuration")
 	}
+	migrationDatabaseURL := serviceConfig.DatabaseDirectURL
+	if migrationDatabaseURL == "" {
+		migrationDatabaseURL = serviceConfig.DatabaseURL
+	}
+	migrationsDirectory := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDirectory == "" {
+		migrationsDirectory = defaultMigrationsDirectory
+	}
+	if err := db.Migrate(migrationDatabaseURL, migrationsDirectory); err != nil {
+		log.Fatal().Err(err).Msg("run nature database migrations")
+	}
+	log.Info().Msg("nature database migrations complete")
 	runtimeContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	databasePool, err := db.Connect(runtimeContext, serviceConfig)
