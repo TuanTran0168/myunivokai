@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/myunivokai/myunivokai/services/dna-service/internal/aifactory"
@@ -15,11 +16,25 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const defaultMigrationsDirectory = "migrations"
+
 func main() {
 	serviceConfig, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("load dna service configuration")
 	}
+	migrationDatabaseURL := serviceConfig.DatabaseDirectURL
+	if strings.TrimSpace(migrationDatabaseURL) == "" {
+		migrationDatabaseURL = serviceConfig.DatabaseURL
+	}
+	migrationsDirectory := strings.TrimSpace(os.Getenv("MIGRATIONS_DIR"))
+	if migrationsDirectory == "" {
+		migrationsDirectory = defaultMigrationsDirectory
+	}
+	if err := db.Migrate(migrationDatabaseURL, migrationsDirectory); err != nil {
+		log.Fatal().Err(err).Msg("run dna database migrations")
+	}
+	log.Info().Msg("dna database migrations complete")
 	runtimeContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	databasePool, err := db.Connect(runtimeContext, serviceConfig)
