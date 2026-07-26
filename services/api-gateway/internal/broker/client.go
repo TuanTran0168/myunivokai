@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
@@ -31,8 +33,26 @@ func NewNATSClient(serviceConfig config.Config) (*NATSClient, error) {
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(serviceConfig.NATSReconnectWait),
 	}
-	if serviceConfig.NATSCredentialsFile != "" {
+
+	credsData := ""
+	if strings.HasPrefix(strings.TrimSpace(serviceConfig.NATSCredentialsFile), "-----BEGIN") {
+		credsData = serviceConfig.NATSCredentialsFile
+	} else if strings.HasPrefix(strings.TrimSpace(serviceConfig.NATSPassword), "-----BEGIN") {
+		credsData = serviceConfig.NATSPassword
+	}
+
+	if credsData != "" {
+		tempFile, err := os.CreateTemp("", "nats-*.creds")
+		if err == nil {
+			defer os.Remove(tempFile.Name())
+			_, _ = tempFile.WriteString(credsData)
+			_ = tempFile.Close()
+			connectionOptions = append(connectionOptions, nats.UserCredentials(tempFile.Name()))
+		}
+	} else if serviceConfig.NATSCredentialsFile != "" {
 		connectionOptions = append(connectionOptions, nats.UserCredentials(serviceConfig.NATSCredentialsFile))
+	} else if strings.HasPrefix(strings.TrimSpace(serviceConfig.NATSPassword), "nhg_") || strings.HasPrefix(strings.TrimSpace(serviceConfig.NATSPassword), "eyJ") {
+		connectionOptions = append(connectionOptions, nats.Token(strings.TrimSpace(serviceConfig.NATSPassword)))
 	} else if serviceConfig.NATSUsername != "" {
 		connectionOptions = append(connectionOptions, nats.UserInfo(serviceConfig.NATSUsername, serviceConfig.NATSPassword))
 	}
