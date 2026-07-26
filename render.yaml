@@ -69,6 +69,7 @@ services:
     dockerContext: .
     plan: free
     autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
@@ -124,6 +125,7 @@ services:
     dockerContext: .
     plan: free
     autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
@@ -171,6 +173,7 @@ services:
     dockerContext: .
     plan: free
     autoDeployTrigger: checksPass
+    preDeployCommand: /app/migrate
     envVars:
       - key: APP_ENV
         value: production
