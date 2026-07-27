@@ -4,7 +4,12 @@ import { useMemo } from "react";
 import { Environment } from "@react-three/drei";
 import type { SceneRendererProps } from "@/features/scene-renderers/types";
 import { pointsOfInterestFromScene } from "@/lib/scene";
-import { createPathLateralDistanceSampler, createTerrainHeightSampler, treelineRadiusFromTerrain } from "./forestMath";
+import {
+  createPathLateralDistanceSampler,
+  createRiverEdgeDistanceSampler,
+  createTerrainHeightSampler,
+  treelineRadiusFromTerrain
+} from "./forestMath";
 import { natureHdriUrlForKey } from "./forestModels";
 import { ForestAmbientParticles } from "./ForestAmbientParticles";
 import { ForestDistantTreeline } from "./ForestDistantTreeline";
@@ -13,6 +18,7 @@ import { ForestLandmarks } from "./ForestLandmarks";
 import { ForestSkyDome, sunDirectionFromLighting } from "./ForestSkyDome";
 import { ForestTerrain } from "./ForestTerrain";
 import { ForestTrees } from "./ForestTrees";
+import { ForestWaterway } from "./ForestWaterway";
 import { ForestWeatherEffects } from "./ForestWeatherEffects";
 import { ForestWildlife } from "./ForestWildlife";
 
@@ -78,6 +84,13 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
 
   const terrainHeightSampler = useMemo(() => createTerrainHeightSampler(terrain), [terrain]);
   const pathLateralDistanceSampler = useMemo(() => createPathLateralDistanceSampler(terrain), [terrain]);
+  // Trees, decor and ground texture all exclude "the dirt path". Water is the
+  // same kind of no-grow surface, so it composes into the one sampler they
+  // already consume rather than each learning about the river separately.
+  const clearFloorDistanceSampler = useMemo(() => {
+    const riverEdgeDistanceSampler = createRiverEdgeDistanceSampler(terrain);
+    return (x: number, z: number) => Math.min(pathLateralDistanceSampler(x, z), riverEdgeDistanceSampler(x, z));
+  }, [pathLateralDistanceSampler, terrain]);
   const pointsOfInterest = useMemo(() => pointsOfInterestFromScene(scene), [scene]);
 
   const sunPosition = useMemo(
@@ -129,14 +142,14 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         trees={trees}
         horizonColor={fogColor}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={pathLateralDistanceSampler}
+        pathLateralDistanceSampler={clearFloorDistanceSampler}
       />
       <ForestTrees
         trees={trees}
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={pathLateralDistanceSampler}
+        pathLateralDistanceSampler={clearFloorDistanceSampler}
       />
       {/* Forested hills ringing the clearing, so the world does not end at the
           treeline in bare tinted ground. */}
@@ -145,8 +158,11 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={pathLateralDistanceSampler}
+        pathLateralDistanceSampler={clearFloorDistanceSampler}
       />
+      {/* Lake in the clearing plus the river through it — drawn after the
+          terrain and trees so the reflector captures them. */}
+      <ForestWaterway terrain={terrain} season={season} terrainHeightSampler={terrainHeightSampler} />
       <ForestWeatherEffects
         weather={weather}
         lighting={lighting}

@@ -13,14 +13,14 @@ const BINARY_SUN_MINIMUM_HITS = 10;
 const BINARY_SUN_MAXIMUM_HITS = 55;
 
 describe("RARE_FEATURE_PROBABILITIES", () => {
-  // Upper bound raised from 0.2 to 0.25 (owner decision): the black hole is a
-  // showpiece and was deliberately tuned to 20% so it is actually encountered.
-  // The bound still guards the real invariant — a "rare" feature must never
-  // become the common case.
+  // Upper bound walked 0.2 -> 0.25 -> 0.5 (owner decisions): the black hole is
+  // the showpiece and is now deliberately tuned to 40% so it is easy to find
+  // while the scene is being iterated on. The bound still guards the real
+  // invariant — a "rare" feature must never be the MAJORITY case.
   it("keeps every probability rare but possible", () => {
     for (const definition of RARE_FEATURE_PROBABILITIES) {
       expect(definition.probability).toBeGreaterThan(0);
-      expect(definition.probability).toBeLessThanOrEqual(0.25);
+      expect(definition.probability).toBeLessThan(0.5);
       expect(definition.displayName.length).toBeGreaterThan(0);
     }
   });

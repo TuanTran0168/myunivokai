@@ -39,6 +39,34 @@ const ANIMAL_WALK_SPEED_UNITS_PER_SECOND = 2.4;
 const ANIMAL_BODY_BOB_AMPLITUDE = 0.035;
 const ANIMAL_BODY_BOB_FREQUENCY = 8;
 const ANIMAL_TURN_PAUSE_FRACTION = 0.06;
+// Two separate causes of the "con vật giật lùi về" (animal jerks backwards)
+// artefact, both fixed here:
+//
+//  1. The ping-pong heading used to flip a full 180 degrees on the single frame
+//     the animal reached a waypoint. An instant reversal reads as a glitch, not
+//     as an animal turning around, so the yaw now eases to its target — the
+//     turn happens during the existing end-of-path pause.
+//  2. elapsedSeconds accumulated raw deltaTime. Any frame hitch (a GLB
+//     finishing its decode, the tab losing focus, a shader compile) hands
+//     useFrame one enormous delta, which jumps the ping-pong parameter far
+//     enough to teleport the animal — sometimes visibly backwards along its
+//     own path. The clamp bounds how far a single frame can advance.
+const ANIMAL_YAW_TURN_RATE_RADIANS_PER_SECOND = 3.2;
+const MAXIMUM_ANIMAL_FRAME_DELTA_SECONDS = 1 / 15;
+
+const FULL_CIRCLE_RADIANS = Math.PI * 2;
+
+/** Shortest-arc signed difference between two yaw angles, in (-PI, PI]. */
+function shortestAngleDifference(fromRadians: number, toRadians: number): number {
+  let difference = (toRadians - fromRadians) % FULL_CIRCLE_RADIANS;
+  if (difference > Math.PI) {
+    difference -= FULL_CIRCLE_RADIANS;
+  }
+  if (difference < -Math.PI) {
+    difference += FULL_CIRCLE_RADIANS;
+  }
+  return difference;
+}
 // Multiplies the config walkSpeed into the walk clip's playback rate so the
 // hooves match the ground speed instead of moonwalking.
 const WALK_CLIP_TIMESCALE_PER_WALK_SPEED = 2.2;
@@ -200,6 +228,9 @@ function GroundAnimal({
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const isPausedRef = useRef(false);
+  // null until the first frame, so an animal starts already facing its path
+  // instead of swinging round from zero on spawn.
+  const currentYawRef = useRef<number | null>(null);
   const planetPositionTracker = usePlanetPositionTracker();
   const trackedPositionRef = useRef(new Vector3());
   const identityKey = planetIdentityKey(pointOfInterest, individualIndex);
@@ -222,7 +253,9 @@ function GroundAnimal({
 
   const { waypointA, waypointB, phaseOffset } = useMemo(() => {
     const nextRandomValue = randomFromSeed(`${animalConfig.pathSeed ?? "forest-animal"}-individual-${individualIndex}`);
-    const wanderInnerRadius = clearingRadius * 0.5;
+    // Starts outside the lake (lakeRadiusFromTerrain is 0.46x the clearing), so
+    // nothing wanders across open water.
+    const wanderInnerRadius = clearingRadius * 0.62;
     const wanderOuterRadius = Math.min(clearingRadius * 2.4, treelineRadius * 0.8);
     const pickWaypoint = () => {
       const angle = nextRandomValue() * Math.PI * 2;
@@ -237,7 +270,8 @@ function GroundAnimal({
     if (!group) {
       return;
     }
-    elapsedSecondsRef.current += deltaTimeSeconds;
+    const stepSeconds = Math.min(deltaTimeSeconds, MAXIMUM_ANIMAL_FRAME_DELTA_SECONDS);
+    elapsedSecondsRef.current += stepSeconds;
     const elapsedSeconds = elapsedSecondsRef.current;
     const pathLength = Math.max(waypointA.distanceTo(waypointB), 0.001);
     const cycleDurationSeconds = pathLength / (walkSpeed * ANIMAL_WALK_SPEED_UNITS_PER_SECOND);
@@ -259,10 +293,20 @@ function GroundAnimal({
         ? 0
         : Math.sin(elapsedSeconds * ANIMAL_BODY_BOB_FREQUENCY) * ANIMAL_BODY_BOB_AMPLITUDE * animalScale;
     group.position.set(x, terrainHeightSampler(x, z) + bodyBob, z);
-    group.rotation.y = Math.atan2(
+
+    const targetYaw = Math.atan2(
       (waypointB.x - waypointA.x) * headingSign,
       (waypointB.z - waypointA.z) * headingSign
     );
+    if (currentYawRef.current === null) {
+      currentYawRef.current = targetYaw;
+    } else {
+      const remainingTurn = shortestAngleDifference(currentYawRef.current, targetYaw);
+      const maximumTurnThisFrame = ANIMAL_YAW_TURN_RATE_RADIANS_PER_SECOND * stepSeconds;
+      currentYawRef.current +=
+        Math.sign(remainingTurn) * Math.min(Math.abs(remainingTurn), maximumTurnThisFrame);
+    }
+    group.rotation.y = currentYawRef.current;
     trackedPositionRef.current.set(
       group.position.x,
       group.position.y + ANIMAL_CAMERA_FOCUS_HEIGHT * animalScale,

@@ -90,7 +90,7 @@ function createRippleNormalTexture(): DataTexture {
 
 // One shared ripple texture for every pond in the app.
 let sharedRippleTexture: DataTexture | null = null;
-function getRippleNormalTexture(): DataTexture {
+export function getRippleNormalTexture(): DataTexture {
   if (!sharedRippleTexture) {
     sharedRippleTexture = createRippleNormalTexture();
   }

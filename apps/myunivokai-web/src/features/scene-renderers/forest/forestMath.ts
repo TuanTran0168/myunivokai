@@ -40,6 +40,93 @@ const MINIMUM_PATH_CURVE_AMPLITUDE_RADIANS = 0.12;
 const PATH_CURVE_AMPLITUDE_RANGE_RADIANS = 0.18;
 const PATH_CURVE_RADIAL_FREQUENCY = 0.16;
 
+// --- Water bodies ------------------------------------------------------------
+// The clearing centre is guaranteed FLAT (see CLEARING_FLATTEN_INNER_FRACTION),
+// which is why the lake lives at the origin: a planar reflector needs a planar
+// mesh. Sizing it off the clearing keeps it clear of the animal wander band
+// (starts at 0.62x clearing) and the decor/tree scatter (starts at 0.9x).
+const LAKE_RADIUS_FRACTION_OF_CLEARING = 0.46;
+
+const RIVER_SHAPE_SEED_SUFFIX = "-river";
+/** Half width of the river channel away from the lake, in world units. */
+export const RIVER_HALF_WIDTH = 1.55;
+const RIVER_MEANDER_AMPLITUDE = 5.5;
+const RIVER_MEANDER_WAVELENGTH = 30;
+// Stops short of DISTANT_RISE_INNER_FRACTION so the channel never has to climb
+// the far ridgeline it would otherwise run straight up.
+const RIVER_SPAN_FRACTION_OF_TREELINE = 0.82;
+
+export function lakeRadiusFromTerrain(terrain?: ForestTerrainConfig): number {
+  return clearingRadiusFromTerrain(terrain) * LAKE_RADIUS_FRACTION_OF_CLEARING;
+}
+
+export type RiverShape = {
+  headingRadians: number;
+  meanderPhase: number;
+  /** Half length of the channel: it runs -spanRadius..+spanRadius through the lake. */
+  spanRadius: number;
+};
+
+export function createRiverShape(terrain?: ForestTerrainConfig): RiverShape {
+  const nextRandomValue = randomFromSeed((terrain?.placementSeed ?? "forest-terrain") + RIVER_SHAPE_SEED_SUFFIX);
+  return {
+    headingRadians: nextRandomValue() * FULL_CIRCLE_RADIANS,
+    meanderPhase: nextRandomValue() * FULL_CIRCLE_RADIANS,
+    spanRadius: treelineRadiusFromTerrain(terrain) * RIVER_SPAN_FRACTION_OF_TREELINE
+  };
+}
+
+/** Signed lateral meander offset of the centreline at `along` metres from the lake. */
+export function riverMeanderOffsetAt(shape: RiverShape, along: number): number {
+  return (
+    Math.sin((along / RIVER_MEANDER_WAVELENGTH) * FULL_CIRCLE_RADIANS + shape.meanderPhase) * RIVER_MEANDER_AMPLITUDE
+  );
+}
+
+/** World-space centreline point at `along` metres from the lake. */
+export function riverCenterlineAt(shape: RiverShape, along: number): { x: number; z: number } {
+  const lateral = riverMeanderOffsetAt(shape, along);
+  const directionX = Math.cos(shape.headingRadians);
+  const directionZ = Math.sin(shape.headingRadians);
+  return {
+    x: directionX * along - directionZ * lateral,
+    z: directionZ * along + directionX * lateral
+  };
+}
+
+/** The channel flares out into the lake instead of meeting it in a hard T. */
+export function riverHalfWidthAt(along: number, lakeRadius: number): number {
+  const flareTarget = Math.max(lakeRadius * 0.85, RIVER_HALF_WIDTH);
+  const flareFalloff = Math.exp(-((along / (lakeRadius * 1.2)) ** 2));
+  return RIVER_HALF_WIDTH + (flareTarget - RIVER_HALF_WIDTH) * flareFalloff;
+}
+
+/**
+ * Distance from a point to the WATER EDGE of the river (0 inside the channel),
+ * so scatter code can reuse the same "is this too close?" threshold it already
+ * applies to the dirt path. Composed with the path sampler in ForestRenderer:
+ * anything the water covers must not also grow a tree.
+ */
+export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): PathLateralDistanceSampler {
+  const shape = createRiverShape(terrain);
+  const lakeRadius = lakeRadiusFromTerrain(terrain);
+  const directionX = Math.cos(shape.headingRadians);
+  const directionZ = Math.sin(shape.headingRadians);
+
+  return (x: number, z: number) => {
+    // Project onto the channel's axis. The meander is shallow enough that the
+    // axis-aligned projection is an accurate stand-in for a true curve
+    // distance, and it stays analytic (no polyline walk per query).
+    const along = x * directionX + z * directionZ;
+    if (Math.abs(along) > shape.spanRadius) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const perpendicular = -x * directionZ + z * directionX;
+    const lateralDistance = Math.abs(perpendicular - riverMeanderOffsetAt(shape, along));
+    return Math.max(0, lateralDistance - riverHalfWidthAt(along, lakeRadius));
+  };
+}
+
 export function clampValue(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
