@@ -43,7 +43,7 @@ export const BENNU_TARGET_SIZE = 0.34;
 /**
  * Rare distant black hole (Sketchfab CC-BY, see ATTRIBUTION.md): a black core
  * with emissive accretion rings and a baked swirl animation, meshopt + WebP.
- * Not preloaded: it only appears on ~6% of worlds via the "black-hole" rare
+ * Not preloaded: it only appears on ~20% of worlds via the "black-hole" rare
  * feature, so it lazy-loads inside its own Suspense boundary.
  */
 export const BLACK_HOLE_MODEL_URL = `${SOLAR_SYSTEM_MODEL_BASE_PATH}/black-hole.glb`;

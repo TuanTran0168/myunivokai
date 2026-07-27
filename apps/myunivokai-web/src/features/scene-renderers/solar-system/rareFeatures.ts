@@ -24,7 +24,7 @@ export type RareFeatureDefinition = {
 export const RARE_FEATURE_PROBABILITIES: RareFeatureDefinition[] = [
   { key: "meteor-shower", displayName: "Meteor Shower", probability: 0.05 },
   { key: "binary-sun", displayName: "Binary Suns", probability: 0.03 },
-  { key: "black-hole", displayName: "Black Hole", probability: 0.06 }
+  { key: "black-hole", displayName: "Black Hole", probability: 0.2 }
 ];
 
 export function resolveRareFeatures(seed: string): RareFeatureDefinition[] {

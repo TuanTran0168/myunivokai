@@ -186,7 +186,7 @@ export function SolarSystemRenderer({
       <Suspense fallback={null}>
         <OrbitingSpacecraft scene={scene} seed={seed} />
       </Suspense>
-      {/* Rare distant black hole: its own boundary so only the ~6% of worlds
+      {/* Rare distant black hole: its own boundary so only the ~20% of worlds
           that roll it ever pay the download. */}
       {hasRareFeature(rareFeatures, "black-hole") ? (
         <Suspense fallback={null}>
