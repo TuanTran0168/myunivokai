@@ -49,11 +49,12 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 
 | File | Credit | Source |
 | --- | --- | --- |
-| animal-boar.glb | "Boar" by Poly by Google via Poly Pizza | <https://poly.pizza/m/57fSWum6F1P> |
-| animal-rabbit.glb | "Rabbit" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/lEJ3d1gMLC> |
-| animal-bear.glb | "Bear" by madtrollstudio via Poly Pizza | <https://poly.pizza/m/kLLBpmcw0w> |
-| animal-squirrel.glb | "Squirrel" by Poly by Google via Poly Pizza | <https://poly.pizza/m/caxos24uWC9> |
 | bird-hawk.glb (rigged flap animation; also reused tinted as the special-bird crosser) | "Hawk Lp Rigged" by Sherkiz via Poly Pizza | <https://poly.pizza/m/RkN6MEbP6g> |
+
+Retired: `animal-boar/rabbit/bear/squirrel.glb` used to be static Poly Pizza
+models (Poly by Google / madtrollstudio, CC-BY 3.0). They had no animation, so
+they slid across the ground without stepping; they were replaced by the rigged
+models below.
 
 ## CC-BY 4.0 — Sketchfab (attribution required)
 
@@ -63,6 +64,17 @@ Credit must remain wherever this ships.
 | File | Credit | Source |
 | --- | --- | --- |
 | tree-fir-realistic.glb | "Realistic Fir Trees Pack (LODS, gameready)" by LOLIPOP via Sketchfab | <https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7> |
+| animal-bear.glb | "Realistic Animated Bear 3D Model" by AnimalMesh 3D via Sketchfab | <https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1> |
+| animal-boar.glb | "Animated Realistic Boar – 3D Animal Model" by AnimalMesh 3D via Sketchfab | <https://sketchfab.com/3d-models/animated-realistic-boar-3d-animal-model-f672a7fd93e84997b80a54ba30956111> |
+| animal-rabbit.glb | "Hare (animated)" via Sketchfab | <https://sketchfab.com/3d-models/hare-animated-948938cd237d49a9868662213fa05543> |
+| animal-squirrel.glb | "Squirrel - Animated Low Poly" via Sketchfab | <https://sketchfab.com/3d-models/squirrel-animated-low-poly-df896ee02a7a4592a5a544978d048440> |
+
+For the four animals, only the single locomotion clip was kept (bear `Walk`,
+boar/hare `Armature|walk`, squirrel `run` — a scamper is the correct squirrel
+gait); every other clip was pruned (the bear alone shipped 81). Textures were
+resized to 1024px WebP and geometry compressed with **EXT_meshopt_compression**,
+not Draco, because Draco does not preserve skeletal animation. Combined
+14MB+7.8MB+1.1MB+1.2MB → 0.59/0.60/0.14/0.09 MB.
 
 Modifications: the shipped file keeps only the pack's **LOD0** meshes (three
 distinct firs; LOD1–LOD3 and the billboards were pruned), textures resized to

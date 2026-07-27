@@ -96,12 +96,18 @@ export const ANIMAL_MODEL_CATALOG: Record<string, AnimalModelDefinition> = {
   "animal-deer": { fileName: "animal-deer.glb", targetHeight: 1.7, walkClipName: "Walk" },
   "animal-fox": { fileName: "animal-fox.glb", targetHeight: 0.8, walkClipName: "Walk" },
   "animal-wolf": { fileName: "animal-wolf.glb", targetHeight: 1.1, walkClipName: "Walk" },
-  "animal-boar": { fileName: "animal-boar.glb", targetHeight: 0.9, walkClipName: "" },
-  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "" },
+  "animal-boar": { fileName: "animal-boar.glb", targetHeight: 0.9, walkClipName: "Armature|walk" },
+  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "Armature|walk" },
   // Schema 1.1 additions ("đa dạng động vật hơn").
   "animal-stag": { fileName: "animal-stag.glb", targetHeight: 2.0, walkClipName: "Walk" },
-  "animal-bear": { fileName: "animal-bear.glb", targetHeight: 1.5, walkClipName: "" },
-  "animal-squirrel": { fileName: "animal-squirrel.glb", targetHeight: 0.35, walkClipName: "" }
+  "animal-bear": { fileName: "animal-bear.glb", targetHeight: 1.5, walkClipName: "Walk" },
+  // The squirrel rig ships a scamper ("run") rather than a walk — correct gait
+  // for the species, and the renderer scales clip speed to the wander speed.
+  "animal-squirrel": {
+    fileName: "animal-squirrel.glb",
+    targetHeight: 0.35,
+    walkClipName: "SquirrelValentine_Rig|SquirrelValentine_Rig|SquirrelValentine_Rig|run"
+  }
 };
 
 // Rare "legendary" ground animals ("động vật quý hiếm") — a reskin of an
