@@ -47,9 +47,12 @@ const CLOUD_OVERCAST_COLOR = "#8E99A8";
 
 // Storm lightning: heavy rain occasionally throws a cold double-flash across
 // the whole scene (an ambient pulse — no geometry, reads as sheet lightning).
-const LIGHTNING_MINIMUM_RAIN_INTENSITY = 0.5;
-const LIGHTNING_MINIMUM_INTERVAL_SECONDS = 6;
-const LIGHTNING_INTERVAL_RANGE_SECONDS = 9;
+// Storms should actually feel like storms: the old 0.5 gate plus a 6-15s gap
+// meant most rainy worlds flashed rarely or never. Any rain with real weight
+// now carries a storm, and strikes come in a 3.5-10s window.
+const LIGHTNING_MINIMUM_RAIN_INTENSITY = 0.4;
+const LIGHTNING_MINIMUM_INTERVAL_SECONDS = 3.5;
+const LIGHTNING_INTERVAL_RANGE_SECONDS = 6.5;
 const LIGHTNING_FLASH_DURATION_SECONDS = 0.45;
 const LIGHTNING_PEAK_INTENSITY = 2.6;
 const LIGHTNING_COLOR = "#CFE0FF";

@@ -141,27 +141,27 @@ type WeightedWeatherKind = {
 // winter; rain never does.
 const WEATHER_WEIGHTS_BY_SEASON: Record<string, WeightedWeatherKind[]> = {
   [FOREST_SEASON_SPRING]: [
-    { kind: FOREST_WEATHER_CLEAR, weight: 0.25 },
-    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.3 },
+    { kind: FOREST_WEATHER_CLEAR, weight: 0.15 },
+    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.25 },
     { kind: FOREST_WEATHER_OVERCAST, weight: 0.15 },
-    { kind: FOREST_WEATHER_RAIN, weight: 0.3 }
+    { kind: FOREST_WEATHER_RAIN, weight: 0.45 }
   ],
   [FOREST_SEASON_SUMMER]: [
-    { kind: FOREST_WEATHER_CLEAR, weight: 0.3 },
-    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.4 },
-    { kind: FOREST_WEATHER_OVERCAST, weight: 0.1 },
-    { kind: FOREST_WEATHER_RAIN, weight: 0.2 }
+    { kind: FOREST_WEATHER_CLEAR, weight: 0.2 },
+    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.33 },
+    { kind: FOREST_WEATHER_OVERCAST, weight: 0.12 },
+    { kind: FOREST_WEATHER_RAIN, weight: 0.35 }
   ],
   [FOREST_SEASON_AUTUMN]: [
-    { kind: FOREST_WEATHER_CLEAR, weight: 0.2 },
-    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.25 },
+    { kind: FOREST_WEATHER_CLEAR, weight: 0.12 },
+    { kind: FOREST_WEATHER_SUN_RAYS, weight: 0.18 },
     { kind: FOREST_WEATHER_OVERCAST, weight: 0.25 },
-    { kind: FOREST_WEATHER_RAIN, weight: 0.3 }
+    { kind: FOREST_WEATHER_RAIN, weight: 0.45 }
   ],
   [FOREST_SEASON_WINTER]: [
-    { kind: FOREST_WEATHER_CLEAR, weight: 0.3 },
-    { kind: FOREST_WEATHER_OVERCAST, weight: 0.3 },
-    { kind: FOREST_WEATHER_SNOW, weight: 0.4 }
+    { kind: FOREST_WEATHER_CLEAR, weight: 0.18 },
+    { kind: FOREST_WEATHER_OVERCAST, weight: 0.27 },
+    { kind: FOREST_WEATHER_SNOW, weight: 0.55 }
   ]
 };
 
@@ -414,15 +414,15 @@ const TREE_SCALE_MAXIMUM_BASE = 1.3;
 const TREE_SCALE_MAXIMUM_RANGE = 0.3;
 const FOLIAGE_TINT_STRENGTH_BASE = 0.5;
 const FOLIAGE_TINT_STRENGTH_RANGE = 0.35;
-const WIND_STRENGTH_BASE = 0.25;
-const WIND_STRENGTH_RANGE = 0.35;
+const WIND_STRENGTH_BASE = 0.35;
+const WIND_STRENGTH_RANGE = 0.5;
 const MINIMUM_WIND_STRENGTH = 0.1;
 const MAXIMUM_WIND_STRENGTH = 1.0;
-const WIND_GUST_FREQUENCY_BASE = 0.2;
-const WIND_GUST_FREQUENCY_RANGE = 0.3;
+const WIND_GUST_FREQUENCY_BASE = 0.28;
+const WIND_GUST_FREQUENCY_RANGE = 0.42;
 
-const WEATHER_INTENSITY_BASE = 0.3;
-const WEATHER_INTENSITY_RANGE = 0.6;
+const WEATHER_INTENSITY_BASE = 0.42;
+const WEATHER_INTENSITY_RANGE = 0.58;
 const BASE_RAIN_DROP_COUNT = 3000;
 const RAIN_DROP_COUNT_RANGE = 4000;
 const MOBILE_RAIN_FRACTION = 0.3;

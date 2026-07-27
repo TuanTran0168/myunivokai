@@ -93,12 +93,29 @@ Vẫn ở tab **Environment** của từng Service, điền các giá trị đ�
 #### 🚀 Service 3: Universe Service (`myunivokai-universe`)
 - `DATABASE_URL`: Dán chuỗi kết nối Pooled của database `myunivokai_universe`.
 - `DATABASE_DIRECT_URL`: Dán chuỗi kết nối Direct của database `myunivokai_universe`.
-- `PUBLIC_WEB_URL`: `https://myunivokai.vercel.app/universe`
+- `PUBLIC_WEB_URL`: `https://<web-origin>/universe` — **có** hậu tố `/universe`,
+  đối xứng với nature. Trang share của universe là `/universe/share/worlds/{slug}`.
 
 #### 🚀 Service 4: Nature Service (`myunivokai-nature`)
 - `DATABASE_URL`: Dán chuỗi kết nối Pooled của database `myunivokai_nature`.
 - `DATABASE_DIRECT_URL`: Dán chuỗi kết nối Direct của database `myunivokai_nature`.
-- `PUBLIC_WEB_URL`: `https://myunivokai.vercel.app/nature`
+- `PUBLIC_WEB_URL`: `https://<web-origin>/nature` — **có** hậu tố `/nature`, vì
+  trang share của forest nằm dưới prefix đó: `/nature/share/worlds/{slug}`.
+
+> 🚨 **BẮT BUỘC ĐỔI TRƯỚC/CÙNG LÚC VỚI KHI DEPLOY BẢN NÀY — quên là link share
+> universe chết.** Trước đây universe **không** có hậu tố; giờ hai service dùng
+> chung một dạng `<web-origin>/<family>`. Cả hai đều `sync: false` trong
+> `render.yaml`, nên **phải nhập tay trên Render dashboard** — sửa file này
+> không tự cập nhật service đang chạy.
+>
+> Route cũ `/share/worlds/{slug}` đã bị **xoá hẳn**, không còn redirect (quyết
+> định của owner: không giữ link share cũ). Hệ quả:
+>
+> - Nếu universe-service còn `PUBLIC_WEB_URL` **không có** `/universe`, nó sẽ in
+>   ra `shareUrl` trỏ tới route không tồn tại → **404**.
+> - Mọi `shareUrl` **đã lưu trong database universe** từ trước bản này cũng trỏ
+>   vào route đã xoá → các link share cũ **sẽ 404**. Đây là đánh đổi đã được
+>   chấp nhận, không phải lỗi.
 
 Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image từ các file `Dockerfile.prod` và khởi động các services. 
 

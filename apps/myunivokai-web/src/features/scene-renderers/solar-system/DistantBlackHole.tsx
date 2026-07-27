@@ -17,8 +17,15 @@ import { BLACK_HOLE_MODEL_URL, BLACK_HOLE_TARGET_SIZE } from "./spacecraftCatalo
  * units are normalized by bounding box like the NASA spacecraft.
  */
 
-const DISTANCE_FROM_CENTER = 30;
-const ELEVATION = 6;
+// Placement is constrained by the camera envelope, NOT just by taste: the
+// OrbitControls rig always looks at the origin and only zooms out to 26
+// (CameraRig ORBIT_CONTROLS_MAXIMUM_DISTANCE), so anything parked beyond that
+// radius sits outside the view cone almost always — the reason an earlier
+// radius of 30 made the black hole effectively unfindable. The outermost
+// planet orbit is ~11, so this band reads as "far beyond the planets" while
+// still landing in frame when the camera pans or zooms out.
+const DISTANCE_FROM_CENTER = 18;
+const ELEVATION = 7;
 
 type DistantBlackHoleProps = {
   seed: string;
