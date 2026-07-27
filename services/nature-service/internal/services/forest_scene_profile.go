@@ -144,27 +144,27 @@ type weightedWeatherKind struct {
 // probabilities; they do not need to sum to 1.
 var weatherWeightsBySeason = map[string][]weightedWeatherKind{
 	SeasonSpring: {
-		{Kind: WeatherClear, Weight: 0.25},
-		{Kind: WeatherSunRays, Weight: 0.30},
+		{Kind: WeatherClear, Weight: 0.15},
+		{Kind: WeatherSunRays, Weight: 0.25},
 		{Kind: WeatherOvercast, Weight: 0.15},
-		{Kind: WeatherRain, Weight: 0.30},
+		{Kind: WeatherRain, Weight: 0.45},
 	},
 	SeasonSummer: {
-		{Kind: WeatherClear, Weight: 0.30},
-		{Kind: WeatherSunRays, Weight: 0.40},
-		{Kind: WeatherOvercast, Weight: 0.10},
-		{Kind: WeatherRain, Weight: 0.20},
+		{Kind: WeatherClear, Weight: 0.20},
+		{Kind: WeatherSunRays, Weight: 0.33},
+		{Kind: WeatherOvercast, Weight: 0.12},
+		{Kind: WeatherRain, Weight: 0.35},
 	},
 	SeasonAutumn: {
-		{Kind: WeatherClear, Weight: 0.20},
-		{Kind: WeatherSunRays, Weight: 0.25},
+		{Kind: WeatherClear, Weight: 0.12},
+		{Kind: WeatherSunRays, Weight: 0.18},
 		{Kind: WeatherOvercast, Weight: 0.25},
-		{Kind: WeatherRain, Weight: 0.30},
+		{Kind: WeatherRain, Weight: 0.45},
 	},
 	SeasonWinter: {
-		{Kind: WeatherClear, Weight: 0.30},
-		{Kind: WeatherOvercast, Weight: 0.30},
-		{Kind: WeatherSnow, Weight: 0.40},
+		{Kind: WeatherClear, Weight: 0.18},
+		{Kind: WeatherOvercast, Weight: 0.27},
+		{Kind: WeatherSnow, Weight: 0.55},
 	},
 }
 
@@ -423,16 +423,16 @@ const (
 	treeScaleMaximumRange    = 0.30
 	foliageTintStrengthBase  = 0.50
 	foliageTintStrengthRange = 0.35
-	windStrengthBase         = 0.25
-	windStrengthRange        = 0.35
+	windStrengthBase         = 0.35
+	windStrengthRange        = 0.50
 	minimumWindStrength      = 0.10
 	maximumWindStrength      = 1.00
-	windGustFrequencyBase    = 0.20
-	windGustFrequencyRange   = 0.30
+	windGustFrequencyBase    = 0.28
+	windGustFrequencyRange   = 0.42
 
 	// weather
-	weatherIntensityBase  = 0.30
-	weatherIntensityRange = 0.60
+	weatherIntensityBase  = 0.42
+	weatherIntensityRange = 0.58
 	baseRainDropCount     = 3000
 	rainDropCountRange    = 4000
 	mobileRainFraction    = 0.30

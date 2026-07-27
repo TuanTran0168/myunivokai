@@ -1,3 +1,4 @@
+import { mergeBufferGeometries } from "three-stdlib";
 import {
   Box3,
   BufferGeometry,
@@ -37,14 +38,21 @@ export type ForestModelDefinition = {
 
 export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
   "tree-birch": [{ fileName: "tree-birch-1.glb", targetHeight: 7.5, splitIntoVariants: true }],
-  "tree-oak": [
-    { fileName: "tree-oak-1.glb", targetHeight: 6.5 },
-    { fileName: "tree-oak-2.glb", targetHeight: 6.0 }
-  ],
-  "tree-pine": [
-    { fileName: "tree-pine-1.glb", targetHeight: 8.5 },
-    { fileName: "tree-pine-2.glb", targetHeight: 7.8 }
-  ],
+  // Real scanned broadleaf oaks (Sketchfab CC-BY): small/medium/large in one
+  // file, so splitIntoVariants yields three canopy silhouettes. Unlike the
+  // firs, this pack's canopy material IS named "leaf*", so it deliberately
+  // stays on the season-recolor path — correct for a deciduous tree, which is
+  // what makes autumn oaks turn.
+  "tree-oak": [{ fileName: "tree-oak-realistic.glb", targetHeight: 7.0, splitIntoVariants: true }],
+  // Real, game-ready fir scans (Sketchfab CC-BY, LOD0 kept, 2048px PBR
+  // textures): three distinct conifers in one file, so splitIntoVariants gives
+  // the scatter three silhouettes. Their branch material is alpha-MASK leaf
+  // cards with a normal map — the detail the stylized low-poly cones could not
+  // carry, which is what made the forest read as a cartoon. Deliberately NOT
+  // named to match FOLIAGE_MATERIAL_NAME_PATTERN: these keep their real
+  // textures instead of being flat-tinted per season, which is also true to
+  // life (firs are evergreen).
+  "tree-pine": [{ fileName: "tree-fir-realistic.glb", targetHeight: 8.5, splitIntoVariants: true }],
   // Only the Quaternius snow pine — the CC-BY "Snow Tree" clashed with the
   // pack's art style (owner: style coherence beats variety).
   "tree-pine-snow": [{ fileName: "tree-pine-snow-1.glb", targetHeight: 8.0 }],
@@ -52,12 +60,23 @@ export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
     { fileName: "tree-dead-1.glb", targetHeight: 5.5 },
     { fileName: "tree-dead-2.glb", targetHeight: 5.0 }
   ],
-  // Blossom = the oak silhouettes wearing the pink foliage anchor: the two
-  // downloaded CC-BY cherry models read chunky/off-style next to Quaternius.
-  "tree-blossom": [
-    { fileName: "tree-oak-1.glb", targetHeight: 6.0 },
-    { fileName: "tree-oak-2.glb", targetHeight: 5.6 }
-  ]
+  // Blossom keeps riding the oak silhouettes, now the realistic ones, wearing
+  // the pink foliage anchor — the season-recolor path makes that work without a
+  // dedicated cherry model.
+  "tree-blossom": [{ fileName: "tree-oak-realistic.glb", targetHeight: 6.2, splitIntoVariants: true }]
+};
+
+/**
+ * Cheap conifers for the horizon belt (LOD2 of the same fir pack, 512px
+ * textures): the land beyond the treeline used to be bare tinted ground, which
+ * read as an oddly empty clearing rimmed by nothing. These fill it. They are
+ * only ever seen at distance, so the low-detail LOD is invisible as such while
+ * costing a fraction of the LOD0 trunks.
+ */
+export const DISTANT_TREE_MODEL_DEFINITION: ForestModelDefinition = {
+  fileName: "tree-fir-distant.glb",
+  targetHeight: 9,
+  splitIntoVariants: true
 };
 
 export const ROCK_MODEL_DEFINITIONS: ForestModelDefinition[] = [
@@ -91,12 +110,18 @@ export const ANIMAL_MODEL_CATALOG: Record<string, AnimalModelDefinition> = {
   "animal-deer": { fileName: "animal-deer.glb", targetHeight: 1.7, walkClipName: "Walk" },
   "animal-fox": { fileName: "animal-fox.glb", targetHeight: 0.8, walkClipName: "Walk" },
   "animal-wolf": { fileName: "animal-wolf.glb", targetHeight: 1.1, walkClipName: "Walk" },
-  "animal-boar": { fileName: "animal-boar.glb", targetHeight: 0.9, walkClipName: "" },
-  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "" },
+  "animal-boar": { fileName: "animal-boar.glb", targetHeight: 0.9, walkClipName: "Armature|walk" },
+  "animal-rabbit": { fileName: "animal-rabbit.glb", targetHeight: 0.45, walkClipName: "Armature|walk" },
   // Schema 1.1 additions ("đa dạng động vật hơn").
   "animal-stag": { fileName: "animal-stag.glb", targetHeight: 2.0, walkClipName: "Walk" },
-  "animal-bear": { fileName: "animal-bear.glb", targetHeight: 1.5, walkClipName: "" },
-  "animal-squirrel": { fileName: "animal-squirrel.glb", targetHeight: 0.35, walkClipName: "" }
+  "animal-bear": { fileName: "animal-bear.glb", targetHeight: 1.5, walkClipName: "Walk" },
+  // The squirrel rig ships a scamper ("run") rather than a walk — correct gait
+  // for the species, and the renderer scales clip speed to the wander speed.
+  "animal-squirrel": {
+    fileName: "animal-squirrel.glb",
+    targetHeight: 0.35,
+    walkClipName: "SquirrelValentine_Rig|SquirrelValentine_Rig|SquirrelValentine_Rig|run"
+  }
 };
 
 // Rare "legendary" ground animals ("động vật quý hiếm") — a reskin of an
@@ -273,6 +298,59 @@ function recolorableFoliageMaterial(originalMaterial: Material): MeshStandardMat
   return material;
 }
 
+/**
+ * Collapses same-material parts into one geometry.
+ *
+ * Scan-derived trees author their canopy as dozens of separate leaf-plane
+ * meshes (one source oak ships 59), and every part becomes its own
+ * InstancedMesh — i.e. its own draw call — no matter how few trees use it. All
+ * those planes share a single leaf material, so merging by material takes a
+ * variant from ~59 draw calls to ~2 with identical pixels.
+ *
+ * Merging is best-effort: it needs every geometry in a group to carry the same
+ * attributes, so on any mismatch the group falls back to its unmerged parts
+ * rather than dropping geometry.
+ */
+function mergePartsByMaterial(parts: { geometry: BufferGeometry; material: Material }[]) {
+  const groupsByMaterial = new Map<Material, BufferGeometry[]>();
+  const orderedMaterials: Material[] = [];
+  for (const part of parts) {
+    const group = groupsByMaterial.get(part.material);
+    if (group) {
+      group.push(part.geometry);
+    } else {
+      groupsByMaterial.set(part.material, [part.geometry]);
+      orderedMaterials.push(part.material);
+    }
+  }
+
+  return orderedMaterials.flatMap((material) => {
+    const geometries = groupsByMaterial.get(material) ?? [];
+    if (geometries.length === 1) {
+      return [{ geometry: geometries[0], material }];
+    }
+    // Attribute sets must match exactly; normalize by keeping only the
+    // attributes every geometry in the group has.
+    const sharedAttributeNames = geometries
+      .map((geometry) => Object.keys(geometry.attributes))
+      .reduce((intersection, names) => intersection.filter((name) => names.includes(name)));
+    const trimmedGeometries = geometries.map((geometry) => {
+      const trimmed = geometry.clone();
+      for (const attributeName of Object.keys(trimmed.attributes)) {
+        if (!sharedAttributeNames.includes(attributeName)) {
+          trimmed.deleteAttribute(attributeName);
+        }
+      }
+      return trimmed;
+    });
+    const merged = mergeBufferGeometries(trimmedGeometries, false);
+    if (!merged) {
+      return geometries.map((geometry) => ({ geometry, material }));
+    }
+    return [{ geometry: merged, material }];
+  });
+}
+
 function buildVariantFromMeshes(meshes: Mesh[], targetHeight: number): InstancedModelVariant | null {
   if (meshes.length === 0) {
     return null;
@@ -297,8 +375,12 @@ function buildVariantFromMeshes(meshes: Mesh[], targetHeight: number): Instanced
     .makeScale(uniformScale, uniformScale, uniformScale)
     .multiply(new Matrix4().makeTranslation(-center.x, -unionBox.min.y, -center.z));
 
-  const parts: InstancedModelPart[] = bakedGeometries.map(({ geometry, material }) => {
-    geometry.applyMatrix4(normalizeMatrix);
+  for (const baked of bakedGeometries) {
+    baked.geometry.applyMatrix4(normalizeMatrix);
+  }
+  // Merge BEFORE wrapping materials: recolorableFoliageMaterial mints a new
+  // material per part, which would defeat the grouping.
+  const parts: InstancedModelPart[] = mergePartsByMaterial(bakedGeometries).map(({ geometry, material }) => {
     geometry.computeBoundingSphere();
     const foliage = isFoliageMaterial(material);
     return {
