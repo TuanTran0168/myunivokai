@@ -46,7 +46,9 @@ const RIVER_BED_LIFT = 0.02;
 const RIVER_BED_WIDTH_MARGIN = 0.3;
 
 const RIVER_UV_LENGTH_SCALE = 0.12;
-const RIVER_NORMAL_REPEAT = 2;
+// Matched to the lake's world-sized ripples, so the chop is the same physical
+// size in both bodies of water instead of each having its own scale.
+const RIVER_NORMAL_REPEAT = 4;
 const RIVER_SCROLL_SPEED = new Vector2(0.0, 0.09);
 const RIVER_NORMAL_STRENGTH = new Vector2(0.5, 0.5);
 const RIVER_OPACITY = 0.86;

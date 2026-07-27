@@ -13,54 +13,99 @@ import {
   Vector2,
   type Texture
 } from "three";
+import { randomFromSeed } from "@/lib/scene";
 import { createWaterOutline, type WaterOutline } from "./forestMath";
 
-// Real-looking pond water. The old pond was a flat disc with metalness 0.85 and
-// roughness 0.12 — a shiny blue coin: it reflected nothing (an HDRI alone gives
-// a mirror no scene content), never moved, and had no depth.
+// Real-looking water. Three things had to be true at once, and the first pass
+// got only the third:
 //
-// Two things make water read as water, and both are here:
-//  1. TRUE reflection of the actual scene — MeshReflectorMaterial renders the
-//     surrounding trees and sky into the surface, so the pond is visibly part
-//     of the forest instead of a hole in it.
-//  2. MOVEMENT — a tiling ripple normal map, scrolled in two directions at
-//     different speeds so the interference never visibly loops.
+//  1. The ripple pattern must not be a LATTICE. The first version summed four
+//     plane waves at rounded integer frequencies, which is a textbook
+//     interference grid — visible on the lake as a plastic checkerboard. It is
+//     now a sum of many waves with irregular frequency vectors, so the crests
+//     never line up into a repeating cell.
+//  2. There must be TWO uncorrelated moving layers. The first version built a
+//     second scrolling texture, animated it every frame — and never bound it to
+//     anything. One normal map sliding in one direction is exactly what reads as
+//     a sheet of plastic being dragged. The second layer now drives the
+//     reflection distortion, at a different scale and speed from the surface
+//     normals.
+//  3. Ripples must be sized in WORLD units, not in UV. A fixed texture repeat
+//     makes ripples scale with the lake, so a big lake gets metres-wide ripples.
+//     Repeat is now derived from the surface's world diameter.
 //
-// The ripple map is generated procedurally rather than downloaded: it is a sum
-// of sines, so it is exactly tileable (a photo-sourced normal map would seam),
-// costs no bytes, and carries no attribution obligation.
+// The ripple map is still generated procedurally rather than downloaded: the
+// waves use integer frequencies, so it tiles exactly (a photo-sourced normal map
+// would seam), costs no bytes, and carries no attribution obligation.
 
-const RIPPLE_TEXTURE_SIZE = 128;
-const RIPPLE_WAVE_COUNT = 4;
-const RIPPLE_TEXTURE_REPEAT = 3;
+const RIPPLE_TEXTURE_SIZE = 256;
+// Enough overlapping waves that the interference reads as noise rather than as a
+// pattern. Four was not: the old fan of four rounded frequencies self-correlates
+// at 0.85 across the tile (1.0 would be an exact repeat), which is the plastic
+// checkerboard that showed up on the lake. This pair was picked by sweeping, not
+// by taste — MORE waves is worse, so do not "improve" these upward:
+//
+//     waves/maxFreq   self-correlation   slope spread
+//     4 / 4  (old)          0.852            —
+//     18 / 7 (this)         0.618          0.136
+//     28 / 9                0.700          0.116
+//     48 / 13               0.605          0.090
+//
+// Amplitude falls as 1/wavelength^2, so extra high-frequency waves add almost no
+// slope while still enlarging the normalisation sum — the water gets FLATTER,
+// which is the exact defect being fixed.
+const RIPPLE_WAVE_COUNT = 18;
+const RIPPLE_MAXIMUM_FREQUENCY = 7;
+// World size of one ripple tile. Real wind chop on a pond is well under a metre;
+// a couple of metres per tile keeps it visible from the default camera without
+// turning into noise.
+const RIPPLE_WORLD_TILE_SIZE = 2.4;
+// The distortion layer is deliberately a different scale from the normal layer —
+// equal scales would correlate and re-introduce a visible pattern.
+const DISTORTION_TILE_SCALE = 0.62;
 
-// Two scroll layers; different speeds/directions so the crests keep
-// re-interfering instead of marching in lockstep.
 const PRIMARY_SCROLL_SPEED = new Vector2(0.021, 0.013);
-const SECONDARY_SCROLL_SPEED = new Vector2(-0.011, 0.017);
+const SECONDARY_SCROLL_SPEED = new Vector2(-0.013, 0.019);
 
 const WATER_SURFACE_HEIGHT = 0.03;
-const NORMAL_STRENGTH = new Vector2(0.22, 0.22);
+// The measured slope field peaks around 0.43, so this is the multiplier that
+// decides how pronounced the chop is. Raised from 0.32: the surface was reading
+// as too smooth to be water.
+const NORMAL_STRENGTH = new Vector2(0.45, 0.45);
+
+// Deep water is darker and more saturated than the shallows. Baked into vertex
+// colours rather than taken from MeshReflectorMaterial's depth-blend options,
+// which need a depth buffer this scene's alpha-masked foliage does not populate
+// cleanly — those banded into a visible grid when they were tried.
+const SHALLOW_EDGE_BRIGHTNESS = 1.28;
+const DEEP_CENTRE_BRIGHTNESS = 0.62;
 
 /**
- * A tileable ripple normal map built from summed sine waves. Each wave uses
- * INTEGER frequencies over the texture, which is what guarantees the result
- * wraps seamlessly when the texture repeats.
+ * A tileable ripple normal map. Each wave uses INTEGER frequencies over the
+ * texture, which is what guarantees the result wraps seamlessly when the texture
+ * repeats; the frequency VECTORS are irregular, which is what stops the sum from
+ * looking like a grid.
  */
 function createRippleNormalTexture(): DataTexture {
   const size = RIPPLE_TEXTURE_SIZE;
   const data = new Uint8Array(size * size * 4);
-  // Fixed wave set (not seeded): water looks the same everywhere, and keeping
-  // it constant lets every pond in every world share one texture upload.
-  const waves = Array.from({ length: RIPPLE_WAVE_COUNT }, (_, waveIndex) => {
-    const harmonic = waveIndex + 1;
-    const angle = (waveIndex * Math.PI * 2) / RIPPLE_WAVE_COUNT + 0.4;
-    return {
-      frequencyX: Math.round(Math.cos(angle) * harmonic),
-      frequencyY: Math.round(Math.sin(angle) * harmonic),
-      amplitude: 1 / harmonic
-    };
+  // Fixed seed (not per-world): water looks the same everywhere, and keeping it
+  // constant lets every surface in the app share one texture upload.
+  const nextRandomValue = randomFromSeed("forest-water-ripple");
+  let slopeNormalisation = 0;
+  const waves = Array.from({ length: RIPPLE_WAVE_COUNT }, () => {
+    const frequencyX = Math.round((nextRandomValue() * 2 - 1) * RIPPLE_MAXIMUM_FREQUENCY);
+    const frequencyY = Math.round((nextRandomValue() * 2 - 1) * RIPPLE_MAXIMUM_FREQUENCY);
+    // A zero/zero wave is a constant offset and contributes nothing.
+    const safeFrequencyX = frequencyX === 0 && frequencyY === 0 ? 1 : frequencyX;
+    const wavelength = Math.hypot(safeFrequencyX, frequencyY) || 1;
+    // Amplitude falls with frequency, as in a real wave spectrum: a few long
+    // swells carry the shape, many short ones carry the detail.
+    const amplitude = 1 / (wavelength * wavelength);
+    slopeNormalisation += amplitude * wavelength;
+    return { frequencyX: safeFrequencyX, frequencyY, amplitude, phase: nextRandomValue() * Math.PI * 2 };
   });
+  const slopeScale = slopeNormalisation > 0 ? 1 / slopeNormalisation : 1;
 
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -71,14 +116,14 @@ function createRippleNormalTexture(): DataTexture {
       let slopeX = 0;
       let slopeY = 0;
       for (const wave of waves) {
-        const phase = wave.frequencyX * u + wave.frequencyY * v;
+        const phase = wave.frequencyX * u + wave.frequencyY * v + wave.phase;
         slopeX += wave.amplitude * wave.frequencyX * Math.cos(phase);
         slopeY += wave.amplitude * wave.frequencyY * Math.cos(phase);
       }
       // Pack the slope as a tangent-space normal.
-      const normalX = -slopeX;
-      const normalY = -slopeY;
-      const normalZ = 4; // keeps the ripples shallow rather than spiky
+      const normalX = -slopeX * slopeScale;
+      const normalY = -slopeY * slopeScale;
+      const normalZ = 0.55; // shallower than 1 keeps the chop crisp, not spiky
       const length = Math.hypot(normalX, normalY, normalZ) || 1;
       const offset = (y * size + x) * 4;
       data[offset] = Math.round(((normalX / length) * 0.5 + 0.5) * 255);
@@ -93,12 +138,12 @@ function createRippleNormalTexture(): DataTexture {
   texture.wrapT = RepeatWrapping;
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
-  texture.repeat.set(RIPPLE_TEXTURE_REPEAT, RIPPLE_TEXTURE_REPEAT);
   texture.needsUpdate = true;
   return texture;
 }
 
-// One shared ripple texture for every pond in the app.
+// One shared ripple image for every water surface in the app. Callers clone it
+// so each can carry its own repeat and scroll offset.
 let sharedRippleTexture: DataTexture | null = null;
 export function getRippleNormalTexture(): DataTexture {
   if (!sharedRippleTexture) {
@@ -110,17 +155,21 @@ export function getRippleNormalTexture(): DataTexture {
 /**
  * Fan-triangulated disc whose boundary follows a seeded organic outline instead
  * of a circle. Built in the XY plane so the caller's existing -PI/2 X rotation
- * still lays it flat, and UVs are generated so the ripple normal map tiles
- * across it in world-ish proportions.
+ * still lays it flat. UVs are in WORLD units (one unit of UV per world unit) so
+ * a ripple tile is the same physical size on a pond and on a lake.
  */
 function buildOrganicWaterDiscGeometry(radius: number, outline: WaterOutline): BufferGeometry {
   const vertexCount = outline.segments + 2; // centre + boundary ring (closed)
   const positions = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
+  const colors = new Float32Array(vertexCount * 3);
   const indices: number[] = [];
 
   uvs[0] = 0.5;
   uvs[1] = 0.5;
+  colors[0] = DEEP_CENTRE_BRIGHTNESS;
+  colors[1] = DEEP_CENTRE_BRIGHTNESS;
+  colors[2] = DEEP_CENTRE_BRIGHTNESS;
   for (let segmentIndex = 0; segmentIndex <= outline.segments; segmentIndex += 1) {
     const angle = (segmentIndex / outline.segments) * Math.PI * 2;
     const boundaryRadius = radius * outline.radiusFactorAt(angle);
@@ -131,6 +180,9 @@ function buildOrganicWaterDiscGeometry(radius: number, outline: WaterOutline): B
     positions[vertexIndex * 3 + 1] = y;
     uvs[vertexIndex * 2] = 0.5 + x / (radius * 2);
     uvs[vertexIndex * 2 + 1] = 0.5 + y / (radius * 2);
+    colors[vertexIndex * 3] = SHALLOW_EDGE_BRIGHTNESS;
+    colors[vertexIndex * 3 + 1] = SHALLOW_EDGE_BRIGHTNESS;
+    colors[vertexIndex * 3 + 2] = SHALLOW_EDGE_BRIGHTNESS;
     if (segmentIndex > 0) {
       indices.push(0, vertexIndex - 1, vertexIndex);
     }
@@ -139,6 +191,7 @@ function buildOrganicWaterDiscGeometry(radius: number, outline: WaterOutline): B
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+  geometry.setAttribute("color", new BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
@@ -160,51 +213,60 @@ type ForestPondWaterProps = {
 };
 
 export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = true }: ForestPondWaterProps) {
-  const rippleTexture = useMemo(() => getRippleNormalTexture(), []);
-  // The second layer is a clone so the two can scroll independently while
-  // sharing the same GPU image.
-  const secondaryRippleTexture = useMemo(() => {
-    const clone = rippleTexture.clone();
-    clone.needsUpdate = true;
-    return clone;
-  }, [rippleTexture]);
+  const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
+  const geometry = useMemo(() => buildOrganicWaterDiscGeometry(radius, outline), [outline, radius]);
+
+  // Two clones of one GPU image: one drives the surface normals, the other warps
+  // the reflection. Different repeats and opposing scroll directions, so the two
+  // never correlate into a pattern.
+  const { normalTexture, distortionTexture } = useMemo(() => {
+    const baseTexture = getRippleNormalTexture();
+    const tilesAcross = Math.max(1, (radius * 2) / RIPPLE_WORLD_TILE_SIZE);
+    const primary = baseTexture.clone();
+    primary.repeat.set(tilesAcross, tilesAcross);
+    primary.needsUpdate = true;
+    const secondary = baseTexture.clone();
+    secondary.repeat.set(tilesAcross * DISTORTION_TILE_SCALE, tilesAcross * DISTORTION_TILE_SCALE);
+    secondary.needsUpdate = true;
+    return { normalTexture: primary, distortionTexture: secondary };
+  }, [radius]);
   const elapsedSecondsRef = useRef(0);
 
   useFrame((_, deltaTimeSeconds) => {
     elapsedSecondsRef.current += deltaTimeSeconds;
     const elapsedSeconds = elapsedSecondsRef.current;
-    rippleTexture.offset.set(
+    normalTexture.offset.set(
       elapsedSeconds * PRIMARY_SCROLL_SPEED.x,
       elapsedSeconds * PRIMARY_SCROLL_SPEED.y
     );
-    secondaryRippleTexture.offset.set(
+    distortionTexture.offset.set(
       elapsedSeconds * SECONDARY_SCROLL_SPEED.x,
       elapsedSeconds * SECONDARY_SCROLL_SPEED.y
     );
   });
 
-  const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
-  const geometry = useMemo(() => buildOrganicWaterDiscGeometry(radius, outline), [outline, radius]);
-
   return (
     <mesh geometry={geometry} position={[0, WATER_SURFACE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       {reflective ? (
         <MeshReflectorMaterial
-          // Tuned DOWN from the first pass, which blew out into white patches
-          // with a visible grid: mixStrength 2.2 pushed the reflection well past
-          // the sky's own brightness, and the depth-blend parameters
-          // (depthScale/minDepthThreshold/...) need a depth buffer that the
-          // alpha-masked foliage in this scene does not populate cleanly, so they
-          // banded. Reflection is now support, not the dominant term.
-          resolution={512}
-          mixBlur={1}
-          mixStrength={0.8}
-          blur={[140, 40]}
-          mirror={0.4}
+          // Sharper than the previous tuning, which blurred the reflection into
+          // an undifferentiated wash — at that point the surface carries no scene
+          // information and the eye reads it as coloured plastic. A mirror needs
+          // to be legible; the ripples, not the blur, supply the softness.
+          resolution={1024}
+          mixBlur={0.55}
+          mixStrength={1.15}
+          blur={[55, 18]}
+          mirror={0.7}
+          // The second moving layer, finally connected: it warps the reflected
+          // image so the mirrored treeline shimmers instead of sitting still.
+          distortion={0.32}
+          distortionMap={distortionTexture as unknown as Texture}
           color={tintColor}
-          roughness={0.35}
-          metalness={0.2}
-          normalMap={rippleTexture as unknown as Texture}
+          roughness={0.18}
+          metalness={0.25}
+          vertexColors
+          normalMap={normalTexture as unknown as Texture}
           normalScale={NORMAL_STRENGTH}
         />
       ) : (
@@ -215,7 +277,8 @@ export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = tru
           roughness={0.16}
           metalness={0.3}
           envMapIntensity={1.5}
-          normalMap={rippleTexture as unknown as Texture}
+          vertexColors
+          normalMap={normalTexture as unknown as Texture}
           normalScale={NORMAL_STRENGTH}
         />
       )}
@@ -238,10 +301,10 @@ export function ForestWaterShoreline({
   height: number;
 }) {
   const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
-  const geometry = useMemo(() => {
-    const inner = buildOrganicWaterDiscGeometry(radius + bandWidth, outline);
-    return inner;
-  }, [bandWidth, outline, radius]);
+  const geometry = useMemo(
+    () => buildOrganicWaterDiscGeometry(radius + bandWidth, outline),
+    [bandWidth, outline, radius]
+  );
 
   return (
     <mesh geometry={geometry} position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>

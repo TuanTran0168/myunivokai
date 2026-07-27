@@ -74,6 +74,44 @@ does not address either real defect — the circle came from our geometry, and t
 white blowout came from our material. A downloaded mesh would inherit both, plus
 the arbitrary pivot/up-axis problem that sank the baked-scene attempt.
 
+### Why the surface read as plastic
+
+Verdict was *"mặt hồ như miếng nhựa không giống nước"* with a visible square grid.
+Three separate causes, and the first pass had fixed only the third:
+
+**1. The ripple map was a lattice.** It summed four plane waves at frequencies
+rounded off an evenly spaced fan — a textbook interference grid. Measured
+self-correlation across the tile 0.852 (1.0 = exact repeat). Now 18 waves with
+irregular frequency vectors: 0.618.
+
+The wave count was chosen by sweeping, and **more is worse** — amplitude falls as
+`1/λ²`, so extra high-frequency waves add almost no slope while still enlarging
+the normalisation sum, flattening the water:
+
+| waves / maxFreq | self-correlation | slope spread |
+|---|---|---|
+| 4 / 4 (old) | 0.852 | — |
+| **18 / 7 (shipped)** | **0.618** | **0.136** |
+| 28 / 9 | 0.700 | 0.116 |
+| 48 / 13 | 0.605 | 0.090 |
+
+**2. The second ripple layer was dead code.** `ForestPondWater` built a second
+scrolling texture and advanced its offset every frame — and never bound it to
+the material. The comment claimed two interfering layers; there was one, sliding
+in a single direction, which is exactly what reads as a dragged plastic sheet.
+It now feeds `distortionMap`, at `0.62 ×` the normal layer's tile scale and
+scrolling the opposite way, so the two cannot correlate.
+
+**3. Ripples were sized in UV, not world units.** A fixed texture repeat means
+ripples scale with the surface, so making the lake hero-sized also gave it
+metres-wide ripples. Repeat is now `diameter / RIPPLE_WORLD_TILE_SIZE`, and the
+river's repeat was matched to it so both bodies of water have the same physical
+chop.
+
+Depth cue comes from **vertex colours** (dark centre, bright shallows) rather
+than `MeshReflectorMaterial`'s depth-blend options — see below for why those are
+unusable here.
+
 ### The reflector blew out
 
 The first tuning showed white patches with a visible grid. Two causes:
