@@ -22,7 +22,14 @@ import { ForestWildlife } from "./ForestWildlife";
 // same seed renders the same forest forever.
 
 const SUN_LIGHT_DISTANCE = 60;
-const SUN_LIGHT_BASE_INTENSITY = 1.35;
+// Sunlight has to DOMINATE the fill to read as sunlight. The old rig ran the
+// sun at 1.35 against ~1.27 of combined HDRI + hemisphere + ambient fill — a
+// ~1:1 key-to-fill ratio, which is the signature of flat overcast studio light,
+// not a sunny day. Outdoors the sun beats skylight by roughly an order of
+// magnitude; this rig now runs ~3:1, kept deliberately short of the physical
+// ratio so AgX has headroom and the selective bloom (threshold 0.85) does not
+// turn lit foliage into a white blob.
+const SUN_LIGHT_BASE_INTENSITY = 2.6;
 // Overcast/rain/snow flatten the light; sun rays crank it slightly.
 const SUN_INTENSITY_MULTIPLIERS_BY_WEATHER_KIND: Record<string, number> = {
   clear: 1.0,
@@ -31,16 +38,24 @@ const SUN_INTENSITY_MULTIPLIERS_BY_WEATHER_KIND: Record<string, number> = {
   rain: 0.4,
   snow: 0.55
 };
-// With HDRI image-based lighting in place, the analytic fill lights only
-// support it (the HDRI carries most of the ambient character).
-const HEMISPHERE_LIGHT_INTENSITY = 0.3;
-const AMBIENT_LIGHT_INTENSITY = 0.12;
+// Fill is support only — pulled down so the sun above can actually carve shape
+// and cast readable shadows instead of every surface being pre-lit from all
+// sides. The HDRI still supplies the sky's color character, just quieter.
+const HEMISPHERE_LIGHT_INTENSITY = 0.2;
+const AMBIENT_LIGHT_INTENSITY = 0.06;
 const HEMISPHERE_GROUND_COLOR = "#3D3327";
-const ENVIRONMENT_LIGHTING_INTENSITY = 0.85;
+const ENVIRONMENT_LIGHTING_INTENSITY = 0.6;
 
-const SHADOW_MAP_SIZE = 2048;
+// Shadows carry most of the "is this real light?" impression, and the scene now
+// has alpha-masked fir foliage whose fine cutouts alias badly at low
+// resolution, so the map is denser than before.
+const SHADOW_MAP_SIZE = 3072;
 const SHADOW_CAMERA_MARGIN = 8;
 const SHADOW_BIAS = -0.0004;
+// Offsets the shadow lookup along the surface normal: kills the acne that a
+// constant bias alone leaves on the firs' angled leaf cards, without the
+// peter-panning a larger constant bias would cause.
+const SHADOW_NORMAL_BIAS = 0.02;
 
 // A whisper of height fog even when the config draws none — pure zero makes
 // the treeline cut a hard edge against the sky dome. Renderer aesthetic, not
@@ -104,6 +119,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         shadow-camera-near={1}
         shadow-camera-far={SUN_LIGHT_DISTANCE * 2.5}
         shadow-bias={SHADOW_BIAS}
+        shadow-normalBias={SHADOW_NORMAL_BIAS}
       />
 
       <ForestSkyDome lighting={lighting} weather={weather} />
