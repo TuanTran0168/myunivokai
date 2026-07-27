@@ -68,16 +68,16 @@
     "scaleMin": 0.76,
     "scaleMax": 1.3,
     "foliageTintStrength": 0.77,
-    "windStrength": 0.31,
+    "windStrength": 0.44,
     "windDirectionRadians": 0.52,
-    "windGustFrequency": 0.4
+    "windGustFrequency": 0.56
   },
   "weather": {
     "kind": "rain",
-    "intensity": 0.72,
+    "intensity": 0.83,
     "cloudCoverage": 0.69,
-    "rainDropCountDesktop": 5880,
-    "rainDropCountMobile": 1764,
+    "rainDropCountDesktop": 6320,
+    "rainDropCountMobile": 1896,
     "snowflakeCountDesktop": 0,
     "snowflakeCountMobile": 0
   },

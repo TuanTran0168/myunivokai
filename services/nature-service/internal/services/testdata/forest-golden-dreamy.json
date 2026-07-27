@@ -70,18 +70,18 @@
     "scaleMin": 0.88,
     "scaleMax": 1.34,
     "foliageTintStrength": 0.67,
-    "windStrength": 0.34,
+    "windStrength": 0.48,
     "windDirectionRadians": 5.48,
-    "windGustFrequency": 0.23
+    "windGustFrequency": 0.33
   },
   "weather": {
     "kind": "snow",
-    "intensity": 0.39,
+    "intensity": 0.51,
     "cloudCoverage": 0.66,
     "rainDropCountDesktop": 0,
     "rainDropCountMobile": 0,
-    "snowflakeCountDesktop": 2475,
-    "snowflakeCountMobile": 742
+    "snowflakeCountDesktop": 2775,
+    "snowflakeCountMobile": 832
   },
   "wildlife": {
     "groundAnimals": [

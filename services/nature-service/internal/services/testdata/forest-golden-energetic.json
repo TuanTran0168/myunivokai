@@ -70,14 +70,14 @@
     "scaleMin": 0.86,
     "scaleMax": 1.47,
     "foliageTintStrength": 0.69,
-    "windStrength": 0.51,
+    "windStrength": 0.72,
     "windDirectionRadians": 3.03,
-    "windGustFrequency": 0.44
+    "windGustFrequency": 0.62
   },
   "weather": {
-    "kind": "clear",
-    "intensity": 0.83,
-    "cloudCoverage": 0.13,
+    "kind": "sunRays",
+    "intensity": 0.93,
+    "cloudCoverage": 0.23,
     "rainDropCountDesktop": 0,
     "rainDropCountMobile": 0,
     "snowflakeCountDesktop": 0,
