@@ -102,17 +102,20 @@ Vẫn ở tab **Environment** của từng Service, điền các giá trị đ�
 - `PUBLIC_WEB_URL`: `https://<web-origin>/nature` — **có** hậu tố `/nature`, vì
   trang share của forest nằm dưới prefix đó: `/nature/share/worlds/{slug}`.
 
-> ⚠️ **BẮT BUỘC ĐỔI KHI DEPLY BẢN NÀY.** Trước đây universe **không** có hậu tố;
-> giờ hai service dùng chung một dạng: `<web-origin>/<family>`. Cả hai đều đặt
-> `sync: false` trong `render.yaml`, nghĩa là **phải nhập tay trên Render
-> dashboard** — sửa file này không tự cập nhật service đang chạy.
+> 🚨 **BẮT BUỘC ĐỔI TRƯỚC/CÙNG LÚC VỚI KHI DEPLOY BẢN NÀY — quên là link share
+> universe chết.** Trước đây universe **không** có hậu tố; giờ hai service dùng
+> chung một dạng `<web-origin>/<family>`. Cả hai đều `sync: false` trong
+> `render.yaml`, nên **phải nhập tay trên Render dashboard** — sửa file này
+> không tự cập nhật service đang chạy.
 >
-> Nếu quên đổi: universe-service vẫn in ra `shareUrl` dạng cũ
-> `<origin>/share/worlds/{slug}`. Link đó **vẫn hoạt động** (route cũ được giữ
-> làm redirect 308 vĩnh viễn sang `/universe/...`), nên không có gì gãy — chỉ là
-> link phát ra chưa ở dạng chuẩn. Đây là lý do route cũ
-> `app/share/worlds/[shareSlug]/page.tsx` **không được xoá**: mọi `shareUrl` đã
-> lưu trong database universe đều trỏ vào đó.
+> Route cũ `/share/worlds/{slug}` đã bị **xoá hẳn**, không còn redirect (quyết
+> định của owner: không giữ link share cũ). Hệ quả:
+>
+> - Nếu universe-service còn `PUBLIC_WEB_URL` **không có** `/universe`, nó sẽ in
+>   ra `shareUrl` trỏ tới route không tồn tại → **404**.
+> - Mọi `shareUrl` **đã lưu trong database universe** từ trước bản này cũng trỏ
+>   vào route đã xoá → các link share cũ **sẽ 404**. Đây là đánh đổi đã được
+>   chấp nhận, không phải lỗi.
 
 Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image từ các file `Dockerfile.prod` và khởi động các services. 
 
