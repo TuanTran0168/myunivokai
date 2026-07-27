@@ -41,11 +41,21 @@ const PATH_CURVE_AMPLITUDE_RANGE_RADIANS = 0.18;
 const PATH_CURVE_RADIAL_FREQUENCY = 0.16;
 
 // --- Water bodies ------------------------------------------------------------
-// The clearing centre is guaranteed FLAT (see CLEARING_FLATTEN_INNER_FRACTION),
-// which is why the lake lives at the origin: a planar reflector needs a planar
-// mesh. Sizing it off the clearing keeps it clear of the animal wander band
-// (starts at 0.62x clearing) and the decor/tree scatter (starts at 0.9x).
-const LAKE_RADIUS_FRACTION_OF_CLEARING = 0.46;
+// The lake is the hero of the clearing, not an ornament in it — the owner's
+// reference photos are a wide sheet of water filling the valley floor. At this
+// size it no longer fits inside the terrain's naturally flat zone, so
+// createTerrainHeightSampler CARVES a basin for it (see LAKE_BED_DEPTH). That
+// carve is what lets the surface stay planar, and planarity is what keeps
+// MeshReflectorMaterial valid.
+const LAKE_RADIUS_FRACTION_OF_CLEARING = 0.85;
+// How far past the water's edge the ground climbs back to its natural height.
+const LAKE_SHORE_BLEND_WIDTH = 2.2;
+// How far the bed sits below the water plane. Only has to beat the local hill
+// amplitude so no terrain pokes through the surface.
+const LAKE_BED_DEPTH = 1.8;
+// How far inside the shoreline the bed reaches full depth — the shallow shelf
+// that makes the edge read as a beach rather than a step.
+const LAKE_BED_SHELF_WIDTH = 3.0;
 
 const RIVER_SHAPE_SEED_SUFFIX = "-river";
 /** Half width of the river channel away from the lake, in world units. */
@@ -56,8 +66,54 @@ const RIVER_MEANDER_WAVELENGTH = 30;
 // the far ridgeline it would otherwise run straight up.
 const RIVER_SPAN_FRACTION_OF_TREELINE = 0.82;
 
+export function lakeShapeSeedFromTerrain(terrain?: ForestTerrainConfig): string {
+  return `${terrain?.placementSeed ?? "forest-terrain"}-lake`;
+}
+
+/** MEAN radius. The organic outline swings around it — see maximumLakeRadius. */
 export function lakeRadiusFromTerrain(terrain?: ForestTerrainConfig): number {
   return clearingRadiusFromTerrain(terrain) * LAKE_RADIUS_FRACTION_OF_CLEARING;
+}
+
+/**
+ * The furthest the shoreline ever reaches. THIS is the number anything placed
+ * near the lake must clear — using the mean radius instead puts objects in the
+ * water wherever the outline bulges.
+ */
+export function maximumLakeRadiusFromTerrain(terrain?: ForestTerrainConfig): number {
+  return lakeRadiusFromTerrain(terrain) * maximumOutlineRadiusFactor();
+}
+
+/**
+ * SIGNED distance to the shoreline: negative inside the water, positive on dry
+ * land, zero exactly at the edge. The terrain carve needs the sign — a clamped
+ * distance makes the bed flat right up to the shoreline, which leaves the water
+ * plane perched on a vertical wall the depth of the lake.
+ */
+export function createLakeSignedEdgeDistanceSampler(
+  terrain?: ForestTerrainConfig
+): (x: number, z: number) => number {
+  const outline = createWaterOutline(lakeShapeSeedFromTerrain(terrain));
+  const meanRadius = lakeRadiusFromTerrain(terrain);
+  return (x: number, z: number) =>
+    Math.hypot(x, z) - meanRadius * outline.radiusFactorAt(waterOutlineAngleAt(x, z));
+}
+
+/** Distance from a point to the lake's water edge; 0 anywhere inside it. */
+export function createLakeEdgeDistanceSampler(terrain?: ForestTerrainConfig): PathLateralDistanceSampler {
+  const signedEdgeDistanceSampler = createLakeSignedEdgeDistanceSampler(terrain);
+  return (x: number, z: number) => Math.max(0, signedEdgeDistanceSampler(x, z));
+}
+
+/**
+ * World XZ -> the angle the outline was authored in. The water mesh is built in
+ * local XY and laid flat with a -PI/2 X rotation, which maps local (x, y) to
+ * world (x, -y); so world angle atan2(z, x) is the NEGATED authoring angle.
+ * Getting this backwards silently mirrors the shoreline, and then every
+ * exclusion test is wrong exactly where the outline bulges.
+ */
+export function waterOutlineAngleAt(x: number, z: number): number {
+  return -Math.atan2(z, x);
 }
 
 export type RiverShape = {
@@ -94,11 +150,33 @@ export function riverCenterlineAt(shape: RiverShape, along: number): { x: number
   };
 }
 
-/** The channel flares out into the lake instead of meeting it in a hard T. */
-export function riverHalfWidthAt(along: number, lakeRadius: number): number {
-  const flareTarget = Math.max(lakeRadius * 0.85, RIVER_HALF_WIDTH);
-  const flareFalloff = Math.exp(-((along / (lakeRadius * 1.2)) ** 2));
-  return RIVER_HALF_WIDTH + (flareTarget - RIVER_HALF_WIDTH) * flareFalloff;
+/**
+ * Half width at `along`. The channel widens slightly as it nears the lake, the
+ * way a real outflow does, but it no longer flares to lake width: the river is
+ * now drawn only OUTSIDE the shoreline, so a flare would just be a wedge lying
+ * on top of the water.
+ */
+export function riverHalfWidthAt(along: number, lakeExitDistance: number): number {
+  const distanceBeyondShore = Math.max(0, Math.abs(along) - lakeExitDistance);
+  const mouthWidening = Math.exp(-((distanceBeyondShore / 6) ** 2)) * RIVER_HALF_WIDTH * 0.6;
+  return RIVER_HALF_WIDTH + mouthWidening;
+}
+
+/**
+ * Where the channel leaves the lake, per side. Measured from the outline at the
+ * river's own heading rather than from the mean radius, so the mouth lands on
+ * the shore even where the lake bulges out.
+ */
+export function riverLakeExitDistance(shape: RiverShape, terrain?: ForestTerrainConfig): number {
+  const outline = createWaterOutline(lakeShapeSeedFromTerrain(terrain));
+  const meanRadius = lakeRadiusFromTerrain(terrain);
+  const directionX = Math.cos(shape.headingRadians);
+  const directionZ = Math.sin(shape.headingRadians);
+  // Sample both ends of the channel and take the wider one, so neither mouth can
+  // start inside the water.
+  const forwardFactor = outline.radiusFactorAt(waterOutlineAngleAt(directionX, directionZ));
+  const backwardFactor = outline.radiusFactorAt(waterOutlineAngleAt(-directionX, -directionZ));
+  return meanRadius * Math.max(forwardFactor, backwardFactor);
 }
 
 /**
@@ -109,7 +187,7 @@ export function riverHalfWidthAt(along: number, lakeRadius: number): number {
  */
 export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): PathLateralDistanceSampler {
   const shape = createRiverShape(terrain);
-  const lakeRadius = lakeRadiusFromTerrain(terrain);
+  const lakeExitDistance = riverLakeExitDistance(shape, terrain);
   const directionX = Math.cos(shape.headingRadians);
   const directionZ = Math.sin(shape.headingRadians);
 
@@ -123,7 +201,7 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
     }
     const perpendicular = -x * directionZ + z * directionX;
     const lateralDistance = Math.abs(perpendicular - riverMeanderOffsetAt(shape, along));
-    return Math.max(0, lateralDistance - riverHalfWidthAt(along, lakeRadius));
+    return Math.max(0, lateralDistance - riverHalfWidthAt(along, lakeExitDistance));
   };
 }
 
@@ -210,6 +288,7 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
   const clearingRadius = clearingRadiusFromTerrain(terrain);
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const angularFrequency = hillFrequency * FULL_CIRCLE_RADIANS;
+  const signedLakeEdgeDistanceSampler = createLakeSignedEdgeDistanceSampler(terrain);
 
   return (x: number, z: number) => {
     const radiusFromCenter = Math.hypot(x, z);
@@ -221,7 +300,22 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
     const crossedBands =
       Math.sin(x * angularFrequency + phaseA) * Math.cos(z * angularFrequency * 1.7 + phaseB) * 0.65;
     const diagonalSwell = Math.sin((x + z) * angularFrequency * 0.5 + phaseC) * 0.35;
-    const nearHills = hillAmplitude * (crossedBands + diagonalSwell) * clearingFlattenFactor;
+    const rollingHills = hillAmplitude * (crossedBands + diagonalSwell) * clearingFlattenFactor;
+
+    // Carve the lake basin. Without this the ground keeps rolling under a planar
+    // water surface and hilltops poke through the middle of the lake — which is
+    // the whole reason the lake could not simply be made bigger.
+    //
+    // The carve is built around the SIGNED shore distance so the surface passes
+    // through exactly zero at the waterline: it shelves down to LAKE_BED_DEPTH
+    // going inward, and climbs back to the natural hills going outward. Driving
+    // it from a clamped distance instead leaves the bed flat all the way to the
+    // edge, and then the water plane sits on top of a wall as deep as the lake.
+    const signedShoreDistance = signedLakeEdgeDistanceSampler(x, z);
+    const nearHills =
+      signedShoreDistance >= 0
+        ? rollingHills * smoothstepValue(0, LAKE_SHORE_BLEND_WIDTH, signedShoreDistance)
+        : -LAKE_BED_DEPTH * smoothstepValue(0, LAKE_BED_SHELF_WIDTH, -signedShoreDistance);
 
     // Distant forested hills: ramp up past the treeline so the far horizon is
     // a rolling ridgeline, not the cut edge of a flat slab.

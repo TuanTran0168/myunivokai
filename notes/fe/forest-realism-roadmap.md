@@ -94,14 +94,59 @@ scene render. It now uses environment reflection (`reflective={false}`).
 the ground as bare dirt — running it over the river turned the channel into a
 wide tan road across the whole clearing.
 
+### Making the lake big required carving the terrain
+
+The lake started at `0.46 × clearing` and the verdict was *"Hồ nước phải to đùng"*.
+It is now `0.85 × clearing`, which **does not fit inside the terrain's naturally
+flat zone** (`CLEARING_FLATTEN_INNER_FRACTION` = 0.65). Simply enlarging the disc
+puts rolling hilltops through the middle of a planar water surface.
+
+So `createTerrainHeightSampler` now **carves a basin**. This is the load-bearing
+detail: the carve is driven by the **signed** shore distance
+(`createLakeSignedEdgeDistanceSampler`), not the clamped one. Driven from the
+clamped distance the bed is flat at full depth right up to the shoreline, and the
+water plane ends up perched on a vertical wall as deep as the lake. Signed, the
+surface passes through exactly zero at the waterline: it shelves down to
+`LAKE_BED_DEPTH` over `LAKE_BED_SHELF_WIDTH` going in, and climbs back to the
+hills over `LAKE_SHORE_BLEND_WIDTH` going out.
+
+Verified numerically before shipping (worth redoing after any change here):
+shoreline discontinuity 0.0001 m, highest terrain inside the lake exactly at the
+waterline, depth profile `0 → −0.13 → −0.47 → −1.33 → −1.80` at 0/0.5/1/2/3 m in.
+
+### Angle convention — easy to get silently backwards
+
+The water mesh is built in local XY and laid flat with a `-PI/2` X rotation, which
+maps local `(x, y)` to world `(x, -y)`. So the world angle `atan2(z, x)` is the
+**negated** authoring angle — hence `waterOutlineAngleAt`. Get this wrong and the
+shoreline is mirrored relative to every exclusion test, which shows up only as
+objects standing in water exactly where the outline bulges. Checked: worst
+geometry-vs-sampler mismatch 3.55e-15.
+
+### The river must not cross the lake
+
+First version ran one ribbon from `-span` to `+span` through the origin, so a
+light strip with its own banks was drawn on top of the water — *"nó bị sông đè lên
+rồi"*. Now there are **two** ribbons, outflow and inflow, each starting at
+`riverLakeExitDistance` (the outline radius at the river's own heading, so the
+mouth lands on the shore even where the lake bulges) minus a small overlap.
+
+### Things the backend positions by radius alone
+
+`landmark.radiusFromCenter` comes from Nature DNA and knows nothing about the
+lake, so lanterns and shrines stood in open water. `ForestRenderer` computes
+`shoreClearanceRadius` and both `ForestLandmarks` and `ForestWildlife` clamp to
+it. **Anything new placed by radius needs the same treatment.**
+
 **The radii are a coupled set. Changing one breaks another:**
 
 | Feature | Radius | Why |
 |---|---|---|
-| Lake (mean) | `0.46 × clearing` | must stay inside the flat zone |
-| Lake (max) | `0.60 × clearing` | mean × `maximumOutlineRadiusFactor()` = 1.30 |
-| Animal wander (inner) | `0.68 × clearing` | clears the lake's *widest* lobe, not its mean |
-| Decor / tree scatter | `0.9 × clearing` | pre-existing |
+| Lake (mean) | `0.85 × clearing` ≈ 8.1 | hero-sized; requires the terrain carve |
+| Lake (max) | `1.30 × mean` ≈ 10.5 | `maximumOutlineRadiusFactor()` |
+| `shoreClearanceRadius` | max + 1.8 ≈ 12.3 | dry land for landmarks and animals |
+| Animal wander | 12.3 → 22.8 | anchored to the **shore**, not a clearing fraction |
+| Decor / tree scatter | `0.9 × clearing` ≈ 8.6 | inside the lake now, so `clearFloorDistanceSampler` skips those picks — decor is thinner near the water by design |
 | River span | `0.82 × treeline` | stops short of `DISTANT_RISE_INNER_FRACTION` so the channel never climbs the far ridge |
 
 Water is a no-grow surface exactly like the dirt path, so

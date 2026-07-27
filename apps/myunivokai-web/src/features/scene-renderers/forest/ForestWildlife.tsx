@@ -81,6 +81,8 @@ type ForestWildlifeProps = {
   wildlife?: ForestWildlifeConfig;
   terrain?: ForestTerrainConfig;
   terrainHeightSampler: TerrainHeightSampler;
+  /** Radius of dry ground: animals must wander outside the lake, not across it. */
+  shoreClearanceRadius: number;
   // The world seed drives the rare special-bird sighting (seed encodes DNA).
   worldSeed: string;
   // Animals join the interactive POI layer: hover shows the species tooltip,
@@ -201,6 +203,7 @@ type GroundAnimalProps = {
   individualIndex: number;
   clearingRadius: number;
   treelineRadius: number;
+  shoreClearanceRadius: number;
   terrainHeightSampler: TerrainHeightSampler;
   pointOfInterest: PlanetSceneConfig;
   isSelected: boolean;
@@ -217,6 +220,7 @@ function GroundAnimal({
   individualIndex,
   clearingRadius,
   treelineRadius,
+  shoreClearanceRadius,
   terrainHeightSampler,
   pointOfInterest,
   isSelected,
@@ -253,18 +257,22 @@ function GroundAnimal({
 
   const { waypointA, waypointB, phaseOffset } = useMemo(() => {
     const nextRandomValue = randomFromSeed(`${animalConfig.pathSeed ?? "forest-animal"}-individual-${individualIndex}`);
-    // Starts outside the lake, so nothing wanders across open water. The lake's
-    // MEAN radius is 0.46x the clearing but its organic outline reaches 1.30x
-    // that (maximumOutlineRadiusFactor), i.e. ~0.60x — hence 0.68, not 0.46.
-    const wanderInnerRadius = clearingRadius * 0.68;
-    const wanderOuterRadius = Math.min(clearingRadius * 2.4, treelineRadius * 0.8);
+    // The lake now covers most of the clearing, so the wander band is anchored
+    // to the SHORE rather than to a fraction of the clearing — animals grazed
+    // across open water when this was a clearing fraction. shoreClearanceRadius
+    // already accounts for the outline's widest bulge, not just the mean radius.
+    const wanderInnerRadius = shoreClearanceRadius;
+    const wanderOuterRadius = Math.max(
+      wanderInnerRadius + 4,
+      Math.min(clearingRadius * 2.4, treelineRadius * 0.8)
+    );
     const pickWaypoint = () => {
       const angle = nextRandomValue() * Math.PI * 2;
       const radius = wanderInnerRadius + nextRandomValue() * (wanderOuterRadius - wanderInnerRadius);
       return new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
     };
     return { waypointA: pickWaypoint(), waypointB: pickWaypoint(), phaseOffset: nextRandomValue() * 2 };
-  }, [animalConfig.pathSeed, clearingRadius, individualIndex, treelineRadius]);
+  }, [animalConfig.pathSeed, clearingRadius, individualIndex, shoreClearanceRadius, treelineRadius]);
 
   useFrame((_, deltaTimeSeconds) => {
     const group = groupRef.current;
@@ -619,6 +627,7 @@ export function ForestWildlife({
   wildlife,
   terrain,
   terrainHeightSampler,
+  shoreClearanceRadius,
   worldSeed,
   selectedPlanetKey,
   onHoverPlanet,
@@ -649,6 +658,7 @@ export function ForestWildlife({
               individualIndex={individualIndex}
               clearingRadius={clearingRadius}
               treelineRadius={treelineRadius}
+              shoreClearanceRadius={shoreClearanceRadius}
               terrainHeightSampler={terrainHeightSampler}
               pointOfInterest={pointOfInterest}
               isSelected={identityKey === selectedPlanetKey}
@@ -696,6 +706,7 @@ export function ForestWildlife({
                 individualIndex={0}
                 clearingRadius={clearingRadius}
                 treelineRadius={treelineRadius}
+                shoreClearanceRadius={shoreClearanceRadius}
                 terrainHeightSampler={terrainHeightSampler}
                 pointOfInterest={pointOfInterest}
                 isSelected={identityKey === selectedPlanetKey}

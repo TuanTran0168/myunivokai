@@ -41,6 +41,8 @@ type ForestLandmarkProps = {
   pointOfInterest: PlanetSceneConfig;
   landmarkIndex: number;
   terrainHeightSampler: TerrainHeightSampler;
+  /** Shore radius: nothing may be placed closer to the centre than this. */
+  minimumRadiusFromCenter: number;
   isSelected: boolean;
   isHovered: boolean;
   onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
@@ -149,6 +151,7 @@ function ForestLandmark({
   pointOfInterest,
   landmarkIndex,
   terrainHeightSampler,
+  minimumRadiusFromCenter,
   isSelected,
   isHovered,
   onHoverPlanet,
@@ -159,11 +162,14 @@ function ForestLandmark({
 
   const landmarkPosition = useMemo(() => {
     const angle = landmark.angleRadians ?? 0;
-    const radius = landmark.radiusFromCenter ?? 6;
+    // The backend picks radiusFromCenter with no knowledge of the lake, and the
+    // lake now covers most of the clearing — so a shrine or lantern would stand
+    // in open water ("cây đèn ở dưới sông vô lý"). Push outward to the shore.
+    const radius = Math.max(landmark.radiusFromCenter ?? 6, minimumRadiusFromCenter);
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     return new Vector3(x, terrainHeightSampler(x, z), z);
-  }, [landmark.angleRadians, landmark.radiusFromCenter, terrainHeightSampler]);
+  }, [landmark.angleRadians, landmark.radiusFromCenter, minimumRadiusFromCenter, terrainHeightSampler]);
 
   // Landmarks are static: register the camera-focus position once (the same
   // Map CameraRig lerps toward for planets).
@@ -240,6 +246,7 @@ type ForestLandmarksProps = {
   landmarks?: ForestLandmarkConfig[];
   pointsOfInterest: PlanetSceneConfig[];
   terrainHeightSampler: TerrainHeightSampler;
+  minimumRadiusFromCenter: number;
   selectedPlanetKey: string | null;
   hoveredPlanetKey: string | null;
   onHoverPlanet: (pointOfInterest: PlanetSceneConfig | null) => void;
@@ -250,6 +257,7 @@ export function ForestLandmarks({
   landmarks,
   pointsOfInterest,
   terrainHeightSampler,
+  minimumRadiusFromCenter,
   selectedPlanetKey,
   hoveredPlanetKey,
   onHoverPlanet,
@@ -270,6 +278,7 @@ export function ForestLandmarks({
             pointOfInterest={pointOfInterest}
             landmarkIndex={landmarkIndex}
             terrainHeightSampler={terrainHeightSampler}
+            minimumRadiusFromCenter={minimumRadiusFromCenter}
             isSelected={identityKey === selectedPlanetKey}
             isHovered={identityKey === hoveredPlanetKey}
             onHoverPlanet={onHoverPlanet}

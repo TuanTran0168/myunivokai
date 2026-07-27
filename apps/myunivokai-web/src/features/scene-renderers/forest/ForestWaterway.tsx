@@ -7,9 +7,11 @@ import type { ForestSeasonConfig, ForestTerrainConfig } from "@/lib/types";
 import {
   createRiverShape,
   lakeRadiusFromTerrain,
+  lakeShapeSeedFromTerrain,
   mixHexColors,
   riverCenterlineAt,
   riverHalfWidthAt,
+  riverLakeExitDistance,
   type TerrainHeightSampler
 } from "./forestMath";
 import { ForestPondWater, ForestWaterShoreline, getRippleNormalTexture } from "./ForestPondWater";
@@ -34,6 +36,9 @@ import { ForestPondWater, ForestWaterShoreline, getRippleNormalTexture } from ".
 //    Moving shallow water hides the missing mirror; a still surface would not.
 
 const RIVER_LENGTH_SEGMENTS = 96;
+const RIVER_DIRECTION_SIGNS: Array<1 | -1> = [1, -1];
+// The mouth tucks slightly under the lake's shore band so the joint has no gap.
+const RIVER_LAKE_OVERLAP = 0.4;
 // Water sits a hair above the ground it covers rather than being carved into
 // the terrain mesh, the same trick the original pond used.
 const RIVER_SURFACE_LIFT = 0.05;
@@ -64,6 +69,8 @@ type RiverGeometryInput = {
   /** Extra half width, used to build the slightly wider bed under the water. */
   widthMargin: number;
   surfaceLift: number;
+  /** +1 draws the outflow, -1 the inflow. Each starts at the shoreline. */
+  directionSign: 1 | -1;
 };
 
 /**
@@ -76,10 +83,16 @@ function buildRiverRibbonGeometry({
   terrain,
   terrainHeightSampler,
   widthMargin,
-  surfaceLift
+  surfaceLift,
+  directionSign
 }: RiverGeometryInput): BufferGeometry {
   const shape = createRiverShape(terrain);
-  const lakeRadius = lakeRadiusFromTerrain(terrain);
+  // Start AT the shoreline, not at the origin. The first version ran the ribbon
+  // straight through the middle of the lake, so a light strip with its own banks
+  // was drawn on top of the water — "nó bị sông đè lên rồi".
+  const lakeExitDistance = riverLakeExitDistance(shape, terrain);
+  const startAlong = lakeExitDistance - RIVER_LAKE_OVERLAP;
+  const endAlong = Math.max(startAlong + 1, shape.spanRadius);
   const stationCount = RIVER_LENGTH_SEGMENTS + 1;
   const positions = new Float32Array(stationCount * 2 * 3);
   const uvs = new Float32Array(stationCount * 2 * 2);
@@ -89,10 +102,11 @@ function buildRiverRibbonGeometry({
   let previousCenter: { x: number; z: number } | null = null;
 
   for (let stationIndex = 0; stationIndex < stationCount; stationIndex += 1) {
-    const along = (stationIndex / RIVER_LENGTH_SEGMENTS) * 2 * shape.spanRadius - shape.spanRadius;
+    const along =
+      directionSign * (startAlong + (stationIndex / RIVER_LENGTH_SEGMENTS) * (endAlong - startAlong));
     const center = riverCenterlineAt(shape, along);
     // Central difference for the tangent; one-sided at the two ends.
-    const tangentStep = shape.spanRadius / RIVER_LENGTH_SEGMENTS;
+    const tangentStep = (endAlong - startAlong) / RIVER_LENGTH_SEGMENTS;
     const ahead = riverCenterlineAt(shape, along + tangentStep);
     const behind = riverCenterlineAt(shape, along - tangentStep);
     const tangentX = ahead.x - behind.x;
@@ -101,7 +115,7 @@ function buildRiverRibbonGeometry({
     const normalX = -tangentZ / tangentLength;
     const normalZ = tangentX / tangentLength;
 
-    const halfWidth = riverHalfWidthAt(along, lakeRadius) + widthMargin;
+    const halfWidth = riverHalfWidthAt(along, lakeExitDistance) + widthMargin;
     if (previousCenter) {
       travelledDistance += Math.hypot(center.x - previousCenter.x, center.z - previousCenter.z);
     }
@@ -143,21 +157,34 @@ type ForestWaterwayProps = {
 
 export function ForestWaterway({ terrain, season, terrainHeightSampler }: ForestWaterwayProps) {
   const lakeRadius = lakeRadiusFromTerrain(terrain);
-  const lakeShapeSeed = `${terrain?.placementSeed ?? "forest-terrain"}-lake`;
+  const lakeShapeSeed = lakeShapeSeedFromTerrain(terrain);
   const waterColor = WATER_COLORS_BY_SEASON_KIND[season?.kind ?? "spring"] ?? WATER_BASE_COLOR;
 
-  const riverGeometry = useMemo(
-    () => buildRiverRibbonGeometry({ terrain, terrainHeightSampler, widthMargin: 0, surfaceLift: RIVER_SURFACE_LIFT }),
+  // Outflow and inflow are separate meshes so neither has to span the lake.
+  const riverGeometries = useMemo(
+    () =>
+      RIVER_DIRECTION_SIGNS.map((directionSign) =>
+        buildRiverRibbonGeometry({
+          terrain,
+          terrainHeightSampler,
+          widthMargin: 0,
+          surfaceLift: RIVER_SURFACE_LIFT,
+          directionSign
+        })
+      ),
     [terrain, terrainHeightSampler]
   );
-  const riverBedGeometry = useMemo(
+  const riverBedGeometries = useMemo(
     () =>
-      buildRiverRibbonGeometry({
-        terrain,
-        terrainHeightSampler,
-        widthMargin: RIVER_BED_WIDTH_MARGIN,
-        surfaceLift: RIVER_BED_LIFT
-      }),
+      RIVER_DIRECTION_SIGNS.map((directionSign) =>
+        buildRiverRibbonGeometry({
+          terrain,
+          terrainHeightSampler,
+          widthMargin: RIVER_BED_WIDTH_MARGIN,
+          surfaceLift: RIVER_BED_LIFT,
+          directionSign
+        })
+      ),
     [terrain, terrainHeightSampler]
   );
 
@@ -183,22 +210,26 @@ export function ForestWaterway({ terrain, season, terrainHeightSampler }: Forest
     <group>
       {/* Bed first: a wider, matte strip under the water so the channel has a
           visible bank instead of a water ribbon floating on grass. */}
-      <mesh geometry={riverBedGeometry} receiveShadow>
-        <meshStandardMaterial color={RIVER_BED_COLOR} roughness={1} side={DoubleSide} />
-      </mesh>
-      <mesh geometry={riverGeometry}>
-        <meshStandardMaterial
-          color={waterColor}
-          transparent
-          opacity={RIVER_OPACITY}
-          roughness={0.14}
-          metalness={0.35}
-          envMapIntensity={1.6}
-          side={DoubleSide}
-          normalMap={riverRippleTexture as unknown as Texture}
-          normalScale={RIVER_NORMAL_STRENGTH}
-        />
-      </mesh>
+      {riverBedGeometries.map((geometry, geometryIndex) => (
+        <mesh key={`bed-${geometryIndex}`} geometry={geometry} receiveShadow>
+          <meshStandardMaterial color={RIVER_BED_COLOR} roughness={1} side={DoubleSide} />
+        </mesh>
+      ))}
+      {riverGeometries.map((geometry, geometryIndex) => (
+        <mesh key={`water-${geometryIndex}`} geometry={geometry}>
+          <meshStandardMaterial
+            color={waterColor}
+            transparent
+            opacity={RIVER_OPACITY}
+            roughness={0.14}
+            metalness={0.35}
+            envMapIntensity={1.6}
+            side={DoubleSide}
+            normalMap={riverRippleTexture as unknown as Texture}
+            normalScale={RIVER_NORMAL_STRENGTH}
+          />
+        </mesh>
+      ))}
 
       {/* Shoreline, then the mirror surface on top of it. Both follow the SAME
           seeded outline, so the bank stays a constant width all the way round a
