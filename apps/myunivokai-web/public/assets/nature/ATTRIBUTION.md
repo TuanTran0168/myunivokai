@@ -64,6 +64,8 @@ Credit must remain wherever this ships.
 | File | Credit | Source |
 | --- | --- | --- |
 | tree-fir-realistic.glb | "Realistic Fir Trees Pack (LODS, gameready)" by LOLIPOP via Sketchfab | <https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7> |
+| tree-fir-distant.glb | same pack as above — LOD2 kept instead of LOD0, for the horizon belt | <https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7> |
+| tree-oak-realistic.glb | "oak trees" by DJMaesen via Sketchfab | <https://sketchfab.com/3d-models/oak-trees-d841c3bcc5324daebee50f45619e05fc> |
 | animal-bear.glb | "Realistic Animated Bear 3D Model" by AnimalMesh 3D via Sketchfab | <https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1> |
 | animal-boar.glb | "Animated Realistic Boar – 3D Animal Model" by AnimalMesh 3D via Sketchfab | <https://sketchfab.com/3d-models/animated-realistic-boar-3d-animal-model-f672a7fd93e84997b80a54ba30956111> |
 | animal-rabbit.glb | "Hare (animated)" via Sketchfab | <https://sketchfab.com/3d-models/hare-animated-948938cd237d49a9868662213fa05543> |
