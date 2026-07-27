@@ -72,6 +72,8 @@ const MINIMUM_RENDER_FOG_DENSITY = 0.004;
 
 // Dry-land breathing room past the widest point of the shoreline.
 const SHORE_PLACEMENT_MARGIN = 1.8;
+// Extra bank kept clear of trees and decor, on top of their own 1.6 exclusion.
+const LAKE_SHORE_PLANTING_BUFFER = 2.8;
 
 /**
  * Renders a ForestSceneConfig: seeded terrain with a clearing and dirt path,
@@ -99,7 +101,13 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
       Math.min(
         pathLateralDistanceSampler(x, z),
         riverEdgeDistanceSampler(x, z),
-        lakeEdgeDistanceSampler(x, z)
+        // Reported SHORT of the true distance so trees and decor keep a real
+        // bank between the treeline and the water. Consumers reject anything
+        // under their own exclusion half-width (1.6), so the effective
+        // clearance is that plus this buffer. Trees grew right to the waterline
+        // when the true distance was reported, which left the lake looking
+        // pasted into the forest rather than sitting in a clearing.
+        lakeEdgeDistanceSampler(x, z) - LAKE_SHORE_PLANTING_BUFFER
       );
   }, [pathLateralDistanceSampler, terrain]);
   // Everything the backend positions by radius alone (landmarks) has to clear

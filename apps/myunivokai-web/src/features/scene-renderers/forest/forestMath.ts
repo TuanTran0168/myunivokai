@@ -47,7 +47,7 @@ const PATH_CURVE_RADIAL_FREQUENCY = 0.16;
 // createTerrainHeightSampler CARVES a basin for it (see LAKE_BED_DEPTH). That
 // carve is what lets the surface stay planar, and planarity is what keeps
 // MeshReflectorMaterial valid.
-const LAKE_RADIUS_FRACTION_OF_CLEARING = 0.85;
+const LAKE_RADIUS_FRACTION_OF_CLEARING = 1.0;
 // How far past the water's edge the ground climbs back to its natural height.
 const LAKE_SHORE_BLEND_WIDTH = 2.2;
 // How far the bed sits below the water plane. Only has to beat the local hill
@@ -211,9 +211,11 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
 // non-integer harmonic leaves a visible notch at the seam). Everything stays at
 // a single Y, so the surface is still planar and MeshReflectorMaterial remains
 // valid — that planarity is the whole reason the lake sits on flat ground.
-const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5];
-const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.16, 0.09, 0.05];
-const WATER_OUTLINE_SEGMENTS = 96;
+// Five harmonics, not three: three give a smooth potato, and the high pair is
+// what produces actual inlets and small headlands rather than a rounded blob.
+const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11];
+const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.15, 0.095, 0.06, 0.038, 0.022];
+const WATER_OUTLINE_SEGMENTS = 160;
 
 export type WaterOutline = {
   /** Radius multiplier at an angle; averages ~1 so `radius` stays the mean. */

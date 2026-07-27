@@ -69,10 +69,62 @@ figure is `maximumOutlineRadiusFactor()` and is what neighbours must clear.
 The water surface and its shoreline band are generated from the **same** seed, so
 the bank keeps a constant width around an irregular shore.
 
-**Rejected: downloading a lake GLB.** Tempting, and explicitly requested, but it
-does not address either real defect — the circle came from our geometry, and the
-white blowout came from our material. A downloaded mesh would inherit both, plus
-the arbitrary pivot/up-axis problem that sank the baked-scene attempt.
+### Downloaded water assets: there is no supply
+
+Asked for repeatedly, so this was **checked rather than argued**:
+
+```
+curl -s "https://api.polyhaven.com/assets?t=textures"   # 786 CC0 textures
+```
+
+Zero water-surface normal maps. Every "water" tag hit is a **beach, sand, coral
+or mud** ground texture (`aerial_beach_*`, `coast_sand_*`, `coral_*`,
+`mud_cracked_dry_riverbed_002`). Poly Haven is the CC0 library this project
+already uses for HDRIs and ground PBR, so if it were there we would have it.
+
+A lake **GLB** does not help either, for reasons independent of supply: it is a
+static baked mesh, so it can neither ripple nor drive a planar reflector, and it
+would arrive with an arbitrary pivot/up-axis — the exact failure that sank the
+baked-scene attempt (see [[forest-baked-scene-approach-failed]]). It also could
+not match the terrain basin carved for it.
+
+**Re-check before spending time on this again**: the blocker is supply, not
+preference. If a CC0 water normal map appears, it drops straight into
+`getRippleNormalTexture`'s slot.
+
+### The lake was a literal plane
+
+The single biggest cause of *"nhìn vẫn còn giả"*. The surface was a triangle fan:
+one centre vertex, a ring of boundary vertices, **all at the same height, no
+interior geometry at all**. No material rescues that — a flat sheet reflects the
+sky uniformly and reads as painted plastic however good the normal map is.
+
+It is now a tessellated radial grid (22 rings × 160 segments ≈ 3.5k vertices,
+6.9k triangles) **displaced every frame** by four travelling waves whose
+directions are unaligned and whose wavelengths are not integer multiples — so the
+sum never settles into a pattern. Measured: **0.378 m peak-to-trough, 10.5° max
+slope.**
+
+Normals come from the **analytic derivative** of the same height field, not from
+recomputing face normals — that would cost a full index-buffer pass per frame and
+come out faceted anyway.
+
+Verified before shipping (a bad index buffer shows as holes, which is invisible
+until rendered): no edge shared by more than two triangles, zero degenerate
+triangles, 204 boundary edges = 160 rim + 44 seam (the seam vertices are
+coincident and get identical displacement, so it cannot crack).
+
+**Two constraints that bit during this change:**
+
+- Waves must taper to nothing at the rim, with a **smoothstep** — a linear taper
+  leaves a visible crease where it starts and keeps enough amplitude at the edge
+  for a trough to dip through the shoreline band.
+- `WATER_SURFACE_HEIGHT` must stay **low** (0.07). Raising it to clear the
+  deepest trough leaves the water visibly perched above its own bank like a
+  filled pool. It does not need to clear anything: the rim is calm, and the
+  interior has a carved bed a metre down.
+- The shoreline band is an **annulus**, not a disc, tucked `SHORELINE_UNDERLAP`
+  under the water. A disc under the lake would z-fight the water everywhere.
 
 ### Why the surface read as plastic
 
