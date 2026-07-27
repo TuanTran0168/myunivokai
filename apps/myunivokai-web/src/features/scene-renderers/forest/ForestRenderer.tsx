@@ -7,6 +7,7 @@ import { pointsOfInterestFromScene } from "@/lib/scene";
 import { createPathLateralDistanceSampler, createTerrainHeightSampler, treelineRadiusFromTerrain } from "./forestMath";
 import { natureHdriUrlForKey } from "./forestModels";
 import { ForestAmbientParticles } from "./ForestAmbientParticles";
+import { ForestDistantTreeline } from "./ForestDistantTreeline";
 import { ForestGroundDecor } from "./ForestGroundDecor";
 import { ForestLandmarks } from "./ForestLandmarks";
 import { ForestSkyDome, sunDirectionFromLighting } from "./ForestSkyDome";
@@ -121,6 +122,9 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrainHeightSampler={terrainHeightSampler}
         pathLateralDistanceSampler={pathLateralDistanceSampler}
       />
+      {/* Forested hills ringing the clearing, so the world does not end at the
+          treeline in bare tinted ground. */}
+      <ForestDistantTreeline terrain={terrain} terrainHeightSampler={terrainHeightSampler} />
       <ForestGroundDecor
         terrain={terrain}
         season={season}

@@ -65,6 +65,19 @@ export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
   ]
 };
 
+/**
+ * Cheap conifers for the horizon belt (LOD2 of the same fir pack, 512px
+ * textures): the land beyond the treeline used to be bare tinted ground, which
+ * read as an oddly empty clearing rimmed by nothing. These fill it. They are
+ * only ever seen at distance, so the low-detail LOD is invisible as such while
+ * costing a fraction of the LOD0 trunks.
+ */
+export const DISTANT_TREE_MODEL_DEFINITION: ForestModelDefinition = {
+  fileName: "tree-fir-distant.glb",
+  targetHeight: 9,
+  splitIntoVariants: true
+};
+
 export const ROCK_MODEL_DEFINITIONS: ForestModelDefinition[] = [
   { fileName: "rock-mossy-1.glb", targetHeight: 1.0 },
   { fileName: "rock-mossy-2.glb", targetHeight: 0.9 },
