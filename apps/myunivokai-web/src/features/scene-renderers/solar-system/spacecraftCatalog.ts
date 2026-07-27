@@ -47,4 +47,4 @@ export const BENNU_TARGET_SIZE = 0.34;
  * feature, so it lazy-loads inside its own Suspense boundary.
  */
 export const BLACK_HOLE_MODEL_URL = `${SOLAR_SYSTEM_MODEL_BASE_PATH}/black-hole.glb`;
-export const BLACK_HOLE_TARGET_SIZE = 12;
+export const BLACK_HOLE_TARGET_SIZE = 13;
