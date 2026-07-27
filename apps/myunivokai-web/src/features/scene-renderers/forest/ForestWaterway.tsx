@@ -12,7 +12,7 @@ import {
   riverHalfWidthAt,
   type TerrainHeightSampler
 } from "./forestMath";
-import { ForestPondWater, getRippleNormalTexture } from "./ForestPondWater";
+import { ForestPondWater, ForestWaterShoreline, getRippleNormalTexture } from "./ForestPondWater";
 
 // The forest's water system: a real lake in the middle of the clearing, with a
 // river running through it and out to the hills.
@@ -38,7 +38,7 @@ const RIVER_LENGTH_SEGMENTS = 96;
 // the terrain mesh, the same trick the original pond used.
 const RIVER_SURFACE_LIFT = 0.05;
 const RIVER_BED_LIFT = 0.02;
-const RIVER_BED_WIDTH_MARGIN = 0.5;
+const RIVER_BED_WIDTH_MARGIN = 0.3;
 
 const RIVER_UV_LENGTH_SCALE = 0.12;
 const RIVER_NORMAL_REPEAT = 2;
@@ -46,7 +46,7 @@ const RIVER_SCROLL_SPEED = new Vector2(0.0, 0.09);
 const RIVER_NORMAL_STRENGTH = new Vector2(0.5, 0.5);
 const RIVER_OPACITY = 0.86;
 
-const LAKE_SHORE_RING_WIDTH = 0.6;
+const LAKE_SHORE_BAND_WIDTH = 0.55;
 
 const WATER_BASE_COLOR = "#2E6E8E";
 // Winter reads as meltwater over pale ice, not as summer teal.
@@ -143,6 +143,7 @@ type ForestWaterwayProps = {
 
 export function ForestWaterway({ terrain, season, terrainHeightSampler }: ForestWaterwayProps) {
   const lakeRadius = lakeRadiusFromTerrain(terrain);
+  const lakeShapeSeed = `${terrain?.placementSeed ?? "forest-terrain"}-lake`;
   const waterColor = WATER_COLORS_BY_SEASON_KIND[season?.kind ?? "spring"] ?? WATER_BASE_COLOR;
 
   const riverGeometry = useMemo(
@@ -199,12 +200,21 @@ export function ForestWaterway({ terrain, season, terrainHeightSampler }: Forest
         />
       </mesh>
 
-      {/* Shoreline, then the mirror surface on top of it. */}
-      <mesh position={[0, RIVER_BED_LIFT, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <ringGeometry args={[lakeRadius - 0.05, lakeRadius + LAKE_SHORE_RING_WIDTH, 64]} />
-        <meshStandardMaterial color={RIVER_BED_COLOR} roughness={1} />
-      </mesh>
-      <ForestPondWater radius={lakeRadius} tintColor={mixHexColors(waterColor, "#0B2733", 0.15).getStyle()} />
+      {/* Shoreline, then the mirror surface on top of it. Both follow the SAME
+          seeded outline, so the bank stays a constant width all the way round a
+          shore that is never a clean arc. */}
+      <ForestWaterShoreline
+        radius={lakeRadius}
+        shapeSeed={lakeShapeSeed}
+        bandWidth={LAKE_SHORE_BAND_WIDTH}
+        color={RIVER_BED_COLOR}
+        height={RIVER_BED_LIFT}
+      />
+      <ForestPondWater
+        radius={lakeRadius}
+        shapeSeed={lakeShapeSeed}
+        tintColor={mixHexColors(waterColor, "#0B2733", 0.15).getStyle()}
+      />
     </group>
   );
 }

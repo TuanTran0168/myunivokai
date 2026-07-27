@@ -127,6 +127,48 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
   };
 }
 
+// A perfect circle never reads as a lake — a real shoreline is lobed and
+// uneven. These build the outline as a seeded sum of sine harmonics at INTEGER
+// frequencies, which is what makes the loop close exactly at theta = 2*PI (a
+// non-integer harmonic leaves a visible notch at the seam). Everything stays at
+// a single Y, so the surface is still planar and MeshReflectorMaterial remains
+// valid — that planarity is the whole reason the lake sits on flat ground.
+const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5];
+const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.16, 0.09, 0.05];
+const WATER_OUTLINE_SEGMENTS = 96;
+
+export type WaterOutline = {
+  /** Radius multiplier at an angle; averages ~1 so `radius` stays the mean. */
+  radiusFactorAt: (angleRadians: number) => number;
+  segments: number;
+};
+
+export function createWaterOutline(seedText: string): WaterOutline {
+  const nextRandomValue = randomFromSeed(seedText + "-water-outline");
+  const harmonics = WATER_OUTLINE_HARMONIC_FREQUENCIES.map((frequency, harmonicIndex) => ({
+    frequency,
+    phase: nextRandomValue() * FULL_CIRCLE_RADIANS,
+    amplitude: WATER_OUTLINE_HARMONIC_AMPLITUDES[harmonicIndex]
+  }));
+  return {
+    segments: WATER_OUTLINE_SEGMENTS,
+    radiusFactorAt: (angleRadians: number) => {
+      let factor = 1;
+      for (const harmonic of harmonics) {
+        factor += Math.sin(harmonic.frequency * angleRadians + harmonic.phase) * harmonic.amplitude;
+      }
+      // Sines average to zero, so the mean factor is 1; the floor only guards
+      // against a pathological seed pinching the shore through the centre.
+      return Math.max(0.45, factor);
+    }
+  };
+}
+
+/** Largest radius the outline reaches — what neighbours must stay clear of. */
+export function maximumOutlineRadiusFactor(): number {
+  return 1 + WATER_OUTLINE_HARMONIC_AMPLITUDES.reduce((sum, amplitude) => sum + amplitude, 0);
+}
+
 export function clampValue(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }

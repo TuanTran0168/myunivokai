@@ -3,7 +3,17 @@
 import { useMemo, useRef } from "react";
 import { MeshReflectorMaterial } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { DataTexture, LinearFilter, RepeatWrapping, RGBAFormat, Vector2, type Texture } from "three";
+import {
+  BufferAttribute,
+  BufferGeometry,
+  DataTexture,
+  LinearFilter,
+  RepeatWrapping,
+  RGBAFormat,
+  Vector2,
+  type Texture
+} from "three";
+import { createWaterOutline, type WaterOutline } from "./forestMath";
 
 // Real-looking pond water. The old pond was a flat disc with metalness 0.85 and
 // roughness 0.12 — a shiny blue coin: it reflected nothing (an HDRI alone gives
@@ -97,13 +107,59 @@ export function getRippleNormalTexture(): DataTexture {
   return sharedRippleTexture;
 }
 
+/**
+ * Fan-triangulated disc whose boundary follows a seeded organic outline instead
+ * of a circle. Built in the XY plane so the caller's existing -PI/2 X rotation
+ * still lays it flat, and UVs are generated so the ripple normal map tiles
+ * across it in world-ish proportions.
+ */
+function buildOrganicWaterDiscGeometry(radius: number, outline: WaterOutline): BufferGeometry {
+  const vertexCount = outline.segments + 2; // centre + boundary ring (closed)
+  const positions = new Float32Array(vertexCount * 3);
+  const uvs = new Float32Array(vertexCount * 2);
+  const indices: number[] = [];
+
+  uvs[0] = 0.5;
+  uvs[1] = 0.5;
+  for (let segmentIndex = 0; segmentIndex <= outline.segments; segmentIndex += 1) {
+    const angle = (segmentIndex / outline.segments) * Math.PI * 2;
+    const boundaryRadius = radius * outline.radiusFactorAt(angle);
+    const x = Math.cos(angle) * boundaryRadius;
+    const y = Math.sin(angle) * boundaryRadius;
+    const vertexIndex = segmentIndex + 1;
+    positions[vertexIndex * 3] = x;
+    positions[vertexIndex * 3 + 1] = y;
+    uvs[vertexIndex * 2] = 0.5 + x / (radius * 2);
+    uvs[vertexIndex * 2 + 1] = 0.5 + y / (radius * 2);
+    if (segmentIndex > 0) {
+      indices.push(0, vertexIndex - 1, vertexIndex);
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 type ForestPondWaterProps = {
+  /** MEAN radius: the organic outline varies around it. */
   radius: number;
   /** Landmark accent, mixed into the water tint so ponds stay per-world. */
   tintColor: string;
+  /** Drives the shoreline shape; same seed, same lake. */
+  shapeSeed: string;
+  /**
+   * True render-to-texture mirror. Costs a whole extra scene render, so only
+   * the hero lake gets it — small ponds fall back to environment reflection,
+   * which is indistinguishable at their size.
+   */
+  reflective?: boolean;
 };
 
-export function ForestPondWater({ radius, tintColor }: ForestPondWaterProps) {
+export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = true }: ForestPondWaterProps) {
   const rippleTexture = useMemo(() => getRippleNormalTexture(), []);
   // The second layer is a clone so the two can scroll independently while
   // sharing the same GPU image.
@@ -127,29 +183,69 @@ export function ForestPondWater({ radius, tintColor }: ForestPondWaterProps) {
     );
   });
 
+  const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
+  const geometry = useMemo(() => buildOrganicWaterDiscGeometry(radius, outline), [outline, radius]);
+
   return (
-    <mesh position={[0, WATER_SURFACE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <circleGeometry args={[radius, 48]} />
-      <MeshReflectorMaterial
-        // Reflection is intentionally soft: a mirror-sharp pond looks like
-        // polished chrome, while a blurred one reads as water under a breeze.
-        resolution={512}
-        mixBlur={0.85}
-        mixStrength={2.2}
-        blur={[220, 60]}
-        mirror={0.55}
-        // Shallow edges stay lighter and more transparent than the middle,
-        // which is what stops the disc from looking like a cut-out hole.
-        depthScale={0.9}
-        minDepthThreshold={0.3}
-        maxDepthThreshold={1.2}
-        depthToBlurRatioBias={0.3}
-        color={tintColor}
-        roughness={0.28}
-        metalness={0.1}
-        normalMap={rippleTexture as unknown as Texture}
-        normalScale={NORMAL_STRENGTH}
-      />
+    <mesh geometry={geometry} position={[0, WATER_SURFACE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {reflective ? (
+        <MeshReflectorMaterial
+          // Tuned DOWN from the first pass, which blew out into white patches
+          // with a visible grid: mixStrength 2.2 pushed the reflection well past
+          // the sky's own brightness, and the depth-blend parameters
+          // (depthScale/minDepthThreshold/...) need a depth buffer that the
+          // alpha-masked foliage in this scene does not populate cleanly, so they
+          // banded. Reflection is now support, not the dominant term.
+          resolution={512}
+          mixBlur={1}
+          mixStrength={0.8}
+          blur={[140, 40]}
+          mirror={0.4}
+          color={tintColor}
+          roughness={0.35}
+          metalness={0.2}
+          normalMap={rippleTexture as unknown as Texture}
+          normalScale={NORMAL_STRENGTH}
+        />
+      ) : (
+        <meshStandardMaterial
+          color={tintColor}
+          transparent
+          opacity={0.9}
+          roughness={0.16}
+          metalness={0.3}
+          envMapIntensity={1.5}
+          normalMap={rippleTexture as unknown as Texture}
+          normalScale={NORMAL_STRENGTH}
+        />
+      )}
+    </mesh>
+  );
+}
+
+/** Shoreline band hugging the same outline, so the bank is never a clean arc. */
+export function ForestWaterShoreline({
+  radius,
+  shapeSeed,
+  bandWidth,
+  color,
+  height
+}: {
+  radius: number;
+  shapeSeed: string;
+  bandWidth: number;
+  color: string;
+  height: number;
+}) {
+  const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
+  const geometry = useMemo(() => {
+    const inner = buildOrganicWaterDiscGeometry(radius + bandWidth, outline);
+    return inner;
+  }, [bandWidth, outline, radius]);
+
+  return (
+    <mesh geometry={geometry} position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <meshStandardMaterial color={color} roughness={1} />
     </mesh>
   );
 }

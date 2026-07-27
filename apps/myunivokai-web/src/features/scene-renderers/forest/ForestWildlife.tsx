@@ -253,9 +253,10 @@ function GroundAnimal({
 
   const { waypointA, waypointB, phaseOffset } = useMemo(() => {
     const nextRandomValue = randomFromSeed(`${animalConfig.pathSeed ?? "forest-animal"}-individual-${individualIndex}`);
-    // Starts outside the lake (lakeRadiusFromTerrain is 0.46x the clearing), so
-    // nothing wanders across open water.
-    const wanderInnerRadius = clearingRadius * 0.62;
+    // Starts outside the lake, so nothing wanders across open water. The lake's
+    // MEAN radius is 0.46x the clearing but its organic outline reaches 1.30x
+    // that (maximumOutlineRadiusFactor), i.e. ~0.60x — hence 0.68, not 0.46.
+    const wanderInnerRadius = clearingRadius * 0.68;
     const wanderOuterRadius = Math.min(clearingRadius * 2.4, treelineRadius * 0.8);
     const pickWaypoint = () => {
       const angle = nextRandomValue() * Math.PI * 2;

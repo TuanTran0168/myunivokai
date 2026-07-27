@@ -10,7 +10,7 @@ import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { usePlanetPositionTracker } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 import { getSoftCircleTexture } from "@/features/scene-renderers/shared/softCircleTexture";
 import { mixHexColors, type TerrainHeightSampler } from "./forestMath";
-import { ForestPondWater } from "./ForestPondWater";
+import { ForestPondWater, ForestWaterShoreline } from "./ForestPondWater";
 import { LANDMARK_MODEL_CATALOG, natureModelUrl, normalizationForObject } from "./forestModels";
 
 // The clickable POI layer — one hero object per Nature DNA landmark, the
@@ -114,19 +114,27 @@ function LandmarkShape({ landmark }: { landmark: ForestLandmarkConfig }) {
   // better than any low-poly pond model at this scale (see ForestPondWater —
   // it reflects the actual trees and sky, which a metallic disc never did).
   if (landmark.kind === "pond") {
+    const pondShapeSeed = `${landmark.key ?? "landmark"}-pond`;
     return (
       <group>
-        <ForestPondWater radius={POND_RADIUS} tintColor={mixHexColors("#2E6E8E", accentColor, 0.25).getStyle()} />
-        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[POND_RADIUS, POND_RADIUS + 0.22, 28]} />
-          <meshStandardMaterial color="#7D8577" flatShading roughness={1} />
-        </mesh>
+        {/* Non-reflective: the hero lake in the clearing already pays for one
+            extra scene render, and a second mirror this small showed up only as
+            a blown-out white patch. */}
+        <ForestWaterShoreline
+          radius={POND_RADIUS}
+          shapeSeed={pondShapeSeed}
+          bandWidth={0.24}
+          color="#7D8577"
+          height={0.04}
+        />
+        <ForestPondWater
+          radius={POND_RADIUS}
+          shapeSeed={pondShapeSeed}
+          reflective={false}
+          tintColor={mixHexColors("#2E6E8E", accentColor, 0.25).getStyle()}
+        />
         <mesh position={[POND_RADIUS * 0.4, 0.06, POND_RADIUS * 0.25]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[0.22, 8]} />
-          <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
-        </mesh>
-        <mesh position={[-POND_RADIUS * 0.35, 0.06, -POND_RADIUS * 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.16, 8]} />
           <meshStandardMaterial color="#4F8A3D" flatShading roughness={0.8} />
         </mesh>
       </group>

@@ -136,13 +136,17 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
       />
 
       <ForestSkyDome lighting={lighting} weather={weather} />
+      {/* Terrain gets the PATH-ONLY sampler on purpose: this sampler also paints
+          the ground as bare dirt, and running it over the river turned the
+          channel into a wide tan road. The riverbed gets its own strip in
+          ForestWaterway. Trees and decor below use the water-aware one. */}
       <ForestTerrain
         terrain={terrain}
         season={season}
         trees={trees}
         horizonColor={fogColor}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={clearFloorDistanceSampler}
+        pathLateralDistanceSampler={pathLateralDistanceSampler}
       />
       <ForestTrees
         trees={trees}

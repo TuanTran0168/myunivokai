@@ -53,12 +53,54 @@ Ripple normal map is **procedural** — summed sines at *integer* frequencies,
 which is what guarantees seamless tiling. Zero asset bytes, no attribution
 obligation. Shared singleton, cloned per surface so each scrolls independently.
 
+### The shoreline must not be a circle
+
+First attempt used `circleGeometry` and the owner's verdict was immediate: *"Hồ
+nước quá tệ nó giống như một hình tròn vậy."* A perfect circle never reads as a
+lake at any material quality.
+
+Fixed with `createWaterOutline` in `forestMath.ts`: a seeded sum of sine
+harmonics giving `radiusFactorAt(angle)`. **The frequencies must be integers**,
+or the loop fails to close at `theta = 2*PI` and leaves a visible notch at the
+seam — the same constraint the ripple normal map has, for the same reason.
+Amplitudes sum to 0.30, so the outline reaches `1.30 ×` the mean radius; that
+figure is `maximumOutlineRadiusFactor()` and is what neighbours must clear.
+
+The water surface and its shoreline band are generated from the **same** seed, so
+the bank keeps a constant width around an irregular shore.
+
+**Rejected: downloading a lake GLB.** Tempting, and explicitly requested, but it
+does not address either real defect — the circle came from our geometry, and the
+white blowout came from our material. A downloaded mesh would inherit both, plus
+the arbitrary pivot/up-axis problem that sank the baked-scene attempt.
+
+### The reflector blew out
+
+The first tuning showed white patches with a visible grid. Two causes:
+`mixStrength 2.2` pushed the reflection past the sky's own brightness, and the
+depth-blend parameters (`depthScale`, `minDepthThreshold`, ...) need a depth
+buffer that this scene's **alpha-masked foliage does not populate cleanly**, so
+they banded. Reflection is now a support term: `mixStrength 0.8`, `mirror 0.4`,
+no depth blending.
+
+**Only one reflector per scene.** The landmark pond had a second one, which at
+its size appeared purely as a blown-out white blob for the cost of a whole extra
+scene render. It now uses environment reflection (`reflective={false}`).
+
+### Terrain sampler split
+
+`clearFloorDistanceSampler` (path + water) goes to **trees and decor** only.
+`ForestTerrain` gets the **path-only** sampler, because that sampler also *paints*
+the ground as bare dirt — running it over the river turned the channel into a
+wide tan road across the whole clearing.
+
 **The radii are a coupled set. Changing one breaks another:**
 
 | Feature | Radius | Why |
 |---|---|---|
-| Lake | `0.46 × clearing` | must stay inside the flat zone |
-| Animal wander (inner) | `0.62 × clearing` | keeps animals off open water |
+| Lake (mean) | `0.46 × clearing` | must stay inside the flat zone |
+| Lake (max) | `0.60 × clearing` | mean × `maximumOutlineRadiusFactor()` = 1.30 |
+| Animal wander (inner) | `0.68 × clearing` | clears the lake's *widest* lobe, not its mean |
 | Decor / tree scatter | `0.9 × clearing` | pre-existing |
 | River span | `0.82 × treeline` | stops short of `DISTANT_RISE_INNER_FRACTION` so the channel never climbs the far ridge |
 
