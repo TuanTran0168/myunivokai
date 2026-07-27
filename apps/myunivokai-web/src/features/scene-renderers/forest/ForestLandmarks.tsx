@@ -10,6 +10,7 @@ import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { usePlanetPositionTracker } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 import { getSoftCircleTexture } from "@/features/scene-renderers/shared/softCircleTexture";
 import { mixHexColors, type TerrainHeightSampler } from "./forestMath";
+import { ForestPondWater } from "./ForestPondWater";
 import { LANDMARK_MODEL_CATALOG, natureModelUrl, normalizationForObject } from "./forestModels";
 
 // The clickable POI layer — one hero object per Nature DNA landmark, the
@@ -109,15 +110,13 @@ function LandmarkShape({ landmark }: { landmark: ForestLandmarkConfig }) {
     [landmark.key]
   );
 
-  // The pond stays procedural: a reflective water disc reads better than any
-  // low-poly pond model at this scale.
+  // The pond stays procedural: a real reflective, rippling water surface reads
+  // better than any low-poly pond model at this scale (see ForestPondWater —
+  // it reflects the actual trees and sky, which a metallic disc never did).
   if (landmark.kind === "pond") {
     return (
       <group>
-        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[POND_RADIUS, 28]} />
-          <meshStandardMaterial color={mixHexColors("#2E6E8E", accentColor, 0.25)} metalness={0.85} roughness={0.12} />
-        </mesh>
+        <ForestPondWater radius={POND_RADIUS} tintColor={mixHexColors("#2E6E8E", accentColor, 0.25).getStyle()} />
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[POND_RADIUS, POND_RADIUS + 0.22, 28]} />
           <meshStandardMaterial color="#7D8577" flatShading roughness={1} />
