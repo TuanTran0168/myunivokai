@@ -93,12 +93,22 @@ Vẫn ở tab **Environment** của từng Service, điền các giá trị đ�
 #### 🚀 Service 3: Universe Service (`myunivokai-universe`)
 - `DATABASE_URL`: Dán chuỗi kết nối Pooled của database `myunivokai_universe`.
 - `DATABASE_DIRECT_URL`: Dán chuỗi kết nối Direct của database `myunivokai_universe`.
-- `PUBLIC_WEB_URL`: `https://myunivokai.vercel.app/universe`
+- `PUBLIC_WEB_URL`: `https://<web-origin>` — **không có hậu tố**. Universe giữ URL
+  lịch sử: trang share của nó là `/share/worlds/{slug}`. Trong web app **không tồn
+  tại** route `/universe`, nên nếu thêm hậu tố `/universe` thì mọi link share của
+  universe sẽ 404 (xem `apps/myunivokai-web/src/lib/worldRoutes.ts`).
 
 #### 🚀 Service 4: Nature Service (`myunivokai-nature`)
 - `DATABASE_URL`: Dán chuỗi kết nối Pooled của database `myunivokai_nature`.
 - `DATABASE_DIRECT_URL`: Dán chuỗi kết nối Direct của database `myunivokai_nature`.
-- `PUBLIC_WEB_URL`: `https://myunivokai.vercel.app/nature`
+- `PUBLIC_WEB_URL`: `https://<web-origin>/nature` — **có** hậu tố `/nature`, vì
+  trang share của forest nằm dưới prefix đó: `/nature/share/worlds/{slug}`.
+
+> ⚠️ Hai giá trị này **cố tình khác nhau** (universe không hậu tố, nature có
+> `/nature`). Cả hai đều đặt `sync: false` trong `render.yaml`, nghĩa là phải
+> nhập tay trên Render dashboard — sửa file này **không** tự cập nhật service
+> đang chạy. Sau khi đổi, share link cũ đã phát ra vẫn giữ giá trị sai cho tới
+> khi world được share lại.
 
 Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image từ các file `Dockerfile.prod` và khởi động các services. 
 
