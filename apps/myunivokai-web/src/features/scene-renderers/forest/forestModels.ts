@@ -41,10 +41,15 @@ export const TREE_MODEL_CATALOG: Record<string, ForestModelDefinition[]> = {
     { fileName: "tree-oak-1.glb", targetHeight: 6.5 },
     { fileName: "tree-oak-2.glb", targetHeight: 6.0 }
   ],
-  "tree-pine": [
-    { fileName: "tree-pine-1.glb", targetHeight: 8.5 },
-    { fileName: "tree-pine-2.glb", targetHeight: 7.8 }
-  ],
+  // Real, game-ready fir scans (Sketchfab CC-BY, LOD0 kept, 2048px PBR
+  // textures): three distinct conifers in one file, so splitIntoVariants gives
+  // the scatter three silhouettes. Their branch material is alpha-MASK leaf
+  // cards with a normal map — the detail the stylized low-poly cones could not
+  // carry, which is what made the forest read as a cartoon. Deliberately NOT
+  // named to match FOLIAGE_MATERIAL_NAME_PATTERN: these keep their real
+  // textures instead of being flat-tinted per season, which is also true to
+  // life (firs are evergreen).
+  "tree-pine": [{ fileName: "tree-fir-realistic.glb", targetHeight: 8.5, splitIntoVariants: true }],
   // Only the Quaternius snow pine — the CC-BY "Snow Tree" clashed with the
   // pack's art style (owner: style coherence beats variety).
   "tree-pine-snow": [{ fileName: "tree-pine-snow-1.glb", targetHeight: 8.0 }],

@@ -55,6 +55,21 @@ Licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/li
 | animal-squirrel.glb | "Squirrel" by Poly by Google via Poly Pizza | <https://poly.pizza/m/caxos24uWC9> |
 | bird-hawk.glb (rigged flap animation; also reused tinted as the special-bird crosser) | "Hawk Lp Rigged" by Sherkiz via Poly Pizza | <https://poly.pizza/m/RkN6MEbP6g> |
 
+## CC-BY 4.0 — Sketchfab (attribution required)
+
+Licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+Credit must remain wherever this ships.
+
+| File | Credit | Source |
+| --- | --- | --- |
+| tree-fir-realistic.glb | "Realistic Fir Trees Pack (LODS, gameready)" by LOLIPOP via Sketchfab | <https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7> |
+
+Modifications: the shipped file keeps only the pack's **LOD0** meshes (three
+distinct firs; LOD1–LOD3 and the billboards were pruned), textures resized to
+2048px and re-encoded to WebP at quality 90, then geometry Draco-compressed —
+7.1MB → 1.6MB. Geometry was deliberately **not** simplified: decimation
+destroys the alpha-masked leaf cards that carry the realism.
+
 ## HDRIs — Poly Haven, CC0
 
 1k pure-sky `.hdr` environments under `hdri/`, from [Poly Haven](https://polyhaven.com) (CC0):
