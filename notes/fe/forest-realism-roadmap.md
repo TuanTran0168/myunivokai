@@ -73,11 +73,16 @@ the bank keeps a constant width around an irregular shore.
 
 Asked for repeatedly, so this was **checked rather than argued**:
 
+**Both** major CC0 libraries were queried, and neither has a water surface:
+
 ```
-curl -s "https://api.polyhaven.com/assets?t=textures"   # 786 CC0 textures
+curl -s "https://api.polyhaven.com/assets?t=textures"                  # 786 assets
+curl -s "https://ambientcg.com/api/v2/full_json?type=Material&q=water" # 12 hits
 ```
 
-Zero water-surface normal maps. Every "water" tag hit is a **beach, sand, coral
+ambientCG's twelve "water" hits are `Ice001`–`Ice004` (frozen lake),
+`Ground035`/`Ground083` (beach, river mud) and `SurfaceImperfections*` (stain
+overlays). Poly Haven has zero water-surface normal maps. Every "water" tag hit is a **beach, sand, coral
 or mud** ground texture (`aerial_beach_*`, `coast_sand_*`, `coral_*`,
 `mud_cracked_dry_riverbed_002`). Poly Haven is the CC0 library this project
 already uses for HDRIs and ground PBR, so if it were there we would have it.
@@ -91,6 +96,48 @@ not match the terrain basin carved for it.
 **Re-check before spending time on this again**: the blocker is supply, not
 preference. If a CC0 water normal map appears, it drops straight into
 `getRippleNormalTexture`'s slot.
+
+### From overhead you see the BOTTOM, not the sky
+
+The realisation that mattered most, and it took far too long. **The camera looks
+nearly straight down. At normal incidence water's Fresnel reflectance is about
+2%.** So from this viewpoint a lake shows its bed through the water — the
+turquoise in every lake photo is *pale rock seen through shallow water*, not a
+reflection.
+
+Every earlier pass had built an **opaque** surface and then tried to make it
+convincing with reflection and shading. That cannot work from above: an opaque
+dark disc is a spill of liquid, not water.
+
+What changed:
+
+- **`MeshReflectorMaterial` is gone.** It cost a full extra scene render to
+  produce a uniform dark wash. A mirror only earns its cost at grazing angles;
+  the environment map covers those.
+- **The water is translucent** (`LAKE_SURFACE_OPACITY`). This is the realism
+  mechanism, not a stylistic choice.
+- **`ForestTerrain` paints the carved basin as a lake bed** — pale sand at the
+  margin shading to dark silt with depth. Seen through translucent water, that
+  gradient *is* the lake's colour. Left grass-green, the lake read as a lawn
+  under glass.
+- **Normal map strength halved** to 0.22; at 0.45 the tiled ripple map read as a
+  repeating carpet of dark squiggles. The geometry waves carry the motion now.
+
+**If the camera ever becomes shore-level by default, revisit this** — the
+trade-off inverts and a real reflector starts paying for itself again.
+
+### Two silent geometry bugs behind the "splat" look
+
+Both were invisible in code review and obvious once measured (peak second
+derivative of the shoreline radius — how sharply the shore kinks):
+
+1. **Branching on the sign of the excursion put a corner at every
+   bay↔headland transition.** `if (excursion < 0) excursion *= GAIN` steps the
+   derivative from 2 straight down to 1 at each zero crossing. Weighting the gain
+   through a sigmoid keeps it C1. **Kink 967 → 12.4.**
+2. **A hard `Math.max` floor gave flat-bottomed bays joined by sharp corners.**
+   Now the depth approaches the floor asymptotically — linear near zero, so
+   shallow bays are unchanged.
 
 ### Measure the shoreline instead of eyeballing it
 
@@ -108,15 +155,20 @@ because it grows headlands as well as bays. What works is
 headlands stay put, so the maximum radius — which is what bounds the tree band —
 is unchanged.
 
-| configuration | SDI | tree band |
-|---|---|---|
-| 5 smooth harmonics | 1.09 | 17.2 |
-| 8 harmonics | 1.28 | 16.4 |
-| 8 harmonics + amplitude | 1.37 | 14.7 |
-| **8 harmonics + bay gain 2.0** | **1.58** | **16.9** |
+| configuration | SDI | kink | tree band |
+|---|---|---|---|
+| 5 smooth harmonics | 1.09 | — | 17.2 |
+| 8 harmonics + bay gain, hard clamp | 1.58 | 967 | 16.9 |
+| **5 harmonics + smooth bay gain** | **1.18** | **12.4** | **16.7** |
 
-**Use the SDI script before claiming a shoreline looks natural.** It takes
-seconds and it is not a matter of opinion.
+**SDI alone is gameable, and I gamed it.** Pushing high harmonics (17, 23) drove
+SDI to 1.58 and the result read as a jagged splat: SDI counts perimeter and cannot
+tell one big sweeping bay from a row of small notches. Real shorelines are
+**smooth curves with a few large bays**. The shipped version scores *lower* on SDI
+and looks considerably better.
+
+**Use both numbers.** SDI for how convoluted, kink for how smooth. Optimising
+either alone produces a characteristic failure: a circle, or a splat.
 
 ### Islands
 

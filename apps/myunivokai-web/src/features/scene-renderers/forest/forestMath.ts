@@ -296,8 +296,15 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
 // A roughly round outline reads as a puddle at any size, because puddles are
 // round and lakes lie along a valley. The higher harmonics only add inlets and
 // headlands on top of that long axis.
-const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11, 13, 17, 23];
-const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.24, 0.075, 0.058, 0.049, 0.039, 0.036, 0.032, 0.027];
+// The top harmonics (17, 23) are GONE. Chasing shoreline development index alone
+// pushed them up, SDI reached 1.58 — and the result read as a jagged splat rather
+// than a lake, because real shorelines are SMOOTH curves with a few large bays,
+// not high-frequency crenellation. That was the metric being gamed: SDI counts
+// perimeter and cannot tell a big sweeping bay from a row of small notches.
+// Keeping the low harmonics and the bay gain buys the same character at a
+// slightly lower score, which is the right trade.
+const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11];
+const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.24, 0.088, 0.07, 0.05, 0.032];
 const WATER_OUTLINE_SEGMENTS = 192;
 /**
  * Inward excursions are amplified; outward ones are not. Bays cut in, headlands
@@ -318,6 +325,8 @@ const WATER_OUTLINE_SEGMENTS = 192;
  */
 const WATER_OUTLINE_BAY_DEPTH_GAIN = 2.0;
 const MINIMUM_WATER_OUTLINE_FACTOR = 0.3;
+/** Width of the smooth bay/headland crossover. Larger = rounder transitions. */
+const WATER_OUTLINE_BAY_TRANSITION_SOFTNESS = 0.11;
 
 export type WaterOutline = {
   /** Radius multiplier at an angle; averages ~1 so `radius` stays the mean. */
@@ -339,12 +348,21 @@ export function createWaterOutline(seedText: string): WaterOutline {
       for (const harmonic of harmonics) {
         excursion += Math.sin(harmonic.frequency * angleRadians + harmonic.phase) * harmonic.amplitude;
       }
-      if (excursion < 0) {
-        excursion *= WATER_OUTLINE_BAY_DEPTH_GAIN;
-      }
-      // The floor only guards against a pathological seed pinching the shore
-      // through the centre.
-      return Math.max(MINIMUM_WATER_OUTLINE_FACTOR, 1 + excursion);
+      // Deepen bays without putting a CORNER at every bay-to-headland
+      // transition. Branching on the sign of the excursion looks harmless but
+      // steps the derivative from the gain straight down to 1 at each crossing,
+      // and a shoreline with a kink at every transition is exactly the angular
+      // "splat" this was meant to cure. Weighting the gain with a smooth sigmoid
+      // keeps the curve C1 everywhere while still leaving headlands untouched.
+      const bayWeight = 1 / (1 + Math.exp(excursion / WATER_OUTLINE_BAY_TRANSITION_SOFTNESS));
+      const gained = excursion * (1 + (WATER_OUTLINE_BAY_DEPTH_GAIN - 1) * bayWeight);
+      // Bays approach the floor asymptotically instead of being clipped to it: a
+      // hard Math.max leaves flat-bottomed bays joined by sharp corners. Linear
+      // near zero, so shallow bays are unaffected, and C1 at the join.
+      const availableDepth = 1 - MINIMUM_WATER_OUTLINE_FACTOR;
+      return (
+        1 + (gained >= 0 ? gained : -availableDepth * (1 - Math.exp(gained / availableDepth)))
+      );
     }
   };
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { MeshReflectorMaterial } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import {
   BufferAttribute,
@@ -84,12 +83,13 @@ const RIPPLE_MAXIMUM_FREQUENCY = 7;
 // of metres per tile stays visible from the default camera without turning into
 // noise.
 const RIPPLE_WORLD_TILE_SIZE = 2.4;
-// The distortion layer is deliberately a different scale from the normal layer —
-// equal scales would correlate and re-introduce a visible pattern.
-const DISTORTION_TILE_SCALE = 0.62;
-
 const PRIMARY_SCROLL_SPEED = new Vector2(0.021, 0.013);
-const SECONDARY_SCROLL_SPEED = new Vector2(-0.013, 0.019);
+
+// Translucency is the whole realism mechanism here: it is what lets the painted
+// lake bed through, which is what gives pale shallows and a dark deep centre.
+// Fully opaque water seen from overhead cannot look like water.
+const LAKE_SURFACE_OPACITY = 0.82;
+const POND_SURFACE_OPACITY = 0.88;
 
 // Deliberately LOW. Waves taper to nothing at the rim (SHORE_CALM_FRACTION), so
 // only the interior ever troughs, and there the carved bed is more than a metre
@@ -99,7 +99,10 @@ const SECONDARY_SCROLL_SPEED = new Vector2(-0.013, 0.019);
 const WATER_SURFACE_HEIGHT = 0.07;
 // The measured slope field peaks around 0.43, so this multiplier decides how
 // pronounced the fine chop is on top of the displaced geometry.
-const NORMAL_STRENGTH = new Vector2(0.45, 0.45);
+// Halved from 0.45. At that strength the tiled ripple map was reading as a
+// repeating carpet of dark squiggles across the surface — the geometry waves now
+// carry the visible motion, and this is only fine detail on top of them.
+const NORMAL_STRENGTH = new Vector2(0.22, 0.22);
 
 // Deep water is darker and more saturated than the shallows. Baked into vertex
 // colours rather than taken from MeshReflectorMaterial's depth-blend options,
@@ -319,9 +322,9 @@ type ForestPondWaterProps = {
   /** Drives the shoreline shape; same seed, same lake. */
   shapeSeed: string;
   /**
-   * True render-to-texture mirror. Costs a whole extra scene render, so only
-   * the hero lake gets it — small ponds fall back to environment reflection,
-   * which is indistinguishable at their size.
+   * Deeper tint and stronger sky response for the hero lake. Ponds are small
+   * enough that the difference is invisible, and keeping one material path means
+   * one set of behaviour to reason about.
    */
   reflective?: boolean;
 };
@@ -334,20 +337,13 @@ export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = tru
     [outline, radius]
   );
 
-  // Two clones of one GPU image: one drives the surface normals, the other warps
-  // the reflection. Different repeats and opposing scroll directions, so the two
-  // never correlate into a pattern. UVs are already in world units, so "repeat"
-  // here is tiles-per-world-unit.
-  const { normalTexture, distortionTexture } = useMemo(() => {
-    const baseTexture = getRippleNormalTexture();
+  // UVs are already in world units, so "repeat" here is tiles per world unit.
+  const normalTexture = useMemo(() => {
     const tilesPerWorldUnit = 1 / RIPPLE_WORLD_TILE_SIZE;
-    const primary = baseTexture.clone();
-    primary.repeat.set(tilesPerWorldUnit, tilesPerWorldUnit);
-    primary.needsUpdate = true;
-    const secondary = baseTexture.clone();
-    secondary.repeat.set(tilesPerWorldUnit * DISTORTION_TILE_SCALE, tilesPerWorldUnit * DISTORTION_TILE_SCALE);
-    secondary.needsUpdate = true;
-    return { normalTexture: primary, distortionTexture: secondary };
+    const texture = getRippleNormalTexture().clone();
+    texture.repeat.set(tilesPerWorldUnit, tilesPerWorldUnit);
+    texture.needsUpdate = true;
+    return texture;
   }, []);
   const elapsedSecondsRef = useRef(0);
 
@@ -358,43 +354,30 @@ export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = tru
     const elapsedSeconds = elapsedSecondsRef.current;
     displaceWaterSurface(geometry, waveScales, elapsedSeconds);
     normalTexture.offset.set(elapsedSeconds * PRIMARY_SCROLL_SPEED.x, elapsedSeconds * PRIMARY_SCROLL_SPEED.y);
-    distortionTexture.offset.set(elapsedSeconds * SECONDARY_SCROLL_SPEED.x, elapsedSeconds * SECONDARY_SCROLL_SPEED.y);
   });
 
   return (
     <mesh geometry={geometry} position={[0, WATER_SURFACE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      {reflective ? (
-        <MeshReflectorMaterial
-          // Sharp enough to carry scene information. Blurred harder, the mirror
-          // carries none, and a surface with no information in it reads as
-          // coloured plastic however it is lit; the ripples supply the softness.
-          resolution={1024}
-          mixBlur={0.55}
-          mixStrength={1.15}
-          blur={[55, 18]}
-          mirror={0.7}
-          distortion={0.32}
-          distortionMap={distortionTexture as unknown as Texture}
-          color={tintColor}
-          roughness={0.18}
-          metalness={0.25}
-          vertexColors
-          normalMap={normalTexture as unknown as Texture}
-          normalScale={NORMAL_STRENGTH}
-        />
-      ) : (
-        <meshStandardMaterial
-          color={tintColor}
-          transparent
-          opacity={0.9}
-          roughness={0.16}
-          metalness={0.3}
-          envMapIntensity={1.5}
-          vertexColors
-          normalMap={normalTexture as unknown as Texture}
-          normalScale={NORMAL_STRENGTH}
-        />
-      )}
+      {/* TRANSLUCENT, not a mirror. The camera looks nearly straight down, and at
+          normal incidence water's Fresnel reflectance is only about 2% - from
+          above you see the BOTTOM, not the sky. MeshReflectorMaterial spent a
+          whole extra scene render to produce a uniform dark wash, which is
+          exactly what made the lake read as opaque spilled liquid rather than
+          water. Transparency over the painted lake bed (see ForestTerrain) is
+          both cheaper and what the physics calls for, and the environment map
+          still gives real sky reflection as the camera tilts toward grazing
+          angles - which is the only place a mirror was ever earning its cost. */}
+      <meshStandardMaterial
+        color={tintColor}
+        transparent
+        opacity={reflective ? LAKE_SURFACE_OPACITY : POND_SURFACE_OPACITY}
+        roughness={0.16}
+        metalness={0.22}
+        envMapIntensity={reflective ? 2.1 : 1.5}
+        vertexColors
+        normalMap={normalTexture as unknown as Texture}
+        normalScale={NORMAL_STRENGTH}
+      />
     </mesh>
   );
 }
