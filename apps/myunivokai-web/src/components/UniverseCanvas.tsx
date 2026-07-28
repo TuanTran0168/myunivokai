@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { AgXToneMapping } from "three";
 import type { Vector3 } from "three";
 import type { PlanetSceneConfig, SceneConfig } from "@/lib/types";
@@ -9,6 +9,7 @@ import { backgroundColorFromScene, isForestScene, pointsOfInterestFromScene, CAN
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { resolveSceneRenderer, resolveSceneTypeRenderer } from "@/features/scene-renderers/registry";
 import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
+import { forestShoreCameraFraming } from "@/features/scene-renderers/forest/forestMath";
 import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
 import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
@@ -25,7 +26,11 @@ const CAMERA_HEIGHT_RATIO = 0.42;
 // scenes have no ground and keep the default free orbit).
 const FOREST_MINIMUM_CAMERA_DISTANCE = 3;
 const FOREST_MAXIMUM_CAMERA_DISTANCE = 70;
-const FOREST_MAXIMUM_POLAR_ANGLE_RADIANS = Math.PI * 0.47;
+// COUPLED to forestShoreCameraFraming: the opening shot grazes the water from
+// as low as 4.3 degrees, which is a polar angle of 85.7. The previous 0.47*PI
+// clamp (84.6) sat just inside that, so OrbitControls' first update would have
+// silently tilted the shallowest seeds back up.
+const FOREST_MAXIMUM_POLAR_ANGLE_RADIANS = Math.PI * 0.492;
 // Render at native device resolution (the old 1.8 cap under-sampled every
 // HiDPI display — a uniform blur). Quality-first scope: weak devices are
 // explicitly out of scope for now.
@@ -101,6 +106,18 @@ export function UniverseCanvas({
     sceneTypeRenderer ?? (hasConfiguredPointsOfInterest ? resolveSceneRenderer(scene?.theme) : FallbackUniverseRenderer);
   const isForestFamilyScene = isForestScene(scene);
 
+  // Forest scenes open from the lake's near bank instead of above its middle:
+  // the framing is derived from the lake the renderer builds, which the
+  // backend's rolled camera.distance cannot know about. Memoized because a hover
+  // re-renders this component and the solve rebuilds the terrain sampler.
+  const forestCameraFraming = useMemo(
+    () => (isForestFamilyScene ? forestShoreCameraFraming(scene?.terrain, cameraFieldOfView) : null),
+    [isForestFamilyScene, scene?.terrain, cameraFieldOfView]
+  );
+  const cameraPosition: [number, number, number] = forestCameraFraming
+    ? [0, forestCameraFraming.height, forestCameraFraming.distance]
+    : [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance];
+
   const hoveredPlanetKey = hoveredPlanet
     ? planetIdentityKey(
         hoveredPlanet,
@@ -108,7 +125,10 @@ export function UniverseCanvas({
       )
     : null;
 
-  const canvasRemountKey = `${seed}-${cameraDistance}-${cameraFieldOfView}`;
+  // The key has to carry the position actually used, not the config's distance:
+  // a forest's framing comes from its lake, so the same rolled distance can want
+  // two different camera positions.
+  const canvasRemountKey = `${seed}-${cameraPosition[1].toFixed(2)}-${cameraPosition[2].toFixed(2)}-${cameraFieldOfView}`;
   const isSceneReady = lastReadyCanvasKey === canvasRemountKey;
 
   return (
@@ -123,10 +143,7 @@ export function UniverseCanvas({
       >
         <Canvas
           key={canvasRemountKey}
-          camera={{
-            position: [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance],
-            fov: cameraFieldOfView
-          }}
+          camera={{ position: cameraPosition, fov: cameraFieldOfView }}
           // Only the forest family casts real shadows (sun through the tree
           // canopy); universe scenes are emissive-lit and skip the shadow pass.
           shadows={isForestFamilyScene ? "soft" : false}

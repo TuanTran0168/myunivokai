@@ -9,6 +9,7 @@ import {
   createPathLateralDistanceSampler,
   createRiverEdgeDistanceSampler,
   createTerrainHeightSampler,
+  LAKE_SHORE_PLANTING_BUFFER,
   maximumLakeRadiusFromTerrain,
   treelineRadiusFromTerrain
 } from "./forestMath";
@@ -72,8 +73,6 @@ const MINIMUM_RENDER_FOG_DENSITY = 0.004;
 
 // Dry-land breathing room past the widest point of the shoreline.
 const SHORE_PLACEMENT_MARGIN = 1.8;
-// Extra bank kept clear of trees and decor, on top of their own 1.6 exclusion.
-const LAKE_SHORE_PLANTING_BUFFER = 2.8;
 
 /**
  * Renders a ForestSceneConfig: seeded terrain with a clearing and dirt path,
