@@ -272,6 +272,75 @@ treeline-relative. **Any future lake resize must re-check every radius in the
 table below** — they are coupled, and the failure mode is a silently degenerate
 range, not an error.
 
+### What finally decided it: the viewpoint, not the water
+
+Six rounds of shape, scale, palette and wave work all ended in *"vẫn giống vũng
+nước"*. The measurable reason was never in the water.
+
+The opening camera sat at the backend's rolled `camera.distance` of 14–20 with
+its height at `0.42 ×` that, aimed at the origin. Against a lake whose outer
+radius is 16–22 for the same clearing range, **the camera stood inside the
+lake**, six to eight units above the surface, looking down at 22.8°. The bottom
+edge of a 50° frame then lands on open water at ~0.62 × the camera distance, so:
+
+- the near bank is **cropped out of frame entirely** — no foreground, no scale
+  reference;
+- the far bank sits in the middle distance under a tall band of forest, so the
+  **forest wins the frame** and the water reads as small;
+- at near-normal incidence the surface shows ~2% reflection, so it never picks
+  up the sky either.
+
+Pulling further back does not help — it only shrinks the lake. Every reference
+photo the owner sent is taken **from the bank**: a strip of shore at the bottom,
+water receding at a grazing angle, far shore and treeline compressed toward the
+horizon. Perspective does what no amount of shoreline detail can.
+
+`forestShoreCameraFraming` (in `forestMath.ts`) now derives the opening camera
+from the lake instead of rolling it independently:
+
+- it stands on the shoreline radius **at its own azimuth** — the mean radius is
+  useless here, since the outline swings 0.3×–1.48× and a camera placed against
+  the mean stands in the water on any seed that bulges along +Z;
+- the standoff is **solved**, not tuned: standoff and look-down angle each
+  depend on the other, so a constant that frames the waterline at one clearing
+  radius misses at the rest of the range. Six fixed-point passes;
+- the standoff is clamped inside `LAKE_SHORE_PLANTING_BUFFER` (2.8 → **4.5**),
+  which is what guarantees no trunk stands between the camera and the water.
+  Everything on that segment is closer to the water than the camera is, so one
+  comparison clears the whole line;
+- the eye rises if the bank's own crest would block the sight line to the far
+  shore. Rare — 4 cases in 1080 — but when a grazing view is blocked it is
+  blocked completely, so the guard is worth its cost.
+
+Measured over 180 terrain cases spanning the backend's whole range
+(clearing 8–11, hill amplitude 0.8–2.2):
+
+| Property | Before | After |
+|---|---|---|
+| Look-down angle | 22.8° | 4.31°–15.51° |
+| Camera vs shoreline | inside the lake | 3.22–4.00 units of dry bank |
+| Water share of frame height | near bank not even in frame | **≥ 41.6%** |
+| Trees between camera and water | possible | impossible by construction |
+
+**Accepted limits, all measured rather than assumed:**
+
+- The foreground strip of bank is lost on 18 of 180 seeds, where the standoff
+  hits its clamp. Widening the buffer to 5.2 fixes most of them but costs a
+  steeper view and another unit of tree-free ring — the wrong trade.
+- An islet interrupts the far water on ~19% of seeds. The blockers are always
+  **past the lake centre** (measured at radius −1.2 to −5.2, ground 0.47–0.74
+  against island peak 0.75), so the near half always reads. Overlapping
+  silhouettes are a depth cue; left alone. Raising the eye to clear an islet
+  near the far shore would need ~4.5 units of height and would throw away the
+  grazing angle.
+- Only the central sight line is guaranteed clear of trunks. Off-axis rays can
+  cross a bay that recedes further than the bank.
+
+**The bank itself is almost never the occluder** — the shore blend slopes the
+ground down to exactly 0 at the waterline, so there is no crest to see over.
+That was the first hypothesis and it was wrong; the 10.5-unit occlusions in the
+first measurement were islands.
+
 ### The lake was a literal plane
 
 The single biggest cause of *"nhìn vẫn còn giả"*. The surface was a triangle fan:
@@ -415,10 +484,11 @@ Defaults are clearing 9.5, treeline 40.
 | Feature | Radius | Why |
 |---|---|---|
 | Lake (mean) | `1.35 × clearing` ≈ 12.8 | hero-sized; requires the terrain carve |
-| Lake (max, bound) | `1.437 × mean` ≈ 18.4 | `maximumOutlineRadiusFactor()`; measured outlines peak near 1.36, so the bound is deliberately conservative |
-| `shoreClearanceRadius` | max + 1.8 ≈ 20.2 | dry land for landmarks and animals |
-| Animal wander | 20.2 → 28.0 | outer is `0.7 × treeline`; a clearing-relative outer now falls *below* the inner bound |
-| Tree scatter | starts ≈ 22.8 | `clearFloorDistanceSampler` minus the 2.8 planting buffer; ~17% of picks land in water and are skipped |
+| Lake (max, bound) | `1.48 × mean` ≈ 19.0 | `maximumOutlineRadiusFactor()` = 1 + Σ harmonic amplitudes; measured outlines peak below it, so the bound is deliberately conservative |
+| `shoreClearanceRadius` | max + 1.8 ≈ 20.8 | dry land for landmarks and animals |
+| Animal wander | 20.8 → 28.0 | outer is `0.7 × treeline`; a clearing-relative outer now falls *below* the inner bound |
+| Tree scatter | starts ≈ 23.5 | `clearFloorDistanceSampler` minus the 4.5 planting buffer |
+| Opening camera | local shore + 3.2…4.0 | `forestShoreCameraFraming`; must stay inside the planting buffer or a trunk blocks the lake |
 | Decor scatter | `0.9 × clearing` ≈ 8.6 | **unbuffered** — runs to the waterline on purpose; ~10% of picks skipped |
 | River span | `0.82 × treeline` | stops short of `DISTANT_RISE_INNER_FRACTION` so the channel never climbs the far ridge |
 | Shore band width | `0.075 × lake radius` | proportional; a fixed width becomes a hairline once the lake is big |
@@ -462,6 +532,10 @@ driving `action.timeScale` from the config `walkSpeed`
    dead trees, snow pine. Upgrade only if they specifically look wrong.
 5. **Water polish:** shoreline foam line, and depth-based colour ramp so the
    lake middle is darker than its edge.
+6. **Now that the view grazes the water,** two things that were invisible from
+   above start to matter: the ripple normal map tiles every 2.4 world units and
+   will streak under strong anisotropic compression, and the far shoreline is a
+   hard line with no haze. Check both before adding anything else to the water.
 
 ## Performance budget — unverified
 
