@@ -47,7 +47,13 @@ const PATH_CURVE_RADIAL_FREQUENCY = 0.16;
 // createTerrainHeightSampler CARVES a basin for it (see LAKE_BED_DEPTH). That
 // carve is what lets the surface stay planar, and planarity is what keeps
 // MeshReflectorMaterial valid.
-const LAKE_RADIUS_FRACTION_OF_CLEARING = 1.0;
+// Sized against the TREELINE, not just the clearing. At 1.0x the clearing the
+// lake was ~26 units across inside an 80-unit forest, which reads as a puddle in
+// a wood however good the surface is: scale is judged relative to the scene, and
+// nothing that small can be a lake. The ceiling is the tree band — trees start at
+// (max shoreline + planting clearance), and that has to leave the forest room to
+// still be a forest.
+const LAKE_RADIUS_FRACTION_OF_CLEARING = 1.35;
 // How far past the water's edge the ground climbs back to its natural height.
 const LAKE_SHORE_BLEND_WIDTH = 2.2;
 // How far the bed sits below the water plane. Only has to beat the local hill
@@ -211,10 +217,13 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
 // non-integer harmonic leaves a visible notch at the seam). Everything stays at
 // a single Y, so the surface is still planar and MeshReflectorMaterial remains
 // valid — that planarity is the whole reason the lake sits on flat ground.
-// Five harmonics, not three: three give a smooth potato, and the high pair is
-// what produces actual inlets and small headlands rather than a rounded blob.
+// Frequency 2 carries most of the amplitude ON PURPOSE: it is the elongation
+// term, and an elongated basin is most of what separates "lake" from "puddle".
+// A roughly round outline reads as a puddle at any size, because puddles are
+// round and lakes lie along a valley. The higher harmonics only add inlets and
+// headlands on top of that long axis.
 const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11];
-const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.15, 0.095, 0.06, 0.038, 0.022];
+const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.26, 0.075, 0.05, 0.032, 0.02];
 const WATER_OUTLINE_SEGMENTS = 160;
 
 export type WaterOutline = {

@@ -49,10 +49,10 @@ import { createWaterOutline, type WaterOutline } from "./forestMath";
  * centimetres of relief; more looks like a storm at sea.
  */
 const SURFACE_WAVES = [
-  { directionX: 0.93, directionY: 0.37, wavelength: 8.3, amplitude: 0.09, speed: 0.5 },
-  { directionX: -0.41, directionY: 0.91, wavelength: 5.1, amplitude: 0.058, speed: 0.72 },
-  { directionX: 0.72, directionY: -0.69, wavelength: 3.2, amplitude: 0.031, speed: 0.98 },
-  { directionX: -0.87, directionY: -0.49, wavelength: 1.9, amplitude: 0.016, speed: 1.35 }
+  { directionX: 0.93, directionY: 0.37, wavelength: 13.5, amplitude: 0.16, speed: 0.62 },
+  { directionX: -0.41, directionY: 0.91, wavelength: 7.4, amplitude: 0.095, speed: 0.8 },
+  { directionX: 0.72, directionY: -0.69, wavelength: 3.9, amplitude: 0.044, speed: 1.05 },
+  { directionX: -0.87, directionY: -0.49, wavelength: 2.1, amplitude: 0.019, speed: 1.4 }
 ];
 
 // Rings of tessellation from centre to shore. This is the knob that decides

@@ -92,6 +92,41 @@ not match the terrain basin carved for it.
 preference. If a CC0 water normal map appears, it drops straight into
 `getRippleNormalTexture`'s slot.
 
+### Puddle vs lake is scale and silhouette, not material
+
+After the surface had displaced waves, sharp reflection and a good normal map,
+the verdict was still *"nhìn nó giống vũng nước hơn là hồ nước"*. The lesson:
+**no amount of surface work makes a small round body of water read as a lake.**
+Three things decide it, all geometric:
+
+1. **Size relative to the scene.** The lake was ~26 units across in an 80-unit
+   forest — 11% of the forest's area. Now 1.35 × clearing, ~35 units across,
+   **21%**. Scale is judged relative to surroundings, not absolutely.
+2. **Elongation.** Puddles are round; lakes lie along a valley. Outline harmonic
+   2 now carries most of the amplitude (0.26 against 0.075/0.05/0.032/0.02), so
+   every seed comes out around **2:1**, pointing in a seed-dependent direction.
+   The high harmonics only add inlets on top of that long axis.
+3. **Something recognisable at the waterline.** Water with a bare ring around it
+   reads as a puddle because there is nothing to judge size against.
+
+That third point reversed an earlier change. The planting buffer had been applied
+to the combined sampler, pushing **trees and decor** off the bank — which
+produced exactly that bare ring and made things worse. Now only
+`ForestTrees` gets `treePlantingDistanceSampler`; grass, ferns and rocks keep the
+unbuffered `clearFloorDistanceSampler` and run down to the water.
+
+**The ceiling on lake size is the tree band.** Trees start at
+`maxShoreline + 1.6 + 2.8`. At 1.35 × clearing that is 22.8, leaving a 17-unit
+band before the treeline at 40. Push the lake much further and the forest stops
+being a forest.
+
+**This change broke the animal wander band and it was silent.** The outer bound
+was `min(2.4 × clearing, 0.8 × treeline)` = 22.8, which fell *below* the new
+inner bound of 20.2 + margin, collapsing the band to its 4-unit floor. It is now
+treeline-relative. **Any future lake resize must re-check every radius in the
+table below** — they are coupled, and the failure mode is a silently degenerate
+range, not an error.
+
 ### The lake was a literal plane
 
 The single biggest cause of *"nhìn vẫn còn giả"*. The surface was a triangle fan:
@@ -230,14 +265,18 @@ it. **Anything new placed by radius needs the same treatment.**
 
 **The radii are a coupled set. Changing one breaks another:**
 
+Defaults are clearing 9.5, treeline 40.
+
 | Feature | Radius | Why |
 |---|---|---|
-| Lake (mean) | `0.85 × clearing` ≈ 8.1 | hero-sized; requires the terrain carve |
-| Lake (max) | `1.30 × mean` ≈ 10.5 | `maximumOutlineRadiusFactor()` |
-| `shoreClearanceRadius` | max + 1.8 ≈ 12.3 | dry land for landmarks and animals |
-| Animal wander | 12.3 → 22.8 | anchored to the **shore**, not a clearing fraction |
-| Decor / tree scatter | `0.9 × clearing` ≈ 8.6 | inside the lake now, so `clearFloorDistanceSampler` skips those picks — decor is thinner near the water by design |
+| Lake (mean) | `1.35 × clearing` ≈ 12.8 | hero-sized; requires the terrain carve |
+| Lake (max, bound) | `1.437 × mean` ≈ 18.4 | `maximumOutlineRadiusFactor()`; measured outlines peak near 1.36, so the bound is deliberately conservative |
+| `shoreClearanceRadius` | max + 1.8 ≈ 20.2 | dry land for landmarks and animals |
+| Animal wander | 20.2 → 28.0 | outer is `0.7 × treeline`; a clearing-relative outer now falls *below* the inner bound |
+| Tree scatter | starts ≈ 22.8 | `clearFloorDistanceSampler` minus the 2.8 planting buffer; ~17% of picks land in water and are skipped |
+| Decor scatter | `0.9 × clearing` ≈ 8.6 | **unbuffered** — runs to the waterline on purpose; ~10% of picks skipped |
 | River span | `0.82 × treeline` | stops short of `DISTANT_RISE_INNER_FRACTION` so the channel never climbs the far ridge |
+| Shore band width | `0.075 × lake radius` | proportional; a fixed width becomes a hairline once the lake is big |
 
 Water is a no-grow surface exactly like the dirt path, so
 `createRiverEdgeDistanceSampler` is composed with the path sampler into one

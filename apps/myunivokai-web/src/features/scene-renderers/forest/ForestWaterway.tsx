@@ -53,7 +53,11 @@ const RIVER_SCROLL_SPEED = new Vector2(0.0, 0.09);
 const RIVER_NORMAL_STRENGTH = new Vector2(0.5, 0.5);
 const RIVER_OPACITY = 0.86;
 
-const LAKE_SHORE_BAND_WIDTH = 0.55;
+// Proportional, not fixed: a constant width that read as a beach on a small pond
+// is a hairline once the lake is hero-sized, and a hairline bank is exactly what
+// makes water look like a puddle sitting on grass rather than filling a basin.
+const LAKE_SHORE_BAND_FRACTION = 0.075;
+const MINIMUM_LAKE_SHORE_BAND_WIDTH = 0.55;
 
 const WATER_BASE_COLOR = "#2E6E8E";
 // Winter reads as meltwater over pale ice, not as summer teal.
@@ -239,7 +243,7 @@ export function ForestWaterway({ terrain, season, terrainHeightSampler }: Forest
       <ForestWaterShoreline
         radius={lakeRadius}
         shapeSeed={lakeShapeSeed}
-        bandWidth={LAKE_SHORE_BAND_WIDTH}
+        bandWidth={Math.max(MINIMUM_LAKE_SHORE_BAND_WIDTH, lakeRadius * LAKE_SHORE_BAND_FRACTION)}
         color={RIVER_BED_COLOR}
         height={RIVER_BED_LIFT}
       />

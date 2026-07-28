@@ -98,18 +98,18 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
     const riverEdgeDistanceSampler = createRiverEdgeDistanceSampler(terrain);
     const lakeEdgeDistanceSampler = createLakeEdgeDistanceSampler(terrain);
     return (x: number, z: number) =>
-      Math.min(
-        pathLateralDistanceSampler(x, z),
-        riverEdgeDistanceSampler(x, z),
-        // Reported SHORT of the true distance so trees and decor keep a real
-        // bank between the treeline and the water. Consumers reject anything
-        // under their own exclusion half-width (1.6), so the effective
-        // clearance is that plus this buffer. Trees grew right to the waterline
-        // when the true distance was reported, which left the lake looking
-        // pasted into the forest rather than sitting in a clearing.
-        lakeEdgeDistanceSampler(x, z) - LAKE_SHORE_PLANTING_BUFFER
-      );
+      Math.min(pathLateralDistanceSampler(x, z), riverEdgeDistanceSampler(x, z), lakeEdgeDistanceSampler(x, z));
   }, [pathLateralDistanceSampler, terrain]);
+  // Trees — and ONLY trees — keep an extra bank clear of the water. Grass, ferns
+  // and rocks run right down to the waterline, which is both what a real
+  // lakeshore looks like and the thing that gives the eye a sense of scale:
+  // water with nothing recognisable at its edge reads as a puddle. Pushing the
+  // decor back with the trees produced a bare ring that made it worse.
+  const treePlantingDistanceSampler = useMemo(() => {
+    const lakeEdgeDistanceSampler = createLakeEdgeDistanceSampler(terrain);
+    return (x: number, z: number) =>
+      Math.min(clearFloorDistanceSampler(x, z), lakeEdgeDistanceSampler(x, z) - LAKE_SHORE_PLANTING_BUFFER);
+  }, [clearFloorDistanceSampler, terrain]);
   // Everything the backend positions by radius alone (landmarks) has to clear
   // the lake, which it knows nothing about.
   const shoreClearanceRadius = maximumLakeRadiusFromTerrain(terrain) + SHORE_PLACEMENT_MARGIN;
@@ -175,7 +175,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={clearFloorDistanceSampler}
+        pathLateralDistanceSampler={treePlantingDistanceSampler}
       />
       {/* Forested hills ringing the clearing, so the world does not end at the
           treeline in bare tinted ground. */}

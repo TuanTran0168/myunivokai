@@ -262,17 +262,17 @@ function GroundAnimal({
     // across open water when this was a clearing fraction. shoreClearanceRadius
     // already accounts for the outline's widest bulge, not just the mean radius.
     const wanderInnerRadius = shoreClearanceRadius;
-    const wanderOuterRadius = Math.max(
-      wanderInnerRadius + 4,
-      Math.min(clearingRadius * 2.4, treelineRadius * 0.8)
-    );
+    // Outer bound is treeline-relative. It used to be min(2.4x clearing, ...),
+    // but the lake now reaches past 2.4x the clearing, so that expression fell
+    // BELOW the inner bound and collapsed the band to its 4-unit floor.
+    const wanderOuterRadius = Math.max(wanderInnerRadius + 6, treelineRadius * 0.7);
     const pickWaypoint = () => {
       const angle = nextRandomValue() * Math.PI * 2;
       const radius = wanderInnerRadius + nextRandomValue() * (wanderOuterRadius - wanderInnerRadius);
       return new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
     };
     return { waypointA: pickWaypoint(), waypointB: pickWaypoint(), phaseOffset: nextRandomValue() * 2 };
-  }, [animalConfig.pathSeed, clearingRadius, individualIndex, shoreClearanceRadius, treelineRadius]);
+  }, [animalConfig.pathSeed, individualIndex, shoreClearanceRadius, treelineRadius]);
 
   useFrame((_, deltaTimeSeconds) => {
     const group = groupRef.current;
