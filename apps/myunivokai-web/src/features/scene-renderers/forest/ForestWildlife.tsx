@@ -38,7 +38,10 @@ import {
 const ANIMAL_WALK_SPEED_UNITS_PER_SECOND = 2.4;
 const ANIMAL_BODY_BOB_AMPLITUDE = 0.035;
 const ANIMAL_BODY_BOB_FREQUENCY = 8;
-const ANIMAL_TURN_PAUSE_FRACTION = 0.06;
+// Raised from 0.06: the pause has to be long enough to hold a whole half-turn
+// (see the turn-rate derivation below), and a longer beat also reads better as
+// "stop, look up, turn round" instead of a bounce off an invisible wall.
+const ANIMAL_TURN_PAUSE_FRACTION = 0.11;
 // Two separate causes of the "con vật giật lùi về" (animal jerks backwards)
 // artefact, both fixed here:
 //
@@ -51,7 +54,12 @@ const ANIMAL_TURN_PAUSE_FRACTION = 0.06;
 //     useFrame one enormous delta, which jumps the ping-pong parameter far
 //     enough to teleport the animal — sometimes visibly backwards along its
 //     own path. The clamp bounds how far a single frame can advance.
-const ANIMAL_YAW_TURN_RATE_RADIANS_PER_SECOND = 3.2;
+// Floor only. The real rate is derived per-animal from its pause duration so the
+// turn always completes before it starts walking again; this just stops a very
+// long path from producing a comically slow turn.
+const ANIMAL_MINIMUM_YAW_TURN_RATE_RADIANS_PER_SECOND = 2.2;
+// Finish the turn comfortably inside the pause rather than exactly at its end.
+const ANIMAL_TURN_COMPLETION_FRACTION_OF_PAUSE = 0.7;
 const MAXIMUM_ANIMAL_FRAME_DELTA_SECONDS = 1 / 15;
 
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
@@ -311,7 +319,19 @@ function GroundAnimal({
       currentYawRef.current = targetYaw;
     } else {
       const remainingTurn = shortestAngleDifference(currentYawRef.current, targetYaw);
-      const maximumTurnThisFrame = ANIMAL_YAW_TURN_RATE_RADIANS_PER_SECOND * stepSeconds;
+      // The turn MUST finish inside the standing-still pause. This is the
+      // "ping lag" bug: with a fixed turn rate a half-turn took about a second,
+      // while the pause at the end of the path lasted only a few tenths, so the
+      // animal spent the remainder walking in its new direction while still
+      // facing the old one — which looks exactly like being dragged backwards.
+      // Deriving the rate from the pause length makes the two agree by
+      // construction, at any path length or walk speed.
+      const pauseSeconds = Math.max(0.001, cycleDurationSeconds * ANIMAL_TURN_PAUSE_FRACTION * 2);
+      const turnRate = Math.max(
+        ANIMAL_MINIMUM_YAW_TURN_RATE_RADIANS_PER_SECOND,
+        Math.PI / (pauseSeconds * ANIMAL_TURN_COMPLETION_FRACTION_OF_PAUSE)
+      );
+      const maximumTurnThisFrame = turnRate * stepSeconds;
       currentYawRef.current +=
         Math.sign(remainingTurn) * Math.min(Math.abs(remainingTurn), maximumTurnThisFrame);
     }

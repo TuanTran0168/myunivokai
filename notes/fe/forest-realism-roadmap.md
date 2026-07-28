@@ -97,6 +97,49 @@ not match the terrain basin carved for it.
 preference. If a CC0 water normal map appears, it drops straight into
 `getRippleNormalTexture`'s slot.
 
+### The animal "ping lag" was caused by a previous fix
+
+Reported as *"động vật di chuyển đi lên rồi lại giật lùi về, giống kiểu ping lag"*.
+
+At the end of its path an animal's `headingSign` flips, so the target yaw rotates
+180°. An earlier pass replaced the instant flip with a smooth eased turn — which
+at 3.2 rad/s takes about **0.98 s**. But translation never waited for it. The
+standing-still pause was only `2 × 0.06` of the cycle ≈ **0.4 s**, so for the
+remaining ~0.6 s the animal walked in its NEW direction while still facing the
+OLD one. That is what reads as rubber-banding.
+
+The instant flip had been ugly but never produced backwards motion. **The fix
+introduced the bug.**
+
+Now the turn rate is **derived from the pause duration**
+(`π / (pauseSeconds × ANIMAL_TURN_COMPLETION_FRACTION_OF_PAUSE)`) so the two agree
+by construction at any path length or walk speed, and the pause fraction rose to
+0.11. Anything that changes path length, walk speed, or the pause must keep this
+relationship — a fixed turn rate cannot.
+
+### Gerstner waves, and the folding they cause
+
+Summed sines are symmetric and rounded, which made the surface read as regular
+diagonal banding. Real waves are **sharp at the crest and flat in the trough**,
+and that asymmetry comes from vertices moving **horizontally** toward crests, not
+from a taller vertical wave. So the displacement is now Gerstner, with 8 waves
+instead of 4.
+
+Two things this forces:
+
+1. **Rest positions must be stored.** The wave phase is evaluated at the
+   undisplaced XY. Reading it back from the live position attribute feeds the
+   displacement into its own input and the surface drifts away every frame.
+2. **The mesh folds where the lateral shift exceeds local vertex spacing.** At the
+   outline's 192 segments it folded almost everywhere — inverted triangles get
+   backface-culled, so it shows up as flickering holes. Fixed by a 96-segment
+   surface grid (independent of the outline's own resolution), a centre taper on
+   the sideways shift only, and steepness 0.35.
+
+Verified with an orientation test rather than by eye: **0 folded triangles across
+33,024 checks** (4,128 triangles × 8 time samples). **Re-run that test after any
+change to steepness, wave amplitudes, ring count or segment count.**
+
 ### From overhead you see the BOTTOM, not the sky
 
 The realisation that mattered most, and it took far too long. **The camera looks

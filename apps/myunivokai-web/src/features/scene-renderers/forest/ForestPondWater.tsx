@@ -28,15 +28,14 @@ import { createWaterOutline, type WaterOutline } from "./forestMath";
 // The other three, all of which the earlier passes got wrong at least once:
 //
 //  * The ripple normal map must not be a LATTICE (see RIPPLE_WAVE_COUNT).
-//  * There must be TWO uncorrelated moving layers. An earlier version built a
-//    second scrolling texture, animated it every frame, and never bound it to
-//    anything; one normal map sliding one direction reads as dragged plastic.
 //  * Ripples must be sized in WORLD units, or they scale with the lake.
+//  * The surface must be TRANSLUCENT over a painted bed, because from overhead
+//    water shows its bottom rather than the sky (see the material below).
 //
 // Everything is procedural rather than downloaded because there is no asset to
-// download: Poly Haven's 786 CC0 textures contain no water-surface normal map
-// (only beaches, sand, coral, mud), and a lake GLB would be a static baked mesh
-// that can neither ripple nor reflect.
+// download: neither Poly Haven (786 CC0 textures) nor ambientCG has a
+// water-surface material, and a lake GLB would be a static baked mesh that can
+// neither ripple nor shade by depth.
 
 // --- Surface displacement ----------------------------------------------------
 
@@ -48,11 +47,37 @@ import { createWaterOutline, type WaterOutline } from "./forestMath";
  * centimetres of relief; more looks like a storm at sea.
  */
 const SURFACE_WAVES = [
-  { directionX: 0.93, directionY: 0.37, wavelength: 13.5, amplitude: 0.16, speed: 0.62 },
-  { directionX: -0.41, directionY: 0.91, wavelength: 7.4, amplitude: 0.095, speed: 0.8 },
-  { directionX: 0.72, directionY: -0.69, wavelength: 3.9, amplitude: 0.044, speed: 1.05 },
-  { directionX: -0.87, directionY: -0.49, wavelength: 2.1, amplitude: 0.019, speed: 1.4 }
+  { directionX: 0.93, directionY: 0.37, wavelength: 12.7, amplitude: 0.125, speed: 0.6 },
+  { directionX: 0.64, directionY: 0.77, wavelength: 9.1, amplitude: 0.088, speed: 0.68 },
+  { directionX: -0.41, directionY: 0.91, wavelength: 6.3, amplitude: 0.062, speed: 0.79 },
+  { directionX: 0.99, directionY: -0.14, wavelength: 4.7, amplitude: 0.045, speed: 0.9 },
+  { directionX: 0.72, directionY: -0.69, wavelength: 3.3, amplitude: 0.032, speed: 1.02 },
+  { directionX: -0.19, directionY: -0.98, wavelength: 2.4, amplitude: 0.023, speed: 1.16 },
+  { directionX: -0.87, directionY: -0.49, wavelength: 1.7, amplitude: 0.015, speed: 1.33 },
+  { directionX: 0.34, directionY: 0.94, wavelength: 1.2, amplitude: 0.009, speed: 1.5 }
 ];
+/**
+ * Gerstner steepness. Plain summed sines give symmetric, rounded swells — which
+ * is what made the surface read as regular diagonal banding rather than water.
+ * Real waves are SHARP at the crest and flat in the trough, and that asymmetry
+ * comes from vertices moving HORIZONTALLY toward the crests, not from a taller
+ * vertical wave. Above ~0.5 the displacement starts to fold the mesh over itself.
+ */
+const WAVE_STEEPNESS = 0.35;
+/**
+ * Angular segments in the water GRID, independent of the outline's own segment
+ * count. Gerstner displacement folds the mesh wherever the lateral shift exceeds
+ * the local vertex spacing, and spacing shrinks as segments rise — at the
+ * outline's 192 the surface folded almost everywhere. 96 still resolves the
+ * shoreline comfortably (its highest harmonic is 11).
+ */
+const WATER_SURFACE_SEGMENT_COUNT = 96;
+/**
+ * Lateral displacement fades toward the centre, where all the angular segments
+ * converge and spacing becomes tiny. Height is unaffected — only the sideways
+ * crowding needs limiting, and near the middle it is invisible anyway.
+ */
+const LATERAL_CENTRE_CALM_FRACTION = 0.45;
 
 // Rings of tessellation from centre to shore. This is the knob that decides
 // whether the surface has relief at all: at 1 it is the old flat fan.
@@ -97,8 +122,6 @@ const POND_SURFACE_OPACITY = 0.88;
 // clear the deepest trough instead leaves the water visibly perched above its
 // own bank, like a filled pool.
 const WATER_SURFACE_HEIGHT = 0.07;
-// The measured slope field peaks around 0.43, so this multiplier decides how
-// pronounced the fine chop is on top of the displaced geometry.
 // Halved from 0.45. At that strength the tiled ripple map was reading as a
 // repeating carpet of dark squiggles across the surface — the geometry waves now
 // carry the visible motion, and this is only fine detail on top of them.
@@ -187,6 +210,15 @@ type WaterSurfaceMesh = {
   geometry: BufferGeometry;
   /** Per-vertex wave amplitude scale: 0 at the shore, 1 in open water. */
   waveScales: Float32Array;
+  /**
+   * Undisplaced XY of every vertex. Gerstner waves move vertices sideways, so the
+   * wave phase MUST be evaluated at the rest position — reading it back from the
+   * live position attribute feeds the displacement into its own input and the
+   * surface drifts away every frame.
+   */
+  restPositions: Float32Array;
+  /** Per-vertex scale on the SIDEWAYS Gerstner shift only; guards against folding. */
+  lateralScales: Float32Array;
 };
 
 /**
@@ -198,13 +230,15 @@ type WaterSurfaceMesh = {
  * vertices to displace, and a fan has none between the centre and the rim.
  */
 function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount: number): WaterSurfaceMesh {
-  const segments = outline.segments;
+  const segments = WATER_SURFACE_SEGMENT_COUNT;
   const vertexCount = 1 + ringCount * (segments + 1);
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Float32Array(vertexCount * 3);
   const waveScales = new Float32Array(vertexCount);
+  const restPositions = new Float32Array(vertexCount * 2);
+  const lateralScales = new Float32Array(vertexCount);
   const indices: number[] = [];
 
   // Centre vertex.
@@ -230,6 +264,8 @@ function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount:
 
       positions[vertexIndex * 3] = x;
       positions[vertexIndex * 3 + 1] = y;
+      restPositions[vertexIndex * 2] = x;
+      restPositions[vertexIndex * 2 + 1] = y;
       normals[vertexIndex * 3 + 2] = 1;
       // UVs in WORLD units so a ripple tile is the same physical size whatever
       // the surface's radius.
@@ -247,6 +283,8 @@ function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount:
       // trough to dip through the shoreline band it overlaps.
       const shoreFade = Math.min(1, (1 - ringFraction) / SHORE_CALM_FRACTION);
       waveScales[vertexIndex] = shoreFade * shoreFade * (3 - 2 * shoreFade);
+      const centreFade = Math.min(1, ringFraction / LATERAL_CENTRE_CALM_FRACTION);
+      lateralScales[vertexIndex] = centreFade * centreFade * (3 - 2 * centreFade);
 
       if (segmentIndex < segments) {
         if (ringIndex === 0) {
@@ -267,7 +305,7 @@ function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount:
   geometry.setAttribute("color", new BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeBoundingSphere();
-  return { geometry, waveScales };
+  return { geometry, waveScales, restPositions, lateralScales };
 }
 
 /**
@@ -276,7 +314,13 @@ function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount:
  * which would cost a full pass over the index buffer every frame and come out
  * faceted anyway.
  */
-function displaceWaterSurface(geometry: BufferGeometry, waveScales: Float32Array, elapsedSeconds: number): void {
+function displaceWaterSurface(
+  geometry: BufferGeometry,
+  waveScales: Float32Array,
+  restPositions: Float32Array,
+  lateralScales: Float32Array,
+  elapsedSeconds: number
+): void {
   const positionAttribute = geometry.getAttribute("position") as BufferAttribute;
   const normalAttribute = geometry.getAttribute("normal") as BufferAttribute;
   const positions = positionAttribute.array as Float32Array;
@@ -284,24 +328,37 @@ function displaceWaterSurface(geometry: BufferGeometry, waveScales: Float32Array
 
   for (let vertexIndex = 0; vertexIndex < waveScales.length; vertexIndex += 1) {
     const offset = vertexIndex * 3;
-    const x = positions[offset];
-    const y = positions[offset + 1];
+    const restX = restPositions[vertexIndex * 2];
+    const restY = restPositions[vertexIndex * 2 + 1];
     const waveScale = waveScales[vertexIndex];
+    const lateralScale = lateralScales[vertexIndex];
 
     let height = 0;
+    let shiftX = 0;
+    let shiftY = 0;
     let slopeX = 0;
     let slopeY = 0;
     for (const wave of SURFACE_WAVES) {
       const angularFrequency = (Math.PI * 2) / wave.wavelength;
       const phase =
-        (wave.directionX * x + wave.directionY * y) * angularFrequency - elapsedSeconds * wave.speed * angularFrequency;
+        (wave.directionX * restX + wave.directionY * restY) * angularFrequency -
+        elapsedSeconds * wave.speed * angularFrequency;
       const amplitude = wave.amplitude * waveScale;
-      height += amplitude * Math.sin(phase);
-      const slopeTerm = amplitude * angularFrequency * Math.cos(phase);
+      const sinPhase = Math.sin(phase);
+      const cosPhase = Math.cos(phase);
+      height += amplitude * sinPhase;
+      // Gerstner: vertices crowd toward the crests, which sharpens them and
+      // flattens the troughs. Scaled by waveScale as well, so the rim stays put.
+      const lateral = WAVE_STEEPNESS * amplitude * lateralScale * cosPhase;
+      shiftX += lateral * wave.directionX;
+      shiftY += lateral * wave.directionY;
+      const slopeTerm = amplitude * angularFrequency * cosPhase;
       slopeX += slopeTerm * wave.directionX;
       slopeY += slopeTerm * wave.directionY;
     }
 
+    positions[offset] = restX + shiftX;
+    positions[offset + 1] = restY + shiftY;
     positions[offset + 2] = height;
     // Local +Z is the surface up-axis, so the normal is (-dh/dx, -dh/dy, 1).
     const length = Math.hypot(slopeX, slopeY, 1) || 1;
@@ -331,7 +388,7 @@ type ForestPondWaterProps = {
 
 export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = true }: ForestPondWaterProps) {
   const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
-  const { geometry, waveScales } = useMemo(
+  const { geometry, waveScales, restPositions, lateralScales } = useMemo(
     // A pond does not need a lake's tessellation; scale rings with radius.
     () => buildWaterSurfaceMesh(radius, outline, Math.max(6, Math.round(SURFACE_RING_COUNT * Math.min(1, radius / 8)))),
     [outline, radius]
@@ -352,7 +409,7 @@ export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = tru
     // after a stall would jump the wave phase and read as a glitch.
     elapsedSecondsRef.current += Math.min(deltaTimeSeconds, 1 / 15);
     const elapsedSeconds = elapsedSecondsRef.current;
-    displaceWaterSurface(geometry, waveScales, elapsedSeconds);
+    displaceWaterSurface(geometry, waveScales, restPositions, lateralScales, elapsedSeconds);
     normalTexture.offset.set(elapsedSeconds * PRIMARY_SCROLL_SPEED.x, elapsedSeconds * PRIMARY_SCROLL_SPEED.y);
   });
 
