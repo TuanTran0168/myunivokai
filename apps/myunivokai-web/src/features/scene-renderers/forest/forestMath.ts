@@ -63,6 +63,80 @@ const LAKE_BED_DEPTH = 1.8;
 // that makes the edge read as a beach rather than a step.
 const LAKE_BED_SHELF_WIDTH = 3.0;
 
+// Islands. An unbroken sheet of water reads as a puddle however large it is;
+// something standing out of it is one of the strongest "this is a lake" cues
+// there is, and it costs nothing but a bump in the height field — the water
+// surface is a sheet at a fixed height, so any terrain rising past it simply
+// emerges. No extra mesh, no hole to cut in the water.
+const LAKE_ISLAND_SEED_SUFFIX = "-lake-islands";
+const MAXIMUM_LAKE_ISLAND_COUNT = 3;
+const LAKE_ISLAND_RADIUS_RANGE = { minimum: 1.6, maximum: 3.4 };
+// Clear of WATER_SURFACE_HEIGHT (0.07) by enough that wave troughs never wash
+// the whole islet away.
+const LAKE_ISLAND_PEAK_HEIGHT = 0.75;
+// Kept off the exact centre (where the deep tint is darkest) and away from the
+// shore (where an islet just looks like a lumpy bank), as a fraction of the
+// local shore radius.
+const LAKE_ISLAND_INNER_FRACTION = 0.22;
+const LAKE_ISLAND_OUTER_FRACTION = 0.62;
+const LAKE_ISLAND_RIM_SAMPLES = 16;
+const LAKE_ISLAND_SHORE_MARGIN = 1.2;
+const LAKE_ISLAND_PULL_IN_STEPS = 8;
+
+type LakeIsland = { x: number; z: number; radius: number };
+
+function createLakeIslands(terrain: ForestTerrainConfig | undefined, outline: WaterOutline): LakeIsland[] {
+  const nextRandomValue = randomFromSeed((terrain?.placementSeed ?? "forest-terrain") + LAKE_ISLAND_SEED_SUFFIX);
+  const meanRadius = lakeRadiusFromTerrain(terrain);
+  // 1..MAXIMUM islands — never zero, so every lake gets the cue.
+  const islandCount = 1 + Math.floor(nextRandomValue() * MAXIMUM_LAKE_ISLAND_COUNT);
+  const islands: LakeIsland[] = [];
+  for (let islandIndex = 0; islandIndex < islandCount; islandIndex += 1) {
+    const angle = nextRandomValue() * FULL_CIRCLE_RADIANS;
+    const shoreRadius = meanRadius * outline.radiusFactorAt(-angle);
+    const radialFraction =
+      LAKE_ISLAND_INNER_FRACTION + nextRandomValue() * (LAKE_ISLAND_OUTER_FRACTION - LAKE_ISLAND_INNER_FRACTION);
+    const radius =
+      LAKE_ISLAND_RADIUS_RANGE.minimum +
+      nextRandomValue() * (LAKE_ISLAND_RADIUS_RANGE.maximum - LAKE_ISLAND_RADIUS_RANGE.minimum);
+    // Pull the islet inward until its WHOLE RIM clears the shore, testing the
+    // rim rather than estimating from the centre's shore radius. Estimating
+    // fails badly now that bays reach 0.3x the mean while headlands reach 1.5x:
+    // an islet sitting comfortably inside a headland can still have its far side
+    // in the bay next door, where it merges with the bank into a peninsula —
+    // which is not the cue it is placed for.
+    const rimClearsShore = (centreDistance: number): boolean => {
+      for (let rimIndex = 0; rimIndex < LAKE_ISLAND_RIM_SAMPLES; rimIndex += 1) {
+        const rimAngle = (rimIndex / LAKE_ISLAND_RIM_SAMPLES) * FULL_CIRCLE_RADIANS;
+        const x = Math.cos(angle) * centreDistance + Math.cos(rimAngle) * radius;
+        const z = Math.sin(angle) * centreDistance + Math.sin(rimAngle) * radius;
+        const shoreAtRim = meanRadius * outline.radiusFactorAt(waterOutlineAngleAt(x, z));
+        if (Math.hypot(x, z) > shoreAtRim - LAKE_ISLAND_SHORE_MARGIN) {
+          return false;
+        }
+      }
+      return true;
+    };
+    let distanceFromCentre = shoreRadius * radialFraction;
+    let attemptsRemaining = LAKE_ISLAND_PULL_IN_STEPS;
+    while (attemptsRemaining > 0 && distanceFromCentre > 0 && !rimClearsShore(distanceFromCentre)) {
+      distanceFromCentre *= 0.8;
+      attemptsRemaining -= 1;
+    }
+    // The centre always has room: the outline floor keeps the shore at least
+    // MINIMUM_WATER_OUTLINE_FACTOR out, which clears the largest islet.
+    if (!rimClearsShore(distanceFromCentre)) {
+      distanceFromCentre = 0;
+    }
+    islands.push({
+      x: Math.cos(angle) * distanceFromCentre,
+      z: Math.sin(angle) * distanceFromCentre,
+      radius
+    });
+  }
+  return islands;
+}
+
 const RIVER_SHAPE_SEED_SUFFIX = "-river";
 /** Half width of the river channel away from the lake, in world units. */
 export const RIVER_HALF_WIDTH = 1.55;
@@ -222,9 +296,28 @@ export function createRiverEdgeDistanceSampler(terrain?: ForestTerrainConfig): P
 // A roughly round outline reads as a puddle at any size, because puddles are
 // round and lakes lie along a valley. The higher harmonics only add inlets and
 // headlands on top of that long axis.
-const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11];
-const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.26, 0.075, 0.05, 0.032, 0.02];
-const WATER_OUTLINE_SEGMENTS = 160;
+const WATER_OUTLINE_HARMONIC_FREQUENCIES = [2, 3, 5, 7, 11, 13, 17, 23];
+const WATER_OUTLINE_HARMONIC_AMPLITUDES = [0.24, 0.075, 0.058, 0.049, 0.039, 0.036, 0.032, 0.027];
+const WATER_OUTLINE_SEGMENTS = 192;
+/**
+ * Inward excursions are amplified; outward ones are not. Bays cut in, headlands
+ * stay put — so the shoreline gets far more convoluted WITHOUT growing the
+ * maximum radius, which is what bounds the tree band.
+ *
+ * Measured by shoreline development index (perimeter over the perimeter of a
+ * circle of equal area — the standard limnological measure; 1.00 is a perfect
+ * circle, real lakes run 1.5-3.0):
+ *
+ *     5 smooth harmonics, no gain   SDI 1.09   <- read as a puddle
+ *     8 harmonics, no gain          SDI 1.28
+ *     8 harmonics, gain 2.0         SDI 1.60   <- shipped
+ *     8 harmonics, gain 3.0         SDI 1.77
+ *
+ * Raising amplitudes instead reaches only ~1.37 and costs 2.5 units of tree
+ * band, because it grows the headlands as well as the bays.
+ */
+const WATER_OUTLINE_BAY_DEPTH_GAIN = 2.0;
+const MINIMUM_WATER_OUTLINE_FACTOR = 0.3;
 
 export type WaterOutline = {
   /** Radius multiplier at an angle; averages ~1 so `radius` stays the mean. */
@@ -242,13 +335,16 @@ export function createWaterOutline(seedText: string): WaterOutline {
   return {
     segments: WATER_OUTLINE_SEGMENTS,
     radiusFactorAt: (angleRadians: number) => {
-      let factor = 1;
+      let excursion = 0;
       for (const harmonic of harmonics) {
-        factor += Math.sin(harmonic.frequency * angleRadians + harmonic.phase) * harmonic.amplitude;
+        excursion += Math.sin(harmonic.frequency * angleRadians + harmonic.phase) * harmonic.amplitude;
       }
-      // Sines average to zero, so the mean factor is 1; the floor only guards
-      // against a pathological seed pinching the shore through the centre.
-      return Math.max(0.45, factor);
+      if (excursion < 0) {
+        excursion *= WATER_OUTLINE_BAY_DEPTH_GAIN;
+      }
+      // The floor only guards against a pathological seed pinching the shore
+      // through the centre.
+      return Math.max(MINIMUM_WATER_OUTLINE_FACTOR, 1 + excursion);
     }
   };
 }
@@ -300,6 +396,7 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
   const treelineRadius = treelineRadiusFromTerrain(terrain);
   const angularFrequency = hillFrequency * FULL_CIRCLE_RADIANS;
   const signedLakeEdgeDistanceSampler = createLakeSignedEdgeDistanceSampler(terrain);
+  const lakeIslands = createLakeIslands(terrain, createWaterOutline(lakeShapeSeedFromTerrain(terrain)));
 
   return (x: number, z: number) => {
     const radiusFromCenter = Math.hypot(x, z);
@@ -323,10 +420,21 @@ export function createTerrainHeightSampler(terrain?: ForestTerrainConfig): Terra
     // it from a clamped distance instead leaves the bed flat all the way to the
     // edge, and then the water plane sits on top of a wall as deep as the lake.
     const signedShoreDistance = signedLakeEdgeDistanceSampler(x, z);
-    const nearHills =
+    let nearHills =
       signedShoreDistance >= 0
         ? rollingHills * smoothstepValue(0, LAKE_SHORE_BLEND_WIDTH, signedShoreDistance)
         : -LAKE_BED_DEPTH * smoothstepValue(0, LAKE_BED_SHELF_WIDTH, -signedShoreDistance);
+
+    // Islands rise back out of the carved bed. Taken as a MAXIMUM rather than
+    // added, so an islet keeps its shape instead of inheriting the bed's slope.
+    for (const island of lakeIslands) {
+      const distanceFromIsland = Math.hypot(x - island.x, z - island.z);
+      if (distanceFromIsland >= island.radius) {
+        continue;
+      }
+      const dome = smoothstepValue(island.radius, island.radius * 0.35, distanceFromIsland);
+      nearHills = Math.max(nearHills, LAKE_ISLAND_PEAK_HEIGHT * dome - LAKE_BED_DEPTH * (1 - dome));
+    }
 
     // Distant forested hills: ramp up past the treeline so the far horizon is
     // a rolling ridgeline, not the cut edge of a flat slab.

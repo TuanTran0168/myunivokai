@@ -59,15 +59,23 @@ const RIVER_OPACITY = 0.86;
 const LAKE_SHORE_BAND_FRACTION = 0.075;
 const MINIMUM_LAKE_SHORE_BAND_WIDTH = 0.55;
 
-const WATER_BASE_COLOR = "#2E6E8E";
+// Darker and far less saturated than the first set, which was a swimming-pool
+// blue. Water has almost no colour of its own — what you see is the sky and the
+// far bank, so a forest lake sits in the dark blue-greens of what surrounds it.
+// A vivid blue disc against desaturated woodland is one of the strongest "this
+// is fake" signals in the whole scene, and it survived several passes because
+// each was judged on the surface rather than on the palette.
+const WATER_BASE_COLOR = "#22414C";
 // Winter reads as meltwater over pale ice, not as summer teal.
 const WATER_COLORS_BY_SEASON_KIND: Record<string, string> = {
-  spring: "#2F7896",
-  summer: "#2E6E8E",
-  autumn: "#39657A",
-  winter: "#7FA3B4"
+  spring: "#26495A",
+  summer: "#22414C",
+  autumn: "#2B3F44",
+  winter: "#5B7683"
 };
-const RIVER_BED_COLOR = "#5E6354";
+// Wet earth at the waterline, not the dry olive of a path. A uniform pale rim
+// around water reads as the mud ring of a puddle.
+const RIVER_BED_COLOR = "#4A4A3E";
 
 type RiverGeometryInput = {
   terrain?: ForestTerrainConfig;

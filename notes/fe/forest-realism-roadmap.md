@@ -92,6 +92,56 @@ not match the terrain basin carved for it.
 preference. If a CC0 water normal map appears, it drops straight into
 `getRippleNormalTexture`'s slot.
 
+### Measure the shoreline instead of eyeballing it
+
+The outline kept being called puddle-shaped after several rounds of tuning. The
+useful move was to **measure** it: limnology's **shoreline development index**
+= perimeter ÷ perimeter of a circle of equal area. A perfect circle is 1.00; real
+lakes run **1.5–3.0**.
+
+The "organic" outline scored **1.09** — mathematically almost a circle. That
+settled it: the eye was right and the tuning had been cosmetic.
+
+Raising harmonic amplitudes only reaches ~1.37 and costs 2.5 units of tree band,
+because it grows headlands as well as bays. What works is
+`WATER_OUTLINE_BAY_DEPTH_GAIN`: **amplify inward excursions only.** Bays cut in,
+headlands stay put, so the maximum radius — which is what bounds the tree band —
+is unchanged.
+
+| configuration | SDI | tree band |
+|---|---|---|
+| 5 smooth harmonics | 1.09 | 17.2 |
+| 8 harmonics | 1.28 | 16.4 |
+| 8 harmonics + amplitude | 1.37 | 14.7 |
+| **8 harmonics + bay gain 2.0** | **1.58** | **16.9** |
+
+**Use the SDI script before claiming a shoreline looks natural.** It takes
+seconds and it is not a matter of opinion.
+
+### Islands
+
+An unbroken sheet of water reads as a puddle however large. Islands are the
+cheapest strong counter-cue here: the water is a sheet at a fixed height, so any
+terrain rising past it simply emerges — **no extra mesh, no hole cut in the
+water**, just a bump in the height field taken as a `max` (not a sum, or the
+islet inherits the bed's slope).
+
+The one subtlety: an islet must be placed by **testing its whole rim** against
+the shoreline, not by estimating from its centre. With bays at 0.3× the mean
+radius and headlands at 1.5×, an islet sitting comfortably inside a headland can
+have its far side in the next bay, where it merges into the bank and becomes a
+peninsula. Estimating from the centre left ~⅓ of islands like that; rim testing
+with an inward pull-in leaves none.
+
+### Water colour
+
+Water has almost no colour of its own — what you see is the sky and the far bank.
+The palette was a saturated `#2E6E8E` pool-blue, which against desaturated
+woodland is one of the strongest fake signals in the scene. It survived several
+passes **because each pass judged the surface, not the palette.** Now dark
+blue-greens (`#22414C` and friends), and the shore band is wet earth rather than
+dry olive.
+
 ### Puddle vs lake is scale and silhouette, not material
 
 After the surface had displaced waves, sharp reflection and a good normal map,
