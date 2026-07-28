@@ -62,6 +62,15 @@ const LAKE_BED_DEPTH = 1.8;
 // How far inside the shoreline the bed reaches full depth — the shallow shelf
 // that makes the edge read as a beach rather than a step.
 const LAKE_BED_SHELF_WIDTH = 3.0;
+/**
+ * Bank kept clear of TREES (not of grass, ferns or rocks — those run to the
+ * waterline, and a bare ring reads worse than a wooded one). It lives here
+ * rather than in the renderer because the opening camera stands inside this
+ * band: if the two numbers drift apart the camera ends up behind a trunk.
+ * Widened from 2.8 to give that camera room — see forestShoreCameraFraming,
+ * whose standoff is clamped to stay inside it.
+ */
+export const LAKE_SHORE_PLANTING_BUFFER = 4.5;
 
 // Islands. An unbroken sheet of water reads as a puddle however large it is;
 // something standing out of it is one of the strongest "this is a lake" cues
@@ -194,6 +203,143 @@ export function createLakeEdgeDistanceSampler(terrain?: ForestTerrainConfig): Pa
  */
 export function waterOutlineAngleAt(x: number, z: number): number {
   return -Math.atan2(z, x);
+}
+
+// --- Opening camera framing --------------------------------------------------
+// Six passes of shape, scale, palette and wave work did not stop the lake
+// reading as a puddle, and the measurable reason is the VIEWPOINT, not the
+// water. The opening camera stood at the backend's rolled distance of 14-20
+// units with its height at 0.42x that, aimed at the origin — which is INSIDE
+// the lake's own outer radius (16-22 for the same clearing range), six to eight
+// units above the surface. The bottom edge of a 50-degree frame then lands on
+// open water at ~0.62x the camera distance, so the near bank is cropped away
+// entirely and the far bank sits in the middle distance beneath a tall band of
+// forest. Water seen from above with no near bank has no depth gradient and no
+// scale reference, and the forest above it wins the frame: that is a puddle
+// read, however good the surface is. Pulling further back only shrinks the lake.
+//
+// Every reference photograph of a forest lake is instead taken FROM THE BANK: a
+// few metres of shore in the foreground, the water receding at a grazing angle,
+// the far shore and treeline compressed toward the horizon. Perspective does the
+// work that no amount of shoreline detail could. Grazing incidence also buys
+// real reflection for free — Fresnel is ~30% at 80 degrees against ~2% looking
+// straight down, which is why the surface never showed the sky before.
+//
+// Limit worth knowing: only the central sight line is guaranteed clear of
+// trunks (the camera stands inside the tree-free bank, so every point between it
+// and the water is inside that band too). Rays that leave the axis can cross a
+// bay that recedes further than the bank, and a shore tree may stand in front of
+// that water. Closing that off would need a tree-free band as wide as the
+// deepest bay, which would cost most of the forest.
+
+/** Eye height above whatever ground the camera stands on. */
+const SHORE_CAMERA_EYE_HEIGHT = 1.7;
+/**
+ * Where the near waterline should sit in the frame, as a fraction of frame
+ * height up from the bottom edge. Small on purpose: the bank is the foreground,
+ * not the subject.
+ */
+const SHORE_CAMERA_WATERLINE_FRAME_FRACTION = 0.12;
+/**
+ * Standoff and look-down angle each depend on the other, so the standoff is
+ * SOLVED rather than tuned: a constant that frames the waterline correctly at
+ * one clearing radius misses it at the rest of the range. The iteration
+ * contracts (the standoff only enters through atan(height / distance), which is
+ * flat here), and six passes settle it to well under a millimetre.
+ */
+const SHORE_CAMERA_STANDOFF_SOLVER_PASSES = 6;
+/** Stay this far inside the tree-free bank, so no trunk shares the camera's spot. */
+const SHORE_CAMERA_TREE_CLEARANCE = 0.5;
+const MINIMUM_SHORE_CAMERA_STANDOFF = 1.5;
+/**
+ * How far the sight line to the far shore must pass above the near bank's crest.
+ * A grazing view is extremely sensitive to this: measured across the backend's
+ * terrain ranges, a fixed eye height hid up to 10.5 units of the far water —
+ * effectively the whole far half of the lake — behind a bank crest less than a
+ * unit high. So the eye RISES until it sees over its own bank. The margin also
+ * buys clearance over the grass tufts (0.45-0.65 tall) that grow to the
+ * waterline; a few blades across the foreground is framing, a wall of them is
+ * not.
+ */
+const SHORE_CAMERA_CREST_CLEARANCE = 0.5;
+const SHORE_CAMERA_CREST_SAMPLES = 24;
+const DEGREES_TO_RADIANS = Math.PI / 180;
+
+export type ForestCameraFraming = {
+  /** Horizontal distance from the scene centre. The camera stands on +Z. */
+  distance: number;
+  /** Height above the water plane (y = 0), not above the local ground. */
+  height: number;
+};
+
+/**
+ * Shoreline radius on the +Z axis, where the opening camera stands. The MEAN
+ * radius is the wrong number here: the outline swings from 0.3x to 1.48x of it,
+ * so a camera placed against the mean stands in the water on any seed whose
+ * bank happens to bulge along +Z.
+ */
+export function lakeShoreRadiusOnOpeningAxis(terrain?: ForestTerrainConfig): number {
+  const outline = createWaterOutline(lakeShapeSeedFromTerrain(terrain));
+  return lakeRadiusFromTerrain(terrain) * outline.radiusFactorAt(waterOutlineAngleAt(0, 1));
+}
+
+/** Shoreline radius on the -Z axis: the far bank the opening shot looks across. */
+export function lakeShoreRadiusAcrossOpeningAxis(terrain?: ForestTerrainConfig): number {
+  const outline = createWaterOutline(lakeShapeSeedFromTerrain(terrain));
+  return lakeRadiusFromTerrain(terrain) * outline.radiusFactorAt(waterOutlineAngleAt(0, -1));
+}
+
+/**
+ * Places the opening camera on the lake's near bank, aimed at the scene centre,
+ * with the waterline just inside the bottom of the frame. Derived from the lake
+ * the renderer actually builds — the backend's rolled `camera.distance` predates
+ * the lake and knows nothing about its extent, so for forests it is ignored.
+ */
+export function forestShoreCameraFraming(
+  terrain: ForestTerrainConfig | undefined,
+  fieldOfViewDegrees: number
+): ForestCameraFraming {
+  const shoreRadius = lakeShoreRadiusOnOpeningAxis(terrain);
+  const farShoreRadius = lakeShoreRadiusAcrossOpeningAxis(terrain);
+  const terrainHeightSampler = createTerrainHeightSampler(terrain);
+  const halfFrameRadians = (fieldOfViewDegrees * DEGREES_TO_RADIANS) / 2;
+  const waterlineInsetRadians = 2 * halfFrameRadians * SHORE_CAMERA_WATERLINE_FRAME_FRACTION;
+  const maximumStandoff = Math.max(
+    MINIMUM_SHORE_CAMERA_STANDOFF,
+    LAKE_SHORE_PLANTING_BUFFER - SHORE_CAMERA_TREE_CLEARANCE
+  );
+  // Two constraints, whichever is higher. Standing height: the bank can dip below
+  // the water plane a few units back from the shore, so the eye is measured from
+  // the ground but floored at the water — a camera under y = 0 would look up
+  // through the surface from beneath. Sight line: the ray to the far shore has to
+  // clear the near bank's crest, and only the bank can hide the lake (everything
+  // past the waterline is bed or island, and an island is meant to be seen).
+  const heightAt = (distance: number) => {
+    let requiredHeight = Math.max(0, terrainHeightSampler(0, distance)) + SHORE_CAMERA_EYE_HEIGHT;
+    const totalRun = distance + farShoreRadius;
+    const standoff = distance - shoreRadius;
+    for (let sample = 1; sample <= SHORE_CAMERA_CREST_SAMPLES; sample += 1) {
+      const run = (standoff * sample) / SHORE_CAMERA_CREST_SAMPLES;
+      const crestHeight = terrainHeightSampler(0, distance - run) + SHORE_CAMERA_CREST_CLEARANCE;
+      // Ray height at this point is cameraHeight * (1 - run / totalRun).
+      requiredHeight = Math.max(requiredHeight, crestHeight / (1 - run / totalRun));
+    }
+    return requiredHeight;
+  };
+
+  let standoff = maximumStandoff;
+  for (let pass = 0; pass < SHORE_CAMERA_STANDOFF_SOLVER_PASSES; pass += 1) {
+    const distance = shoreRadius + standoff;
+    const height = heightAt(distance);
+    const waterlineDepressionRadians = Math.atan(height / distance) + halfFrameRadians - waterlineInsetRadians;
+    standoff = clampValue(
+      height / Math.tan(waterlineDepressionRadians),
+      MINIMUM_SHORE_CAMERA_STANDOFF,
+      maximumStandoff
+    );
+  }
+  const distance = shoreRadius + standoff;
+  return { distance, height: heightAt(distance) };
 }
 
 export type RiverShape = {
