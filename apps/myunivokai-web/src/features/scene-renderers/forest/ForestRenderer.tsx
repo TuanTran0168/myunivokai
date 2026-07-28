@@ -4,7 +4,14 @@ import { useMemo } from "react";
 import { Environment } from "@react-three/drei";
 import type { SceneRendererProps } from "@/features/scene-renderers/types";
 import { pointsOfInterestFromScene } from "@/lib/scene";
-import { createPathLateralDistanceSampler, createTerrainHeightSampler, treelineRadiusFromTerrain } from "./forestMath";
+import {
+  createLakeEdgeDistanceSampler,
+  createPathLateralDistanceSampler,
+  createRiverEdgeDistanceSampler,
+  createTerrainHeightSampler,
+  maximumLakeRadiusFromTerrain,
+  treelineRadiusFromTerrain
+} from "./forestMath";
 import { natureHdriUrlForKey } from "./forestModels";
 import { ForestAmbientParticles } from "./ForestAmbientParticles";
 import { ForestDistantTreeline } from "./ForestDistantTreeline";
@@ -13,6 +20,7 @@ import { ForestLandmarks } from "./ForestLandmarks";
 import { ForestSkyDome, sunDirectionFromLighting } from "./ForestSkyDome";
 import { ForestTerrain } from "./ForestTerrain";
 import { ForestTrees } from "./ForestTrees";
+import { ForestWaterway } from "./ForestWaterway";
 import { ForestWeatherEffects } from "./ForestWeatherEffects";
 import { ForestWildlife } from "./ForestWildlife";
 
@@ -62,6 +70,11 @@ const SHADOW_NORMAL_BIAS = 0.02;
 // contract: the config's density always wins when present.
 const MINIMUM_RENDER_FOG_DENSITY = 0.004;
 
+// Dry-land breathing room past the widest point of the shoreline.
+const SHORE_PLACEMENT_MARGIN = 1.8;
+// Extra bank kept clear of trees and decor, on top of their own 1.6 exclusion.
+const LAKE_SHORE_PLANTING_BUFFER = 2.8;
+
 /**
  * Renders a ForestSceneConfig: seeded terrain with a clearing and dirt path,
  * wind-swayed instanced trees, seasonal weather and ambience, wandering
@@ -78,6 +91,28 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
 
   const terrainHeightSampler = useMemo(() => createTerrainHeightSampler(terrain), [terrain]);
   const pathLateralDistanceSampler = useMemo(() => createPathLateralDistanceSampler(terrain), [terrain]);
+  // Trees, decor and ground texture all exclude "the dirt path". Water is the
+  // same kind of no-grow surface, so it composes into the one sampler they
+  // already consume rather than each learning about the river separately.
+  const clearFloorDistanceSampler = useMemo(() => {
+    const riverEdgeDistanceSampler = createRiverEdgeDistanceSampler(terrain);
+    const lakeEdgeDistanceSampler = createLakeEdgeDistanceSampler(terrain);
+    return (x: number, z: number) =>
+      Math.min(pathLateralDistanceSampler(x, z), riverEdgeDistanceSampler(x, z), lakeEdgeDistanceSampler(x, z));
+  }, [pathLateralDistanceSampler, terrain]);
+  // Trees — and ONLY trees — keep an extra bank clear of the water. Grass, ferns
+  // and rocks run right down to the waterline, which is both what a real
+  // lakeshore looks like and the thing that gives the eye a sense of scale:
+  // water with nothing recognisable at its edge reads as a puddle. Pushing the
+  // decor back with the trees produced a bare ring that made it worse.
+  const treePlantingDistanceSampler = useMemo(() => {
+    const lakeEdgeDistanceSampler = createLakeEdgeDistanceSampler(terrain);
+    return (x: number, z: number) =>
+      Math.min(clearFloorDistanceSampler(x, z), lakeEdgeDistanceSampler(x, z) - LAKE_SHORE_PLANTING_BUFFER);
+  }, [clearFloorDistanceSampler, terrain]);
+  // Everything the backend positions by radius alone (landmarks) has to clear
+  // the lake, which it knows nothing about.
+  const shoreClearanceRadius = maximumLakeRadiusFromTerrain(terrain) + SHORE_PLACEMENT_MARGIN;
   const pointsOfInterest = useMemo(() => pointsOfInterestFromScene(scene), [scene]);
 
   const sunPosition = useMemo(
@@ -123,6 +158,10 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
       />
 
       <ForestSkyDome lighting={lighting} weather={weather} />
+      {/* Terrain gets the PATH-ONLY sampler on purpose: this sampler also paints
+          the ground as bare dirt, and running it over the river turned the
+          channel into a wide tan road. The riverbed gets its own strip in
+          ForestWaterway. Trees and decor below use the water-aware one. */}
       <ForestTerrain
         terrain={terrain}
         season={season}
@@ -136,7 +175,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={pathLateralDistanceSampler}
+        pathLateralDistanceSampler={treePlantingDistanceSampler}
       />
       {/* Forested hills ringing the clearing, so the world does not end at the
           treeline in bare tinted ground. */}
@@ -145,8 +184,11 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         terrain={terrain}
         season={season}
         terrainHeightSampler={terrainHeightSampler}
-        pathLateralDistanceSampler={pathLateralDistanceSampler}
+        pathLateralDistanceSampler={clearFloorDistanceSampler}
       />
+      {/* Lake in the clearing plus the river through it — drawn after the
+          terrain and trees so the reflector captures them. */}
+      <ForestWaterway terrain={terrain} season={season} terrainHeightSampler={terrainHeightSampler} />
       <ForestWeatherEffects
         weather={weather}
         lighting={lighting}
@@ -164,6 +206,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         wildlife={wildlife}
         terrain={terrain}
         terrainHeightSampler={terrainHeightSampler}
+        shoreClearanceRadius={shoreClearanceRadius}
         worldSeed={placementSeed}
         selectedPlanetKey={selectedPlanetKey}
         onHoverPlanet={onHoverPlanet}
@@ -173,6 +216,7 @@ export function ForestRenderer({ scene, selectedPlanetKey, hoveredPlanetKey, onH
         landmarks={scene.landmarks}
         pointsOfInterest={pointsOfInterest}
         terrainHeightSampler={terrainHeightSampler}
+        minimumRadiusFromCenter={shoreClearanceRadius}
         selectedPlanetKey={selectedPlanetKey}
         hoveredPlanetKey={hoveredPlanetKey}
         onHoverPlanet={onHoverPlanet}

@@ -38,7 +38,43 @@ import {
 const ANIMAL_WALK_SPEED_UNITS_PER_SECOND = 2.4;
 const ANIMAL_BODY_BOB_AMPLITUDE = 0.035;
 const ANIMAL_BODY_BOB_FREQUENCY = 8;
-const ANIMAL_TURN_PAUSE_FRACTION = 0.06;
+// Raised from 0.06: the pause has to be long enough to hold a whole half-turn
+// (see the turn-rate derivation below), and a longer beat also reads better as
+// "stop, look up, turn round" instead of a bounce off an invisible wall.
+const ANIMAL_TURN_PAUSE_FRACTION = 0.11;
+// Two separate causes of the "con vật giật lùi về" (animal jerks backwards)
+// artefact, both fixed here:
+//
+//  1. The ping-pong heading used to flip a full 180 degrees on the single frame
+//     the animal reached a waypoint. An instant reversal reads as a glitch, not
+//     as an animal turning around, so the yaw now eases to its target — the
+//     turn happens during the existing end-of-path pause.
+//  2. elapsedSeconds accumulated raw deltaTime. Any frame hitch (a GLB
+//     finishing its decode, the tab losing focus, a shader compile) hands
+//     useFrame one enormous delta, which jumps the ping-pong parameter far
+//     enough to teleport the animal — sometimes visibly backwards along its
+//     own path. The clamp bounds how far a single frame can advance.
+// Floor only. The real rate is derived per-animal from its pause duration so the
+// turn always completes before it starts walking again; this just stops a very
+// long path from producing a comically slow turn.
+const ANIMAL_MINIMUM_YAW_TURN_RATE_RADIANS_PER_SECOND = 2.2;
+// Finish the turn comfortably inside the pause rather than exactly at its end.
+const ANIMAL_TURN_COMPLETION_FRACTION_OF_PAUSE = 0.7;
+const MAXIMUM_ANIMAL_FRAME_DELTA_SECONDS = 1 / 15;
+
+const FULL_CIRCLE_RADIANS = Math.PI * 2;
+
+/** Shortest-arc signed difference between two yaw angles, in (-PI, PI]. */
+function shortestAngleDifference(fromRadians: number, toRadians: number): number {
+  let difference = (toRadians - fromRadians) % FULL_CIRCLE_RADIANS;
+  if (difference > Math.PI) {
+    difference -= FULL_CIRCLE_RADIANS;
+  }
+  if (difference < -Math.PI) {
+    difference += FULL_CIRCLE_RADIANS;
+  }
+  return difference;
+}
 // Multiplies the config walkSpeed into the walk clip's playback rate so the
 // hooves match the ground speed instead of moonwalking.
 const WALK_CLIP_TIMESCALE_PER_WALK_SPEED = 2.2;
@@ -53,6 +89,8 @@ type ForestWildlifeProps = {
   wildlife?: ForestWildlifeConfig;
   terrain?: ForestTerrainConfig;
   terrainHeightSampler: TerrainHeightSampler;
+  /** Radius of dry ground: animals must wander outside the lake, not across it. */
+  shoreClearanceRadius: number;
   // The world seed drives the rare special-bird sighting (seed encodes DNA).
   worldSeed: string;
   // Animals join the interactive POI layer: hover shows the species tooltip,
@@ -173,6 +211,7 @@ type GroundAnimalProps = {
   individualIndex: number;
   clearingRadius: number;
   treelineRadius: number;
+  shoreClearanceRadius: number;
   terrainHeightSampler: TerrainHeightSampler;
   pointOfInterest: PlanetSceneConfig;
   isSelected: boolean;
@@ -189,6 +228,7 @@ function GroundAnimal({
   individualIndex,
   clearingRadius,
   treelineRadius,
+  shoreClearanceRadius,
   terrainHeightSampler,
   pointOfInterest,
   isSelected,
@@ -200,6 +240,9 @@ function GroundAnimal({
   const groupRef = useRef<Group>(null);
   const elapsedSecondsRef = useRef(0);
   const isPausedRef = useRef(false);
+  // null until the first frame, so an animal starts already facing its path
+  // instead of swinging round from zero on spawn.
+  const currentYawRef = useRef<number | null>(null);
   const planetPositionTracker = usePlanetPositionTracker();
   const trackedPositionRef = useRef(new Vector3());
   const identityKey = planetIdentityKey(pointOfInterest, individualIndex);
@@ -222,22 +265,30 @@ function GroundAnimal({
 
   const { waypointA, waypointB, phaseOffset } = useMemo(() => {
     const nextRandomValue = randomFromSeed(`${animalConfig.pathSeed ?? "forest-animal"}-individual-${individualIndex}`);
-    const wanderInnerRadius = clearingRadius * 0.5;
-    const wanderOuterRadius = Math.min(clearingRadius * 2.4, treelineRadius * 0.8);
+    // The lake now covers most of the clearing, so the wander band is anchored
+    // to the SHORE rather than to a fraction of the clearing — animals grazed
+    // across open water when this was a clearing fraction. shoreClearanceRadius
+    // already accounts for the outline's widest bulge, not just the mean radius.
+    const wanderInnerRadius = shoreClearanceRadius;
+    // Outer bound is treeline-relative. It used to be min(2.4x clearing, ...),
+    // but the lake now reaches past 2.4x the clearing, so that expression fell
+    // BELOW the inner bound and collapsed the band to its 4-unit floor.
+    const wanderOuterRadius = Math.max(wanderInnerRadius + 6, treelineRadius * 0.7);
     const pickWaypoint = () => {
       const angle = nextRandomValue() * Math.PI * 2;
       const radius = wanderInnerRadius + nextRandomValue() * (wanderOuterRadius - wanderInnerRadius);
       return new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
     };
     return { waypointA: pickWaypoint(), waypointB: pickWaypoint(), phaseOffset: nextRandomValue() * 2 };
-  }, [animalConfig.pathSeed, clearingRadius, individualIndex, treelineRadius]);
+  }, [animalConfig.pathSeed, individualIndex, shoreClearanceRadius, treelineRadius]);
 
   useFrame((_, deltaTimeSeconds) => {
     const group = groupRef.current;
     if (!group) {
       return;
     }
-    elapsedSecondsRef.current += deltaTimeSeconds;
+    const stepSeconds = Math.min(deltaTimeSeconds, MAXIMUM_ANIMAL_FRAME_DELTA_SECONDS);
+    elapsedSecondsRef.current += stepSeconds;
     const elapsedSeconds = elapsedSecondsRef.current;
     const pathLength = Math.max(waypointA.distanceTo(waypointB), 0.001);
     const cycleDurationSeconds = pathLength / (walkSpeed * ANIMAL_WALK_SPEED_UNITS_PER_SECOND);
@@ -259,10 +310,32 @@ function GroundAnimal({
         ? 0
         : Math.sin(elapsedSeconds * ANIMAL_BODY_BOB_FREQUENCY) * ANIMAL_BODY_BOB_AMPLITUDE * animalScale;
     group.position.set(x, terrainHeightSampler(x, z) + bodyBob, z);
-    group.rotation.y = Math.atan2(
+
+    const targetYaw = Math.atan2(
       (waypointB.x - waypointA.x) * headingSign,
       (waypointB.z - waypointA.z) * headingSign
     );
+    if (currentYawRef.current === null) {
+      currentYawRef.current = targetYaw;
+    } else {
+      const remainingTurn = shortestAngleDifference(currentYawRef.current, targetYaw);
+      // The turn MUST finish inside the standing-still pause. This is the
+      // "ping lag" bug: with a fixed turn rate a half-turn took about a second,
+      // while the pause at the end of the path lasted only a few tenths, so the
+      // animal spent the remainder walking in its new direction while still
+      // facing the old one — which looks exactly like being dragged backwards.
+      // Deriving the rate from the pause length makes the two agree by
+      // construction, at any path length or walk speed.
+      const pauseSeconds = Math.max(0.001, cycleDurationSeconds * ANIMAL_TURN_PAUSE_FRACTION * 2);
+      const turnRate = Math.max(
+        ANIMAL_MINIMUM_YAW_TURN_RATE_RADIANS_PER_SECOND,
+        Math.PI / (pauseSeconds * ANIMAL_TURN_COMPLETION_FRACTION_OF_PAUSE)
+      );
+      const maximumTurnThisFrame = turnRate * stepSeconds;
+      currentYawRef.current +=
+        Math.sign(remainingTurn) * Math.min(Math.abs(remainingTurn), maximumTurnThisFrame);
+    }
+    group.rotation.y = currentYawRef.current;
     trackedPositionRef.current.set(
       group.position.x,
       group.position.y + ANIMAL_CAMERA_FOCUS_HEIGHT * animalScale,
@@ -574,6 +647,7 @@ export function ForestWildlife({
   wildlife,
   terrain,
   terrainHeightSampler,
+  shoreClearanceRadius,
   worldSeed,
   selectedPlanetKey,
   onHoverPlanet,
@@ -604,6 +678,7 @@ export function ForestWildlife({
               individualIndex={individualIndex}
               clearingRadius={clearingRadius}
               treelineRadius={treelineRadius}
+              shoreClearanceRadius={shoreClearanceRadius}
               terrainHeightSampler={terrainHeightSampler}
               pointOfInterest={pointOfInterest}
               isSelected={identityKey === selectedPlanetKey}
@@ -651,6 +726,7 @@ export function ForestWildlife({
                 individualIndex={0}
                 clearingRadius={clearingRadius}
                 treelineRadius={treelineRadius}
+                shoreClearanceRadius={shoreClearanceRadius}
                 terrainHeightSampler={terrainHeightSampler}
                 pointOfInterest={pointOfInterest}
                 isSelected={identityKey === selectedPlanetKey}

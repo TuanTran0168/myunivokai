@@ -24,7 +24,9 @@ export type RareFeatureDefinition = {
 export const RARE_FEATURE_PROBABILITIES: RareFeatureDefinition[] = [
   { key: "meteor-shower", displayName: "Meteor Shower", probability: 0.05 },
   { key: "binary-sun", displayName: "Binary Suns", probability: 0.03 },
-  { key: "black-hole", displayName: "Black Hole", probability: 0.2 }
+  // Deliberately the loudest of the three: it is the most spectacular feature
+  // and the owner wants it findable while tuning the scene, not a true rarity.
+  { key: "black-hole", displayName: "Black Hole", probability: 0.4 }
 ];
 
 export function resolveRareFeatures(seed: string): RareFeatureDefinition[] {
