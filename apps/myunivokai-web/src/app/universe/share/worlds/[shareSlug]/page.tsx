@@ -4,8 +4,8 @@ import { buildShareWorldMetadata } from "@/features/share/shareWorldMetadata";
 
 // The universe share page. It lives under /universe so the two families are
 // symmetric (/universe/... and /nature/...) — see lib/worldRoutes.ts. The
-// historical un-prefixed /share/worlds/[shareSlug] still resolves: it is now a
-// permanent redirect here, so every link ever handed out keeps working.
+// historical un-prefixed /share/worlds/[shareSlug] was removed outright, so
+// universe-service's PUBLIC_WEB_URL must carry the /universe prefix.
 
 type PageProps = {
   params: {

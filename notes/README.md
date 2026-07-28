@@ -33,6 +33,7 @@ date; it is not the original creation date.
 | [fe/threejs-scene-architecture.md](fe/threejs-scene-architecture.md) | three.js principles, the sceneType-first renderer registry, how to add a scene type | Before touching any 3D code |
 | [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md) | How the **universe** is drawn: 4 model layers, texture/GLB pipelines, determinism | Before adding a universe 3D asset |
 | [fe/forest-render-mechanism.md](fe/forest-render-mechanism.md) | How the **forest/nature** scene is drawn: instanced + animated GLBs, seasonal recolor, bird gotchas, **the Sketchfab constraint** | Before adding a forest 3D asset |
+| [fe/forest-realism-roadmap.md](fe/forest-realism-roadmap.md) | **What realism level the forest is at**, the coupled water/wander radii, the animal-jitter fix, what to improve next, perf knobs | Before any "make the forest look better" task |
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
 | [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe and Nature communicate through NATS/Redis and own data | For any backend task |
@@ -58,6 +59,7 @@ date; it is not the original creation date.
 | `fe/threejs-scene-architecture.md` | Active | Registry exists; the lazy-loading upgrade is still pending |
 | `fe/universe-render-mechanism.md` | Active | Matches the solar-system renderer and asset catalogs |
 | `fe/forest-render-mechanism.md` | Active | Matches Forest schema 1.2 and current asset pipeline; decoder self-hosting is a pending task |
+| `fe/forest-realism-roadmap.md` | Active | Assessed 2026-07-27 on `feat/fe-be/scene-realism-pass`; the perf budget in it is **unmeasured** |
 | `fe/refactor-plan.md` | Needs re-baseline | Several unchecked items already exist in source; do not use its status table as backlog |
 | `fe/3d-development-limitations.md` | Reference | Principles remain useful; the room-demo branch references are historical |
 | `vision/README.md` | Implemented V1 baseline | NATS/Redis/DNA architecture exists; live deployment verification remains |

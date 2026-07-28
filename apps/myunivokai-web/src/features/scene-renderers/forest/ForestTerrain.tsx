@@ -58,7 +58,17 @@ const GRASS_SCATTER_SEED_SUFFIX = "-grass";
 
 const GROUND_COLOR_VARIATION_STRENGTH = 0.1;
 const CLEARING_LIGHTEN_STRENGTH = 0.12;
-const DIRT_PATH_COLOR = "#71543A";
+// Pale sand at the waterline, dark silt in the deep. Seen THROUGH the water, so
+// this pair is what actually produces the lake's colour gradient from above.
+const LAKE_SHALLOW_BED_COLOR = "#A79B7C";
+const LAKE_DEEP_BED_COLOR = "#3A4038";
+// Depth at which the bed has fully turned to silt.
+const LAKE_BED_SILT_DEPTH = 1.4;
+// How much of the seasonal ground colour survives under water, so a winter lake
+// bed still differs from a summer one.
+const LAKE_BED_GROUND_RETENTION = 0.25;
+
+const DIRT_PATH_COLOR ="#71543A";
 const PATH_HALF_WIDTH = 1.4;
 const PATH_EDGE_FEATHER = 0.9;
 
@@ -135,6 +145,8 @@ export function ForestTerrain({
     const nextRandomValue = randomFromSeed(placementSeed + GROUND_COLOR_NOISE_SEED_SUFFIX);
     const baseGroundColor = blendedGroundColor(season);
     const pathColor = new Color(DIRT_PATH_COLOR);
+    const lakeShallowBedColor = new Color(LAKE_SHALLOW_BED_COLOR);
+    const lakeDeepBedColor = new Color(LAKE_DEEP_BED_COLOR);
     // Distant hills read as tree-covered: a darkened forest-canopy green from
     // the season palette (stays pale in winter, so snowy hills stay snowy).
     const foliageColors = blendedFoliageColors(season);
@@ -164,6 +176,18 @@ export function ForestTerrain({
       const pathLateralDistance = pathLateralDistanceSampler(x, z);
       const pathBlend = 1 - smoothstepValue(PATH_HALF_WIDTH, PATH_HALF_WIDTH + PATH_EDGE_FEATHER, pathLateralDistance);
       workingColor.lerp(pathColor, pathBlend);
+      // The lake bed. This ground is SEEN THROUGH THE WATER, which is the whole
+      // point: the camera looks nearly straight down, and at normal incidence
+      // water reflects only about 2% — so from above you see the bottom, not the
+      // sky. Leaving the bed grass-green made the lake read as a lawn under
+      // glass; sand at the margin shading to silt in the deep is what produces
+      // the pale shallows and dark centre that say "water" from overhead.
+      const lakeDepth = -Math.min(0, terrainHeightSampler(x, z));
+      if (lakeDepth > 0) {
+        const depthBlend = smoothstepValue(0, LAKE_BED_SILT_DEPTH, lakeDepth);
+        workingColor.lerp(lakeShallowBedColor, 1 - LAKE_BED_GROUND_RETENTION);
+        workingColor.lerp(lakeDeepBedColor, depthBlend);
+      }
       // Mid-far ground turns forest-green (rising hills read as forested)...
       const distantCanopyBlend =
         smoothstepValue(treelineRadius * DISTANT_CANOPY_INNER_FRACTION, treelineRadius * DISTANT_CANOPY_OUTER_FRACTION, radiusFromCenter) *
