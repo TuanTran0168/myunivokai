@@ -12,21 +12,42 @@ The shared Go module runs module verification, vet, test, and build. The same
 job lints `contracts/openapi.yaml` with the pinned Redocly CLI version.
 
 Its tests also **enforce** the JSON Schemas rather than only parsing them
-(`contracts/go/schema_conformance_test.go`): the committed fixtures and the
-nature-service golden scenes are validated against the schema that claims to
-describe them, and a set of deliberately broken scenes proves the validator
-rejects. Nothing is fetched over the network — a `$ref` to an unregistered URL
-fails compilation, so a document is only ever checked against schemas in this
-repository.
+(`contracts/go/schema_conformance_test.go`): the committed fixtures and both
+families' golden scenes are validated against the schema that claims to describe
+them, and deliberately broken scenes prove the validator rejects. Nothing is
+fetched over the network — a `$ref` to an unregistered URL fails compilation, so
+a document is only ever checked against schemas in this repository.
 
 This is the gate that catches a builder and its contract drifting apart. It
 found four such drifts the first time it ran (wind gust frequency, weather
 intensity and both rain-drop counts had outgrown their documented ranges), none
 of which any other check could see.
 
-Not yet covered: `contracts/schemas/world-scene-config.schema.json`.
-universe-service commits no golden scene fixture, so its scene contract is still
-only parse-checked. Adding one is the obvious next step.
+The mutation tests are not optional decoration. A schema can be vacuous — the
+universe scene schema mostly asserts which sections must be present — so "the
+fixture passed" means nothing until a deletion is shown to fail. Each family
+therefore has a set of mutations that must be rejected.
+
+## Golden scene fixtures
+
+Both families commit golden scene configs, and they serve two purposes at once:
+
+| Family | Fixtures | Guards |
+| --- | --- | --- |
+| Nature | `services/nature-service/internal/services/testdata/forest-golden-*.json` | byte-level builder output, plus forest scene schema conformance |
+| Universe | `services/universe-service/internal/services/testdata/universe-golden-*.json` | byte-level builder output, plus universe scene schema conformance |
+
+The service-side test compares bytes: a saved world must render forever, so any
+change to what the builder emits for an existing seed is a breaking change.
+Regenerate only deliberately, after bumping the family's scene schema version:
+
+```txt
+UPDATE_GOLDEN=1 go test ./internal/services -run TestGoldenFixtures          # nature
+UPDATE_GOLDEN=1 go test ./internal/services -run TestUniverseGoldenFixtures  # universe
+```
+
+The universe cases cover all five themes, because the theme selects palette,
+sky, belt, sun and grade — one theme would fix a fifth of the surface.
 
 ## Backend jobs
 

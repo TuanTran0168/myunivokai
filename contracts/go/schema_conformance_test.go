@@ -27,10 +27,13 @@ const (
 	profileDNASchemaPath      = "../schemas/profile-dna.schema.json"
 	personalityDNASchemaPath  = "../schemas/personality-dna.schema.json"
 	forestSceneSchemaPath     = "../scenes/forest-scene-config.schema.json"
+	universeSceneSchemaPath   = "../schemas/world-scene-config.schema.json"
 
-	// world-input declares no $id, so the compiler needs an identity for it.
-	// Anything stable works; this mirrors the $id style the other schemas use.
-	worldInputSchemaURL = "https://myunivokai.local/contracts/world-input.schema.json"
+	// world-input and world-scene-config declare no $id, so the compiler needs
+	// an identity for them. Anything stable works; these mirror the $id style the
+	// other schemas use.
+	worldInputSchemaURL    = "https://myunivokai.local/contracts/world-input.schema.json"
+	universeSceneSchemaURL = "https://myunivokai.local/contracts/world-scene-config.schema.json"
 
 	// profile-dna.schema.json is an alias: its whole body is a relative $ref to
 	// personality-dna.schema.json, which resolves against the alias's own host.
@@ -38,7 +41,8 @@ const (
 	// registered under the URL the ref actually asks for.
 	personalityDNAReferenceURL = "https://myunivokai.local/contracts/personality-dna.schema.json"
 
-	forestGoldenSceneGlob = "../../services/nature-service/internal/services/testdata/forest-golden-*.json"
+	forestGoldenSceneGlob   = "../../services/nature-service/internal/services/testdata/forest-golden-*.json"
+	universeGoldenSceneGlob = "../../services/universe-service/internal/services/testdata/universe-golden-*.json"
 )
 
 func TestContractFixturesConformToTheEnvelopeSchema(t *testing.T) {
@@ -92,38 +96,39 @@ func TestComposeCommandProfileDNAConformsToTheProfileDNASchema(t *testing.T) {
 }
 
 func TestForestGoldenScenesConformToTheSceneContract(t *testing.T) {
-	validator := compileSchema(t, forestSceneSchemaPath, "")
-	goldenPaths, err := filepath.Glob(forestGoldenSceneGlob)
+	validateGoldenScenes(t, compileSchema(t, forestSceneSchemaPath, ""), forestGoldenSceneGlob, "forest")
+}
+
+func TestUniverseGoldenScenesConformToTheSceneContract(t *testing.T) {
+	validateGoldenScenes(t, compileSchema(t, universeSceneSchemaPath, universeSceneSchemaURL), universeGoldenSceneGlob, "universe")
+}
+
+func validateGoldenScenes(t *testing.T, validator *schemavalidation.Validator, goldenGlob, familyName string) {
+	t.Helper()
+	goldenPaths, err := filepath.Glob(goldenGlob)
 	if err != nil {
-		t.Fatalf("glob %s: %v", forestGoldenSceneGlob, err)
+		t.Fatalf("glob %s: %v", goldenGlob, err)
 	}
 	// A glob that silently matches nothing is the failure mode this whole test
 	// is meant to remove: it would report success while checking no scene at all.
 	if len(goldenPaths) == 0 {
-		t.Fatalf("no golden forest scenes matched %s — the fixtures moved and nothing is validating the scene contract", forestGoldenSceneGlob)
+		t.Fatalf("no golden %s scenes matched %s — the fixtures moved and nothing is validating the scene contract", familyName, goldenGlob)
 	}
 	for _, goldenPath := range goldenPaths {
 		if err := validator.Validate(readFixture(t, goldenPath)); err != nil {
-			t.Errorf("%s violates the forest scene contract:\n%v", goldenPath, err)
+			t.Errorf("%s violates the %s scene contract:\n%v", goldenPath, familyName, err)
 		}
 	}
 }
 
-// Without this, a validator that accepted everything would make every test
+// Without these, a validator that accepted everything would make every test
 // above pass, and the suite would be worse than no suite: it would license the
-// belief that the contracts are enforced.
-func TestSchemaValidationRejectsBrokenScenes(t *testing.T) {
-	validator := compileSchema(t, forestSceneSchemaPath, "")
-	goldenPaths, err := filepath.Glob(forestGoldenSceneGlob)
-	if err != nil || len(goldenPaths) == 0 {
-		t.Fatalf("need at least one golden forest scene to mutate: %v", err)
-	}
-	var scene map[string]any
-	if err := json.Unmarshal(readFixture(t, goldenPaths[0]), &scene); err != nil {
-		t.Fatalf("decode %s: %v", goldenPaths[0], err)
-	}
-
-	mutations := map[string]func(map[string]any){
+// belief that the contracts are enforced. Both families are covered, because a
+// schema can be vacuous on its own — the universe scene schema mostly asserts
+// which sections must be present, so "it passed" means nothing until a deletion
+// is shown to fail.
+func TestSchemaValidationRejectsBrokenForestScenes(t *testing.T) {
+	assertMutationsAreRejected(t, compileSchema(t, forestSceneSchemaPath, ""), forestGoldenSceneGlob, map[string]func(map[string]any){
 		"missing required section": func(document map[string]any) {
 			delete(document, "terrain")
 		},
@@ -139,6 +144,40 @@ func TestSchemaValidationRejectsBrokenScenes(t *testing.T) {
 		"schema version bumped without updating the contract": func(document map[string]any) {
 			document["schemaVersion"] = "9.9"
 		},
+	})
+}
+
+func TestSchemaValidationRejectsBrokenUniverseScenes(t *testing.T) {
+	assertMutationsAreRejected(t, compileSchema(t, universeSceneSchemaPath, universeSceneSchemaURL), universeGoldenSceneGlob, map[string]func(map[string]any){
+		"missing planets": func(document map[string]any) {
+			delete(document, "planets")
+		},
+		"missing core": func(document map[string]any) {
+			delete(document, "core")
+		},
+		"scene rendered by the wrong family": func(document map[string]any) {
+			document["sceneType"] = "forest"
+		},
+		"sky section present but incomplete": func(document map[string]any) {
+			document["sky"] = map[string]any{"milkyWay": map[string]any{}}
+		},
+	})
+}
+
+func assertMutationsAreRejected(
+	t *testing.T,
+	validator *schemavalidation.Validator,
+	goldenGlob string,
+	mutations map[string]func(map[string]any),
+) {
+	t.Helper()
+	goldenPaths, err := filepath.Glob(goldenGlob)
+	if err != nil || len(goldenPaths) == 0 {
+		t.Fatalf("need at least one golden scene matching %s to mutate: %v", goldenGlob, err)
+	}
+	var scene map[string]any
+	if err := json.Unmarshal(readFixture(t, goldenPaths[0]), &scene); err != nil {
+		t.Fatalf("decode %s: %v", goldenPaths[0], err)
 	}
 	for mutationName, mutate := range mutations {
 		t.Run(mutationName, func(t *testing.T) {

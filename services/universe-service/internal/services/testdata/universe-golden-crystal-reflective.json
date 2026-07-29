@@ -1,0 +1,234 @@
+{
+  "schemaVersion": "1.2",
+  "sceneType": "universe",
+  "sceneName": "Quiet Constellation",
+  "archetype": "Builder Explorer",
+  "quote": "Build the map while walking it.",
+  "theme": "crystal",
+  "palette": {
+    "background": "#04070c",
+    "primary": "#8B5CF6",
+    "secondary": "#06B6D4",
+    "accent": "#FACC15",
+    "gradient": [
+      "#8B5CF6",
+      "#06B6D4",
+      "#FACC15"
+    ]
+  },
+  "core": {
+    "shape": "box",
+    "color": "#8B5CF6",
+    "emissive": "#06B6D4",
+    "scale": 1.29,
+    "spinSpeed": 0.11
+  },
+  "planets": [
+    {
+      "key": "origin",
+      "name": "Origin",
+      "meaning": "Facet Origin",
+      "color": "#06B6D4",
+      "size": 1.02,
+      "orbitRadius": 3.73,
+      "orbitSpeed": 0.03,
+      "phase": 5.33,
+      "energy": 92
+    },
+    {
+      "key": "craft",
+      "name": "Craft",
+      "meaning": "Facet Craft",
+      "color": "#FACC15",
+      "size": 0.64,
+      "orbitRadius": 4.44,
+      "orbitSpeed": 0.03,
+      "phase": 0.67,
+      "energy": 83
+    },
+    {
+      "key": "signal",
+      "name": "Signal",
+      "meaning": "Facet Signal",
+      "color": "#8B5CF6",
+      "size": 0.5,
+      "orbitRadius": 5.57,
+      "orbitSpeed": 0.05,
+      "phase": 5.91,
+      "energy": 74
+    }
+  ],
+  "particles": {
+    "desktopCount": 561,
+    "mobileCount": 295,
+    "color": "#06B6D4",
+    "spread": 19.97
+  },
+  "camera": {
+    "distance": 11.45,
+    "fov": 50
+  },
+  "postFX": {
+    "bloomIntensity": 0.48,
+    "grade": {
+      "hueRadians": 0,
+      "saturation": -0.04,
+      "brightness": 0.02,
+      "contrast": 0.09
+    }
+  },
+  "hud": {
+    "showTraitBars": true,
+    "showLabels": true
+  },
+  "sky": {
+    "milkyWay": {
+      "seed": "UNI-GOLDEN-CRYSTAL-milky-way",
+      "allSkyStarCount": 3656,
+      "bandStarCount": 4045,
+      "coreStarCount": 1796,
+      "heroStarCount": 29,
+      "nebulaCloudCount": 280,
+      "coreCloudCount": 118,
+      "dustCloudCount": 244,
+      "starColors": [
+        {
+          "color": "#9BB0FF",
+          "weight": 0.1
+        },
+        {
+          "color": "#AABFFF",
+          "weight": 0.18
+        },
+        {
+          "color": "#CAD7FF",
+          "weight": 0.22
+        },
+        {
+          "color": "#F8F7FF",
+          "weight": 0.2
+        },
+        {
+          "color": "#FFF4EA",
+          "weight": 0.15
+        },
+        {
+          "color": "#FFD2A1",
+          "weight": 0.1
+        },
+        {
+          "color": "#FFCC6F",
+          "weight": 0.05
+        }
+      ],
+      "coreStarColors": [
+        {
+          "color": "#FFF4EA",
+          "weight": 0.3
+        },
+        {
+          "color": "#FFD2A1",
+          "weight": 0.35
+        },
+        {
+          "color": "#FFCC6F",
+          "weight": 0.25
+        },
+        {
+          "color": "#F8F7FF",
+          "weight": 0.1
+        }
+      ],
+      "nebulaCloudColors": [
+        {
+          "color": "#2A3550",
+          "weight": 0.26
+        },
+        {
+          "color": "#8FA5CE",
+          "weight": 0.22
+        },
+        {
+          "color": "#E8DCC0",
+          "weight": 0.18
+        },
+        {
+          "color": "#7FB8D8",
+          "weight": 0.14
+        },
+        {
+          "color": "#6B4530",
+          "weight": 0.12
+        },
+        {
+          "color": "#4A3020",
+          "weight": 0.08
+        }
+      ],
+      "coreCloudColors": [
+        {
+          "color": "#F5E3B8",
+          "weight": 0.4
+        },
+        {
+          "color": "#E8C79A",
+          "weight": 0.3
+        },
+        {
+          "color": "#D9A468",
+          "weight": 0.2
+        },
+        {
+          "color": "#B98A58",
+          "weight": 0.1
+        }
+      ],
+      "dustCloudColors": [
+        {
+          "color": "#0D0D12",
+          "weight": 0.4
+        },
+        {
+          "color": "#120C08",
+          "weight": 0.3
+        },
+        {
+          "color": "#1A1210",
+          "weight": 0.3
+        }
+      ],
+      "nebulaCloudOpacity": 0.07,
+      "coreCloudOpacity": 0.08,
+      "dustCloudOpacity": 0.4,
+      "bandTiltXRadians": 0.58,
+      "bandTiltZRadians": 0.29,
+      "rotationRadiansPerSecond": 0.0018
+    },
+    "constellations": {
+      "seed": "UNI-GOLDEN-CRYSTAL",
+      "displayCount": 8,
+      "starColor": "#EAFBFF",
+      "lineColor": "#7DD3FC",
+      "glowMultiplier": 0.7,
+      "rotationRadiansPerSecond": 0.003
+    }
+  },
+  "belt": {
+    "enabled": true,
+    "instanceCount": 489,
+    "gapBeyondLastOrbit": 2.01,
+    "rockColor": "#4A443C",
+    "tiltXRadians": 0.04,
+    "tiltZRadians": -0.09
+  },
+  "comets": {
+    "count": 2,
+    "tailLengthMultiplier": 0.81
+  },
+  "sun": {
+    "surfaceTintColor": "#FDFDFF",
+    "glowColor": "#FFD86B",
+    "lightColor": "#FFF9EC",
+    "surfaceHdrMultiplier": 1.6
+  }
+}
