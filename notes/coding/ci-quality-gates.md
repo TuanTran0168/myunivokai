@@ -11,6 +11,23 @@
 The shared Go module runs module verification, vet, test, and build. The same
 job lints `contracts/openapi.yaml` with the pinned Redocly CLI version.
 
+Its tests also **enforce** the JSON Schemas rather than only parsing them
+(`contracts/go/schema_conformance_test.go`): the committed fixtures and the
+nature-service golden scenes are validated against the schema that claims to
+describe them, and a set of deliberately broken scenes proves the validator
+rejects. Nothing is fetched over the network — a `$ref` to an unregistered URL
+fails compilation, so a document is only ever checked against schemas in this
+repository.
+
+This is the gate that catches a builder and its contract drifting apart. It
+found four such drifts the first time it ran (wind gust frequency, weather
+intensity and both rain-drop counts had outgrown their documented ranges), none
+of which any other check could see.
+
+Not yet covered: `contracts/schemas/world-scene-config.schema.json`.
+universe-service commits no golden scene fixture, so its scene contract is still
+only parse-checked. Adding one is the obvious next step.
+
 ## Backend jobs
 
 Four independent jobs run in:

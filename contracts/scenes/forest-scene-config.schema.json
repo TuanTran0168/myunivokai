@@ -109,20 +109,20 @@
         "foliageTintStrength": { "type": "number", "minimum": 0.5, "maximum": 0.85 },
         "windStrength": { "type": "number", "minimum": 0.1, "maximum": 1 },
         "windDirectionRadians": { "type": "number", "minimum": 0, "maximum": 6.29 },
-        "windGustFrequency": { "type": "number", "minimum": 0.2, "maximum": 0.5 }
+        "windGustFrequency": { "type": "number", "minimum": 0.28, "maximum": 0.7 }
       }
     },
     "weather": {
       "type": "object",
-      "description": "Snow only appears in winter; rain never does. Particle counts are zero unless kind matches.",
+      "description": "Snow only appears in winter; rain never does. Particle counts are zero unless kind matches. Bounds mirror forest_scene_profile.go exactly: intensity is base 0.42 + roll x 0.58, desktop counts are int(base + intensity x range), and each mobile count is 30% of its desktop count.",
       "required": ["kind", "intensity", "cloudCoverage", "rainDropCountDesktop", "rainDropCountMobile", "snowflakeCountDesktop", "snowflakeCountMobile"],
       "properties": {
         "kind": { "enum": ["clear", "sunRays", "overcast", "rain", "snow"] },
-        "intensity": { "type": "number", "minimum": 0.3, "maximum": 0.9 },
+        "intensity": { "type": "number", "minimum": 0.42, "maximum": 1 },
         "cloudCoverage": { "type": "number", "minimum": 0, "maximum": 1 },
-        "rainDropCountDesktop": { "type": "integer", "minimum": 0, "maximum": 6600 },
-        "rainDropCountMobile": { "type": "integer", "minimum": 0, "maximum": 2000 },
-        "snowflakeCountDesktop": { "type": "integer", "minimum": 0, "maximum": 3750 },
+        "rainDropCountDesktop": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "rainDropCountMobile": { "type": "integer", "minimum": 0, "maximum": 2100 },
+        "snowflakeCountDesktop": { "type": "integer", "minimum": 0, "maximum": 4000 },
         "snowflakeCountMobile": { "type": "integer", "minimum": 0, "maximum": 1200 }
       }
     },
