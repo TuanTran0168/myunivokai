@@ -1,8 +1,9 @@
 # Sprint 01 — complete platform migration
 
 > **Starts:** 2026-07-22
-> **Status:** Implemented in source; local container and managed deployment verification pending
-> **Last source review:** 2026-07-22
+> **Status:** Deployed to production (Vercel + Render) and reachable; lifecycle,
+> failure and rollback evidence still pending
+> **Last source review:** 2026-07-29
 
 ## Sprint goal
 
@@ -143,13 +144,21 @@ overwrites.
 
 ### Deployed
 
-- [ ] Managed NATS/Redis/Neon connectivity and TLS pass.
-- [ ] Three fresh database migrations pass from empty.
-- [ ] All four backend deployment processes report healthy/ready by their
+Ticked boxes carry the evidence table in
+[S1-DEPLOY-001](user-stories.md#s1-deploy-001--reproducible-production-fleet),
+recorded 2026-07-29T23:42Z at commit `653c845`.
+
+- [x] Managed NATS/Redis/Neon connectivity and TLS pass. *(Gateway `readyz`
+      returns `{"nats":"ready","redis":"ready"}` over HTTPS; that handler pings
+      both dependencies rather than reporting process liveness.)*
+- [x] Three fresh database migrations pass from empty. *(Run at service start on
+      the free plan, which has no pre-deploy hook; the one failure mode found in
+      production is recorded in the deployment guide §5.4.)*
+- [x] All four backend deployment processes report healthy/ready by their
       documented mechanism.
 - [ ] Both family public lifecycles and cache/rate-limit behavior pass.
 - [ ] Failure/retry smoke proves accepted jobs are not silently lost.
-- [ ] Commit SHA, UTC timestamp and safe pass/fail evidence are recorded.
+- [x] Commit SHA, UTC timestamp and safe pass/fail evidence are recorded.
 - [ ] Rollback is tested before old services are retired.
 
 ### Documentation
