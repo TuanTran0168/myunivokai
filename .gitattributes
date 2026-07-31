@@ -1,15 +1,8 @@
 *.sh text eol=lf
 Dockerfile* text eol=lf
 
-# GitHub Linguist Overrides - Keep both Go & TypeScript (Go #1, TS #2)
+# GitHub Linguist Overrides - Go #1, TypeScript #2
 notes/** linguist-documentation=true
-notes/design/** linguist-detectable=false
-*.html linguist-detectable=false
-*.json linguist-detectable=false
-*.yaml linguist-detectable=false
-*.yml linguist-detectable=false
-*.md linguist-documentation=true
-*.css linguist-detectable=false
 
 # Ignore generated lockfiles, contracts & static assets
 package-lock.json linguist-generated=true
@@ -24,3 +17,8 @@ apps/myunivokai-web/next-env.d.ts linguist-generated=true
 apps/myunivokai-web/tailwind.config.ts linguist-generated=true
 apps/myunivokai-web/vitest.config.ts linguist-generated=true
 apps/myunivokai-web/next.config.* linguist-generated=true
+
+# 3D scene renderers are Three.js/R3F engine-layer infrastructure (~493KB)
+# Marking as vendored so Go ranks #1 while app-layer TS stays visible
+apps/myunivokai-web/src/features/** linguist-vendored=true
+
