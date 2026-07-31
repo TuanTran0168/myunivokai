@@ -137,21 +137,57 @@ passing tests, typecheck, lint, and production build.
 
 ## S1-DEPLOY-001 — Reproducible production fleet
 
-Status: Prepared; external verification pending
+Status: Deployed and reachable; lifecycle and failure evidence still pending
 
 As an operator, I want a safe deploy/rollback sequence so configuration is not
 mistaken for a successful cutover.
 
 Given managed NATS/Redis, three Neon databases, and Render access, when the
 operator applies `render.yaml` and the deployment guide, then Gateway is the
-only public backend and DNA/Universe/Nature are paid Background Workers without
-`-worker` suffixes. Migrations run as pre-deploy commands.
+only public backend and DNA/Universe/Nature carry no `-worker` suffix.
+Migrations run automatically at service start.
 
-Evidence: `render.yaml`, `Dockerfile.prod` files, and `deployment-guide.md`.
+**Corrected 2026-07-29.** This story previously required "paid Background
+Workers" and migrations as "pre-deploy commands". Neither matches the delivered
+system, and the difference is a deliberate cost decision, not a defect:
+`render.yaml` declares all four services as `type: web`, `plan: free`, and
+[the production guide](../../ops/production-deployment-guide.md) records the
+same. Free Render plans have no pre-deploy hook, so migrations run at startup
+(guide §5, with the `outbox_messages` / prepared-statement failure and its fix
+in §5.4). The three domain services also run a minimal `/healthz` HTTP server
+purely so Render's port scan succeeds (§5.6) — they expose no business port.
+Left as written, the acceptance could never be met by the system that exists.
 
-Pending verification: managed credentials, live service IDs, UTC timestamp,
-negative ACL/database tests, public lifecycle smoke, observation, and rollback.
-No external deployment or destructive legacy retirement is automated.
+Evidence recorded 2026-07-29T23:42Z at commit `653c845`, by direct request from
+this workstation:
+
+| Target | Check | Result |
+| --- | --- | --- |
+| `myunivokai.vercel.app` | `GET /` | 200 |
+| `myunivokai-gateway.onrender.com` | `GET /api/v1/healthz` | 200 |
+| `myunivokai-gateway.onrender.com` | `GET /api/v1/readyz` | 200, `{"nats":"ready","redis":"ready"}` |
+| `myunivokai-dna.onrender.com` | `GET /healthz` | 200 |
+| `myunivokai-universe.onrender.com` | `GET /healthz` | 200 |
+| `myunivokai-nature.onrender.com` | `GET /healthz` | 200 |
+
+The gateway readiness probe pings NATS and Redis with a 2s timeout
+(`services/api-gateway/internal/handlers/health_handler.go`), so a 200 there is
+positive proof that managed Synadia NATS and managed Upstash Redis are both
+reachable from the deployed gateway — not merely that the process is running.
+
+Still unproven, and deliberately left unchecked:
+
+- public lifecycle smoke for both families (create → job → world → publish →
+  share) against production;
+- negative NATS ACL and least-privilege database tests;
+- failure/retry smoke proving an accepted job is never silently lost;
+- two Gateway instances sharing one Redis rate-limit policy;
+- a tested rollback.
+
+Reachability is not a lifecycle. Four healthy processes and a live Redis/NATS
+connection say the fleet is up; they say nothing about whether a generation job
+completes end to end. No external deployment or destructive legacy retirement
+is automated.
 
 ## S1-SECURITY-001 — Remove vulnerable frontend runtime dependencies
 

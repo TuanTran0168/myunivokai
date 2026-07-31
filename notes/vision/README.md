@@ -1,7 +1,8 @@
 # Vision — Myunivokai as a scalable portrait platform
 
-> **Document status:** Active index; V1 implemented in source, deployment verification pending
-> **Last source review:** 2026-07-22
+> **Document status:** Active index; V1 implemented in source and deployed to
+> production, lifecycle/failure verification pending
+> **Last source review:** 2026-07-29
 
 Myunivokai turns one person's semantic DNA into multiple deterministic 3D
 portrait families. Universe and Nature remain independent bounded contexts so
@@ -9,10 +10,15 @@ they can evolve, deploy and scale separately. Canonical DNA and AI generation
 move to `dna-service`; the public gateway becomes a NATS edge; Redis supplies
 shared edge state.
 
-The target was approved and implemented in source on 2026-07-22. Compilation,
-unit/regression tests, frontend production build, and Compose configuration pass.
-Do not describe the fleet as deployed until managed-environment evidence in the
-Sprint 1 runbook is recorded.
+The target was approved and implemented in source on 2026-07-22, and deployed on
+2026-07-29 to Vercel (web) and Render (four Go services) against managed Neon,
+Upstash and Synadia. All four services and the frontend answer over HTTPS, and
+the gateway's readiness probe confirms live NATS and Redis connections — the
+evidence table is in
+[S1-DEPLOY-001](../sprints/sprint-01-2026-07-22/user-stories.md#s1-deploy-001--reproducible-production-fleet).
+Reachability is not a lifecycle: end-to-end generation, failure/retry and
+rollback evidence are still unrecorded, so do not describe the migration as
+complete.
 
 ## Architecture source of truth
 
