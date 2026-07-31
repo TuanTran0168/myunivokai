@@ -1,2 +1,19 @@
 *.sh text eol=lf
 Dockerfile* text eol=lf
+
+# GitHub Linguist Overrides - Keep both Go & TypeScript (Go #1, TS #2)
+notes/** linguist-documentation=true
+notes/design/** linguist-detectable=false
+*.html linguist-detectable=false
+*.json linguist-detectable=false
+*.yaml linguist-detectable=false
+*.yml linguist-detectable=false
+*.md linguist-documentation=true
+
+# Ignore generated lockfiles, contracts & static assets
+package-lock.json linguist-generated=true
+go.sum linguist-generated=true
+contracts/schemas/** linguist-detectable=false
+contracts/fixtures/** linguist-detectable=false
+contracts/openapi.yaml linguist-detectable=false
+apps/myunivokai-web/public/** linguist-vendored=true
