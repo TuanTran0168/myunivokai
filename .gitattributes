@@ -10,15 +10,15 @@ go.sum linguist-generated=true
 contracts/schemas/** linguist-detectable=false
 contracts/fixtures/** linguist-detectable=false
 contracts/openapi.yaml linguist-detectable=false
-apps/myunivokai-web/public/** linguist-vendored=true
+apps/myunivokai-web/public/** linguist-detectable=false
 
-# Mark TS config/tooling files as generated (not app source)
+# Mark TS config/tooling files as generated/non-detectable
 apps/myunivokai-web/next-env.d.ts linguist-generated=true
 apps/myunivokai-web/tailwind.config.ts linguist-generated=true
 apps/myunivokai-web/vitest.config.ts linguist-generated=true
 apps/myunivokai-web/next.config.* linguist-generated=true
 
-# 3D scene renderers are Three.js/R3F engine-layer infrastructure (~493KB)
-# Marking as vendored so Go ranks #1 while app-layer TS stays visible
-apps/myunivokai-web/src/features/** linguist-vendored=true
+# Exclude 3D scene renderers infrastructure (~450KB TS) from language stats so Go ranks #1
+apps/myunivokai-web/src/features/scene-renderers/** linguist-detectable=false
+
 
