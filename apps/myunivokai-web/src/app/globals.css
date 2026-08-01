@@ -30,6 +30,19 @@
   /* The one Liquid-Glass material (very transparent so the live world reads through) */
   --glass-tint: rgba(15, 14, 19, 0.30);
   --glass-blur: blur(30px) saturate(180%) brightness(1.07);
+
+  /* Motion. --glass-easing is not a new curve: it is the value this file already
+     wrote twice (the panel transition and the glass-rise entrance), hoisted so
+     the create form's rail closes on the identical curve it arrived on. */
+  --glass-easing: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --form-rail-collapse-easing-out: cubic-bezier(0.4, 0, 1, 1);
+  --form-rail-collapse-duration: 320ms;
+  /* Tailwind lg:left-6 = 1.5rem, i.e. theme spacing.gutter. */
+  --form-rail-left-gutter: 24px;
+  /* Blur radius of .glass-panel-glow's outer shadow: the rail has to travel far
+     enough that its shadow spill leaves the viewport too, or a dark smear stays
+     pinned to the left edge. */
+  --form-rail-shadow-reach: 80px;
 }
 
 * {
@@ -196,7 +209,7 @@ textarea {
 /* ---------- Liquid-Glass motion (Apple-style) ---------- */
 .glass-panel,
 .liquid-glass {
-  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform 320ms var(--glass-easing), box-shadow 320ms var(--glass-easing);
 }
 
 /* Entrance: floating glass islands settle up into place. */
@@ -212,7 +225,7 @@ textarea {
 }
 
 .glass-rise {
-  animation: glass-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: glass-rise 560ms var(--glass-easing) both;
 }
 
 /* Page transition: each route cross-fades in (re-mounted by app/template.tsx).
@@ -264,6 +277,46 @@ textarea {
   background: rgba(201, 163, 91, 0.5);
 }
 
+/* ---------- The create form's collapsing rail ---------- */
+/* The duration below is also declared as FORM_RAIL_COLLAPSE_DURATION_MILLISECONDS
+   in lib/formRailCollapse.ts, which times the mobile layout release; a test
+   parses this file and fails if the two ever drift. */
+/* One button hides the whole form so the live world is unobstructed, and shows
+   it again. The collapse lives on a WRAPPER that carries neither .glass-panel
+   nor .glass-rise, and that is structural, not stylistic:
+
+   - .glass-rise's `both` fill retains transform: translateY(0) scale(1) forever,
+     and an animation-applied value outranks a normal declaration, so a transform
+     on the panel itself would be dead on arrival;
+   - the reduced-motion block below resets .glass-panel with transform: none,
+     which would silently nullify the collapse for exactly the users who still
+     need it to work.
+
+   Transform + opacity only: the rail is a 30px backdrop-filter surface over a
+   continuously rendering WebGL canvas, and it contains a dozen more nested
+   blurred surfaces. Animating its box would force layout, paint and a fresh
+   backdrop every frame; animating its position does not. */
+.form-rail-collapse {
+  transition:
+    transform var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    opacity var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    visibility 0s linear 0s;
+}
+
+/* `visibility` is what removes the form's ~25 controls from the tab order AND
+   the accessibility tree; its delay is what keeps them there until the slide
+   has played. Drop either and the collapsed rail becomes an invisible keyboard
+   trap with no visual symptom. */
+.form-rail-collapse[data-form-rail-collapsed="true"] {
+  transform: translateX(calc(-100% - var(--form-rail-left-gutter) - var(--form-rail-shadow-reach)));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    opacity var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    visibility 0s linear var(--form-rail-collapse-duration);
+}
+
 /* iOS-style springy tap feedback for interactive controls (chips, options). */
 .tappable {
   transition:
@@ -301,6 +354,15 @@ textarea {
   }
   .page-enter {
     animation: none;
+  }
+  /* The collapsed selector is repeated in full on purpose: a bare
+     .form-rail-collapse would not outrank the attribute rule above, and the
+     rail would still slide. Killing the shorthand also kills the visibility
+     delay, so the form and its tab stops disappear at once — the collapse still
+     WORKS here, it just does not animate. */
+  .form-rail-collapse,
+  .form-rail-collapse[data-form-rail-collapsed="true"] {
+    transition: none;
   }
 }
 

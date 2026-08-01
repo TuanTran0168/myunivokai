@@ -65,6 +65,13 @@ itself.
   read as universe). IDs saved automatically on create and when opening a world.
 - `lib/exportImage.ts` — downloads the WebGL canvas as PNG
   (requires `preserveDrawingBuffer`, already set on the Canvas).
+- `lib/formRailCollapse.ts` — state for the create page's one-button form
+  collapse. The rail is never unmounted (the submit button sits outside the
+  `<form>` and would lose its owner); a wrapper slides off-canvas and flips
+  `visibility`, so fields keep their values and the GL context survives. The
+  collapse duration is declared in both this module and `globals.css`, and
+  `formRailCollapse.test.ts` fails if the two drift. See
+  [../user-stories/create-page-chrome.md](../user-stories/create-page-chrome.md).
 
 ## The 3D part
 
@@ -107,8 +114,13 @@ See `notes/user-stories/engineering-backlog.md` for Given/When/Then acceptance.
 cd apps/myunivokai-web
 npm run typecheck
 npm run lint
+npm run test
 npm run build
 ```
+
+`npm run test` is a hard CI step between lint and build; this list omitted it
+until 2026-08-01, so a contributor following the old block could push a red
+build.
 
 For integrated local development, root `docker-compose-local.yaml` builds this
 client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080`. The production
