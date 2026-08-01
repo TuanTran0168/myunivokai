@@ -91,6 +91,10 @@ Notes:
 - The metrics used so far — SDI plus a smoothness "kink" metric, triangle-fold
   counts, frame-share of water, sight-line occlusion — are recorded in
   `notes/fe/forest-realism-roadmap.md`.
+- Execution plan: [../fe/deferred-work-plan.md](../fe/deferred-work-plan.md)
+  Part B. Verified 2026-08-02: frame-share and sight-line already live in
+  `forestMath.test.ts`; SDI, the kink metric and the wave-fold check do not, and
+  the wave constants must leave `ForestPondWater.tsx` before they can be tested.
 - SDI on its own is gameable: it was once pushed to 1.58 with high harmonics and
   produced a worse, jagged shape. Any single metric needs its counterweight.
 

@@ -213,6 +213,10 @@ and looks considerably better.
 **Use both numbers.** SDI for how convoluted, kink for how smooth. Optimising
 either alone produces a characteristic failure: a circle, or a splat.
 
+Neither number is a test yet — the table above was measured by hand. Turning SDI
+and kink into asserted tests is [deferred-work-plan.md](deferred-work-plan.md)
+Part B (US-FOREST-002).
+
 ### Islands
 
 An unbroken sheet of water reads as a puddle however large. Islands are the
