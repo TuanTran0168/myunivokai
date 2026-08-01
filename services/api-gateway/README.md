@@ -29,5 +29,5 @@ go build ./...
 go run ./cmd/gateway
 ```
 
-Local default: <http://localhost:8080>. See the root Compose file for the full
+Local default: <http://localhost:41800>. See the root Compose file for the full
 NATS/Redis/domain stack and `contracts/openapi.yaml` for public routes.

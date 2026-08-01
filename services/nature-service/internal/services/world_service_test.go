@@ -15,7 +15,7 @@ import (
 func newTestWorldService(t *testing.T) (*WorldService, *repositories.MemoryStore) {
 	t.Helper()
 	store := repositories.NewMemoryStore()
-	serviceConfig := config.Config{PublicWebURL: "http://localhost:3000/nature", ShareSlugLength: 10}
+	serviceConfig := config.Config{PublicWebURL: "http://localhost:41300/nature", ShareSlugLength: 10}
 	return NewWorldService(serviceConfig, store, NewForestConfigBuilder()), store
 }
 

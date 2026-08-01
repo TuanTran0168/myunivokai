@@ -12,7 +12,7 @@ import (
 )
 
 func newTestWorldService(store repositories.Store) *WorldService {
-	serviceConfig := config.Config{PublicWebURL: "http://localhost:3000", ShareSlugLength: 10}
+	serviceConfig := config.Config{PublicWebURL: "http://localhost:41300", ShareSlugLength: 10}
 	return NewWorldService(serviceConfig, store, NewWorldConfigBuilder())
 }
 

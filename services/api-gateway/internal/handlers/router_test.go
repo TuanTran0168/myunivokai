@@ -310,18 +310,18 @@ func TestGatewayRejectsOversizedBodyBeforePublishing(t *testing.T) {
 func TestGatewayCORSIsOwnedAtPublicEdge(t *testing.T) {
 	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 	request := httptest.NewRequest(http.MethodOptions, "/api/universe/worlds", nil)
-	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Origin", "http://localhost:41300")
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:41300" {
 		t.Fatalf("preflight status=%d origin=%q", response.Code, response.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
 
 func testGatewayConfig() config.Config {
 	return config.Config{
-		AppEnvironment: "test", AppName: "Gateway Test", AllowedOrigins: []string{"http://localhost:3000"},
+		AppEnvironment: "test", AppName: "Gateway Test", AllowedOrigins: []string{"http://localhost:41300"},
 		RateLimitRequestsPerSecond: 1000, RateLimitBurst: 1000, MaximumRequestBodyBytes: 64 * 1024,
 		NATSPublishTimeout: time.Second, NATSRequestTimeout: time.Second, JobCacheTimeToLive: time.Minute,
 		WorldCacheTimeToLive: time.Minute, ShareCacheTimeToLive: time.Minute,

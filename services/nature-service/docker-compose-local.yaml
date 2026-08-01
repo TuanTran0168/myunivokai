@@ -22,7 +22,7 @@ services:
       - ./.env.local
     environment:
       APP_ENV: ${APP_ENV:-development}
-      PUBLIC_WEB_URL: http://localhost:${WEB_PORT:-3000}/nature
+      PUBLIC_WEB_URL: http://localhost:${WEB_PORT:-41300}/nature
       DATABASE_URL: postgresql://${NATURE_DATABASE_USER:-myunivokai_nature_app}:${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}@postgres:5432/${NATURE_DATABASE_NAME:-myunivokai_nature}?sslmode=disable
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       NATS_USERNAME: ${NATS_NATURE_USERNAME:-myunivokai_nature}

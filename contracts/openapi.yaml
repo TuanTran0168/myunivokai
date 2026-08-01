@@ -14,7 +14,7 @@ servers:
         default: http
         enum: [http, https]
       host:
-        default: localhost:8080
+        default: localhost:41800
 security: []
 paths:
   /api/v1/healthz:

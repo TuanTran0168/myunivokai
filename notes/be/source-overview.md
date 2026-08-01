@@ -11,7 +11,7 @@ public domain handlers, and `GATEWAY_SHARED_SECRET` runtime have been removed.
 
 ```text
 myunivokai-web
-  -> API Gateway (HTTP :8080)
+  -> API Gateway (HTTP :41800 local, PORT on Render)
        -> JetStream MYUNIVOKAI_COMMANDS
        -> Core NATS queries
        -> Redis rate/cache

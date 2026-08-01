@@ -61,7 +61,7 @@ func Load() (Config, error) {
 		AppName:                    get("APP_NAME", "Myunivokai API Gateway"),
 		APIHost:                    get("API_HOST", "0.0.0.0"),
 		APIPort:                    getAny([]string{"API_PORT", "PORT"}, defaultAPIPort),
-		AllowedOrigins:             split(get("API_ALLOWED_ORIGINS", "http://localhost:3000")),
+		AllowedOrigins:             split(get("API_ALLOWED_ORIGINS", "http://localhost:41300")),
 		TrustProxyHeaders:          getBool("TRUST_PROXY", false),
 		MaximumRequestBodyBytes:    getInt64("MAX_REQUEST_BODY_BYTES", defaultMaximumRequestBodyBytes),
 		RateLimitRequestsPerSecond: getFloat("RATE_LIMIT_REQUESTS_PER_SECOND", defaultRateLimitRequestsPerSecond),

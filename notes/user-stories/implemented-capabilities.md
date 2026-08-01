@@ -143,7 +143,7 @@ When the developer runs `docker compose -f docker-compose-local.yaml up --build`
 Then PostgreSQL initializes three owned databases and migrations complete
 And NATS JetStream/ACL bootstrap and Redis become available to the fleet
 And domain services expose no host HTTP ports
-And the web client uses only `http://localhost:8080`.
+And the web client uses only `http://localhost:41800`.
 
 Source evidence:
 
