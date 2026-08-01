@@ -19,17 +19,76 @@
   --card: #131217;
   --card-hover: #1A181E;
   --paper: #F2EEE6;
-  --grey: #B6B0A4;
-  --faint: #807868;
-  --brass: #C9A35B;
-  --brass-soft: rgba(201, 163, 91, 0.5);
+  --grey: #DCD7CB;
+  --faint: #A79D8A;
+  /* The single metallic accent, held as raw channels so Tailwind can take it
+     through `rgb(var(--brass-rgb) / <alpha-value>)` and keep its /10 and /40
+     opacity modifiers working. Holding it as a variable is what lets a world
+     family retint the entire interface by setting two numbers. */
+  --brass-rgb: 201 163 91;
+  --brass-deep-rgb: 168 132 63;
+  --brass: rgb(var(--brass-rgb));
+  --brass-soft: rgb(var(--brass-rgb) / 0.5);
   --vermillion: #E0573A;
   --ink: #1B1402;
   --hairline: rgba(255, 255, 255, 0.10);
 
-  /* The one Liquid-Glass material (very transparent so the live world reads through) */
-  --glass-tint: rgba(15, 14, 19, 0.30);
-  --glass-blur: blur(30px) saturate(180%) brightness(1.07);
+  /* The one Liquid-Glass material, deliberately close to invisible: the live
+     world is the luminous element and has to read THROUGH the chrome. What
+     still marks a panel as a panel is its specular top edge, its brass inner
+     rule and its lift shadow — not a wash of dark.
+
+     CLEAR, NOT FROSTED. There is no blur here, and its absence is the whole
+     point: the owner's word is "trong suốt" (see-through), not "mờ như kính"
+     (hazy like frosted glass). Blur was also what made the panel read as a dark
+     card over the universe — averaging a sharp star field on black flattens the
+     bright points away and leaves a grey wash, so the more blur, the LESS the
+     panel looked transparent. Saturation alone keeps the material present
+     without touching sharpness.
+
+     Content opacity is deliberately NOT reduced with the tint: the rail is a
+     form to be filled in, so the material thins while the text stays solid.
+     Legibility is carried by the text shadow below, never by darkening this. */
+  --glass-tint: rgba(15, 14, 19, 0.08);
+  --glass-blur: saturate(125%);
+
+  /* Motion. --glass-easing is not a new curve: it is the value this file already
+     wrote twice (the panel transition and the glass-rise entrance), hoisted so
+     the create form's rail closes on the identical curve it arrived on. */
+  --glass-easing: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --form-rail-collapse-easing-out: cubic-bezier(0.4, 0, 1, 1);
+  --form-rail-collapse-duration: 320ms;
+  /* Tailwind lg:left-6 = 1.5rem, i.e. theme spacing.gutter. */
+  --form-rail-left-gutter: 24px;
+  /* Blur radius of .glass-panel-glow's outer shadow: the rail has to travel far
+     enough that its shadow spill leaves the viewport too, or a dark smear stays
+     pinned to the left edge. */
+  --form-rail-shadow-reach: 80px;
+
+  /* The fixed header's height, a contract documented in layout.tsx. The world
+     toggle is centred inside this band, so the two are derived from one number
+     rather than two that can drift. */
+  --header-height: 57px;
+  --footer-height: 57px;
+  --chrome-toggle-size: 44px;
+  --chrome-toggle-icon-size: 20px;
+  --chrome-toggle-expand-duration: 260ms;
+  /* The springy curve .tappable already uses, hoisted for the same reason
+     --glass-easing was. */
+  --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* A forest is not a brass world. Brass reads as the same family of yellows as
+   the sunlit sand and the canopy's warm highlights, so it stopped being an
+   accent there. Copper is still a metal — the gallery language keeps its single
+   metallic accent — but it sits opposite the greens instead of inside them, and
+   it agrees with the blossom pink and the wet earth.
+
+   Set on <body> rather than on the page, so the fixed header and footer, which
+   are not the page's descendants, retint with it. */
+body[data-world-family="nature"] {
+  --brass-rgb: 207 138 85;
+  --brass-deep-rgb: 169 107 61;
 }
 
 * {
@@ -84,7 +143,7 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.08),
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
@@ -99,15 +158,40 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.08),
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
+}
+
+/* With no blur and almost no tint, the panel adds nothing of its own, so ALL
+   legibility comes from the text. The shadow is deliberately heavy: text now
+   sits on a sharp, busy, moving scene rather than on a smoothed-out wash, which
+   is a far harder background than the one the palette was tuned against. This
+   is the trade that buys genuine transparency. */
+.glass-panel,
+.liquid-glass {
+  /* Three layers, each doing a different job: a tight 1px drop that separates
+     the glyph from whatever is directly under it, a 4px halo that carries the
+     counters and thin strokes, and a wide 12px pool that darkens the region so
+     a bright highlight passing behind the text cannot reach it. One large soft
+     shadow alone leaves the glyph edges themselves unresolved. */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 4px rgba(0, 0, 0, 0.85),
+    0 0 12px rgba(0, 0, 0, 0.6);
+}
+
+/* Dark engraved labels on a brass fill need no shadow, and a dark one muddies
+   them. */
+.btn-brass,
+.btn-gradient {
+  text-shadow: none;
 }
 
 /* Highest-elevation islands get a touch more lift + brass edge. */
 .glass-panel-glow {
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.14),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.14),
     0 36px 80px -24px rgba(0, 0, 0, 0.82);
 }
 
@@ -116,7 +200,7 @@ textarea {
 .btn-brass {
   background: var(--brass);
   color: var(--ink);
-  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  box-shadow: 0 8px 22px -8px rgb(var(--brass-rgb) / 0.55);
   transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
 
@@ -131,7 +215,7 @@ textarea {
 /* SHIM: the old purple→cyan gradient CTA now resolves to solid brass. */
 .btn-gradient {
   background: var(--brass);
-  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  box-shadow: 0 8px 22px -8px rgb(var(--brass-rgb) / 0.55);
   color: var(--ink);
   transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
@@ -144,15 +228,19 @@ textarea {
   transform: translateY(1px) scale(0.97);
 }
 
-/* SHIM: glassy input → translucent field with a brass focus rule. */
+/* SHIM: glassy input → translucent field with a brass focus rule.
+   The fill is dark rather than a 5% white veil: with the panel behind it now
+   near-clear, a field lit only by white-on-white sat directly on a daylight
+   forest canopy, and neither the value nor the placeholder survived it. A field
+   is the one surface a user has to read character by character. */
 .input-dark {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 10, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .input-dark:focus {
   border-color: var(--brass);
-  box-shadow: 0 0 0 1px rgba(201, 163, 91, 0.32);
+  box-shadow: 0 0 0 1px rgb(var(--brass-rgb) / 0.32);
 }
 
 /* ---------- Removed decorations (neutralized for the shim) ---------- */
@@ -196,7 +284,7 @@ textarea {
 /* ---------- Liquid-Glass motion (Apple-style) ---------- */
 .glass-panel,
 .liquid-glass {
-  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform 320ms var(--glass-easing), box-shadow 320ms var(--glass-easing);
 }
 
 /* Entrance: floating glass islands settle up into place. */
@@ -212,7 +300,7 @@ textarea {
 }
 
 .glass-rise {
-  animation: glass-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: glass-rise 560ms var(--glass-easing) both;
 }
 
 /* Page transition: each route cross-fades in (re-mounted by app/template.tsx).
@@ -236,14 +324,14 @@ textarea {
   transform: translateY(-3px);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.16),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.16),
     0 40px 90px -26px rgba(0, 0, 0, 0.85);
 }
 
 /* Thin, unobtrusive scrollbar for the floating rail's field column. */
 .rail-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(201, 163, 91, 0.35) transparent;
+  scrollbar-color: rgb(var(--brass-rgb) / 0.35) transparent;
 }
 
 .rail-scroll::-webkit-scrollbar {
@@ -256,18 +344,245 @@ textarea {
 }
 
 .rail-scroll::-webkit-scrollbar-thumb {
-  background: rgba(201, 163, 91, 0.3);
+  background: rgb(var(--brass-rgb) / 0.3);
   border-radius: 100px;
 }
 
 .rail-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 163, 91, 0.5);
+  background: rgb(var(--brass-rgb) / 0.5);
 }
+
+/* ---------- The create form's collapsing rail ---------- */
+/* The duration below is also declared as FORM_RAIL_COLLAPSE_DURATION_MILLISECONDS
+   in lib/formRailCollapse.ts, which times the mobile layout release; a test
+   parses this file and fails if the two ever drift. */
+/* One button hides the whole form so the live world is unobstructed, and shows
+   it again. The collapse lives on a WRAPPER that carries neither .glass-panel
+   nor .glass-rise, and that is structural, not stylistic:
+
+   - .glass-rise's `both` fill retains transform: translateY(0) scale(1) forever,
+     and an animation-applied value outranks a normal declaration, so a transform
+     on the panel itself would be dead on arrival;
+   - the reduced-motion block below resets .glass-panel with transform: none,
+     which would silently nullify the collapse for exactly the users who still
+     need it to work.
+
+   Transform + opacity only: the rail sits over a continuously rendering WebGL
+   canvas and carries a backdrop-filter, as do a dozen surfaces nested inside it.
+   Animating its box would force layout, paint and a fresh backdrop composite
+   every frame; animating its position does not. */
+.form-rail-collapse {
+  transition:
+    transform var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    opacity var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    visibility 0s linear 0s;
+}
+
+/* `visibility` is what removes the form's ~25 controls from the tab order AND
+   the accessibility tree; its delay is what keeps them there until the slide
+   has played. Drop either and the collapsed rail becomes an invisible keyboard
+   trap with no visual symptom. */
+.form-rail-collapse[data-form-rail-collapsed="true"] {
+  transform: translateX(calc(-100% - var(--form-rail-left-gutter) - var(--form-rail-shadow-reach)));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    opacity var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    visibility 0s linear var(--form-rail-collapse-duration);
+}
+
+/* ---------- The two chrome bars ---------- */
+/* Both are exactly their declared height rather than whatever their content
+   happens to measure, because floating chrome all over the app offsets itself
+   by those numbers. The hairline takes the family accent, so it retints with
+   the world. */
+.chrome-bar {
+  display: flex;
+  align-items: center;
+}
+
+header.chrome-bar {
+  height: var(--header-height);
+  box-shadow: 0 1px 0 0 rgb(var(--brass-rgb) / 0.22);
+}
+
+footer.chrome-bar {
+  height: var(--footer-height);
+  box-shadow: 0 -1px 0 0 rgb(var(--brass-rgb) / 0.18);
+}
+
+/* ---------- The world toggle, docked in the header band ---------- */
+/* It rides at the header's own vertical centre and above it, so it keeps the
+   same place whether the header is present or has left — and it stays a bare
+   icon until pointed at, so the resting screen is world and nothing else.
+
+   Both offsets come from --header-height, so the 57px contract is stated once. */
+.chrome-toggle-dock {
+  top: calc((var(--header-height) - var(--chrome-toggle-size)) / 2);
+}
+
+.chrome-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chrome-toggle-size);
+  /* Symmetric padding is what makes the collapsed state a true circle: the icon
+     plus twice this is exactly --chrome-toggle-size. */
+  padding: 0 calc((var(--chrome-toggle-size) - var(--chrome-toggle-icon-size)) / 2);
+  border-radius: 999px;
+  /* SOLID BRASS, deliberately not glass. Twice now this control was reported
+     missing: a translucent circle is invisible against a bright canopy AND
+     against a near-black star field, because it borrows its contrast from
+     whatever is behind it and both extremes defeat it. The header's own brass
+     CTA is legible in every screenshot, so the toggle takes the same treatment.
+     Everything else on this page may dissolve into the world; the one way back
+     may not. */
+  background: var(--brass);
+  color: var(--ink);
+  border: 1px solid rgba(27, 20, 2, 0.28);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.38),
+    0 10px 26px -8px rgba(0, 0, 0, 0.75);
+  transition:
+    transform var(--chrome-toggle-expand-duration) var(--spring-easing),
+    filter var(--chrome-toggle-expand-duration) var(--glass-easing),
+    background-color var(--chrome-toggle-expand-duration) var(--glass-easing),
+    border-color var(--chrome-toggle-expand-duration) var(--glass-easing),
+    color var(--chrome-toggle-expand-duration) var(--glass-easing),
+    box-shadow var(--chrome-toggle-expand-duration) var(--glass-easing);
+}
+
+/* Once the interface is gone this is the only thing left over the world, so it
+   steps back — but only so far, because it is also the only way back.
+   It does NOT become glass. Glass borrows its contrast from whatever is behind
+   it, and this control was reported missing twice for exactly that reason: once
+   against a bright forest canopy, once against a near-black star field. So the
+   quiet state keeps TWO independent contrast sources, one for each extreme — a
+   dark fill that reads against a bright scene, and a brass icon and rim that
+   read against a dark one. Neither extreme can defeat both.
+   The hit area never changes, and pointing at it or focusing it brings the full
+   brass straight back. */
+body[data-world-immersive="true"] .chrome-toggle {
+  background: rgba(11, 11, 14, 0.42);
+  color: var(--brass);
+  border-color: rgb(var(--brass-rgb) / 0.45);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
+    0 8px 20px -10px rgba(0, 0, 0, 0.6);
+}
+
+body[data-world-immersive="true"] .chrome-toggle:hover,
+body[data-world-immersive="true"] .chrome-toggle:focus-visible {
+  background: var(--brass);
+  color: var(--ink);
+  border-color: rgba(27, 20, 2, 0.28);
+  /* Repeated because the quiet rule above outranks the generic :hover on
+     specificity, so the lift would otherwise not come back here. */
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
+    0 14px 32px -8px rgba(0, 0, 0, 0.8);
+}
+
+.chrome-toggle:hover,
+.chrome-toggle:focus-visible {
+  transform: translateY(1px) scale(1.03);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
+    0 14px 32px -8px rgba(0, 0, 0, 0.8);
+}
+
+.chrome-toggle:active {
+  transform: scale(0.94);
+}
+
+/* The label expands from zero width by interpolating grid-template-columns
+   rather than a max-width: there is no arbitrary width to guess, and it stays
+   correct when the label changes between "Hide the form" and "Show the form".
+   Its padding lives on the clipped child, so the collapsed state clips the gap
+   along with the text and the circle stays a circle. */
+.chrome-toggle-label {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns var(--chrome-toggle-expand-duration) var(--glass-easing);
+}
+
+.chrome-toggle-label-text {
+  overflow: hidden;
+  white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 2px;
+  opacity: 0;
+  /* Faster than the width, so the text arrives in an opening gap instead of
+     being dragged out of a closed one. */
+  transition: opacity calc(var(--chrome-toggle-expand-duration) * 0.55) linear;
+}
+
+/* :focus rather than :focus-visible on purpose — a touch tap focuses without
+   hovering, and that is the only way a touch user ever sees the label. */
+.chrome-toggle:hover .chrome-toggle-label,
+.chrome-toggle:focus .chrome-toggle-label {
+  grid-template-columns: 1fr;
+}
+
+.chrome-toggle:hover .chrome-toggle-label-text,
+.chrome-toggle:focus .chrome-toggle-label-text {
+  opacity: 1;
+}
+
+.chrome-toggle-icon {
+  display: grid;
+  height: var(--chrome-toggle-icon-size);
+  width: var(--chrome-toggle-icon-size);
+  place-items: center;
+  transition: transform var(--chrome-toggle-expand-duration) var(--spring-easing);
+}
+
+.chrome-toggle:hover .chrome-toggle-icon,
+.chrome-toggle:focus .chrome-toggle-icon {
+  transform: scale(1.08);
+}
+
+/* ---------- Immersive world: every chrome surface leaves ---------- */
+/* Hiding the form clears the entire interface, not only the rail, so that what
+   is left is the live world and the one button that brings everything back.
+   The header and footer live in the shared layout, an ANCESTOR of the page, and
+   no selector can reach upward — hence the marker on <body>, set and cleared by
+   the create page. Each surface leaves toward the edge it is anchored to.
+
+   `visibility` again carries the tab order and the accessibility tree; a header
+   that is merely transparent still swallows Tab stops over the world. */
+.immersive-exit {
+  transition:
+    transform var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    opacity var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    visibility 0s linear 0s;
+}
+
+body[data-world-immersive="true"] .immersive-exit {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    opacity var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    visibility 0s linear var(--form-rail-collapse-duration);
+}
+
+body[data-world-immersive="true"] .immersive-exit-up {
+  transform: translateY(calc(-100% - var(--form-rail-shadow-reach)));
+}
+
+body[data-world-immersive="true"] .immersive-exit-right {
+  transform: translateX(calc(100% + var(--form-rail-left-gutter) + var(--form-rail-shadow-reach)));
+}
+
+/* The footer fades without travelling: it sits in normal flow, and a downward
+   translate would grow the document's scrollable area rather than leaving it. */
 
 /* iOS-style springy tap feedback for interactive controls (chips, options). */
 .tappable {
   transition:
-    transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 240ms var(--spring-easing),
     background-color 200ms ease,
     border-color 200ms ease,
     color 200ms ease,
@@ -302,6 +617,30 @@ textarea {
   .page-enter {
     animation: none;
   }
+  /* The collapsed selector is repeated in full on purpose: a bare
+     .form-rail-collapse would not outrank the attribute rule above, and the
+     rail would still slide. Killing the shorthand also kills the visibility
+     delay, so the form and its tab stops disappear at once — the collapse still
+     WORKS here, it just does not animate. */
+  .form-rail-collapse,
+  .form-rail-collapse[data-form-rail-collapsed="true"],
+  .immersive-exit,
+  body[data-world-immersive="true"] .immersive-exit,
+  .chrome-toggle,
+  .chrome-toggle-label,
+  .chrome-toggle-label-text,
+  .chrome-toggle-icon {
+    transition: none;
+  }
+  /* The label still appears on hover — it just appears rather than unrolling.
+     Suppressing the scale keeps the control from jumping under the pointer. */
+  .chrome-toggle:hover,
+  .chrome-toggle:focus-visible,
+  .chrome-toggle:active,
+  .chrome-toggle:hover .chrome-toggle-icon,
+  .chrome-toggle:focus .chrome-toggle-icon {
+    transform: none;
+  }
 }
 
 /* --- Custom cursor: a small brass compass star -------------------------------
@@ -334,7 +673,15 @@ textarea {
    scenes are near-black, so the translucent glass panels wash out and dark
    buttons float as black pills. Inside .forest-chrome every glass panel gets
    a solid warm-dark base under its blur, restoring the contrast the chrome
-   was designed against. */
+   was designed against.
+
+   It used to be the whole answer, and at 0.62/0.45/0.34 that made forest panels
+   read as muddy cards rather than as glass — not transparent, and still low
+   contrast, because the text was grey on a mid-dark wash. Legibility now comes
+   from the text shadow above and the brighter muted tokens, so this only has to
+   keep the canopy's brightest patches from reaching the text. Raise it only if
+   forest text still fails, and judge that on the Forest family: the universe's
+   #050816 background flatters any value. */
 .forest-chrome .glass-panel {
-  background-color: rgba(14, 18, 13, 0.62);
+  background-color: rgba(14, 18, 13, 0.14);
 }

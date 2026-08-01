@@ -65,6 +65,18 @@ itself.
   read as universe). IDs saved automatically on create and when opening a world.
 - `lib/exportImage.ts` — downloads the WebGL canvas as PNG
   (requires `preserveDrawingBuffer`, already set on the Canvas).
+- `lib/formRailCollapse.ts` + `components/WorldChromeToggle.tsx` — the one-button
+  "clear the interface off the world" control, shared by the create, world and
+  share pages. The collapsing region is never unmounted (on the create page the
+  submit button sits outside the `<form>` and would lose its owner); it slides or
+  fades and flips `visibility`, so fields keep their values and the GL context
+  survives. Two `<body>` markers carry state the pages cannot reach with a
+  selector — `data-world-immersive` hides the shared header/footer,
+  `data-world-family` swaps the accent metal (brass → copper for forest). Those
+  attribute names and the collapse duration are contracts between TypeScript and
+  CSS with no compiler between them, so `formRailCollapse.test.ts` parses
+  `globals.css` and fails if either drifts. See
+  [../user-stories/world-chrome.md](../user-stories/world-chrome.md).
 
 ## The 3D part
 
@@ -107,8 +119,13 @@ See `notes/user-stories/engineering-backlog.md` for Given/When/Then acceptance.
 cd apps/myunivokai-web
 npm run typecheck
 npm run lint
+npm run test
 npm run build
 ```
+
+`npm run test` is a hard CI step between lint and build; this list omitted it
+until 2026-08-01, so a contributor following the old block could push a red
+build.
 
 For integrated local development, root `docker-compose-local.yaml` builds this
 client with `NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080`. The production

@@ -10,6 +10,8 @@ import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { StatusMessage } from "@/components/StatusMessage";
+import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
+import { WORLD_PANELS_ELEMENT_ID } from "@/lib/formRailCollapse";
 
 type ShareWorldViewProps = {
   shareSlug: string;
@@ -23,6 +25,9 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
+  // A load failure replaces this whole view rather than rendering inside the
+  // panels, so there is no error that hiding them could swallow.
+  const { collapseState, toggleCollapse, toggleButtonReference } = useWorldChromeCollapse({ worldFamily: family });
 
   useEffect(() => {
     let mounted = true;
@@ -55,7 +60,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   if (loading) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="loading">Loading shared world...</StatusMessage>
       </main>
     );
@@ -63,7 +68,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   if (!world) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="error">{error || "Shared world not found"}</StatusMessage>
       </main>
     );
@@ -75,9 +80,24 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
         isForestScene(scene) ? "forest-chrome" : ""
       }`}
     >
+      {/* Clears every HUD island off the world and brings them back. Outside the
+          collapsing region, so it can never hide itself. */}
+      <WorldChromeToggle
+        isExpanded={collapseState.isExpanded}
+        onToggle={toggleCollapse}
+        controlsElementId={WORLD_PANELS_ELEMENT_ID}
+        noun="panels"
+        buttonReference={toggleButtonReference}
+      />
+
       {/* Full-bleed universe: an in-flow hero on mobile, the immersive background
-          on desktop. Clicking a planet focuses the camera (read-only view state). */}
-      <div className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
+          on desktop. Clicking a planet focuses the camera (read-only view state).
+          On mobile the hero takes the whole viewport once the panels are gone. */}
+      <div
+        className={`relative w-full lg:absolute lg:inset-0 lg:h-full ${
+          collapseState.reservesLayoutSpace ? "h-[48vh]" : "h-svh"
+        }`}
+      >
         <UniverseCanvas
           scene={scene}
           className="h-full"
@@ -87,8 +107,15 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
       </div>
 
       {/* HUD overlay — a scrolling column on mobile; on desktop a pointer-through
-          layer so orbit-drag passes between the floating glass islands. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-0 lg:top-[57px]">
+          layer so orbit-drag passes between the floating glass islands. Also the
+          single collapse target: it fades rather than sliding, because its
+          islands are anchored to both edges and the bottom centre. */}
+      <div
+        id={WORLD_PANELS_ELEMENT_ID}
+        className={`immersive-exit relative z-10 flex flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px] ${
+          collapseState.reservesLayoutSpace ? "flex-1" : "h-0 overflow-hidden p-0 sm:p-0"
+        }`}
+      >
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
