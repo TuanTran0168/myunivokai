@@ -64,9 +64,11 @@ flowchart TB
   nature -->|"Owns Schema"| natureDatabase
 ```
 
-The diagram shows ownership and communication flow, not request sequence.
-Each service owns its own PostgreSQL database.
-Redis belongs to the gateway — it handles caching and rate limits, not job queuing.
+- The diagram shows ownership, not request sequence.
+- Each service owns its own PostgreSQL database; nothing reads another's tables.
+- Redis belongs to the gateway alone — caching and rate limits, never job queuing.
+- Only the gateway is public; NATS, Redis and every domain service are private.
+- Domain services are NATS workers with no HTTP business API.
 
 | Service | What it does |
 | --- | --- |
@@ -79,22 +81,37 @@ Redis belongs to the gateway — it handles caching and rate limits, not job que
 
 ---
 
-## How it works
+## Generation flow
 
-1. User fills a form in the Next.js frontend.
-2. Frontend sends a `POST` request to the API Gateway.
-3. Gateway validates input, applies rate limits via Redis,
-   publishes a durable command to NATS JetStream,
-   and immediately returns **202 Accepted** with a `jobId`.
-4. DNA Service picks up the command, calls the configured AI provider
-   to generate a canonical ProfileDNA, stores the root job in its database,
-   and emits a compose command for the appropriate family service.
-5. Universe Service or Nature Service picks up the compose command,
-   computes a deterministic World Seed and World Scene Config (no AI involved),
-   stores the world and its first variant, and emits a completion event.
-6. DNA Service listens for the completion event and marks the root job as done.
-7. Frontend polls `GET /api/jobs/{jobId}` until the job completes,
-   then fetches the world data and renders the 3D scene with React Three Fiber.
+- `POST /api/{family}/worlds` — gateway validates, rate-limits, publishes to JetStream.
+- Gateway answers **202 Accepted** with a `jobId`; it never waits for the world.
+- `dna-service` consumes the command and calls the AI provider for a ProfileDNA.
+- `dna-service` stores the root job, then emits a compose command for the family.
+- `universe-service` or `nature-service` composes the world from a seed — no AI.
+- The family service stores the world plus variant 1 and emits a completion event.
+- `dna-service` consumes that event and marks the root job done.
+- Frontend polls `GET /api/jobs/{jobId}`, then loads the world and renders it.
+
+`{family}` is `universe` or `nature`. Both families use identical request shapes.
+
+## World lifecycle after generation
+
+- `GET /api/{family}/worlds/{id}` — the private dashboard read, cached in Redis.
+- `POST /api/{family}/worlds/{id}/variants` — new seed, new scene, zero AI cost.
+- `POST /api/{family}/worlds/{id}/variants/{variantId}/select` — pick what is shown.
+- `POST /api/{family}/worlds/{id}/publish` — mint the share slug once, then reuse it.
+- `GET /api/{family}/share/worlds/{slug}` — public, privacy-safe, cached in Redis.
+- Frontend share pages live at `/universe/share/worlds/{slug}` and `/nature/share/worlds/{slug}`.
+
+## Gateway caching and invalidation
+
+- Three Redis namespaces: `job:v1`, `world:v1`, `share:v1`.
+- `world:v1` is keyed by world id; `share:v1` is keyed by share slug.
+- Every mutation deletes `world:v1` before and after the call.
+- A mutation cannot derive the slug from a world id, so the domain service
+  returns `shareSlug` in its response and the gateway deletes `share:v1` with it.
+- Without that, selecting a variant left the share page serving the previous
+  scene for a whole TTL — which looked like the share losing scene features.
 
 ---
 
@@ -102,25 +119,19 @@ Redis belongs to the gateway — it handles caching and rate limits, not job que
 
 ### AI only generates the semantic profile — all 3D numbers are deterministic
 
-The AI provider produces conceptual traits like archetype, narrative, mood, energy, and palette intent.
-
-Every numeric value that goes into 3D rendering — orbit radii, planet sizes,
-forest density, lighting angles — is derived from a seed using safe mathematical bounds.
-
-What this means in practice:
-- Generating alternative variants (`POST /worlds/{id}/variants`) costs **zero AI calls**.
-- The same seed always produces the exact same 3D scene.
+- The AI produces concepts: archetype, narrative, mood, energy, palette intent.
+- Every rendering number comes from the seed inside safe mathematical bounds.
+- That covers orbit radii, planet sizes, forest density and lighting angles.
+- Alternative variants therefore cost **zero AI calls**.
+- The same seed always produces the same scene, on any page, forever.
+- `Math.random()` is banned in scene code; the frontend mirrors the seeded PRNG.
 
 ### Single public edge with interchangeable AI providers
 
-The browser only talks to the API Gateway.
-Domain services, databases, NATS, and Redis are all private.
-
-All domain services run as NATS background workers: `myunivokai-dna`, `myunivokai-universe`, `myunivokai-nature`.
-
-AI providers (`Gemini`, `OpenAI`, `mock`) sit behind a single `ai.Provider` interface.
-Switching providers is just an environment variable change.
-The `mock` provider lets you develop and test without any API key.
+- The browser talks to the gateway and nothing else.
+- `Gemini`, `OpenAI` and `mock` sit behind one `ai.Provider` interface.
+- Switching provider is an environment variable, not a code change.
+- `mock` runs the whole flow with no API key, and is what tests use.
 
 ---
 
@@ -133,7 +144,8 @@ The `mock` provider lets you develop and test without any API key.
 | **World Scene Config** | The full numeric recipe for a 3D scene (planets, orbits, lighting, palette, mood). Computed from the seed, completely AI-free. |
 | **Variant** | An alternative scene config for the same world. Generated from a new seed at zero AI cost. One variant is marked as the selected one. |
 | **Mood Scene Profiles** | Per-mood rendering parameters, mirrored in both Go and TypeScript to keep visuals consistent. |
-| **Share Slug** | Publishing a world creates a public, privacy-safe read-only URL at `/share/worlds/{slug}`. |
+| **Share Slug** | Publishing mints one permanent slug per world. Republishing reuses it. |
+| **Rare Features** | Black hole, binary suns, meteor shower. Rolled on the frontend from the seed, never stored, so the same seed must reach every page. |
 | **Async Job & Polling** | Gateway returns `202 + jobId`. Frontend polls `GET /api/jobs/{jobId}` until the result is ready. |
 
 ---
@@ -186,9 +198,9 @@ The `mock` provider lets you develop and test without any API key.
 
 ---
 
-## Run locally — full stack (recommended)
+## Run locally — full stack
 
-This starts everything in Docker: databases, messaging, all backend services, and the frontend.
+Everything in Docker: databases, messaging, all backend services, the frontend.
 
 **Step 1.** Copy the environment template (skip if `.env.local` already exists):
 
@@ -196,28 +208,30 @@ This starts everything in Docker: databases, messaging, all backend services, an
 cp .env.example .env.local
 ```
 
-> The repo ships a working `.env.local` with safe local-only credentials.
+- The repo ships a working `.env.local` with local-only credentials.
 
 **Step 2.** Start all services:
 
 ```powershell
-docker compose -f docker-compose-local.yaml up --build
+docker compose --env-file .env.local -f docker-compose-local.yaml up --build
 ```
 
-Or use the Makefile shortcut:
+- `--env-file .env.local` is **required**, not cosmetic.
+- Compose auto-loads a root `.env` when the flag is absent.
+- A root `.env` outranks the `env_file:` entries under `include:`.
+- Anyone holding a deploy-shaped `.env` then boots the local stack against
+  production NATS, production Redis and the live AI provider — silently.
+- Verify what you are about to start: `docker compose --env-file .env.local -f docker-compose-local.yaml config`.
+- `make local-up` passes the flag for you.
 
-```powershell
-make local-up
-```
-
-**Step 3.** Wait for all containers to report healthy, then open:
+**Step 3.** Wait for the containers to report healthy, then open:
 
 | Component | URL |
 | --- | --- |
-| Web (frontend) | http://localhost:3000 |
-| API Gateway | http://localhost:8080 |
-| Liveness probe | http://localhost:8080/api/v1/healthz |
-| Readiness probe | http://localhost:8080/api/v1/readyz |
+| Web (frontend) | http://localhost:41300 |
+| API Gateway | http://localhost:41800 |
+| Liveness probe | http://localhost:41800/api/v1/healthz |
+| Readiness probe | http://localhost:41800/api/v1/readyz |
 
 **Step 4.** Stop everything:
 
@@ -225,22 +239,29 @@ make local-up
 make local-down
 ```
 
-### Diagnostics
+### Published ports
 
-These ports are available for debugging when the stack is running:
+- Deliberately off the usual numbers so the stack never fights another project.
+- Nothing here uses `3000`, `8080`, `5432`, `6379` or `4222` on the host.
+- Change any of them in `.env.local`; the compose files read the variables.
 
-| Service | Address |
-| --- | --- |
-| PostgreSQL | `localhost:15432` |
-| NATS client | `nats://localhost:14222` |
-| NATS monitor | http://localhost:18222 |
-| Redis | `localhost:16379` |
+| Host port | Service | Container port |
+| ---: | --- | ---: |
+| 41300 | Web (frontend) | 41300 |
+| 41800 | API Gateway | 41800 |
+| 15432 | PostgreSQL | 5432 |
+| 14222 | NATS client | 4222 |
+| 18222 | NATS monitoring | 8222 |
+| 16379 | Redis | 6379 |
+
+- Domain services publish no host port at all — they are NATS workers.
+- Production ports come from the platform's `PORT`, untouched by these values.
 
 ---
 
 ## Run locally — single service
 
-When you want to iterate on one service with hot-reload while infrastructure runs in Docker.
+For iterating on one service while infrastructure runs in Docker.
 
 **Step 1.** Start shared infrastructure only:
 
@@ -248,24 +269,25 @@ When you want to iterate on one service with hot-reload while infrastructure run
 docker compose --env-file infra/.env.local -f infra/docker-compose-local.yaml up -d
 ```
 
-**Step 2.** Start the service you're working on (example: universe-service):
+**Step 2.** Start the service you are working on (example: universe-service):
 
 ```powershell
 docker compose --env-file services/universe-service/.env.local `
   -f services/universe-service/docker-compose-local.yaml up --build
 ```
 
-Each service's compose file joins the shared `myunivokai-local-backend` network
-and expects infrastructure to already be running.
+- Each service compose file joins the shared `myunivokai-local-backend` network.
+- Each expects infrastructure to be running already.
+- The frontend outside Docker: `cd apps/myunivokai-web; npm run dev` (port 41300).
 
 ---
 
 ## Environment files
 
-The project uses `.env.local` files for actual credentials (tracked in git as local-only values)
-and `.env.example` files as templates with placeholder values.
-
-> **Never** put managed or production secrets in `.env.local`.
+- `.env.local` holds real local-only values and is tracked in git.
+- `.env.example` is the template with placeholders.
+- A root `.env` is gitignored and belongs to whoever deploys — never to the stack.
+- **Never** put managed or production secrets in `.env.local`.
 
 ### Which file is used where
 
@@ -279,29 +301,19 @@ and `.env.example` files as templates with placeholder values.
 | `services/nature-service/.env.local` | `services/nature-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `apps/myunivokai-web/.env.local` | Web compose file and `npm run dev` | Just `NEXT_PUBLIC_GATEWAY_BASE_URL`. |
 
-### How full-stack mode wires everything together
+### How full-stack mode resolves variables
 
-The root `docker-compose-local.yaml` is a Compose `include:` aggregator.
-It passes the root `.env.local` to every child compose file:
+- The root `docker-compose-local.yaml` is an `include:` aggregator, nothing more.
+- Each `include:` entry names the root `.env.local` for interpolation.
+- Each child compose file also loads its own `.env.local` via `env_file:`.
+- Root-level variables win over child ones through Compose interpolation.
+- A root `.env` wins over all of it, which is why the `--env-file` flag matters.
 
-```yaml
-include:
-  - path: ./infra/docker-compose-local.yaml
-    env_file: ./.env.local
-  - path: ./services/api-gateway/docker-compose-local.yaml
-    env_file: ./.env.local
-  # ... same pattern for dna-service, universe-service, nature-service, web
-```
+### Why NATS credentials are prefixed in the root file
 
-Each child compose file also loads its own `.env.local` via `env_file:`,
-but root-level variables take priority through Compose interpolation.
-
-### Why NATS credentials have prefixes in the root file
-
-The root `.env.local` needs to hold credentials for every service in one file.
-To avoid naming collisions, it uses prefixed names like `NATS_GATEWAY_USERNAME`.
-
-Each service's compose file maps these to the unprefixed names its Go binary expects:
+- One root file has to hold credentials for every service at once.
+- Prefixed names (`NATS_GATEWAY_USERNAME`) avoid collisions between them.
+- Each service compose file maps the prefixed name to the plain one its binary reads.
 
 ```yaml
 # In services/api-gateway/docker-compose-local.yaml:
@@ -312,9 +324,9 @@ environment:
 
 ### Production
 
-In production (Render), environment variables are set through the dashboard.
-The `render.yaml` blueprint lists which variables each service needs.
-Secrets like database URLs, NATS URLs, and API keys are configured manually per service.
+- Render sets every variable through its dashboard; `render.yaml` lists which.
+- Database URLs, NATS URLs and API keys are configured per service, by hand.
+- The service port comes from Render's `PORT`, so local port choices never leak.
 
 ---
 
