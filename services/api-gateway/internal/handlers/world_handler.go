@@ -155,6 +155,13 @@ func (handler *WorldHandler) GetShare(responseWriter http.ResponseWriter, reques
 }
 
 // Invalidate before and after a mutation to close the concurrent stale-fill race.
+//
+// The share cache can only be dropped AFTER the call: it is keyed by share slug,
+// which the gateway does not know from a world id, so every mutation response
+// carries `shareSlug` back for this. Selecting a different variant changes what
+// the public share page renders, and without this the share served the previous
+// variant for a whole cache TTL — long enough for a seed-derived rare feature to
+// appear on the dashboard and be missing from the shared link.
 func (handler *WorldHandler) proxyWorldMutation(responseWriter http.ResponseWriter, request *http.Request, worldID, subject string, data any) {
 	handler.transport.InvalidateWorld(request.Context(), handler.family, worldID)
 	response, ok := handler.transport.Request(responseWriter, request, subject, data)
@@ -162,7 +169,22 @@ func (handler *WorldHandler) proxyWorldMutation(responseWriter http.ResponseWrit
 		return
 	}
 	handler.transport.InvalidateWorld(request.Context(), handler.family, worldID)
+	handler.transport.InvalidateShare(request.Context(), handler.family, shareSlugFromMutationPayload(response.Data.Payload))
 	httpx.WriteRawJSON(responseWriter, response.Data.StatusCode, response.Data.Payload)
+}
+
+// shareSlugFromMutationPayload peeks at the one field the gateway needs without
+// taking on the shape of any service's response model. Publish already returns
+// the slug at the root; variant mutations now do too. A payload without it (or
+// an unpublished world) yields "", which InvalidateShare treats as a no-op.
+func shareSlugFromMutationPayload(payload []byte) string {
+	var mutation struct {
+		ShareSlug string `json:"shareSlug"`
+	}
+	if err := json.Unmarshal(payload, &mutation); err != nil {
+		return ""
+	}
+	return mutation.ShareSlug
 }
 
 func worldIdentifierFromRequest(responseWriter http.ResponseWriter, request *http.Request) (string, bool) {

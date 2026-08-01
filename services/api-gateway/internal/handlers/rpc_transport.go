@@ -120,3 +120,16 @@ func (transport *RPCTransport) InvalidateWorld(ctx context.Context, family contr
 		log.Warn().Err(err).Str("world_id", worldID).Msg("invalidate world cache")
 	}
 }
+
+// InvalidateShare drops the cached public share response for a slug. The share
+// cache is keyed by SLUG while mutations arrive keyed by WORLD ID, so the slug
+// has to come back from the domain service in the mutation response; an empty
+// slug means the world was never published and there is nothing to drop.
+func (transport *RPCTransport) InvalidateShare(ctx context.Context, family contracts.WorldFamily, shareSlug string) {
+	if shareSlug == "" {
+		return
+	}
+	if err := transport.cache.Delete(ctx, shareCacheNamespace, edge.ShareCacheIdentifier(string(family), shareSlug)); err != nil {
+		log.Warn().Err(err).Str("share_slug", shareSlug).Msg("invalidate share cache")
+	}
+}

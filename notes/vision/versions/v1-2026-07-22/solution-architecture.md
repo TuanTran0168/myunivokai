@@ -356,7 +356,7 @@ shared infra Compose contains PostgreSQL, database initialization, NATS,
 stream/consumer bootstrap and Redis. Service migrations stay inside their
 owning service Compose file.
 
-Only development-facing ports are published: web `3000`, gateway `8080`,
+Only development-facing ports are published: web `41300`, gateway `41800`,
 PostgreSQL `5432`, NATS client `4222`, NATS monitoring `8222`, and Redis `6379`.
 Domain services expose no host port. Named volumes preserve PostgreSQL, NATS
 JetStream and Redis development data. Health/dependency gates ensure database,

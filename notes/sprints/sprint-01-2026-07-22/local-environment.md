@@ -202,8 +202,8 @@ Root `.env.local` is the source for a full local stack. It includes:
 COMPOSE_PROJECT_NAME=myunivokai-local
 APP_ENV=development
 
-WEB_PORT=3000
-GATEWAY_PORT=8080
+WEB_PORT=41300
+GATEWAY_PORT=41800
 POSTGRES_PORT=15432
 NATS_CLIENT_PORT=14222
 NATS_MONITOR_PORT=18222
@@ -265,7 +265,7 @@ AI_TIMEOUT=35s
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 
-NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:41800
 ```
 
 ### Component `.env.local`
@@ -310,8 +310,8 @@ Published developer ports:
 
 | Port | Purpose |
 | ---: | --- |
-| 3000 | branded web app |
-| 8080 | gateway HTTP API |
+| 41300 | branded web app |
+| 41800 | gateway HTTP API |
 | 15432 | optional local PostgreSQL diagnostics; container port remains 5432 |
 | 14222 | optional local NATS CLI/client diagnostics; container port remains 4222 |
 | 18222 | local NATS monitoring; container port remains 8222 |
@@ -339,11 +339,17 @@ supports the host binding syntax. Domain services publish no host port.
 Integrated stack:
 
 ```powershell
-docker compose -f docker-compose-local.yaml config
-docker compose -f docker-compose-local.yaml up --build
-docker compose -f docker-compose-local.yaml ps
-docker compose -f docker-compose-local.yaml down
+docker compose --env-file .env.local -f docker-compose-local.yaml config
+docker compose --env-file .env.local -f docker-compose-local.yaml up --build
+docker compose --env-file .env.local -f docker-compose-local.yaml ps
+docker compose --env-file .env.local -f docker-compose-local.yaml down
 ```
+
+`--env-file .env.local` is required. Compose auto-loads a root `.env` when the
+flag is absent, and that file outranks the `env_file:` entries under `include:`,
+so a machine holding a deploy-shaped `.env` boots the local stack against
+production NATS, production Redis and the live AI provider. `make local-up`
+passes the flag.
 
 Standalone component example:
 

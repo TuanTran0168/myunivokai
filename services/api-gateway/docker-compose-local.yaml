@@ -9,8 +9,8 @@ services:
       APP_ENV: ${APP_ENV:-development}
       APP_NAME: Myunivokai API Gateway
       API_HOST: 0.0.0.0
-      API_PORT: 8080
-      API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-3000}
+      API_PORT: 41800
+      API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-41300}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       NATS_USERNAME: ${NATS_GATEWAY_USERNAME:-myunivokai_gateway}
       NATS_PASSWORD: ${NATS_GATEWAY_PASSWORD:-myunivokai_local_gateway}
@@ -27,12 +27,12 @@ services:
       SHARE_CACHE_TTL: ${SHARE_CACHE_TTL:-60s}
       SERVICE_SHUTDOWN_TIMEOUT: ${SERVICE_SHUTDOWN_TIMEOUT:-15s}
     ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      - "${GATEWAY_PORT:-41800}:41800"
     volumes:
       - ../..:/workspace
       - api-gateway-go-cache:/go/pkg/mod
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8080/api/v1/readyz"]
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:41800/api/v1/readyz"]
       interval: 5s
       timeout: 3s
       retries: 30

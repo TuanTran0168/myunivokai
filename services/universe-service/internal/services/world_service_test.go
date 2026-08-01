@@ -12,7 +12,7 @@ import (
 )
 
 func newTestWorldService(store repositories.Store) *WorldService {
-	serviceConfig := config.Config{PublicWebURL: "http://localhost:3000", ShareSlugLength: 10}
+	serviceConfig := config.Config{PublicWebURL: "http://localhost:41300", ShareSlugLength: 10}
 	return NewWorldService(serviceConfig, store, NewWorldConfigBuilder())
 }
 
@@ -135,5 +135,45 @@ func TestPublishWorldRetriesOnSlugConflict(t *testing.T) {
 	}
 	if !strings.HasPrefix(response.ShareSlug, "tuan-") {
 		t.Fatalf("expected slug based on nickname, got %q", response.ShareSlug)
+	}
+}
+
+// The gateway's public share cache is keyed by slug, so a variant mutation has
+// to hand the slug back or the share page keeps serving the previous variant
+// until its cache entry expires. That window is how a seed-derived rare feature
+// (a black hole) could show on the dashboard and be absent from the shared link.
+func TestVariantMutationsReturnTheShareSlugForCacheInvalidation(t *testing.T) {
+	service := newTestWorldService(repositories.NewMemoryStore())
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("compose world: %v", err)
+	}
+	regenerated, err := service.RegenerateVariant(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("regenerate variant: %v", err)
+	}
+	if regenerated.ShareSlug != "" {
+		t.Fatalf("unpublished world should report no slug, got %q", regenerated.ShareSlug)
+	}
+	published, err := service.PublishWorld(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("publish world: %v", err)
+	}
+	selected, err := service.SelectVariant(context.Background(), created.World.ID, regenerated.Variant.ID)
+	if err != nil {
+		t.Fatalf("select variant: %v", err)
+	}
+	if selected.ShareSlug != published.ShareSlug {
+		t.Fatalf("select returned slug %q, want %q", selected.ShareSlug, published.ShareSlug)
+	}
+	if !selected.Variant.IsSelected {
+		t.Fatalf("selected variant %q is not marked selected", selected.Variant.ID)
+	}
+	regeneratedAfterPublish, err := service.RegenerateVariant(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("regenerate variant after publish: %v", err)
+	}
+	if regeneratedAfterPublish.ShareSlug != published.ShareSlug {
+		t.Fatalf("regenerate returned slug %q, want %q", regeneratedAfterPublish.ShareSlug, published.ShareSlug)
 	}
 }

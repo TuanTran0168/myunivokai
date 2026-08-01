@@ -1,6 +1,6 @@
 import type { WorldFamily } from "./types";
 
-const DEFAULT_GATEWAY_BASE_URL = "http://localhost:8080";
+const DEFAULT_GATEWAY_BASE_URL = "http://localhost:41800";
 const GATEWAY_ENVIRONMENT_VARIABLE_NAME = "NEXT_PUBLIC_GATEWAY_BASE_URL";
 const SUPPORTED_GATEWAY_PROTOCOLS = new Set(["http:", "https:"]);
 
