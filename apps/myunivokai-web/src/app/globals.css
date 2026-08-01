@@ -32,13 +32,19 @@
      still marks a panel as a panel is its specular top edge, its brass inner
      rule and its lift shadow — not a wash of dark.
 
-     0.30 -> 0.16 -> 0.06 and blur 30px -> 14px, on owner request 2026-08-01.
-     Content opacity is deliberately NOT reduced with it: the rail is a form to
-     be filled in, so the material thins while the text stays solid. The forest
-     override at the bottom of this file is the counterweight that keeps that
-     text legible against a bright daylight canopy. */
-  --glass-tint: rgba(15, 14, 19, 0.06);
-  --glass-blur: blur(14px) saturate(150%) brightness(1.05);
+     CLEAR, NOT FROSTED. There is no blur here, and its absence is the whole
+     point: the owner's word is "trong suốt" (see-through), not "mờ như kính"
+     (hazy like frosted glass). Blur was also what made the panel read as a dark
+     card over the universe — averaging a sharp star field on black flattens the
+     bright points away and leaves a grey wash, so the more blur, the LESS the
+     panel looked transparent. Saturation alone keeps the material present
+     without touching sharpness.
+
+     Content opacity is deliberately NOT reduced with the tint: the rail is a
+     form to be filled in, so the material thins while the text stays solid.
+     Legibility is carried by the text shadow below, never by darkening this. */
+  --glass-tint: rgba(15, 14, 19, 0.08);
+  --glass-blur: saturate(125%);
 
   /* Motion. --glass-easing is not a new curve: it is the value this file already
      wrote twice (the panel transition and the glass-rise entrance), hoisted so
@@ -136,13 +142,16 @@ textarea {
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
-/* At this tint a panel adds almost no darkness of its own, so legibility has to
-   come from the TEXT rather than from a wash behind it. This is the trade that
-   lets the material stay genuinely clear over a bright forest canopy instead of
-   being darkened back up until it reads as a solid card again. */
+/* With no blur and almost no tint, the panel adds nothing of its own, so ALL
+   legibility comes from the text. The shadow is deliberately heavy: text now
+   sits on a sharp, busy, moving scene rather than on a smoothed-out wash, which
+   is a far harder background than the one the palette was tuned against. This
+   is the trade that buys genuine transparency. */
 .glass-panel,
 .liquid-glass {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.62);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 0 8px rgba(0, 0, 0, 0.55);
 }
 
 /* Dark engraved labels on a brass fill need no shadow, and a dark one muddies
@@ -332,10 +341,10 @@ textarea {
      which would silently nullify the collapse for exactly the users who still
      need it to work.
 
-   Transform + opacity only: the rail is a 30px backdrop-filter surface over a
-   continuously rendering WebGL canvas, and it contains a dozen more nested
-   blurred surfaces. Animating its box would force layout, paint and a fresh
-   backdrop every frame; animating its position does not. */
+   Transform + opacity only: the rail sits over a continuously rendering WebGL
+   canvas and carries a backdrop-filter, as do a dozen surfaces nested inside it.
+   Animating its box would force layout, paint and a fresh backdrop composite
+   every frame; animating its position does not. */
 .form-rail-collapse {
   transition:
     transform var(--form-rail-collapse-duration) var(--glass-easing) 0s,
@@ -375,29 +384,32 @@ textarea {
      plus twice this is exactly --chrome-toggle-size. */
   padding: 0 calc((var(--chrome-toggle-size) - var(--chrome-toggle-icon-size)) / 2);
   border-radius: 999px;
-  /* Its OWN material, deliberately not .glass-panel. This is the one control
-     that must be findable, and at --glass-tint a 44px circle vanished into a
-     bright forest canopy. Everything else on the page may dissolve into the
-     world; this may not. */
-  background: rgba(11, 11, 14, 0.62);
-  border: 1px solid var(--brass-soft);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  backdrop-filter: blur(14px) saturate(150%);
+  /* SOLID BRASS, deliberately not glass. Twice now this control was reported
+     missing: a translucent circle is invisible against a bright canopy AND
+     against a near-black star field, because it borrows its contrast from
+     whatever is behind it and both extremes defeat it. The header's own brass
+     CTA is legible in every screenshot, so the toggle takes the same treatment.
+     Everything else on this page may dissolve into the world; the one way back
+     may not. */
+  background: var(--brass);
+  color: var(--ink);
+  border: 1px solid rgba(27, 20, 2, 0.28);
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.20),
-    0 10px 26px -10px rgba(0, 0, 0, 0.85);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.38),
+    0 10px 26px -8px rgba(0, 0, 0, 0.75);
   transition:
     transform var(--chrome-toggle-expand-duration) var(--spring-easing),
-    background-color var(--chrome-toggle-expand-duration) var(--glass-easing),
-    border-color var(--chrome-toggle-expand-duration) var(--glass-easing),
+    filter var(--chrome-toggle-expand-duration) var(--glass-easing),
     box-shadow var(--chrome-toggle-expand-duration) var(--glass-easing);
 }
 
 .chrome-toggle:hover,
 .chrome-toggle:focus-visible {
   transform: translateY(1px) scale(1.03);
-  background: rgba(11, 11, 14, 0.74);
-  border-color: var(--brass);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
+    0 14px 32px -8px rgba(0, 0, 0, 0.8);
 }
 
 .chrome-toggle:active {
@@ -586,9 +598,10 @@ textarea {
    It used to be the whole answer, and at 0.62/0.45/0.34 that made forest panels
    read as muddy cards rather than as glass — not transparent, and still low
    contrast, because the text was grey on a mid-dark wash. Legibility now comes
-   mostly from the text shadow above and the brighter muted tokens, so this can
-   stay faint. Raise it only if forest text still fails, and judge that on the
-   Forest family: the universe's #050816 background flatters any value. */
+   from the text shadow above and the brighter muted tokens, so this only has to
+   keep the canopy's brightest patches from reaching the text. Raise it only if
+   forest text still fails, and judge that on the Forest family: the universe's
+   #050816 background flatters any value. */
 .forest-chrome .glass-panel {
-  background-color: rgba(14, 18, 13, 0.16);
+  background-color: rgba(14, 18, 13, 0.14);
 }

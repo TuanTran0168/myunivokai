@@ -145,13 +145,22 @@ literally on a form that has to be filled in. The decision (2026-08-01) was to
 keep the first and drop the second: **the material goes nearly invisible, the
 content stays at full opacity.**
 
+**Clear, not frosted — the blur was the whole problem.** Three rounds were spent
+lowering the *tint* while the blur stayed, and none of them read as transparent,
+because the owner's word is "trong suốt" (see-through), not "mờ như kính" (hazy
+like frosted glass). Blur was also what made the panel look like a dark card
+over the **universe**: averaging a sharp star field on black flattens the bright
+points away and leaves a grey wash, so more blur meant *less* apparent
+transparency, in both families at once. There is now no blur anywhere in the
+chrome — only saturation.
+
 | Token | Was | Now |
 | --- | --- | --- |
-| `--glass-tint` | `0.30` | **`0.06`** |
-| `--glass-blur` | `blur(30px) saturate(180%)` | **`blur(14px) saturate(150%)`** |
-| header wash | `bg-mount/35`, `backdrop-blur-2xl` | **`bg-mount/10`, `backdrop-blur-md`** |
-| footer wash | `bg-void/45`, `backdrop-blur-2xl` | **`bg-void/10`, `backdrop-blur-md`** |
-| `.forest-chrome .glass-panel` | `0.62` | **`0.16`** |
+| `--glass-tint` | `0.30` | **`0.08`** |
+| `--glass-blur` | `blur(30px) saturate(180%)` | **`saturate(125%)` — no blur** |
+| header wash | `bg-mount/35`, `backdrop-blur-2xl` | **`bg-mount/10`, saturate only** |
+| footer wash | `bg-void/45`, `backdrop-blur-2xl` | **`bg-void/10`, saturate only** |
+| `.forest-chrome .glass-panel` | `0.62` | **`0.14`** |
 | `grey` / `on-surface-variant` | `#B6B0A4` | **`#DCD7CB`** |
 | `faint` / `outline` | `#807868` | **`#A79D8A`** |
 | `.input-dark` fill | `rgba(255,255,255,0.05)` | **`rgba(8,8,10,0.42)`** |
@@ -198,11 +207,12 @@ hovering, and that is the only way a touch user ever sees the label. The
 accessible name lives on the button and never depends on the label being
 visible, so a screen reader is unaffected by any of this.
 
-It carries **its own material rather than `.glass-panel`** — a solid-ish dark
-fill with a brass ring. This is not decoration: at `--glass-tint` a 44px circle
-with a 20px icon disappeared entirely into a forest canopy, and it was reported
-as the button being gone. Everything else on this page may dissolve into the
-world; this one control may not.
+It is **solid brass, deliberately not glass.** It was reported missing twice: a
+translucent circle is invisible against a bright forest canopy *and* against a
+near-black star field, because it borrows its contrast from whatever is behind
+it and both extremes defeat it. The header's own brass CTA stayed legible in
+every screenshot, so the toggle takes the same treatment. Everything else on
+this page may dissolve into the world; the one way back may not.
 
 Known risk for QA: the toggle is centred in the header band, and on the
 narrowest phones the header's own logo and nav leave little clear space there.
