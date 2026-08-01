@@ -328,6 +328,19 @@ it and both extremes defeat it. The header's own brass CTA stayed legible in
 every screenshot, so the toggle takes the same treatment. Everything else on
 this page may dissolve into the world; the one way back may not.
 
+**Quiet in the collapsed state, but never transparent.** Once the interface is
+gone this is the only non-3D thing on screen, so it steps back — and only so
+far, because it is simultaneously the only way back, which makes it the worst
+possible thing on the page to hide. The quiet state therefore keeps **two
+independent contrast sources, one per failure mode**: a dark fill that reads
+against a bright scene, and a brass icon and rim that read against a dark one.
+Neither extreme can defeat both, which is exactly what glass could not promise.
+The hit area never changes, and hover or focus brings the full brass straight
+back.
+
+Full transparency was considered and rejected: it is the precise change that
+produced both "không thấy button" reports.
+
 Known risk for QA: the toggle is centred in the header band, and on the
 narrowest phones the header's own logo and nav leave little clear space there.
 
