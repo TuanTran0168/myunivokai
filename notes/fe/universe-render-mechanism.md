@@ -187,6 +187,36 @@ const scale = targetSize / Math.max(size.x, size.y, size.z);
    tint màu thủ công, nếu không nó trắng toát.
 6. Chọn model theo seed: `randomFromSeed(seed + "-spacecraft")` → world nào
    cũng có "vệ tinh của riêng mình", tất định.
+7. **Vật thể to phải đặt theo camera, không theo bán kính** — xem mục dưới.
+
+### Đặt vật thể lớn: giải theo camera, không theo bán kính
+
+Bug thật đã gặp (2026-08-02): hố đen rare đặt trên vòng bán kính 18, góc
+azimuth random cả vòng, elevation cố định 7. Camera universe luôn ở
+`[0, distance*0.42, distance]` với `distance ∈ [7, 12]` và nhìn về gốc qua
+lens 50° → **phần lớn vòng đó nằm cạnh hoặc SAU lưng camera**. World thật
+`WLD-DR3HMIJRZ2` có hố đen lệch trục 157°, tức ngay sau lưng người xem, trong
+khi `RareFeatureBadge` vẫn ghi "Black Hole". Nhìn từ ngoài y như world bị mất
+thông số khi share, dù seed và scene config hai trang giống nhau từng byte.
+
+Quy tắc rút ra:
+
+- Tham số hoá vị trí theo **hệ trục màn hình** (forward/right/up dựng từ vị
+  trí camera), không theo góc world thô. `distantBlackHolePlacement.ts` là
+  bản mẫu: depth tính từ gốc dọc trục nhìn, rồi offset trong mặt phẳng màn
+  hình.
+- Biên offset phải **trừ đi kích thước của chính model** (`targetSize / 2`)
+  cộng lề, và đo bằng nửa chiều CAO khung với tỉ lệ khung vuông — viewport
+  rộng hơn chỉ thêm chỗ, nên qua được vòng tròn nội tiếp là qua mọi cửa sổ.
+  Chặn từng trục riêng sẽ để lọt góc chéo ra ngoài khung.
+- Lens hẹp không được kẹp offset về 0 (dán vật thể vào trục nhìn, bị Sun che):
+  đẩy depth ra xa cho đủ chỗ.
+- Các con số camera của cảnh mở nằm ở `universeCameraFraming.ts`. Đừng copy
+  chúng vào component — bản sao riêng chính là thứ đã cho hố đen trôi ra sau
+  lưng camera.
+- Invariant "nằm trong khung" phải là **unit test** trên nhiều seed và nhiều
+  cấu hình camera (`distantBlackHolePlacement.test.ts`), không phải hằng số
+  chỉnh tay.
 
 ### Gắn model vào object chuyển động
 
