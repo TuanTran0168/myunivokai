@@ -129,3 +129,39 @@ func TestSelectPublishAndGetPublicWorld(t *testing.T) {
 		t.Fatalf("get public forest: %#v, %v", publicWorld, err)
 	}
 }
+
+// Twin of the universe-service test: the gateway's public share cache is keyed by
+// slug, so a variant mutation has to hand the slug back or the forest share page
+// keeps serving the previous variant until its cache entry expires.
+func TestVariantMutationsReturnTheShareSlugForCacheInvalidation(t *testing.T) {
+	service, _ := newTestWorldService(t)
+	created, err := service.ComposeWorld(context.Background(), validComposeEnvelope())
+	if err != nil {
+		t.Fatalf("compose world: %v", err)
+	}
+	regenerated, err := service.RegenerateVariant(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("regenerate variant: %v", err)
+	}
+	if regenerated.ShareSlug != "" {
+		t.Fatalf("unpublished world should report no slug, got %q", regenerated.ShareSlug)
+	}
+	published, err := service.PublishWorld(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("publish world: %v", err)
+	}
+	selected, err := service.SelectVariant(context.Background(), created.World.ID, regenerated.Variant.ID)
+	if err != nil {
+		t.Fatalf("select variant: %v", err)
+	}
+	if selected.ShareSlug != published.ShareSlug {
+		t.Fatalf("select returned slug %q, want %q", selected.ShareSlug, published.ShareSlug)
+	}
+	regeneratedAfterPublish, err := service.RegenerateVariant(context.Background(), created.World.ID)
+	if err != nil {
+		t.Fatalf("regenerate variant after publish: %v", err)
+	}
+	if regeneratedAfterPublish.ShareSlug != published.ShareSlug {
+		t.Fatalf("regenerate returned slug %q, want %q", regeneratedAfterPublish.ShareSlug, published.ShareSlug)
+	}
+}

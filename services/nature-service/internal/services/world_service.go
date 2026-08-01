@@ -104,7 +104,7 @@ func (service *WorldService) RegenerateVariant(ctx context.Context, worldID stri
 		sceneConfig := service.builder.Build(BuildForestConfigInput{DNA: bundle.World.NatureDNA, Seed: variantSeed, VariantNo: nextVariantNumber, Input: bundle.World.VisualIntent})
 		variant, err := service.store.AddVariant(ctx, worldID, models.WorldVariant{VariantNo: nextVariantNumber, Seed: variantSeed, Config: sceneConfig})
 		if err == nil {
-			return models.VariantResponse{Variant: variant}, nil
+			return models.VariantResponse{Variant: variant, ShareSlug: shareSlugValue(bundle.World.ShareSlug)}, nil
 		}
 		if !errors.Is(err, repositories.ErrConflict) {
 			return models.VariantResponse{}, err
@@ -115,11 +115,19 @@ func (service *WorldService) RegenerateVariant(ctx context.Context, worldID stri
 }
 
 func (service *WorldService) SelectVariant(ctx context.Context, worldID, variantID string) (models.VariantResponse, error) {
+	// The share slug is read BEFORE the selection, not after: the gateway needs it
+	// to drop the stale public share response, and reading first means a failed
+	// lookup can never report a selection that already committed as an error.
+	// Publishing never rewrites an existing slug, so it cannot change underneath.
+	bundle, err := service.store.GetWorld(ctx, worldID)
+	if err != nil {
+		return models.VariantResponse{}, err
+	}
 	variant, err := service.store.SelectVariant(ctx, worldID, variantID)
 	if err != nil {
 		return models.VariantResponse{}, err
 	}
-	return models.VariantResponse{Variant: variant}, nil
+	return models.VariantResponse{Variant: variant, ShareSlug: shareSlugValue(bundle.World.ShareSlug)}, nil
 }
 
 func (service *WorldService) PublishWorld(ctx context.Context, worldID string) (models.PublishResponse, error) {
@@ -199,6 +207,16 @@ func highestVariantNumber(variants []models.WorldVariant) int {
 		}
 	}
 	return highestNumber
+}
+
+// shareSlugValue flattens the optional slug for transport: an unpublished world
+// has no share page to invalidate, and an empty string says so without making
+// every caller nil-check.
+func shareSlugValue(shareSlug *string) string {
+	if shareSlug == nil {
+		return ""
+	}
+	return *shareSlug
 }
 
 func selectedVariant(variants []models.WorldVariant) models.WorldVariant {
