@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Loader2, Orbit, Plus, Trees } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -9,6 +9,8 @@ import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ensureRange, toggleItem } from "@/lib/formSelection";
+import { FORM_RAIL_ELEMENT_ID } from "@/lib/formRailCollapse";
+import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
 import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
@@ -94,6 +96,11 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<GenerationJobStatus | undefined>();
+  const {
+    collapseState: formRailCollapseState,
+    toggleCollapse,
+    toggleButtonReference: formRailToggleButtonReference
+  } = useWorldChromeCollapse({ errorMessage: error, worldFamily });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -232,6 +239,16 @@ export default function HomePage() {
     setIsAddingCustomInterest(false);
   }
 
+  function handleFormRailToggle() {
+    // Commit a half-typed custom interest through the same path the input's
+    // onBlur uses, rather than relying on the browser to blur it for us: the
+    // rail is about to become invisible and the draft would be unreachable.
+    // This is the create page's own concern, which is why the shared hook does
+    // not know about it.
+    closeCustomInterestInput();
+    toggleCollapse();
+  }
+
   return (
     <main
       className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
@@ -243,9 +260,27 @@ export default function HomePage() {
         status={generationStatus === "queued" || generationStatus === "processing" ? generationStatus : undefined}
       />
 
+      {/* The one control that hides the whole interface and brings it back. It
+          sits OUTSIDE the collapsing region on purpose: it can never hide
+          itself, and focus is never inside the region at the moment that region
+          disappears. Disabled while generating, so a collapse can never start
+          behind the overlay. */}
+      <WorldChromeToggle
+        isExpanded={formRailCollapseState.isExpanded}
+        onToggle={handleFormRailToggle}
+        controlsElementId={FORM_RAIL_ELEMENT_ID}
+        noun="form"
+        buttonReference={formRailToggleButtonReference}
+        disabled={loading}
+      />
+
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
           desktop so the preview owns the screen and the rail floats over it. */}
-      <div className="relative h-[46vh] min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full">
+      <div
+        className={`relative min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full ${
+          formRailCollapseState.reservesLayoutSpace ? "h-[46vh]" : "h-svh"
+        }`}
+      >
         <UniverseCanvas
           scene={previewScene}
           className="h-full"
@@ -254,8 +289,12 @@ export default function HomePage() {
         />
 
         {/* Floating identity island (desktop): live state, the curatorial
-            accession, and the palette — opposite the form rail. */}
-        <div className="glass-panel glass-panel-glow glass-rise pointer-events-none absolute right-5 top-[72px] hidden w-[290px] flex-col gap-3 rounded-2xl px-4 py-3.5 lg:flex">
+            accession, and the palette — opposite the form rail. Wrapped for the
+            same reason the rail is: the panel's own .glass-rise retains a
+            transform and .glass-panel is reset to `transform: none` under
+            reduced motion, so the exit has to live on a plain ancestor. */}
+        <div className="immersive-exit immersive-exit-right pointer-events-none absolute right-5 top-[72px] hidden w-[290px] lg:block">
+        <div className="glass-panel glass-panel-glow glass-rise flex w-full flex-col gap-3 rounded-2xl px-4 py-3.5">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-grey">Live preview</span>
@@ -282,12 +321,30 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Floating Liquid-Glass form rail: an in-flow card on mobile (pulled up over
           the hero), a floating glass island on the left on desktop where only the
-          field column scrolls. */}
-      <section className="glass-panel glass-panel-glow glass-rise relative z-10 mx-3 mb-4 mt-4 flex flex-col overflow-hidden rounded-3xl sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px]">
+          field column scrolls.
+
+          The positioning lives on this WRAPPER rather than on the panel, and the
+          wrapper deliberately carries neither .glass-panel nor .glass-rise: the
+          entrance animation's retained transform and the reduced-motion
+          `transform: none` on .glass-panel would each silently defeat a collapse
+          applied to the panel itself. See .form-rail-collapse in globals.css.
+
+          `h-0` only ever applies once the slide has finished, so the mobile page
+          closes up under an already-invisible card instead of jumping while it
+          is still on screen. */}
+      <div
+        id={FORM_RAIL_ELEMENT_ID}
+        data-form-rail-collapsed={!formRailCollapseState.isExpanded}
+        className={`form-rail-collapse relative z-10 sm:mx-4 lg:absolute lg:bottom-[68px] lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px] ${
+          formRailCollapseState.reservesLayoutSpace ? "mx-3 mb-4 mt-4" : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
+        }`}
+      >
+      <section className="glass-panel glass-panel-glow glass-rise flex w-full flex-col overflow-hidden rounded-3xl lg:h-full">
           <div className="border-b border-white/5 px-5 pb-5 pt-5 sm:px-7">
             <div className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">Curate</div>
             <h1 className="font-display text-3xl font-semibold text-paper">A portrait of you.</h1>
@@ -367,7 +424,7 @@ export default function HomePage() {
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
-                            ? "border-primary bg-primary/35 font-semibold text-paper shadow-glow"
+                            ? "border-primary bg-primary/35 font-semibold text-paper"
                             : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
@@ -385,7 +442,7 @@ export default function HomePage() {
                         type="button"
                         aria-pressed="true"
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
-                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper shadow-glow"
+                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper"
                       >
                         {item}
                       </button>
@@ -438,7 +495,7 @@ export default function HomePage() {
                         onClick={() => setTraits((current) => toggleItem(current, item, 3, 6))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm capitalize ${
                           selected
-                            ? "border-secondary bg-secondary/30 font-semibold text-paper shadow-cyan"
+                            ? "border-secondary bg-secondary/30 font-semibold text-paper"
                             : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
@@ -486,7 +543,7 @@ export default function HomePage() {
                         aria-pressed={selected}
                         className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
-                            ? "scale-[1.03] border-secondary bg-secondary/15 shadow-cyan ring-2 ring-secondary/40"
+                            ? "scale-[1.03] border-secondary bg-secondary/15 ring-2 ring-secondary/40"
                             : "border-transparent hover:border-white/20"
                         }`}
                       >
@@ -521,7 +578,7 @@ export default function HomePage() {
                         aria-pressed={selected}
                         className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
-                            ? "scale-[1.03] border-primary bg-primary/15 shadow-glow ring-2 ring-primary/40"
+                            ? "scale-[1.03] border-primary bg-primary/15 ring-2 ring-primary/40"
                             : "border-transparent hover:border-white/20"
                         }`}
                       >
@@ -577,6 +634,7 @@ export default function HomePage() {
             </button>
           </div>
       </section>
+      </div>
     </main>
   );
 }

@@ -19,10 +19,17 @@ const config: Config = {
         card: "#131217",
         "card-hover": "#1A181E",
         paper: "#F2EEE6", // warm gallery-white
-        grey: "#B6B0A4",
-        faint: "#807868",
-        brass: "#C9A35B", // the single metallic accent
-        "brass-deep": "#A8843F",
+        // Raised 2026-08-01 with the glass tint drop: these were tuned against a
+        // dark wash behind them. With the material near-clear they sit straight
+        // on the live world, and a bright forest canopy ate them.
+        grey: "#DCD7CB",
+        faint: "#A79D8A",
+        // The single metallic accent, taken from a CSS variable so a world
+        // family can retint the whole interface (see body[data-world-family] in
+        // globals.css). The <alpha-value> form is what keeps bg-brass/10,
+        // ring-brass/40 and friends working.
+        brass: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "brass-deep": "rgb(var(--brass-deep-rgb) / <alpha-value>)",
         vermillion: "#E0573A", // the live dot only
         ink: "#1B1402", // engraved dark label on brass fills
         hairline: "rgba(255,255,255,0.10)",
@@ -35,18 +42,21 @@ const config: Config = {
         "surface-high": "#1A181E",
         "surface-bright": "#222028",
         "on-surface": "#F2EEE6",
-        "on-surface-variant": "#B6B0A4",
-        outline: "#807868",
+        "on-surface-variant": "#DCD7CB",
+        outline: "#A79D8A",
         "outline-variant": "#2A2730",
-        primary: "#C9A35B",
-        "primary-container": "#C9A35B",
+        // These legacy aliases follow the accent variable too, or the chips and
+        // rings they colour would stay brass while the rest of a forest went
+        // copper.
+        primary: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "primary-container": "rgb(var(--brass-rgb) / <alpha-value>)",
         "primary-fixed": "#E7D6AE",
         "on-primary-fixed": "#1B1402",
-        secondary: "#C9A35B",
-        "secondary-container": "#A8843F",
+        secondary: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "secondary-container": "rgb(var(--brass-deep-rgb) / <alpha-value>)",
         "secondary-fixed": "#E7D6AE",
         "on-secondary-fixed": "#1B1402",
-        tertiary: "#C9A35B",
+        tertiary: "rgb(var(--brass-rgb) / <alpha-value>)",
         error: "#E86A52",
         "error-container": "#5A1B10"
       },
@@ -73,10 +83,11 @@ const config: Config = {
       boxShadow: {
         // Emphasis is value contrast + brass rule + a soft LIFT, never neon glow.
         lift: "0 30px 70px -22px rgba(0,0,0,0.7)",
-        "brass-lift": "0 8px 22px -8px rgba(201,163,91,0.55)",
-        // Legacy names (SHIM: remapped from violet/cyan halos to the neutral lift).
-        glow: "0 30px 70px -22px rgba(0,0,0,0.7)",
-        cyan: "0 30px 70px -22px rgba(0,0,0,0.7)"
+        "brass-lift": "0 8px 22px -8px rgb(var(--brass-rgb) / 0.55)"
+        // The legacy `glow` and `cyan` aliases are gone. They had been remapped
+        // to the neutral lift, which meant every chip and option card was
+        // carrying a 70px island shadow — lift belongs to a floating island, not
+        // to a control inside one. Removing the call sites orphaned them.
       },
       fontFamily: {
         // Editorial serif masthead (production self-hosts a Didone via next/font;

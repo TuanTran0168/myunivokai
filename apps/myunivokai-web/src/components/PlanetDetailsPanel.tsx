@@ -6,6 +6,11 @@ import { planetIdentityKey } from "@/components/UniverseCanvas";
 
 const ENERGY_BAR_MAXIMUM_VALUE = 100;
 
+// A point of interest carries its own colour from the world's palette. When it
+// does not, fall back to the accent metal rather than to a hard-coded violet:
+// an unnamed colour should look like chrome, not like a seventh palette entry.
+const FALLBACK_POINT_OF_INTEREST_COLOR = "var(--brass)";
+
 type PlanetDetailsPanelProps = {
   planets: PlanetSceneConfig[];
   selectedPlanetKey: string | null;
@@ -45,27 +50,41 @@ export function PlanetDetailsPanel({ planets, selectedPlanetKey, onSelectPlanet 
               <button
                 type="button"
                 onClick={() => onSelectPlanet(isSelected ? null : planet)}
+                // A translucent dark veil, not the opaque card this used to be:
+                // the rest of the chrome is clear glass now, and a solid
+                // #222028 block read as a leftover pasted over the world. The
+                // veil is still see-through, but it gives the label and the
+                // number a consistent floor over a bright, busy scene — the
+                // rows are the densest text on the page.
                 className={`focus-ring w-full rounded-xl border p-3 text-left transition ${
                   isSelected
-                    ? "border-primary/50 bg-primary/15 shadow-glow"
-                    : "border-white/10 bg-surface-bright hover:border-white/25"
+                    ? "border-brass/55 bg-brass/20"
+                    : "border-hairline bg-black/30 hover:border-white/30 hover:bg-black/40"
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-paper">
                     <span
                       className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: planet.color ?? "#8B5CF6" }}
+                      style={{ backgroundColor: planet.color ?? FALLBACK_POINT_OF_INTEREST_COLOR }}
                       aria-hidden="true"
                     />
                     {planet.name ?? "Unknown planet"}
                   </span>
-                  <span className="font-mono text-xs text-on-surface-variant">{energyValue}</span>
+                  <span className="font-mono text-xs text-paper">{energyValue}</span>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                {/* The bar takes the point's OWN colour, the same one as its dot.
+                    It used to be the accent metal, which put two colour systems
+                    in every row — a cyan dot beside a copper bar, neither
+                    agreeing with the other or with the chrome. One hue per row
+                    reads as that row's identity instead of as decoration. */}
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/45">
                   <div
-                    className="h-full rounded-full bg-brass"
-                    style={{ width: `${energyValue}%` }}
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${energyValue}%`,
+                      backgroundColor: planet.color ?? FALLBACK_POINT_OF_INTEREST_COLOR
+                    }}
                   />
                 </div>
                 {isSelected && planet.meaning ? (
