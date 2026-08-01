@@ -1,7 +1,10 @@
-# Create-page chrome backlog
+# World-chrome backlog
 
-> **Document status:** Active backlog for unplanned owner-requested create-page work
-> **Last source review:** 2026-08-01
+> **Document status:** Active backlog for unplanned owner-requested chrome work
+> **Last source review:** 2026-08-02
+>
+> Renamed from `create-page-chrome.md` on 2026-08-02: the toggle now runs on the
+> create, world and share pages, so the file is no longer about one page.
 
 Owner-requested changes to the create page's chrome that no sprint story covers.
 This file exists for the same reason [scene-fidelity.md](scene-fidelity.md) does:
@@ -13,14 +16,42 @@ marked *required before production cutover*.
 
 Recording it does not approve it. Sequencing is the owner's call.
 
-## US-CREATE-001 — One button clears the form off the world
+## US-CHROME-001 — One button clears the interface off the world
 
 Status: Implemented
 Priority: Unranked — owner-requested outside sprint scope
 
-As a visitor filling in the create form,
-I want one button that hides every input and brings it back,
-so that I can look at the live world I am shaping without losing what I typed.
+As a visitor looking at any of my worlds,
+I want one button that clears the interface and brings it back,
+so that I can look at the world itself without losing where I was.
+
+It runs on all three world-bearing pages. The mechanism, the timing, the `<body>`
+markers and the button are shared (`components/WorldChromeToggle.tsx`); only what
+each page hides and the noun the user is shown differ:
+
+| Page | Hides | Label | How it leaves |
+| --- | --- | --- | --- |
+| `/` create | the form rail | "Hide the form" | slides off the left edge |
+| `/worlds/[worldId]` | the HUD islands | "Hide the panels" | fades |
+| the two share routes | the HUD islands | "Hide the panels" | fades |
+
+The world and share HUD is one overlay `<div>` carrying neither `.glass-panel`
+nor `.glass-rise`, so it needs no wrapper of its own. It **fades rather than
+sliding** because its islands are anchored to both edges and the bottom centre —
+any single direction would drag one of them across the whole screen. It keys off
+the same `<body>` marker that clears the header and footer, so all of it goes at
+once.
+
+Naming the actual thing beats one vague label like "interface" on all three, so
+the noun is a typed parameter and a test pins both label sets. The two regions
+also carry distinct ids: one shared `aria-controls` target would point at the
+wrong element on one of the pages.
+
+Neither the world nor the share page passes `errorMessage`. The world page
+reports failures as toasts, which sit outside the collapsing region, and a share
+load failure replaces the whole view — so on those pages there is no error that
+hiding the panels could swallow. The create page does pass it, because its
+`StatusMessage` renders *inside* the rail.
 
 Scenario: The whole interface leaves, not just the form
 
@@ -64,9 +95,12 @@ And the label still switches between the two states.
 
 Source evidence:
 
+- `apps/myunivokai-web/src/components/WorldChromeToggle.tsx` (shared hook + button)
 - `apps/myunivokai-web/src/lib/formRailCollapse.ts`
 - `apps/myunivokai-web/src/lib/formRailCollapse.test.ts`
 - `apps/myunivokai-web/src/app/page.tsx`
+- `apps/myunivokai-web/src/app/worlds/[worldId]/page.tsx`
+- `apps/myunivokai-web/src/features/share/ShareWorldView.tsx`
 - `apps/myunivokai-web/src/app/layout.tsx` (header/footer exits)
 - `apps/myunivokai-web/src/app/globals.css` (`.form-rail-collapse`, `.immersive-exit`)
 

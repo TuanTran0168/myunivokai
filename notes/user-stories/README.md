@@ -13,7 +13,7 @@ acceptance evidence live beside each dated sprint in `notes/sprints/*/user-stori
 | [implemented-capabilities.md](implemented-capabilities.md) | What the current product already supports, expressed as verifiable stories |
 | [engineering-backlog.md](engineering-backlog.md) | Approved event-driven migration, scale and City epics with Given/When/Then acceptance |
 | [scene-fidelity.md](scene-fidelity.md) | Unplanned owner-requested forest realism work, recorded so it is not invisible |
-| [create-page-chrome.md](create-page-chrome.md) | Unplanned owner-requested create-page chrome work, recorded on the same basis |
+| [world-chrome.md](world-chrome.md) | Unplanned owner-requested world-chrome work — the immersive toggle, the clear glass, the family accent — recorded on the same basis |
 | [Sprint 1 stories](../sprints/sprint-01-2026-07-22/user-stories.md) | Migration implementation and pending environment evidence |
 | [Sprint 2 stories](../sprints/sprint-02-2026-08-05/user-stories.md) | Resilience and scale commitments |
 | [Sprint 3 stories](../sprints/sprint-03-2026-08-19/user-stories.md) | City vertical-slice commitments |

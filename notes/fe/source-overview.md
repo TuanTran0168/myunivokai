@@ -65,13 +65,18 @@ itself.
   read as universe). IDs saved automatically on create and when opening a world.
 - `lib/exportImage.ts` — downloads the WebGL canvas as PNG
   (requires `preserveDrawingBuffer`, already set on the Canvas).
-- `lib/formRailCollapse.ts` — state for the create page's one-button form
-  collapse. The rail is never unmounted (the submit button sits outside the
-  `<form>` and would lose its owner); a wrapper slides off-canvas and flips
-  `visibility`, so fields keep their values and the GL context survives. The
-  collapse duration is declared in both this module and `globals.css`, and
-  `formRailCollapse.test.ts` fails if the two drift. See
-  [../user-stories/create-page-chrome.md](../user-stories/create-page-chrome.md).
+- `lib/formRailCollapse.ts` + `components/WorldChromeToggle.tsx` — the one-button
+  "clear the interface off the world" control, shared by the create, world and
+  share pages. The collapsing region is never unmounted (on the create page the
+  submit button sits outside the `<form>` and would lose its owner); it slides or
+  fades and flips `visibility`, so fields keep their values and the GL context
+  survives. Two `<body>` markers carry state the pages cannot reach with a
+  selector — `data-world-immersive` hides the shared header/footer,
+  `data-world-family` swaps the accent metal (brass → copper for forest). Those
+  attribute names and the collapse duration are contracts between TypeScript and
+  CSS with no compiler between them, so `formRailCollapse.test.ts` parses
+  `globals.css` and fails if either drifts. See
+  [../user-stories/world-chrome.md](../user-stories/world-chrome.md).
 
 ## The 3D part
 

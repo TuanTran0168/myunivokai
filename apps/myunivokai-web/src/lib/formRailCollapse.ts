@@ -49,15 +49,41 @@ export const WORLD_FAMILY_BODY_ATTRIBUTE = "data-world-family";
  * to it by the HTML `form` attribute.
  */
 export const FORM_RAIL_ELEMENT_ID = "create-universe-form-rail";
+export const WORLD_PANELS_ELEMENT_ID = "world-chrome-panels";
+
+/**
+ * What the toggle hides on a given page. The create page hides a form; the world
+ * and share pages hide the HUD islands. The mechanism is identical — only the
+ * noun the user is shown differs, and naming the actual thing beats one vague
+ * label like "interface" on all three.
+ */
+export type WorldChromeNoun = "form" | "panels";
 
 /**
  * The accessible name stays constant across both states; the state itself is
  * announced once, by `aria-expanded`. A name that changed with the state would
  * make a screen reader announce the state twice, and contradictorily.
  */
-export const FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL = "Create-world form";
-export const FORM_RAIL_HIDE_LABEL = "Hide the form";
-export const FORM_RAIL_SHOW_LABEL = "Show the form";
+const ACCESSIBLE_LABEL_BY_NOUN: Record<WorldChromeNoun, string> = {
+  form: "Create-world form",
+  panels: "World information panels"
+};
+const HIDE_LABEL_BY_NOUN: Record<WorldChromeNoun, string> = {
+  form: "Hide the form",
+  panels: "Hide the panels"
+};
+const SHOW_LABEL_BY_NOUN: Record<WorldChromeNoun, string> = {
+  form: "Show the form",
+  panels: "Show the panels"
+};
+
+export const FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL = ACCESSIBLE_LABEL_BY_NOUN.form;
+export const FORM_RAIL_HIDE_LABEL = HIDE_LABEL_BY_NOUN.form;
+export const FORM_RAIL_SHOW_LABEL = SHOW_LABEL_BY_NOUN.form;
+
+export function worldChromeToggleAccessibleLabel(noun: WorldChromeNoun): string {
+  return ACCESSIBLE_LABEL_BY_NOUN[noun];
+}
 
 /**
  * `isExpanded` drives the slide; `reservesLayoutSpace` keeps the rail's box in
@@ -132,6 +158,6 @@ export function formRailStateAfterErrorChange(
 }
 
 /** The visible label on the button, which does change with the state. */
-export function formRailToggleLabel(isExpanded: boolean): string {
-  return isExpanded ? FORM_RAIL_HIDE_LABEL : FORM_RAIL_SHOW_LABEL;
+export function formRailToggleLabel(isExpanded: boolean, noun: WorldChromeNoun = "form"): string {
+  return isExpanded ? HIDE_LABEL_BY_NOUN[noun] : SHOW_LABEL_BY_NOUN[noun];
 }

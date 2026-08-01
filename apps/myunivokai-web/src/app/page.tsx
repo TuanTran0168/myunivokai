@@ -2,26 +2,15 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Orbit, PanelLeftClose, PanelLeftOpen, Plus, Trees } from "lucide-react";
+import { ArrowRight, Check, Loader2, Orbit, Plus, Trees } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
 import { GeneratingOverlay } from "@/components/GeneratingOverlay";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ensureRange, toggleItem } from "@/lib/formSelection";
-import {
-  EXPANDED_FORM_RAIL_COLLAPSE_STATE,
-  FORM_RAIL_ELEMENT_ID,
-  IMMERSIVE_WORLD_BODY_ATTRIBUTE,
-  WORLD_FAMILY_BODY_ATTRIBUTE,
-  FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
-  formRailLayoutReleaseDelayMilliseconds,
-  formRailStateAfterErrorChange,
-  formRailToggleLabel,
-  releaseFormRailLayoutSpace,
-  REDUCED_MOTION_MEDIA_QUERY,
-  toggleFormRailCollapseState
-} from "@/lib/formRailCollapse";
+import { FORM_RAIL_ELEMENT_ID } from "@/lib/formRailCollapse";
+import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
 import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
@@ -107,49 +96,11 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<GenerationJobStatus | undefined>();
-  const [formRailCollapseState, setFormRailCollapseState] = useState(EXPANDED_FORM_RAIL_COLLAPSE_STATE);
-  const formRailToggleButtonReference = useRef<HTMLButtonElement | null>(null);
-
-  // The rail's box stays in the mobile document flow until the slide has
-  // played, so nothing below it moves while it is still visible.
-  useEffect(() => {
-    if (formRailCollapseState.isExpanded || !formRailCollapseState.reservesLayoutSpace) {
-      return;
-    }
-    const prefersReducedMotion = window.matchMedia(REDUCED_MOTION_MEDIA_QUERY).matches;
-    const timeoutId = setTimeout(
-      () => setFormRailCollapseState(releaseFormRailLayoutSpace),
-      formRailLayoutReleaseDelayMilliseconds(prefersReducedMotion)
-    );
-    return () => clearTimeout(timeoutId);
-  }, [formRailCollapseState]);
-
-  // The error surface lives inside the rail, so an error has to bring it back —
-  // otherwise a failed generation reports into a hidden panel.
-  useEffect(() => {
-    setFormRailCollapseState((current) => formRailStateAfterErrorChange(current, error));
-  }, [error]);
-
-  // Hiding the form clears the WHOLE interface, leaving only the live world and
-  // the button that brings it back. The header and footer belong to the shared
-  // layout — an ancestor no selector here can reach — so the state is published
-  // on <body> instead. The cleanup is not optional: without it, navigating away
-  // while hidden would leave every other page with no header.
-  useEffect(() => {
-    if (formRailCollapseState.isExpanded) {
-      return;
-    }
-    document.body.setAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE, "true");
-    return () => document.body.removeAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE);
-  }, [formRailCollapseState.isExpanded]);
-
-  // The accent metal is family-dependent, and the header and footer have to
-  // follow it even though they are not this page's descendants — same route,
-  // same cleanup obligation.
-  useEffect(() => {
-    document.body.setAttribute(WORLD_FAMILY_BODY_ATTRIBUTE, worldFamily);
-    return () => document.body.removeAttribute(WORLD_FAMILY_BODY_ATTRIBUTE);
-  }, [worldFamily]);
+  const {
+    collapseState: formRailCollapseState,
+    toggleCollapse,
+    toggleButtonReference: formRailToggleButtonReference
+  } = useWorldChromeCollapse({ errorMessage: error, worldFamily });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -292,11 +243,10 @@ export default function HomePage() {
     // Commit a half-typed custom interest through the same path the input's
     // onBlur uses, rather than relying on the browser to blur it for us: the
     // rail is about to become invisible and the draft would be unreachable.
+    // This is the create page's own concern, which is why the shared hook does
+    // not know about it.
     closeCustomInterestInput();
-    setFormRailCollapseState(toggleFormRailCollapseState);
-    // Safari does not focus a button on click, which would leave focus on
-    // <body> and restart the next Tab from the top of the document.
-    formRailToggleButtonReference.current?.focus();
+    toggleCollapse();
   }
 
   return (
@@ -313,38 +263,16 @@ export default function HomePage() {
       {/* The one control that hides the whole interface and brings it back. It
           sits OUTSIDE the collapsing region on purpose: it can never hide
           itself, and focus is never inside the region at the moment that region
-          disappears.
-
-          It docks in the header's own band and above it (z over the header's 50)
-          so it keeps one place whether the header is present or has left, and it
-          rests as a bare icon — the label unrolls only when pointed at, so the
-          resting screen is world and nothing else. The accessible name is on the
-          button and does not depend on the label being visible. */}
-      <div className="chrome-toggle-dock pointer-events-none absolute inset-x-0 z-[60] flex justify-center">
-        <button
-          ref={formRailToggleButtonReference}
-          type="button"
-          onClick={handleFormRailToggle}
-          disabled={loading}
-          aria-expanded={formRailCollapseState.isExpanded}
-          aria-controls={FORM_RAIL_ELEMENT_ID}
-          aria-label={FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL}
-          className="chrome-toggle focus-ring pointer-events-auto text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <span className="chrome-toggle-icon">
-            {formRailCollapseState.isExpanded ? (
-              <PanelLeftClose className="h-5 w-5" aria-hidden="true" />
-            ) : (
-              <PanelLeftOpen className="h-5 w-5" aria-hidden="true" />
-            )}
-          </span>
-          <span className="chrome-toggle-label" aria-hidden="true">
-            <span className="chrome-toggle-label-text">
-              {formRailToggleLabel(formRailCollapseState.isExpanded)}
-            </span>
-          </span>
-        </button>
-      </div>
+          disappears. Disabled while generating, so a collapse can never start
+          behind the overlay. */}
+      <WorldChromeToggle
+        isExpanded={formRailCollapseState.isExpanded}
+        onToggle={handleFormRailToggle}
+        controlsElementId={FORM_RAIL_ELEMENT_ID}
+        noun="form"
+        buttonReference={formRailToggleButtonReference}
+        disabled={loading}
+      />
 
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
           desktop so the preview owns the screen and the rail floats over it. */}

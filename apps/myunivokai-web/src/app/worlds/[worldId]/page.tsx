@@ -16,6 +16,8 @@ import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
 import { VariantList } from "@/components/VariantList";
+import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
+import { WORLD_PANELS_ELEMENT_ID } from "@/lib/formRailCollapse";
 
 type PageProps = {
   params: {
@@ -53,6 +55,9 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"variant" | "publish" | "select" | "copy" | null>(null);
   const [selectedPlanetKey, setSelectedPlanetKey] = useState<string | null>(null);
+  // No errorMessage: this page reports failures as toasts, which sit outside the
+  // collapsing region, so hiding the panels can never swallow one.
+  const { collapseState, toggleCollapse, toggleButtonReference } = useWorldChromeCollapse({ worldFamily: family });
   const sceneContainerReference = useRef<HTMLDivElement>(null);
 
   async function loadWorld() {
@@ -200,10 +205,26 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
         isForestScene(activeScene) ? "forest-chrome" : ""
       }`}
     >
+      {/* Clears every HUD island off the world and brings them back. Outside the
+          collapsing region, so it can never hide itself. */}
+      <WorldChromeToggle
+        isExpanded={collapseState.isExpanded}
+        onToggle={toggleCollapse}
+        controlsElementId={WORLD_PANELS_ELEMENT_ID}
+        noun="panels"
+        buttonReference={toggleButtonReference}
+      />
+
       {/* Full-bleed solar system: an in-flow hero on mobile, the command-deck
           background on desktop (bleeds behind the glass header). The ref wraps
-          the canvas so Export captures it. */}
-      <div ref={sceneContainerReference} className="relative h-[48vh] w-full lg:absolute lg:inset-0 lg:h-full">
+          the canvas so Export captures it. On mobile the hero takes the whole
+          viewport once the panels are gone and their box has been released. */}
+      <div
+        ref={sceneContainerReference}
+        className={`relative w-full lg:absolute lg:inset-0 lg:h-full ${
+          collapseState.reservesLayoutSpace ? "h-[48vh]" : "h-svh"
+        }`}
+      >
         <UniverseCanvas
           scene={activeScene}
           className="h-full"
@@ -215,8 +236,20 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
 
       {/* HUD overlay — a normal scrolling column on mobile; on desktop it becomes
           a pointer-transparent layer so orbit-drag passes through the gaps, while
-          each glass island re-enables pointer events. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px]">
+          each glass island re-enables pointer events.
+
+          This is also the single collapse target. It leaves by fading rather than
+          sliding, because its islands are anchored to both edges and the bottom
+          centre — a single direction would drag one of them across the whole
+          screen. `.immersive-exit` keys off the same <body> marker that clears
+          the header and footer, so all of it goes at once. It carries neither
+          .glass-panel nor .glass-rise, so it needs no wrapper of its own. */}
+      <div
+        id={WORLD_PANELS_ELEMENT_ID}
+        className={`immersive-exit relative z-10 flex flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px] ${
+          collapseState.reservesLayoutSpace ? "flex-1" : "h-0 overflow-hidden p-0 sm:p-0"
+        }`}
+      >
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">

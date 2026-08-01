@@ -10,6 +10,8 @@ import {
   FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
   IMMERSIVE_WORLD_BODY_ATTRIBUTE,
   WORLD_FAMILY_BODY_ATTRIBUTE,
+  WORLD_PANELS_ELEMENT_ID,
+  worldChromeToggleAccessibleLabel,
   formRailLayoutReleaseDelayMilliseconds,
   formRailStateAfterErrorChange,
   formRailToggleLabel,
@@ -106,6 +108,24 @@ describe("toggle labelling", () => {
     // it twice, and contradictorily.
     expect(FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL).not.toBe(FORM_RAIL_HIDE_LABEL);
     expect(FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL).not.toBe(FORM_RAIL_SHOW_LABEL);
+  });
+
+  it("names the actual thing each page hides", () => {
+    // The create page hides a form; the world and share pages hide HUD islands.
+    // One vague label like "interface" on all three would be worse than naming
+    // what the user is looking at.
+    expect(formRailToggleLabel(true, "panels")).toBe("Hide the panels");
+    expect(formRailToggleLabel(false, "panels")).toBe("Show the panels");
+    expect(formRailToggleLabel(true, "form")).toBe(FORM_RAIL_HIDE_LABEL);
+  });
+
+  it("gives each region a distinct accessible name and a distinct id", () => {
+    // Two regions on two pages controlled by the same component; a shared id
+    // would make aria-controls point at the wrong element on one of them.
+    expect(worldChromeToggleAccessibleLabel("panels")).not.toBe(FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL);
+    expect(worldChromeToggleAccessibleLabel("panels")).not.toBe(formRailToggleLabel(true, "panels"));
+    expect(WORLD_PANELS_ELEMENT_ID).not.toBe("");
+    expect(WORLD_PANELS_ELEMENT_ID).not.toBe(FORM_RAIL_ELEMENT_ID);
   });
 
   it("does not reuse the create form's own element id", () => {
