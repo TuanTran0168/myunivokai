@@ -169,9 +169,15 @@ textarea {
    is the trade that buys genuine transparency. */
 .glass-panel,
 .liquid-glass {
+  /* Three layers, each doing a different job: a tight 1px drop that separates
+     the glyph from whatever is directly under it, a 4px halo that carries the
+     counters and thin strokes, and a wide 12px pool that darkens the region so
+     a bright highlight passing behind the text cannot reach it. One large soft
+     shadow alone leaves the glyph edges themselves unresolved. */
   text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.9),
-    0 0 8px rgba(0, 0, 0, 0.55);
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 4px rgba(0, 0, 0, 0.85),
+    0 0 12px rgba(0, 0, 0, 0.6);
 }
 
 /* Dark engraved labels on a brass fill need no shadow, and a dark one muddies

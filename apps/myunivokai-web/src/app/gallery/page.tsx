@@ -74,7 +74,7 @@ export default function GalleryPage() {
           {failedWorldEntries.map((entry) => (
             <div
               key={entry.worldIdentifier}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-surface-low px-4 py-3 text-sm text-on-surface-variant"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-black/30 px-4 py-3 text-sm text-on-surface-variant"
             >
               <span className="truncate">
                 World <span className="font-mono">{entry.worldIdentifier}</span> could not be loaded
@@ -83,7 +83,7 @@ export default function GalleryPage() {
               <button
                 type="button"
                 onClick={() => removeSavedWorld(entry.worldIdentifier)}
-                className="focus-ring rounded-md border border-white/10 bg-surface-bright px-3 py-1.5 text-on-surface hover:border-white/30"
+                className="focus-ring rounded-md border border-hairline bg-black/30 px-3 py-1.5 text-on-surface hover:border-white/30"
               >
                 Remove
               </button>

@@ -83,10 +83,11 @@ const config: Config = {
       boxShadow: {
         // Emphasis is value contrast + brass rule + a soft LIFT, never neon glow.
         lift: "0 30px 70px -22px rgba(0,0,0,0.7)",
-        "brass-lift": "0 8px 22px -8px rgba(201,163,91,0.55)",
-        // Legacy names (SHIM: remapped from violet/cyan halos to the neutral lift).
-        glow: "0 30px 70px -22px rgba(0,0,0,0.7)",
-        cyan: "0 30px 70px -22px rgba(0,0,0,0.7)"
+        "brass-lift": "0 8px 22px -8px rgb(var(--brass-rgb) / 0.55)"
+        // The legacy `glow` and `cyan` aliases are gone. They had been remapped
+        // to the neutral lift, which meant every chip and option card was
+        // carrying a 70px island shadow — lift belongs to a floating island, not
+        // to a control inside one. Removing the call sites orphaned them.
       },
       fontFamily: {
         // Editorial serif masthead (production self-hosts a Didone via next/font;

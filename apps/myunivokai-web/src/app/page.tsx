@@ -424,7 +424,7 @@ export default function HomePage() {
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm ${
                           selected
-                            ? "border-primary bg-primary/35 font-semibold text-paper shadow-glow"
+                            ? "border-primary bg-primary/35 font-semibold text-paper"
                             : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
@@ -442,7 +442,7 @@ export default function HomePage() {
                         type="button"
                         aria-pressed="true"
                         onClick={() => setInterests((current) => toggleItem(current, item, MINIMUM_INTERESTS, MAXIMUM_INTERESTS))}
-                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper shadow-glow"
+                        className="focus-ring tappable rounded-full border border-primary bg-primary/35 px-4 py-1.5 text-sm font-semibold text-paper"
                       >
                         {item}
                       </button>
@@ -495,7 +495,7 @@ export default function HomePage() {
                         onClick={() => setTraits((current) => toggleItem(current, item, 3, 6))}
                         className={`focus-ring tappable rounded-full border px-4 py-1.5 text-sm capitalize ${
                           selected
-                            ? "border-secondary bg-secondary/30 font-semibold text-paper shadow-cyan"
+                            ? "border-secondary bg-secondary/30 font-semibold text-paper"
                             : "border-white/15 bg-white/5 text-on-surface-variant hover:border-white/35 hover:text-on-surface"
                         }`}
                       >
@@ -543,7 +543,7 @@ export default function HomePage() {
                         aria-pressed={selected}
                         className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
-                            ? "scale-[1.03] border-secondary bg-secondary/15 shadow-cyan ring-2 ring-secondary/40"
+                            ? "scale-[1.03] border-secondary bg-secondary/15 ring-2 ring-secondary/40"
                             : "border-transparent hover:border-white/20"
                         }`}
                       >
@@ -578,7 +578,7 @@ export default function HomePage() {
                         aria-pressed={selected}
                         className={`focus-ring glass-panel tappable relative rounded-xl border-2 p-3 text-center ${
                           selected
-                            ? "scale-[1.03] border-primary bg-primary/15 shadow-glow ring-2 ring-primary/40"
+                            ? "scale-[1.03] border-primary bg-primary/15 ring-2 ring-primary/40"
                             : "border-transparent hover:border-white/20"
                         }`}
                       >

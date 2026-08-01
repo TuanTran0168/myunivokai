@@ -268,6 +268,39 @@ Known gap: the custom cursor is a `data:` URI with `#C9A35B` baked in, so it
 stays brass in a forest. A variable cannot reach inside a data URI; changing it
 needs a second cursor asset.
 
+### Panels that stayed opaque, and one hue per row
+
+When the glass went clear, several surfaces did not come with it and were left
+reading as leftovers pasted over the world — solid `bg-surface-bright` (`#222028`)
+and `bg-surface-low` blocks in the World DNA rows, the world page's action
+toolbar and share-link row, the gallery, and the canvas hints. They are now
+**translucent dark veils** (`bg-black/30`–`/55`), which keep the material
+see-through while giving dense text a consistent floor.
+
+The World DNA rows also carried **two colour systems in each row**: the dot took
+the point's own palette colour while the bar took the accent metal, so a cyan dot
+sat beside a copper bar and neither agreed with the other or with the chrome. The
+bar now takes the point's own colour, the same one as its dot — one hue per row,
+reading as that row's identity rather than as decoration. An uncoloured point
+falls back to the accent rather than to a hard-coded violet, so an unnamed colour
+looks like chrome instead of a seventh palette entry.
+
+`shadow-glow` and `shadow-cyan` are gone from every call site and deleted from
+the config. They had been remapped to the neutral lift by the V1 shim, which
+meant every chip and option card was carrying a 70px island shadow — **lift
+belongs to a floating island, not to a control inside one.** That closes one of
+the V acceptance criteria as a side effect.
+
+### Text legibility over a clear panel
+
+With no blur and almost no tint, text sits on a sharp, busy, moving scene. The
+shadow on `.glass-panel` / `.liquid-glass` is three layers, each doing a
+different job: a tight 1px drop that separates the glyph from whatever is
+directly beneath it, a 4px halo that carries counters and thin strokes, and a
+wide 12px pool that darkens the region so a bright highlight passing behind the
+text cannot reach it. One large soft shadow alone leaves the glyph edges
+themselves unresolved.
+
 ### The world toggle
 
 It docks at the header band's own vertical centre and above the header (z over

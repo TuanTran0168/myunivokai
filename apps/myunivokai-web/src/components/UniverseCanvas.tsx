@@ -199,7 +199,7 @@ export function UniverseCanvas({
         </div>
       </div>
       {hoveredPlanet ? (
-        <div className="pointer-events-none absolute bottom-[68px] left-4 z-10 max-w-xs rounded-lg border border-white/15 bg-surface-low/85 px-3 py-2 backdrop-blur">
+        <div className="pointer-events-none absolute bottom-[68px] left-4 z-10 max-w-xs rounded-lg border border-white/15 bg-black/55 px-3 py-2 backdrop-blur">
           <p className="text-sm font-semibold text-on-surface">{hoveredPlanet.name ?? "Unknown planet"}</p>
           {typeof hoveredPlanet.energy === "number" ? (
             <p className="font-mono text-xs uppercase tracking-widest text-on-surface-variant">
@@ -210,7 +210,7 @@ export function UniverseCanvas({
       ) : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-lowest/65 to-transparent" />
       {enableKeyboardMove && isSceneReady ? (
-        <div className="pointer-events-none absolute bottom-[68px] right-4 z-10 hidden rounded-md border border-white/10 bg-surface-low/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/50 backdrop-blur sm:block">
+        <div className="pointer-events-none absolute bottom-[68px] right-4 z-10 hidden rounded-md border border-white/10 bg-black/50 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/50 backdrop-blur sm:block">
           WASD / arrows to move · drag to orbit · scroll to zoom
         </div>
       ) : null}

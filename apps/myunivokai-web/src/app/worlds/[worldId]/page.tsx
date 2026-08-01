@@ -297,14 +297,14 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
             {world.shareSlug ? (
               <div className="glass-panel rounded-2xl p-4">
                 <h2 className="mb-3 font-display text-base font-semibold text-on-surface">Share</h2>
-                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-white/10 bg-surface-low p-2">
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-hairline bg-black/30 p-2">
                   <span className="truncate text-sm text-on-surface-variant">{sharePagePath(world.shareSlug, family)}</span>
                   <button
                     type="button"
                     title="Copy link"
                     aria-label="Copy share link"
                     onClick={copyShareLink}
-                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface"
+                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-hairline bg-black/30 text-on-surface"
                   >
                     {action === "copy" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
                   </button>
@@ -312,7 +312,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
                     href={sharePagePath(world.shareSlug, family)}
                     title="Open share page"
                     aria-label="Open share page"
-                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md bg-surface-bright text-on-surface"
+                    className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-hairline bg-black/30 text-on-surface"
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden="true" />
                   </Link>
@@ -329,7 +329,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
               type="button"
               onClick={regenerateVariant}
               disabled={action !== null}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25 disabled:opacity-45"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-hairline bg-black/30 px-4 py-2 text-sm text-on-surface tappable hover:border-white/25 disabled:opacity-45"
             >
               {action === "variant" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               Regenerate Variant
@@ -337,7 +337,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
             <button
               type="button"
               onClick={exportSceneImage}
-              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-surface-bright px-4 py-2 text-sm text-on-surface tappable hover:border-white/25"
+              className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl border border-hairline bg-black/30 px-4 py-2 text-sm text-on-surface tappable hover:border-white/25"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
               Export Image

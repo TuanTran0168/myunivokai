@@ -76,7 +76,7 @@ export function SavedWorldCard({ world, family, onRemove }: SavedWorldCardProps)
         type="button"
         title="Remove from gallery"
         onClick={() => onRemove(world.id)}
-        className="focus-ring absolute right-3 top-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-surface-bright text-on-surface-variant opacity-0 transition hover:border-white/30 hover:text-on-surface group-hover:opacity-100"
+        className="focus-ring absolute right-3 top-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-black/30 text-on-surface-variant opacity-0 transition hover:border-white/30 hover:text-on-surface group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
