@@ -66,9 +66,9 @@ describe("asynchronous generation", () => {
 
     expect(world.id).toBe("world-1");
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8080/api/universe/worlds");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:8080/api/jobs/job-1");
-    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:8080/api/universe/worlds/world-1");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:41800/api/universe/worlds");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:41800/api/jobs/job-1");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:41800/api/universe/worlds/world-1");
   });
 
   it("surfaces a terminal generation failure without loading a world", async () => {
