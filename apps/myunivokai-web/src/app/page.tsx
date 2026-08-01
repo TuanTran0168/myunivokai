@@ -301,14 +301,17 @@ export default function HomePage() {
         status={generationStatus === "queued" || generationStatus === "processing" ? generationStatus : undefined}
       />
 
-      {/* The one control that hides the whole form so the live world is
-          unobstructed, and brings it back. It sits OUTSIDE the collapsing region
-          on purpose: it can never hide itself, and focus is never inside the
-          region at the moment that region disappears. Top-centre is the one
-          strip of chrome that is free at every width — the identity island is
-          top-right, the hover tooltip bottom-left, the movement hint
-          bottom-right and the rail top-left. */}
-      <div className="pointer-events-none absolute inset-x-0 top-[72px] z-20 flex justify-center">
+      {/* The one control that hides the whole interface and brings it back. It
+          sits OUTSIDE the collapsing region on purpose: it can never hide
+          itself, and focus is never inside the region at the moment that region
+          disappears.
+
+          It docks in the header's own band and above it (z over the header's 50)
+          so it keeps one place whether the header is present or has left, and it
+          rests as a bare icon — the label unrolls only when pointed at, so the
+          resting screen is world and nothing else. The accessible name is on the
+          button and does not depend on the label being visible. */}
+      <div className="chrome-toggle-dock pointer-events-none absolute inset-x-0 z-[60] flex justify-center">
         <button
           ref={formRailToggleButtonReference}
           type="button"
@@ -317,14 +320,20 @@ export default function HomePage() {
           aria-expanded={formRailCollapseState.isExpanded}
           aria-controls={FORM_RAIL_ELEMENT_ID}
           aria-label={FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL}
-          className="focus-ring glass-panel tappable pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm text-paper disabled:cursor-not-allowed disabled:opacity-45"
+          className="chrome-toggle focus-ring glass-panel pointer-events-auto text-sm text-paper disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {formRailCollapseState.isExpanded ? (
-            <PanelLeftClose className="h-4 w-4 text-brass" aria-hidden="true" />
-          ) : (
-            <PanelLeftOpen className="h-4 w-4 text-brass" aria-hidden="true" />
-          )}
-          {formRailToggleLabel(formRailCollapseState.isExpanded)}
+          <span className="chrome-toggle-icon text-brass">
+            {formRailCollapseState.isExpanded ? (
+              <PanelLeftClose className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5" aria-hidden="true" />
+            )}
+          </span>
+          <span className="chrome-toggle-label" aria-hidden="true">
+            <span className="chrome-toggle-label-text">
+              {formRailToggleLabel(formRailCollapseState.isExpanded)}
+            </span>
+          </span>
         </button>
       </div>
 

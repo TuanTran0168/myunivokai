@@ -138,17 +138,54 @@ document's scrollable area instead of leaving it.
 
 ### Glass transparency
 
-`--glass-tint` went 0.30 → **0.16** on owner request (2026-08-01), and the
-header/footer washes from `bg-mount/35` → `/20` and `bg-void/45` → `/25`. The
-material's legibility is meant to come from blur and saturation, not from
-opacity, so that the live world reads through the chrome.
+The owner asked for the transparency seen *mid-close* to become the resting
+state. That moment is two effects at once — the material thinning **and** the
+whole panel (text included) fading toward zero — so it cannot be adopted
+literally on a form that has to be filled in. The decision (2026-08-01) was to
+keep the first and drop the second: **the material goes nearly invisible, the
+content stays at full opacity.**
 
-The counterweight is `.forest-chrome .glass-panel` (0.62 → **0.45**), which
-exists because forest scenes are bright daylight where universe scenes are
-near-black: without a solid base under the blur, the panels wash out and dark
-buttons float as black pills. **Any further reduction has to be checked against
-the forest family, not the universe one** — the universe background is
-`#050816`-dark and will look fine at almost any tint.
+| Token | Was | Now |
+| --- | --- | --- |
+| `--glass-tint` | `0.30` | **`0.06`** |
+| `--glass-blur` | `blur(30px) saturate(180%)` | **`blur(14px) saturate(150%)`** |
+| header wash | `bg-mount/35`, `backdrop-blur-2xl` | **`bg-mount/10`, `backdrop-blur-md`** |
+| footer wash | `bg-void/45`, `backdrop-blur-2xl` | **`bg-void/10`, `backdrop-blur-md`** |
+| `.forest-chrome .glass-panel` | `0.62` | **`0.34`** |
+
+What still marks a panel as a panel at this tint is its specular top edge, its
+brass inner rule and its lift shadow — not a wash of dark. That is why those
+three must not be thinned along with the tint.
+
+`.forest-chrome .glass-panel` is the **counterweight and the one number to raise
+if forest text becomes hard to read.** It cannot go as low as the base tint:
+forest scenes are bright daylight where universe scenes are near-black, and
+without a base under the blur the panels wash out and dark buttons float as
+black pills. **Judge any further thinning on the Forest family, never on the
+universe one** — a `#050816` background flatters almost any value.
+
+### The world toggle
+
+It docks at the header band's own vertical centre and above the header (z over
+its 50), so it holds one place whether the header is present or has left. Both
+offsets derive from `--header-height`, so the 57px contract is stated once
+rather than copied.
+
+At rest it is a bare icon — a true circle, because its padding is
+`(size - icon) / 2` on both sides. The label unrolls on hover **or focus**: the
+width comes from interpolating `grid-template-columns` between `0fr` and `1fr`
+rather than a guessed `max-width`, so it stays correct when the label changes
+between "Hide the form" and "Show the form". The label's own padding lives on
+the clipped child, so the collapsed state clips the gap along with the text and
+the circle stays circular.
+
+`:focus` rather than `:focus-visible` is deliberate: a touch tap focuses without
+hovering, and that is the only way a touch user ever sees the label. The
+accessible name lives on the button and never depends on the label being
+visible, so a screen reader is unaffected by any of this.
+
+Known risk for QA: the toggle is centred in the header band, and on the
+narrowest phones the header's own logo and nav leave little clear space there.
 
 ### Constraints any future create-page chrome work inherits
 

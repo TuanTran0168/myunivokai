@@ -27,14 +27,18 @@
   --ink: #1B1402;
   --hairline: rgba(255, 255, 255, 0.10);
 
-  /* The one Liquid-Glass material. The tint is deliberately faint: the live
-     world is the luminous element and has to read THROUGH the chrome, so the
-     glass earns its legibility from blur and saturation rather than from
-     opacity. Lowered 0.30 -> 0.16 on owner request 2026-08-01; the forest
-     override at the bottom of this file is what keeps text legible against a
-     bright daylight canopy. */
-  --glass-tint: rgba(15, 14, 19, 0.16);
-  --glass-blur: blur(30px) saturate(180%) brightness(1.07);
+  /* The one Liquid-Glass material, deliberately close to invisible: the live
+     world is the luminous element and has to read THROUGH the chrome. What
+     still marks a panel as a panel is its specular top edge, its brass inner
+     rule and its lift shadow — not a wash of dark.
+
+     0.30 -> 0.16 -> 0.06 and blur 30px -> 14px, on owner request 2026-08-01.
+     Content opacity is deliberately NOT reduced with it: the rail is a form to
+     be filled in, so the material thins while the text stays solid. The forest
+     override at the bottom of this file is the counterweight that keeps that
+     text legible against a bright daylight canopy. */
+  --glass-tint: rgba(15, 14, 19, 0.06);
+  --glass-blur: blur(14px) saturate(150%) brightness(1.05);
 
   /* Motion. --glass-easing is not a new curve: it is the value this file already
      wrote twice (the panel transition and the glass-rise entrance), hoisted so
@@ -48,6 +52,17 @@
      enough that its shadow spill leaves the viewport too, or a dark smear stays
      pinned to the left edge. */
   --form-rail-shadow-reach: 80px;
+
+  /* The fixed header's height, a contract documented in layout.tsx. The world
+     toggle is centred inside this band, so the two are derived from one number
+     rather than two that can drift. */
+  --header-height: 57px;
+  --chrome-toggle-size: 44px;
+  --chrome-toggle-icon-size: 20px;
+  --chrome-toggle-expand-duration: 260ms;
+  /* The springy curve .tappable already uses, hoisted for the same reason
+     --glass-easing was. */
+  --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 * {
@@ -322,6 +337,85 @@ textarea {
     visibility 0s linear var(--form-rail-collapse-duration);
 }
 
+/* ---------- The world toggle, docked in the header band ---------- */
+/* It rides at the header's own vertical centre and above it, so it keeps the
+   same place whether the header is present or has left — and it stays a bare
+   icon until pointed at, so the resting screen is world and nothing else.
+
+   Both offsets come from --header-height, so the 57px contract is stated once. */
+.chrome-toggle-dock {
+  top: calc((var(--header-height) - var(--chrome-toggle-size)) / 2);
+}
+
+.chrome-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chrome-toggle-size);
+  /* Symmetric padding is what makes the collapsed state a true circle: the icon
+     plus twice this is exactly --chrome-toggle-size. */
+  padding: 0 calc((var(--chrome-toggle-size) - var(--chrome-toggle-icon-size)) / 2);
+  border-radius: 999px;
+  transition:
+    transform var(--chrome-toggle-expand-duration) var(--spring-easing),
+    box-shadow var(--chrome-toggle-expand-duration) var(--glass-easing);
+}
+
+.chrome-toggle:hover,
+.chrome-toggle:focus-visible {
+  transform: translateY(1px) scale(1.03);
+}
+
+.chrome-toggle:active {
+  transform: scale(0.94);
+}
+
+/* The label expands from zero width by interpolating grid-template-columns
+   rather than a max-width: there is no arbitrary width to guess, and it stays
+   correct when the label changes between "Hide the form" and "Show the form".
+   Its padding lives on the clipped child, so the collapsed state clips the gap
+   along with the text and the circle stays a circle. */
+.chrome-toggle-label {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns var(--chrome-toggle-expand-duration) var(--glass-easing);
+}
+
+.chrome-toggle-label-text {
+  overflow: hidden;
+  white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 2px;
+  opacity: 0;
+  /* Faster than the width, so the text arrives in an opening gap instead of
+     being dragged out of a closed one. */
+  transition: opacity calc(var(--chrome-toggle-expand-duration) * 0.55) linear;
+}
+
+/* :focus rather than :focus-visible on purpose — a touch tap focuses without
+   hovering, and that is the only way a touch user ever sees the label. */
+.chrome-toggle:hover .chrome-toggle-label,
+.chrome-toggle:focus .chrome-toggle-label {
+  grid-template-columns: 1fr;
+}
+
+.chrome-toggle:hover .chrome-toggle-label-text,
+.chrome-toggle:focus .chrome-toggle-label-text {
+  opacity: 1;
+}
+
+.chrome-toggle-icon {
+  display: grid;
+  height: var(--chrome-toggle-icon-size);
+  width: var(--chrome-toggle-icon-size);
+  place-items: center;
+  transition: transform var(--chrome-toggle-expand-duration) var(--spring-easing);
+}
+
+.chrome-toggle:hover .chrome-toggle-icon,
+.chrome-toggle:focus .chrome-toggle-icon {
+  transform: scale(1.08);
+}
+
 /* ---------- Immersive world: every chrome surface leaves ---------- */
 /* Hiding the form clears the entire interface, not only the rail, so that what
    is left is the live world and the one button that brings everything back.
@@ -361,7 +455,7 @@ body[data-world-immersive="true"] .immersive-exit-right {
 /* iOS-style springy tap feedback for interactive controls (chips, options). */
 .tappable {
   transition:
-    transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 240ms var(--spring-easing),
     background-color 200ms ease,
     border-color 200ms ease,
     color 200ms ease,
@@ -404,8 +498,21 @@ body[data-world-immersive="true"] .immersive-exit-right {
   .form-rail-collapse,
   .form-rail-collapse[data-form-rail-collapsed="true"],
   .immersive-exit,
-  body[data-world-immersive="true"] .immersive-exit {
+  body[data-world-immersive="true"] .immersive-exit,
+  .chrome-toggle,
+  .chrome-toggle-label,
+  .chrome-toggle-label-text,
+  .chrome-toggle-icon {
     transition: none;
+  }
+  /* The label still appears on hover — it just appears rather than unrolling.
+     Suppressing the scale keeps the control from jumping under the pointer. */
+  .chrome-toggle:hover,
+  .chrome-toggle:focus-visible,
+  .chrome-toggle:active,
+  .chrome-toggle:hover .chrome-toggle-icon,
+  .chrome-toggle:focus .chrome-toggle-icon {
+    transform: none;
   }
 }
 
@@ -439,7 +546,12 @@ textarea {
    scenes are near-black, so the translucent glass panels wash out and dark
    buttons float as black pills. Inside .forest-chrome every glass panel gets
    a solid warm-dark base under its blur, restoring the contrast the chrome
-   was designed against. */
+   was designed against.
+
+   THIS IS THE COUNTERWEIGHT TO --glass-tint, and it is the one number to raise
+   if forest text becomes hard to read. It cannot go as low as the universe
+   tint: judge any further thinning of the glass on the Forest family, never on
+   the universe one, whose #050816 background flatters almost any value. */
 .forest-chrome .glass-panel {
-  background-color: rgba(14, 18, 13, 0.45);
+  background-color: rgba(14, 18, 13, 0.34);
 }
