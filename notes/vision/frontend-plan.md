@@ -68,6 +68,10 @@ renderer resolution. Do not delete compatibility for already stored worlds.
 Each family should become a client-only dynamic chunk with the existing
 `CanvasLoader` as fallback. Acceptance must be based on build output and a
 browser network trace, not only a source-level dynamic import.
+Step-by-step plan: [../fe/deferred-work-plan.md](../fe/deferred-work-plan.md)
+Part A. It records the prerequisite this section misses — `planetIdentityKey` is
+re-exported from `UniverseCanvas`, so splitting the registry alone changes
+nothing for the pages that import that helper.
 
 ### 3. API responses are trusted at runtime
 

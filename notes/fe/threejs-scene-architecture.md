@@ -207,4 +207,6 @@ on the create form.
 The registry is sceneType-first but not lazy: `registry.ts` statically imports
 both renderers. A visitor who only needs one family still receives both family
 code graphs. Dynamic family chunks are tracked in
-[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).
+[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md);
+the execution plan, including the `planetIdentityKey` re-export that blocks the
+split, is [deferred-work-plan.md](deferred-work-plan.md) Part A.
