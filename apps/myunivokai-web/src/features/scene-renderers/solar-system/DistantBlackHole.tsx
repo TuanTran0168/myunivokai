@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { Box3, Vector3, type Group, type Material, type Mesh, type MeshStandardMaterial, type Texture } from "three";
-import { randomFromSeed } from "@/lib/scene";
+import type { SceneCameraConfig } from "@/lib/types";
+import { distantBlackHolePlacement } from "./distantBlackHolePlacement";
 import { BLACK_HOLE_MODEL_URL, BLACK_HOLE_TARGET_SIZE } from "./spacecraftCatalog";
 
 /**
@@ -15,23 +16,19 @@ import { BLACK_HOLE_MODEL_URL, BLACK_HOLE_TARGET_SIZE } from "./spacecraftCatalo
  * Scenery only: raycasting is disabled so it never intercepts a planet click.
  * Placed far from the origin so it reads as a distant, majestic object; source
  * units are normalized by bounding box like the NASA spacecraft.
+ *
+ * WHERE it goes is solved in distantBlackHolePlacement against the opening
+ * camera — the earlier full-circle ring put it behind the viewer on most seeds,
+ * which is what made worlds look like they had lost their black hole between
+ * the dashboard and the share page.
  */
-
-// Placement is constrained by the camera envelope, NOT just by taste: the
-// OrbitControls rig always looks at the origin and only zooms out to 26
-// (CameraRig ORBIT_CONTROLS_MAXIMUM_DISTANCE), so anything parked beyond that
-// radius sits outside the view cone almost always — the reason an earlier
-// radius of 30 made the black hole effectively unfindable. The outermost
-// planet orbit is ~11, so this band reads as "far beyond the planets" while
-// still landing in frame when the camera pans or zooms out.
-const DISTANCE_FROM_CENTER = 18;
-const ELEVATION = 7;
 
 type DistantBlackHoleProps = {
   seed: string;
+  camera?: SceneCameraConfig;
 };
 
-export function DistantBlackHole({ seed }: DistantBlackHoleProps) {
+export function DistantBlackHole({ seed, camera }: DistantBlackHoleProps) {
   const renderer = useThree((state) => state.gl);
   const gltf = useGLTF(BLACK_HOLE_MODEL_URL);
   const animatedRootReference = useRef<Group>(null);
@@ -62,28 +59,15 @@ export function DistantBlackHole({ seed }: DistantBlackHoleProps) {
     });
   }, [gltf, renderer]);
 
-  const { position, tilt, normalizedScale } = useMemo(() => {
-    const random = randomFromSeed(`${seed}-black-hole-placement`);
-    const orbitAngle = random() * Math.PI * 2;
-    const placement: [number, number, number] = [
-      Math.cos(orbitAngle) * DISTANCE_FROM_CENTER,
-      ELEVATION,
-      Math.sin(orbitAngle) * DISTANCE_FROM_CENTER
-    ];
-    // Seeded orientation: a gentle tilt off face-on plus a full-circle yaw, so
-    // no two worlds frame the disk identically.
-    const tiltRotation: [number, number, number] = [
-      -0.5 - random() * 0.3,
-      random() * Math.PI * 2,
-      random() * 0.3 - 0.15
-    ];
+  const { position, tilt } = useMemo(() => distantBlackHolePlacement(seed, camera), [seed, camera]);
+
+  const normalizedScale = useMemo(() => {
     const boundingBox = new Box3().setFromObject(gltf.scene);
     const size = new Vector3();
     boundingBox.getSize(size);
     const largestDimension = Math.max(size.x, size.y, size.z);
-    const scale = largestDimension > 0 ? BLACK_HOLE_TARGET_SIZE / largestDimension : 1;
-    return { position: placement, tilt: tiltRotation, normalizedScale: scale };
-  }, [gltf, seed]);
+    return largestDimension > 0 ? BLACK_HOLE_TARGET_SIZE / largestDimension : 1;
+  }, [gltf]);
 
   // Play the model's baked accretion-swirl clip.
   useEffect(() => {
