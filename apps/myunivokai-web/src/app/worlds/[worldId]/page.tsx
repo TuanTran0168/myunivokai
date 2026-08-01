@@ -30,7 +30,7 @@ export default function WorldPage({ params }: PageProps) {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
           <StatusMessage tone="loading">Loading world...</StatusMessage>
         </main>
       }
@@ -180,7 +180,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
 
   if (loading) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="loading">Loading world...</StatusMessage>
       </main>
     );
@@ -188,7 +188,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
 
   if (!world) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="error">{error || "World not found"}</StatusMessage>
       </main>
     );
@@ -216,7 +216,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
       {/* HUD overlay — a normal scrolling column on mobile; on desktop it becomes
           a pointer-transparent layer so orbit-drag passes through the gaps, while
           each glass island re-enables pointer events. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-0 lg:top-[57px]">
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px]">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">

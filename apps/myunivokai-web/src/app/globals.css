@@ -21,8 +21,14 @@
   --paper: #F2EEE6;
   --grey: #DCD7CB;
   --faint: #A79D8A;
-  --brass: #C9A35B;
-  --brass-soft: rgba(201, 163, 91, 0.5);
+  /* The single metallic accent, held as raw channels so Tailwind can take it
+     through `rgb(var(--brass-rgb) / <alpha-value>)` and keep its /10 and /40
+     opacity modifiers working. Holding it as a variable is what lets a world
+     family retint the entire interface by setting two numbers. */
+  --brass-rgb: 201 163 91;
+  --brass-deep-rgb: 168 132 63;
+  --brass: rgb(var(--brass-rgb));
+  --brass-soft: rgb(var(--brass-rgb) / 0.5);
   --vermillion: #E0573A;
   --ink: #1B1402;
   --hairline: rgba(255, 255, 255, 0.10);
@@ -63,12 +69,26 @@
      toggle is centred inside this band, so the two are derived from one number
      rather than two that can drift. */
   --header-height: 57px;
+  --footer-height: 57px;
   --chrome-toggle-size: 44px;
   --chrome-toggle-icon-size: 20px;
   --chrome-toggle-expand-duration: 260ms;
   /* The springy curve .tappable already uses, hoisted for the same reason
      --glass-easing was. */
   --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* A forest is not a brass world. Brass reads as the same family of yellows as
+   the sunlit sand and the canopy's warm highlights, so it stopped being an
+   accent there. Copper is still a metal — the gallery language keeps its single
+   metallic accent — but it sits opposite the greens instead of inside them, and
+   it agrees with the blossom pink and the wet earth.
+
+   Set on <body> rather than on the page, so the fixed header and footer, which
+   are not the page's descendants, retint with it. */
+body[data-world-family="nature"] {
+  --brass-rgb: 207 138 85;
+  --brass-deep-rgb: 169 107 61;
 }
 
 * {
@@ -123,7 +143,7 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.08),
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
@@ -138,7 +158,7 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.08),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.08),
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
@@ -165,7 +185,7 @@ textarea {
 .glass-panel-glow {
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.14),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.14),
     0 36px 80px -24px rgba(0, 0, 0, 0.82);
 }
 
@@ -174,7 +194,7 @@ textarea {
 .btn-brass {
   background: var(--brass);
   color: var(--ink);
-  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  box-shadow: 0 8px 22px -8px rgb(var(--brass-rgb) / 0.55);
   transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
 
@@ -189,7 +209,7 @@ textarea {
 /* SHIM: the old purple→cyan gradient CTA now resolves to solid brass. */
 .btn-gradient {
   background: var(--brass);
-  box-shadow: 0 8px 22px -8px rgba(201, 163, 91, 0.55);
+  box-shadow: 0 8px 22px -8px rgb(var(--brass-rgb) / 0.55);
   color: var(--ink);
   transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 200ms ease;
 }
@@ -214,7 +234,7 @@ textarea {
 
 .input-dark:focus {
   border-color: var(--brass);
-  box-shadow: 0 0 0 1px rgba(201, 163, 91, 0.32);
+  box-shadow: 0 0 0 1px rgb(var(--brass-rgb) / 0.32);
 }
 
 /* ---------- Removed decorations (neutralized for the shim) ---------- */
@@ -298,14 +318,14 @@ textarea {
   transform: translateY(-3px);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 1px rgba(201, 163, 91, 0.16),
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.16),
     0 40px 90px -26px rgba(0, 0, 0, 0.85);
 }
 
 /* Thin, unobtrusive scrollbar for the floating rail's field column. */
 .rail-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(201, 163, 91, 0.35) transparent;
+  scrollbar-color: rgb(var(--brass-rgb) / 0.35) transparent;
 }
 
 .rail-scroll::-webkit-scrollbar {
@@ -318,12 +338,12 @@ textarea {
 }
 
 .rail-scroll::-webkit-scrollbar-thumb {
-  background: rgba(201, 163, 91, 0.3);
+  background: rgb(var(--brass-rgb) / 0.3);
   border-radius: 100px;
 }
 
 .rail-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 163, 91, 0.5);
+  background: rgb(var(--brass-rgb) / 0.5);
 }
 
 /* ---------- The create form's collapsing rail ---------- */
@@ -364,6 +384,26 @@ textarea {
     transform var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
     opacity var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
     visibility 0s linear var(--form-rail-collapse-duration);
+}
+
+/* ---------- The two chrome bars ---------- */
+/* Both are exactly their declared height rather than whatever their content
+   happens to measure, because floating chrome all over the app offsets itself
+   by those numbers. The hairline takes the family accent, so it retints with
+   the world. */
+.chrome-bar {
+  display: flex;
+  align-items: center;
+}
+
+header.chrome-bar {
+  height: var(--header-height);
+  box-shadow: 0 1px 0 0 rgb(var(--brass-rgb) / 0.22);
+}
+
+footer.chrome-bar {
+  height: var(--footer-height);
+  box-shadow: 0 -1px 0 0 rgb(var(--brass-rgb) / 0.18);
 }
 
 /* ---------- The world toggle, docked in the header band ---------- */

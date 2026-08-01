@@ -15,7 +15,7 @@ export default function GalleryPage() {
 
   if (isLoading) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="loading">Loading your saved worlds...</StatusMessage>
       </main>
     );

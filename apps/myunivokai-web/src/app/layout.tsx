@@ -10,10 +10,19 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 const jetBrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
 
-// The fixed header is 57px tall. Pages now render full-bleed *behind* it so the
-// 3D world shows through the glass header/footer; floating chrome offsets itself
-// by ~57px (lg:top-[72px] / lg:top-[57px]) and scrolling pages add their own
-// top padding to clear it.
+// The header and the footer are both fixed and both 57px tall (the
+// --header-height / --footer-height contract in globals.css). Pages render
+// full-bleed *behind* both, so the 3D world runs edge to edge and the chrome
+// frames it; floating chrome offsets itself by those heights and scrolling
+// pages add their own top and bottom padding to clear them.
+//
+// Both bars are pointer-transparent except on their own controls. They are
+// nearly invisible over a live world now, and a full-width bar that silently
+// ate orbit-drags — and, before this, the create page's own toggle — is not a
+// bar the user can see any reason for. The toggle could not simply outrank the
+// header with a z-index: app/template.tsx wraps every page in an opacity
+// animation, which creates a stacking context, so page content can never rise
+// above sibling chrome no matter what z-index it asks for.
 const COPYRIGHT_YEAR = 2026;
 
 export const metadata: Metadata = {
@@ -28,12 +37,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="relative flex min-h-screen flex-col">
           {/* Floating gallery deck: warm-black Liquid Glass with a faint brass
               bottom edge. Height must stay 57px (HEADER_OFFSET_PIXELS contract). */}
-          <header className="immersive-exit immersive-exit-up fixed top-0 z-50 w-full border-b border-white/10 bg-mount/10 shadow-[0_1px_0_0_rgba(201,163,91,0.22)] backdrop-saturate-[1.25]">
+          <header className="immersive-exit immersive-exit-up chrome-bar pointer-events-none fixed top-0 z-50 w-full border-b border-hairline bg-mount/10 backdrop-saturate-[1.25]">
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between px-margin-mobile py-3 md:px-margin-desktop">
-              <Link href="/" className="font-display text-xl font-semibold tracking-normal text-paper">
+              <Link
+                href="/"
+                className="pointer-events-auto font-display text-xl font-semibold tracking-normal text-paper"
+              >
                 Myunivokai
               </Link>
-              <nav className="flex items-center gap-3 sm:gap-6">
+              <nav className="pointer-events-auto flex items-center gap-3 sm:gap-6">
                 <Link
                   href="/gallery"
                   className="font-mono text-xs uppercase tracking-widest text-on-surface-variant transition hover:text-secondary"
@@ -64,13 +76,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           <div className="flex-1">{children}</div>
 
-          <footer className="immersive-exit relative z-10 mt-auto border-t border-white/10 bg-void/10 shadow-[0_-1px_0_0_rgba(201,163,91,0.15)] backdrop-saturate-[1.25]">
-            <div className="mx-auto flex w-full max-w-container-max flex-col items-center justify-between gap-2 px-margin-mobile py-8 text-center md:flex-row md:px-margin-desktop md:text-left">
-              <span className="font-display text-body-lg font-semibold text-paper">Myunivokai</span>
-              <span className="font-body text-sm text-on-surface-variant">
+          {/* Fixed and slim, mirroring the header: the world runs underneath it
+              so the chrome frames the scene instead of ending it. It used to be
+              a tall in-flow band, which put a hard edge across the bottom of
+              every full-bleed page and left the 3D stopping short of the
+              viewport. Its rows collapse to one line so 57px is enough at every
+              width — the copyright sentence is the part that would have
+              wrapped, so it hides on the narrowest screens. */}
+          <footer className="immersive-exit chrome-bar pointer-events-none fixed bottom-0 z-50 w-full border-t border-hairline bg-void/10 backdrop-saturate-[1.25]">
+            <div className="mx-auto flex w-full max-w-container-max items-center justify-between gap-4 px-margin-mobile py-3 md:px-margin-desktop">
+              <span className="pointer-events-auto font-display text-base font-semibold text-paper">Myunivokai</span>
+              <span className="pointer-events-auto hidden font-body text-xs text-on-surface-variant sm:inline">
                 © {COPYRIGHT_YEAR} Myunivokai — turn your personality into a living 3D world.
               </span>
-              <span className="font-mono text-xs uppercase tracking-widest text-secondary">MVP</span>
+              <span className="pointer-events-auto font-mono text-xs uppercase tracking-widest text-secondary">MVP</span>
             </div>
           </footer>
         </div>

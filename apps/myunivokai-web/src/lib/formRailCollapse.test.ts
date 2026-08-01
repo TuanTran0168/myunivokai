@@ -9,6 +9,7 @@ import {
   FORM_RAIL_SHOW_LABEL,
   FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
   IMMERSIVE_WORLD_BODY_ATTRIBUTE,
+  WORLD_FAMILY_BODY_ATTRIBUTE,
   formRailLayoutReleaseDelayMilliseconds,
   formRailStateAfterErrorChange,
   formRailToggleLabel,
@@ -132,6 +133,13 @@ describe("stylesheet agreement", () => {
     // selector and the chrome silently stops leaving — the form hides, the
     // header stays, and nothing fails.
     expect(globalStylesheet).toContain(`body[${IMMERSIVE_WORLD_BODY_ATTRIBUTE}="true"]`);
+  });
+
+  it("retints the accent from the same family marker the page sets", () => {
+    // Same contract-with-no-compiler as the immersive marker: rename one side
+    // and a forest silently keeps the universe's brass.
+    expect(globalStylesheet).toContain(`body[${WORLD_FAMILY_BODY_ATTRIBUTE}="nature"]`);
+    expect(globalStylesheet).toContain("--brass-rgb:");
   });
 
   it("hoists the house easing curve instead of writing it a third time", () => {

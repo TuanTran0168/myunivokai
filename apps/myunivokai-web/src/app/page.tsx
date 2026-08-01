@@ -13,6 +13,7 @@ import {
   EXPANDED_FORM_RAIL_COLLAPSE_STATE,
   FORM_RAIL_ELEMENT_ID,
   IMMERSIVE_WORLD_BODY_ATTRIBUTE,
+  WORLD_FAMILY_BODY_ATTRIBUTE,
   FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
   formRailLayoutReleaseDelayMilliseconds,
   formRailStateAfterErrorChange,
@@ -141,6 +142,14 @@ export default function HomePage() {
     document.body.setAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE, "true");
     return () => document.body.removeAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE);
   }, [formRailCollapseState.isExpanded]);
+
+  // The accent metal is family-dependent, and the header and footer have to
+  // follow it even though they are not this page's descendants — same route,
+  // same cleanup obligation.
+  useEffect(() => {
+    document.body.setAttribute(WORLD_FAMILY_BODY_ATTRIBUTE, worldFamily);
+    return () => document.body.removeAttribute(WORLD_FAMILY_BODY_ATTRIBUTE);
+  }, [worldFamily]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -403,7 +412,7 @@ export default function HomePage() {
       <div
         id={FORM_RAIL_ELEMENT_ID}
         data-form-rail-collapsed={!formRailCollapseState.isExpanded}
-        className={`form-rail-collapse relative z-10 sm:mx-4 lg:absolute lg:bottom-6 lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px] ${
+        className={`form-rail-collapse relative z-10 sm:mx-4 lg:absolute lg:bottom-[68px] lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px] ${
           formRailCollapseState.reservesLayoutSpace ? "mx-3 mb-4 mt-4" : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
         }`}
       >

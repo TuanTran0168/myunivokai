@@ -55,7 +55,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   if (loading) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="loading">Loading shared world...</StatusMessage>
       </main>
     );
@@ -63,7 +63,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   if (!world) {
     return (
-      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pt-[57px]">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 pb-[57px] pt-[57px]">
         <StatusMessage tone="error">{error || "Shared world not found"}</StatusMessage>
       </main>
     );
@@ -88,7 +88,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
       {/* HUD overlay — a scrolling column on mobile; on desktop a pointer-through
           layer so orbit-drag passes between the floating glass islands. */}
-      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-0 lg:top-[57px]">
+      <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px]">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">

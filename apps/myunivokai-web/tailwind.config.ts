@@ -24,8 +24,12 @@ const config: Config = {
         // on the live world, and a bright forest canopy ate them.
         grey: "#DCD7CB",
         faint: "#A79D8A",
-        brass: "#C9A35B", // the single metallic accent
-        "brass-deep": "#A8843F",
+        // The single metallic accent, taken from a CSS variable so a world
+        // family can retint the whole interface (see body[data-world-family] in
+        // globals.css). The <alpha-value> form is what keeps bg-brass/10,
+        // ring-brass/40 and friends working.
+        brass: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "brass-deep": "rgb(var(--brass-deep-rgb) / <alpha-value>)",
         vermillion: "#E0573A", // the live dot only
         ink: "#1B1402", // engraved dark label on brass fills
         hairline: "rgba(255,255,255,0.10)",
@@ -41,15 +45,18 @@ const config: Config = {
         "on-surface-variant": "#DCD7CB",
         outline: "#A79D8A",
         "outline-variant": "#2A2730",
-        primary: "#C9A35B",
-        "primary-container": "#C9A35B",
+        // These legacy aliases follow the accent variable too, or the chips and
+        // rings they colour would stay brass while the rest of a forest went
+        // copper.
+        primary: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "primary-container": "rgb(var(--brass-rgb) / <alpha-value>)",
         "primary-fixed": "#E7D6AE",
         "on-primary-fixed": "#1B1402",
-        secondary: "#C9A35B",
-        "secondary-container": "#A8843F",
+        secondary: "rgb(var(--brass-rgb) / <alpha-value>)",
+        "secondary-container": "rgb(var(--brass-deep-rgb) / <alpha-value>)",
         "secondary-fixed": "#E7D6AE",
         "on-secondary-fixed": "#1B1402",
-        tertiary: "#C9A35B",
+        tertiary: "rgb(var(--brass-rgb) / <alpha-value>)",
         error: "#E86A52",
         "error-container": "#5A1B10"
       },

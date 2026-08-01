@@ -34,6 +34,15 @@ export const REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 export const IMMERSIVE_WORLD_BODY_ATTRIBUTE = "data-world-immersive";
 
 /**
+ * The world family, published for the same reason and by the same route: the
+ * metallic accent is family-dependent (brass for the universe, copper for the
+ * forest) and the header and footer have to follow it, but they are not the
+ * page's descendants. The stylesheet reads it as `body[data-world-family=...]`
+ * and retints every accent by redefining two variables.
+ */
+export const WORLD_FAMILY_BODY_ATTRIBUTE = "data-world-family";
+
+/**
  * The id of the collapsing wrapper, used as the toggle's `aria-controls`
  * target. It must never collide with CREATE_FORM_ELEMENT_ID in page.tsx, which
  * is load-bearing: the submit button lives outside the <form> and is re-attached

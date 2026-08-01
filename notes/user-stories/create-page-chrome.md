@@ -187,6 +187,53 @@ wash behind it:
 Raise `.forest-chrome .glass-panel` only if forest text still fails, and judge
 that on the **Forest** family: the universe's `#050816` flatters any value.
 
+### Both chrome bars are fixed, pointer-transparent and 57px
+
+The footer used to be a tall in-flow band, which put a hard edge across the
+bottom of every full-bleed page and left the 3D stopping short of the viewport.
+It is now `fixed bottom-0` and slim, mirroring the header, so the world runs
+underneath both and the chrome frames the scene instead of ending it. Its rows
+collapse to one line so 57px is enough at every width; the copyright sentence is
+the part that would have wrapped, so it hides on the narrowest screens.
+
+`.chrome-bar` pins both bars to their declared height rather than to whatever
+their content measures, because floating chrome all over the app offsets itself
+by those numbers (`--header-height`, `--footer-height`). Everything that was
+anchored to the viewport bottom moved up to clear it: the create rail, the world
+and share HUD columns, the canvas hover tooltip and movement hint, and the
+scrolling pages' bottom padding.
+
+**Both bars are `pointer-events-none` except on their own controls.** This is
+what fixed the toggle being unclickable, and no z-index could have: `app/template.tsx`
+wraps every page in an opacity animation with `animation-fill-mode: both`, which
+creates a **stacking context**, so page content is confined below sibling chrome
+no matter what z-index it asks for — the toggle sat at `z-60` under a header at
+`z-50` and stayed under it. It was still *visible*, because the header is now
+nearly transparent, which is exactly what made the symptom confusing. A
+full-width bar that silently eats orbit-drags over a live world was wrong on its
+own merits anyway.
+
+### The accent metal follows the world family
+
+Brass reads as the same family of yellows as a forest's sunlit sand and warm
+canopy highlights, so it stops being an accent there. Forest worlds now get
+**copper** (`207 138 85`); the gallery language keeps its single metallic accent,
+but one that sits opposite the greens instead of inside them.
+
+The accent is held as raw channels in `--brass-rgb` and taken through Tailwind
+as `rgb(var(--brass-rgb) / <alpha-value>)`, which is what keeps `bg-brass/10`
+and `ring-brass/40` working. The legacy `primary`/`secondary`/`tertiary` aliases
+follow the same variable, or the chips and rings they colour would stay brass
+while the rest of a forest went copper. Two numbers retint the entire interface.
+
+It is published as `data-world-family` on `<body>` for the same reason the
+immersive marker is: the fixed header and footer are not the page's descendants.
+A test asserts the stylesheet still selects on the exported constant.
+
+Known gap: the custom cursor is a `data:` URI with `#C9A35B` baked in, so it
+stays brass in a forest. A variable cannot reach inside a data URI; changing it
+needs a second cursor asset.
+
 ### The world toggle
 
 It docks at the header band's own vertical centre and above the header (z over
