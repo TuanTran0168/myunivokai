@@ -14,6 +14,7 @@ import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChr
 import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { worldPagePath } from "@/lib/worldRoutes";
 import type { GenerationJobStatus, PlanetSceneConfig, WorldFamily } from "@/lib/types";
 
@@ -171,6 +172,18 @@ export default function HomePage() {
     // exact renderer the generated world will use.
     return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
   }, [debouncedPayload, worldFamily]);
+
+  // The preview mounts the selected family immediately, so that chunk is already
+  // in flight. Warm the others as well: this is the one page whose whole job is
+  // choosing between families, and people flick the picker back and forth. A
+  // spinner on every flick is a worse trade than bytes that arrive after first
+  // paint. The world and share routes, which know their family for certain,
+  // still fetch exactly one renderer.
+  useEffect(() => {
+    for (const option of familyOptions) {
+      prefetchSceneRendererForFamily(option.value);
+    }
+  }, []);
 
   // The preview is fully interactive too: clicking a planet/landmark/animal
   // flies the camera to it, exactly like the world page.

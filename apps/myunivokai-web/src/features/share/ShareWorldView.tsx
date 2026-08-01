@@ -6,7 +6,9 @@ import { ArrowRight } from "lucide-react";
 import { api, apiErrorMessage, DEFAULT_WORLD_FAMILY } from "@/lib/api";
 import type { PlanetSceneConfig, ShareWorld, WorldFamily } from "@/lib/types";
 import { isForestScene, pointsOfInterestFromScene, sceneFromVariant } from "@/lib/scene";
-import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { StatusMessage } from "@/components/StatusMessage";
@@ -31,6 +33,10 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   useEffect(() => {
     let mounted = true;
+    // The route path already names the family, so the renderer chunk can travel
+    // alongside the share request rather than after it. Share pages are the
+    // cold-cache case that matters most: a visitor arrives from a link.
+    prefetchSceneRendererForFamily(family);
     api
       .getShareWorld(shareSlug, family)
       .then((nextWorld) => mounted && setWorld(nextWorld))

@@ -2,7 +2,7 @@
 
 import { Orbit } from "lucide-react";
 import type { PlanetSceneConfig } from "@/lib/types";
-import { planetIdentityKey } from "@/components/UniverseCanvas";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 
 const ENERGY_BAR_MAXIMUM_VALUE = 100;
 
