@@ -12,6 +12,7 @@ import { ensureRange, toggleItem } from "@/lib/formSelection";
 import {
   EXPANDED_FORM_RAIL_COLLAPSE_STATE,
   FORM_RAIL_ELEMENT_ID,
+  IMMERSIVE_WORLD_BODY_ATTRIBUTE,
   FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
   formRailLayoutReleaseDelayMilliseconds,
   formRailStateAfterErrorChange,
@@ -127,6 +128,19 @@ export default function HomePage() {
   useEffect(() => {
     setFormRailCollapseState((current) => formRailStateAfterErrorChange(current, error));
   }, [error]);
+
+  // Hiding the form clears the WHOLE interface, leaving only the live world and
+  // the button that brings it back. The header and footer belong to the shared
+  // layout — an ancestor no selector here can reach — so the state is published
+  // on <body> instead. The cleanup is not optional: without it, navigating away
+  // while hidden would leave every other page with no header.
+  useEffect(() => {
+    if (formRailCollapseState.isExpanded) {
+      return;
+    }
+    document.body.setAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE, "true");
+    return () => document.body.removeAttribute(IMMERSIVE_WORLD_BODY_ATTRIBUTE);
+  }, [formRailCollapseState.isExpanded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -316,7 +330,11 @@ export default function HomePage() {
 
       {/* Full-bleed live world: a tall hero on mobile, the immersive background on
           desktop so the preview owns the screen and the rail floats over it. */}
-      <div className="relative h-[46vh] min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full">
+      <div
+        className={`relative min-h-[320px] w-full lg:absolute lg:inset-0 lg:h-full ${
+          formRailCollapseState.reservesLayoutSpace ? "h-[46vh]" : "h-svh"
+        }`}
+      >
         <UniverseCanvas
           scene={previewScene}
           className="h-full"
@@ -325,8 +343,12 @@ export default function HomePage() {
         />
 
         {/* Floating identity island (desktop): live state, the curatorial
-            accession, and the palette — opposite the form rail. */}
-        <div className="glass-panel glass-panel-glow glass-rise pointer-events-none absolute right-5 top-[72px] hidden w-[290px] flex-col gap-3 rounded-2xl px-4 py-3.5 lg:flex">
+            accession, and the palette — opposite the form rail. Wrapped for the
+            same reason the rail is: the panel's own .glass-rise retains a
+            transform and .glass-panel is reset to `transform: none` under
+            reduced motion, so the exit has to live on a plain ancestor. */}
+        <div className="immersive-exit immersive-exit-right pointer-events-none absolute right-5 top-[72px] hidden w-[290px] lg:block">
+        <div className="glass-panel glass-panel-glow glass-rise flex w-full flex-col gap-3 rounded-2xl px-4 py-3.5">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-vermillion shadow-[0_0_8px_rgba(224,87,58,0.8)]" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-grey">Live preview</span>
@@ -352,6 +374,7 @@ export default function HomePage() {
               ))}
             </div>
           </div>
+        </div>
         </div>
       </div>
 

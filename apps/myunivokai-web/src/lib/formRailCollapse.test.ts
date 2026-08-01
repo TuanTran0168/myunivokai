@@ -8,6 +8,7 @@ import {
   FORM_RAIL_HIDE_LABEL,
   FORM_RAIL_SHOW_LABEL,
   FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL,
+  IMMERSIVE_WORLD_BODY_ATTRIBUTE,
   formRailLayoutReleaseDelayMilliseconds,
   formRailStateAfterErrorChange,
   formRailToggleLabel,
@@ -123,6 +124,14 @@ describe("stylesheet agreement", () => {
     const declaredDuration = /--form-rail-collapse-duration:\s*(\d+)ms/.exec(globalStylesheet);
     expect(declaredDuration).not.toBeNull();
     expect(Number(declaredDuration?.[1])).toBe(FORM_RAIL_COLLAPSE_DURATION_MILLISECONDS);
+  });
+
+  it("hides the shared chrome from the same body marker the page sets", () => {
+    // The header and footer live in the shared layout, so the page reaches them
+    // only through this attribute. Rename the constant without renaming the
+    // selector and the chrome silently stops leaving — the form hides, the
+    // header stays, and nothing fails.
+    expect(globalStylesheet).toContain(`body[${IMMERSIVE_WORLD_BODY_ATTRIBUTE}="true"]`);
   });
 
   it("hoists the house easing curve instead of writing it a third time", () => {

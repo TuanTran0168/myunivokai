@@ -23,6 +23,17 @@ export const FORM_RAIL_COLLAPSE_DURATION_MILLISECONDS = 320;
 export const REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 
 /**
+ * Hiding the form clears the whole interface, not just the rail: the header and
+ * footer live in the shared layout, which is an ancestor of the page, and CSS
+ * cannot reach an ancestor. So the page marks `document.body` while it is in
+ * this state and the stylesheet hides every chrome surface from there.
+ *
+ * The page must clear the attribute when it unmounts, or navigating away leaves
+ * the rest of the app with no header.
+ */
+export const IMMERSIVE_WORLD_BODY_ATTRIBUTE = "data-world-immersive";
+
+/**
  * The id of the collapsing wrapper, used as the toggle's `aria-controls`
  * target. It must never collide with CREATE_FORM_ELEMENT_ID in page.tsx, which
  * is load-bearing: the submit button lives outside the <form> and is re-attached

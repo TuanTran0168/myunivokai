@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="relative flex min-h-screen flex-col">
           {/* Floating gallery deck: warm-black Liquid Glass with a faint brass
               bottom edge. Height must stay 57px (HEADER_OFFSET_PIXELS contract). */}
-          <header className="fixed top-0 z-50 w-full border-b border-white/10 bg-mount/35 shadow-[0_1px_0_0_rgba(201,163,91,0.22)] backdrop-blur-2xl backdrop-saturate-150">
+          <header className="immersive-exit immersive-exit-up fixed top-0 z-50 w-full border-b border-white/10 bg-mount/20 shadow-[0_1px_0_0_rgba(201,163,91,0.22)] backdrop-blur-2xl backdrop-saturate-150">
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between px-margin-mobile py-3 md:px-margin-desktop">
               <Link href="/" className="font-display text-xl font-semibold tracking-normal text-paper">
                 Myunivokai
@@ -64,7 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           <div className="flex-1">{children}</div>
 
-          <footer className="relative z-10 mt-auto border-t border-white/10 bg-void/45 shadow-[0_-1px_0_0_rgba(201,163,91,0.15)] backdrop-blur-2xl backdrop-saturate-150">
+          <footer className="immersive-exit relative z-10 mt-auto border-t border-white/10 bg-void/25 shadow-[0_-1px_0_0_rgba(201,163,91,0.15)] backdrop-blur-2xl backdrop-saturate-150">
             <div className="mx-auto flex w-full max-w-container-max flex-col items-center justify-between gap-2 px-margin-mobile py-8 text-center md:flex-row md:px-margin-desktop md:text-left">
               <span className="font-display text-body-lg font-semibold text-paper">Myunivokai</span>
               <span className="font-body text-sm text-on-surface-variant">

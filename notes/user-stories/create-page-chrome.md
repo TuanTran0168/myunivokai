@@ -22,15 +22,25 @@ As a visitor filling in the create form,
 I want one button that hides every input and brings it back,
 so that I can look at the live world I am shaping without losing what I typed.
 
-Scenario: The form leaves and comes back
+Scenario: The whole interface leaves, not just the form
 
 Given the create page has loaded on any viewport
 When I press the single "Hide the form" button
 Then the whole rail — heading, every field, chip, swatch, the error area and the
 submit button — slides off the left edge and fades out
-And nothing of the panel or its shadow is left on screen
-And the same button, now reading "Show the form", brings the rail back with every
-field holding exactly the value it held before.
+And the site header leaves upward, the identity island leaves to the right, and
+the footer fades out
+And what is left on screen is the live 3D world and that one button
+And nothing of any panel or its shadow is left behind
+And the same button, now reading "Show the form", brings all of it back with
+every field holding exactly the value it held before.
+
+Scenario: On a phone the world takes the whole screen
+
+Given I am on a phone, where the world is a 46vh hero above the form
+When I hide the form
+Then the world grows to fill the viewport
+And it returns to its hero height when I show the form again.
 
 Scenario: Hidden means hidden to the keyboard too
 
@@ -57,7 +67,8 @@ Source evidence:
 - `apps/myunivokai-web/src/lib/formRailCollapse.ts`
 - `apps/myunivokai-web/src/lib/formRailCollapse.test.ts`
 - `apps/myunivokai-web/src/app/page.tsx`
-- `apps/myunivokai-web/src/app/globals.css` (`.form-rail-collapse`)
+- `apps/myunivokai-web/src/app/layout.tsx` (header/footer exits)
+- `apps/myunivokai-web/src/app/globals.css` (`.form-rail-collapse`, `.immersive-exit`)
 
 Tasks:
 
@@ -102,6 +113,42 @@ is released only after the slide has finished, so the page closes up under an
 already-invisible card. `FORM_RAIL_COLLAPSE_DURATION_MILLISECONDS` and the
 stylesheet's `--form-rail-collapse-duration` are the same number, and
 `formRailCollapse.test.ts` parses `globals.css` and fails if they ever drift.
+
+### Reaching the header and footer, which are not the page's to hide
+
+The owner's requirement is that hiding the form leaves **only** the 3D world, and
+the header and footer live in the shared `app/layout.tsx` — an *ancestor* of the
+page. No selector reaches upward, and lifting them into page state would make
+the layout a client component and change every route.
+
+So the page publishes the state as `data-world-immersive` on `<body>` and the
+stylesheet hides each chrome surface from there. Two consequences worth knowing
+before touching this:
+
+- the effect's cleanup is load-bearing. Navigating away while hidden without
+  clearing the attribute would leave the entire app with no header;
+- the attribute name is a contract between TypeScript and CSS with no compiler
+  between them, so a test asserts `globals.css` still selects on exactly the
+  exported constant. Renaming one side alone would leave the form hiding while
+  the header stays, and nothing would fail.
+
+Each surface leaves toward the edge it is anchored to, except the footer, which
+only fades: it sits in normal flow, where a downward translate would grow the
+document's scrollable area instead of leaving it.
+
+### Glass transparency
+
+`--glass-tint` went 0.30 → **0.16** on owner request (2026-08-01), and the
+header/footer washes from `bg-mount/35` → `/20` and `bg-void/45` → `/25`. The
+material's legibility is meant to come from blur and saturation, not from
+opacity, so that the live world reads through the chrome.
+
+The counterweight is `.forest-chrome .glass-panel` (0.62 → **0.45**), which
+exists because forest scenes are bright daylight where universe scenes are
+near-black: without a solid base under the blur, the panels wash out and dark
+buttons float as black pills. **Any further reduction has to be checked against
+the forest family, not the universe one** — the universe background is
+`#050816`-dark and will look fine at almost any tint.
 
 ### Constraints any future create-page chrome work inherits
 

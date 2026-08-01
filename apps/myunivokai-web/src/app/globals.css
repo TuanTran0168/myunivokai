@@ -27,8 +27,13 @@
   --ink: #1B1402;
   --hairline: rgba(255, 255, 255, 0.10);
 
-  /* The one Liquid-Glass material (very transparent so the live world reads through) */
-  --glass-tint: rgba(15, 14, 19, 0.30);
+  /* The one Liquid-Glass material. The tint is deliberately faint: the live
+     world is the luminous element and has to read THROUGH the chrome, so the
+     glass earns its legibility from blur and saturation rather than from
+     opacity. Lowered 0.30 -> 0.16 on owner request 2026-08-01; the forest
+     override at the bottom of this file is what keeps text legible against a
+     bright daylight canopy. */
+  --glass-tint: rgba(15, 14, 19, 0.16);
   --glass-blur: blur(30px) saturate(180%) brightness(1.07);
 
   /* Motion. --glass-easing is not a new curve: it is the value this file already
@@ -317,6 +322,42 @@ textarea {
     visibility 0s linear var(--form-rail-collapse-duration);
 }
 
+/* ---------- Immersive world: every chrome surface leaves ---------- */
+/* Hiding the form clears the entire interface, not only the rail, so that what
+   is left is the live world and the one button that brings everything back.
+   The header and footer live in the shared layout, an ANCESTOR of the page, and
+   no selector can reach upward — hence the marker on <body>, set and cleared by
+   the create page. Each surface leaves toward the edge it is anchored to.
+
+   `visibility` again carries the tab order and the accessibility tree; a header
+   that is merely transparent still swallows Tab stops over the world. */
+.immersive-exit {
+  transition:
+    transform var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    opacity var(--form-rail-collapse-duration) var(--glass-easing) 0s,
+    visibility 0s linear 0s;
+}
+
+body[data-world-immersive="true"] .immersive-exit {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    opacity var(--form-rail-collapse-duration) var(--form-rail-collapse-easing-out) 0s,
+    visibility 0s linear var(--form-rail-collapse-duration);
+}
+
+body[data-world-immersive="true"] .immersive-exit-up {
+  transform: translateY(calc(-100% - var(--form-rail-shadow-reach)));
+}
+
+body[data-world-immersive="true"] .immersive-exit-right {
+  transform: translateX(calc(100% + var(--form-rail-left-gutter) + var(--form-rail-shadow-reach)));
+}
+
+/* The footer fades without travelling: it sits in normal flow, and a downward
+   translate would grow the document's scrollable area rather than leaving it. */
+
 /* iOS-style springy tap feedback for interactive controls (chips, options). */
 .tappable {
   transition:
@@ -361,7 +402,9 @@ textarea {
      delay, so the form and its tab stops disappear at once — the collapse still
      WORKS here, it just does not animate. */
   .form-rail-collapse,
-  .form-rail-collapse[data-form-rail-collapsed="true"] {
+  .form-rail-collapse[data-form-rail-collapsed="true"],
+  .immersive-exit,
+  body[data-world-immersive="true"] .immersive-exit {
     transition: none;
   }
 }
@@ -398,5 +441,5 @@ textarea {
    a solid warm-dark base under its blur, restoring the contrast the chrome
    was designed against. */
 .forest-chrome .glass-panel {
-  background-color: rgba(14, 18, 13, 0.62);
+  background-color: rgba(14, 18, 13, 0.45);
 }
