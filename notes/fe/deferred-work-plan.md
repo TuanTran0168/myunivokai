@@ -1,19 +1,19 @@
 # FE deferred work — execution plan
 
-> **Document status:** Planned — not approved, not started
+> **Document status:** Part A implemented; Part B planned, not approved
 > **Last source review:** 2026-08-02
 
-Two FE items are recorded across three documents but have no execution plan
-anywhere. This file is that plan, so the next round starts from source facts
-instead of re-reading the whole frontend.
+Two FE items were recorded across three documents with no execution plan
+anywhere. This file is that plan, so a round starts from source facts instead of
+re-reading the whole frontend.
 
-- Nothing here is approved. Do not execute without the owner's word.
+- Part B is not approved. Do not execute without the owner's word.
 - Each part is independently shippable — one branch each, not one big branch.
-- Both parts were re-verified against source on 2026-08-02; findings are inline.
+- Both parts were verified against source on 2026-08-02; findings are inline.
 
-| Item | Origin document | Status recorded there |
+| Item | Origin document | State |
 | --- | --- | --- |
-| [Part A — dynamic family chunks](#part-a--deferred-fe-lazy-001-dynamic-family-chunks) | [threejs-scene-architecture.md](threejs-scene-architecture.md) §Performance, [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md) §Deferred product work | Deferred — "must be re-estimated after Sprint 1" |
+| [Part A — dynamic family chunks](#part-a--deferred-fe-lazy-001-dynamic-family-chunks) | [threejs-scene-architecture.md](threejs-scene-architecture.md) §Family chunks, [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md) | **Shipped** on `feat/fe/lazy-renderer-chunks` |
 | [Part B — forest fidelity metrics](#part-b--us-forest-002-codify-the-fidelity-metrics) | [../user-stories/scene-fidelity.md](../user-stories/scene-fidelity.md) US-FOREST-002 | Planned / Unranked — proposed, not approved |
 
 ---
@@ -23,7 +23,47 @@ instead of re-reading the whole frontend.
 Goal: a visitor who opens a forest world does not download the universe
 renderer, and vice versa.
 
-### What source actually looks like today
+### Outcome — shipped
+
+Implemented on `feat/fe/lazy-renderer-chunks`. First Load JS 512-526 kB →
+436-450 kB across the five 3D routes; per-route table and the runtime mechanism
+now live in [threejs-scene-architecture.md](threejs-scene-architecture.md)
+§Family chunks, which is the doc to read. Three corrections to what this plan
+predicted, kept because the reasoning is worth not repeating:
+
+- **The `planetIdentityKey` blocker was overstated.** The helper was already a
+  standalone module; `UniverseCanvas` only *re-exported* it, so the fix was
+  deleting one line, not moving code. And it moved the bundle numbers by zero:
+  every file importing the helper also imported the canvas, except
+  `PlanetDetailsPanel`, which only renders on pages that mount the canvas anyway.
+  It is still worth deleting — it would block a later canvas-level split — but it
+  was hygiene, not a prerequisite.
+- **`ComponentType` needed no widening.** `React.lazy`'s return type satisfies the
+  registry's existing `SceneRendererComponent` as written; step 4's contingency
+  never fired.
+- **`next/dynamic` was the wrong tool, and only reading its source showed why.**
+  Step 5 assumed any lazy wrapper would suspend into the existing boundary. In
+  14.2.x `next/dynamic` does not suspend at all — `loadable.shared-runtime`
+  renders a `loading` component, `null` by default. Because `SceneReadySignal`
+  shares that boundary, it would have mounted immediately and lifted the opacity
+  veil over an empty canvas. `React.lazy` throws the promise and preserves the
+  original behaviour. Nothing in the build output or the test suite would have
+  caught this — it is a visual regression that only shows on a cold cache.
+
+What was verified, and what was not: `next build` output, the per-route
+`app-build-manifest.json`, disjoint family markers in the two chunk files, and a
+`next start` probe of the served HTML for all four route shapes. Not verified in a
+browser: that opening a forest world requests *only* the forest chunk at runtime.
+Which chunk gets requested follows from the prefetch call and the resolved
+`sceneType`, so that part rests on the code, not on an observation.
+
+One scope decision worth knowing: `/` prefetches **every** family after mount,
+not just the selected one. It is the page whose whole job is choosing between
+families, and a spinner on each flick of the picker is a worse trade than bytes
+that arrive after first paint. The world and share routes still fetch exactly one
+renderer, which is where the promise above actually has to hold.
+
+### Source state before the change (kept as the baseline record)
 
 - `scene-renderers/registry.ts:3-4` statically imports both family renderers.
 - So every page that mounts a canvas ships both family code graphs.
@@ -38,23 +78,22 @@ renderer, and vice versa.
 - 3D dependency weight sits in `three@0.171`, `@react-three/fiber`,
   `@react-three/drei`, `@react-three/postprocessing`.
 
-### Blocker found — fix this before anything else
+### Coupling found — real, but not the blocker this plan claimed
 
-- `components/PlanetDetailsPanel.tsx:5` imports `planetIdentityKey` **from**
-  `UniverseCanvas`.
-- `app/worlds/[worldId]/page.tsx` and `ShareWorldView.tsx` do the same.
+- `components/PlanetDetailsPanel.tsx:5` imported `planetIdentityKey` **from**
+  `UniverseCanvas`; `app/worlds/[worldId]/page.tsx` and `ShareWorldView.tsx` too.
 - A pure helper re-exported from the canvas module means importing the helper
   drags three.js in with it.
-- So splitting the canvas has no effect until `planetIdentityKey` moves to a
-  plain module (`lib/scene.ts` already holds the family-agnostic POI adapter).
+- See the Outcome above for why this cost 0 kB in practice, and was still worth
+  deleting.
 
 ### Steps
 
 1. Run `npm run build` and record per-route First Load JS **before** touching
    anything. Without a before number, "improved" is unprovable — the same
    mistake Part B exists to prevent.
-2. Move `planetIdentityKey` out of `UniverseCanvas` into `lib/scene.ts`; update
-   the three importers.
+2. Delete the `planetIdentityKey` re-export from `UniverseCanvas`; point the
+   three importers at `scene-renderers/planetIdentity`, where it already lives.
 3. Convert the two registry entries to lazy components, keeping the registry's
    two-level resolution (`sceneType` first, then `theme`) unchanged.
 4. Confirm the lazy component still satisfies `SceneRendererComponent`; widen the

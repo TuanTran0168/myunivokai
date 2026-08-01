@@ -61,17 +61,19 @@ type SceneConfig =
 Legacy configs without `sceneType` must normalize to `"solar-system"` before
 renderer resolution. Do not delete compatibility for already stored worlds.
 
-### 2. Scene renderers are eagerly bundled
+### 2. Scene renderers are eagerly bundled — resolved
 
-`registry.ts` statically imports both `SolarSystemRenderer` and
-`ForestRenderer`. The original lazy-registry goal was never implemented.
-Each family should become a client-only dynamic chunk with the existing
-`CanvasLoader` as fallback. Acceptance must be based on build output and a
-browser network trace, not only a source-level dynamic import.
-Step-by-step plan: [../fe/deferred-work-plan.md](../fe/deferred-work-plan.md)
-Part A. It records the prerequisite this section misses — `planetIdentityKey` is
-re-exported from `UniverseCanvas`, so splitting the registry alone changes
-nothing for the pages that import that helper.
+Done on `feat/fe/lazy-renderer-chunks`. Each family is now its own client-side
+chunk suspending into the existing `CanvasLoader`, exactly as this section asked
+— via `React.lazy` rather than `next/dynamic`, because `next/dynamic` in 14.2.x
+does not suspend and would have lifted the scene-ready veil early.
+
+Acceptance was build output, not a source-level dynamic import: First Load JS
+fell 512-526 kB → 436-450 kB across the five 3D routes, `app-build-manifest.json`
+lists neither family chunk under any route, and a `next start` probe confirmed
+the served HTML of each route references neither. Numbers and mechanism live in
+[../fe/threejs-scene-architecture.md](../fe/threejs-scene-architecture.md)
+§Family chunks.
 
 ### 3. API responses are trusted at runtime
 

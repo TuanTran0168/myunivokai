@@ -14,7 +14,9 @@ import type { PlanetSceneConfig, World, WorldFamily, WorldVariant } from "@/lib/
 import { StatusMessage } from "@/components/StatusMessage";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
-import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { VariantList } from "@/components/VariantList";
 import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
 import { WORLD_PANELS_ELEMENT_ID } from "@/lib/formRailCollapse";
@@ -71,6 +73,9 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    // Start the renderer chunk now instead of when the response lands: `?family=`
+    // already says which one, so the two requests overlap rather than queue.
+    prefetchSceneRendererForFamily(family);
     api
       .getWorld(worldId, family)
       .then((nextWorld) => {

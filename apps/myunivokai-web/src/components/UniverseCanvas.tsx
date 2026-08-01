@@ -20,7 +20,10 @@ import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
 import { PlanetPositionTrackerContext } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 
-export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+// planetIdentityKey is deliberately NOT re-exported here. It is a pure string
+// helper, and re-exporting it made this module — with three.js behind it — a
+// dependency of anything that only needed the key. Import it from
+// scene-renderers/planetIdentity instead.
 
 // The opening-shot numbers moved to universeCameraFraming: anything that has to
 // place an object IN FRAME needs them too, and a private copy is what let the
