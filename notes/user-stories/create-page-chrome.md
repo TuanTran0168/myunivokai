@@ -151,18 +151,32 @@ content stays at full opacity.**
 | `--glass-blur` | `blur(30px) saturate(180%)` | **`blur(14px) saturate(150%)`** |
 | header wash | `bg-mount/35`, `backdrop-blur-2xl` | **`bg-mount/10`, `backdrop-blur-md`** |
 | footer wash | `bg-void/45`, `backdrop-blur-2xl` | **`bg-void/10`, `backdrop-blur-md`** |
-| `.forest-chrome .glass-panel` | `0.62` | **`0.34`** |
+| `.forest-chrome .glass-panel` | `0.62` | **`0.16`** |
+| `grey` / `on-surface-variant` | `#B6B0A4` | **`#DCD7CB`** |
+| `faint` / `outline` | `#807868` | **`#A79D8A`** |
+| `.input-dark` fill | `rgba(255,255,255,0.05)` | **`rgba(8,8,10,0.42)`** |
 
 What still marks a panel as a panel at this tint is its specular top edge, its
-brass inner rule and its lift shadow — not a wash of dark. That is why those
-three must not be thinned along with the tint.
+brass inner rule and its lift shadow — not a wash of dark. Those three must not
+be thinned along with it.
 
-`.forest-chrome .glass-panel` is the **counterweight and the one number to raise
-if forest text becomes hard to read.** It cannot go as low as the base tint:
-forest scenes are bright daylight where universe scenes are near-black, and
-without a base under the blur the panels wash out and dark buttons float as
-black pills. **Judge any further thinning on the Forest family, never on the
-universe one** — a `#050816` background flatters almost any value.
+**The correction that made it work.** The first attempt only lowered the tint
+and kept `.forest-chrome` high as the counterweight, which produced the worst of
+both: panels that were still muddy *and* still low-contrast, because grey text
+sat on a mid-dark wash. Legibility now comes from the text instead of from a
+wash behind it:
+
+- `.glass-panel` / `.liquid-glass` carry a `text-shadow`, so text holds up over
+  any scene while the material stays clear. `.btn-brass` cancels it — dark
+  engraved labels on a brass fill need no shadow and a dark one muddies them.
+- the muted tokens were tuned against a dark wash and had to rise once they sat
+  straight on the live world.
+- `.input-dark` is filled dark rather than veiled with 5% white. A field is the
+  one surface a user reads character by character, and white-on-white over a
+  daylight canopy lost both the value and the placeholder.
+
+Raise `.forest-chrome .glass-panel` only if forest text still fails, and judge
+that on the **Forest** family: the universe's `#050816` flatters any value.
 
 ### The world toggle
 
@@ -183,6 +197,12 @@ the circle stays circular.
 hovering, and that is the only way a touch user ever sees the label. The
 accessible name lives on the button and never depends on the label being
 visible, so a screen reader is unaffected by any of this.
+
+It carries **its own material rather than `.glass-panel`** — a solid-ish dark
+fill with a brass ring. This is not decoration: at `--glass-tint` a 44px circle
+with a 20px icon disappeared entirely into a forest canopy, and it was reported
+as the button being gone. Everything else on this page may dissolve into the
+world; this one control may not.
 
 Known risk for QA: the toggle is centred in the header band, and on the
 narrowest phones the header's own logo and nav leave little clear space there.

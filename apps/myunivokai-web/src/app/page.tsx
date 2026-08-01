@@ -320,7 +320,7 @@ export default function HomePage() {
           aria-expanded={formRailCollapseState.isExpanded}
           aria-controls={FORM_RAIL_ELEMENT_ID}
           aria-label={FORM_RAIL_TOGGLE_ACCESSIBLE_LABEL}
-          className="chrome-toggle focus-ring glass-panel pointer-events-auto text-sm text-paper disabled:cursor-not-allowed disabled:opacity-45"
+          className="chrome-toggle focus-ring pointer-events-auto text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-45"
         >
           <span className="chrome-toggle-icon text-brass">
             {formRailCollapseState.isExpanded ? (

@@ -19,8 +19,8 @@
   --card: #131217;
   --card-hover: #1A181E;
   --paper: #F2EEE6;
-  --grey: #B6B0A4;
-  --faint: #807868;
+  --grey: #DCD7CB;
+  --faint: #A79D8A;
   --brass: #C9A35B;
   --brass-soft: rgba(201, 163, 91, 0.5);
   --vermillion: #E0573A;
@@ -136,6 +136,22 @@ textarea {
     0 30px 70px -22px rgba(0, 0, 0, 0.7);
 }
 
+/* At this tint a panel adds almost no darkness of its own, so legibility has to
+   come from the TEXT rather than from a wash behind it. This is the trade that
+   lets the material stay genuinely clear over a bright forest canopy instead of
+   being darkened back up until it reads as a solid card again. */
+.glass-panel,
+.liquid-glass {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.62);
+}
+
+/* Dark engraved labels on a brass fill need no shadow, and a dark one muddies
+   them. */
+.btn-brass,
+.btn-gradient {
+  text-shadow: none;
+}
+
 /* Highest-elevation islands get a touch more lift + brass edge. */
 .glass-panel-glow {
   box-shadow:
@@ -177,10 +193,14 @@ textarea {
   transform: translateY(1px) scale(0.97);
 }
 
-/* SHIM: glassy input → translucent field with a brass focus rule. */
+/* SHIM: glassy input → translucent field with a brass focus rule.
+   The fill is dark rather than a 5% white veil: with the panel behind it now
+   near-clear, a field lit only by white-on-white sat directly on a daylight
+   forest canopy, and neither the value nor the placeholder survived it. A field
+   is the one surface a user has to read character by character. */
 .input-dark {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 10, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .input-dark:focus {
@@ -355,14 +375,29 @@ textarea {
      plus twice this is exactly --chrome-toggle-size. */
   padding: 0 calc((var(--chrome-toggle-size) - var(--chrome-toggle-icon-size)) / 2);
   border-radius: 999px;
+  /* Its OWN material, deliberately not .glass-panel. This is the one control
+     that must be findable, and at --glass-tint a 44px circle vanished into a
+     bright forest canopy. Everything else on the page may dissolve into the
+     world; this may not. */
+  background: rgba(11, 11, 14, 0.62);
+  border: 1px solid var(--brass-soft);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.20),
+    0 10px 26px -10px rgba(0, 0, 0, 0.85);
   transition:
     transform var(--chrome-toggle-expand-duration) var(--spring-easing),
+    background-color var(--chrome-toggle-expand-duration) var(--glass-easing),
+    border-color var(--chrome-toggle-expand-duration) var(--glass-easing),
     box-shadow var(--chrome-toggle-expand-duration) var(--glass-easing);
 }
 
 .chrome-toggle:hover,
 .chrome-toggle:focus-visible {
   transform: translateY(1px) scale(1.03);
+  background: rgba(11, 11, 14, 0.74);
+  border-color: var(--brass);
 }
 
 .chrome-toggle:active {
@@ -548,10 +583,12 @@ textarea {
    a solid warm-dark base under its blur, restoring the contrast the chrome
    was designed against.
 
-   THIS IS THE COUNTERWEIGHT TO --glass-tint, and it is the one number to raise
-   if forest text becomes hard to read. It cannot go as low as the universe
-   tint: judge any further thinning of the glass on the Forest family, never on
-   the universe one, whose #050816 background flatters almost any value. */
+   It used to be the whole answer, and at 0.62/0.45/0.34 that made forest panels
+   read as muddy cards rather than as glass — not transparent, and still low
+   contrast, because the text was grey on a mid-dark wash. Legibility now comes
+   mostly from the text shadow above and the brighter muted tokens, so this can
+   stay faint. Raise it only if forest text still fails, and judge that on the
+   Forest family: the universe's #050816 background flatters any value. */
 .forest-chrome .glass-panel {
-  background-color: rgba(14, 18, 13, 0.34);
+  background-color: rgba(14, 18, 13, 0.16);
 }

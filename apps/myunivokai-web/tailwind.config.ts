@@ -19,8 +19,11 @@ const config: Config = {
         card: "#131217",
         "card-hover": "#1A181E",
         paper: "#F2EEE6", // warm gallery-white
-        grey: "#B6B0A4",
-        faint: "#807868",
+        // Raised 2026-08-01 with the glass tint drop: these were tuned against a
+        // dark wash behind them. With the material near-clear they sit straight
+        // on the live world, and a bright forest canopy ate them.
+        grey: "#DCD7CB",
+        faint: "#A79D8A",
         brass: "#C9A35B", // the single metallic accent
         "brass-deep": "#A8843F",
         vermillion: "#E0573A", // the live dot only
@@ -35,8 +38,8 @@ const config: Config = {
         "surface-high": "#1A181E",
         "surface-bright": "#222028",
         "on-surface": "#F2EEE6",
-        "on-surface-variant": "#B6B0A4",
-        outline: "#807868",
+        "on-surface-variant": "#DCD7CB",
+        outline: "#A79D8A",
         "outline-variant": "#2A2730",
         primary: "#C9A35B",
         "primary-container": "#C9A35B",
