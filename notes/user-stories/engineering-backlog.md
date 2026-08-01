@@ -372,13 +372,13 @@ And internal NATS credentials are not confused with user authentication.
 
 ## Deferred product work retained from the previous backlog
 
-The supported Next.js major upgrade, lazy renderer chunks, self-hosted Draco,
-asset/license budgets, adaptive weak-device quality and full City breadth remain
-valid product/engineering work. They must be re-estimated after Sprint 1 because
-the public API, runtime contracts and deployment topology change. Do not execute
-the old HTTP-peer City edge stories as written; the target uses NATS.
+The supported Next.js major upgrade, self-hosted Draco, asset/license budgets,
+adaptive weak-device quality and full City breadth remain valid
+product/engineering work. They must be re-estimated after Sprint 1 because the
+public API, runtime contracts and deployment topology change. Do not execute the
+old HTTP-peer City edge stories as written; the target uses NATS.
 
-Lazy renderer chunks now has a source-verified execution plan in
-[../fe/deferred-work-plan.md](../fe/deferred-work-plan.md) Part A
-(DEFERRED-FE-LAZY-001). The plan is written, not approved — it does not change
-this section's deferred status.
+Lazy renderer chunks left this list: shipped on `feat/fe/lazy-renderer-chunks`,
+First Load JS 512-526 kB → 436-450 kB on the five 3D routes. Mechanism and
+numbers in [../fe/threejs-scene-architecture.md](../fe/threejs-scene-architecture.md)
+§Family chunks.

@@ -35,7 +35,7 @@ date; it is not the original creation date.
 | [fe/forest-render-mechanism.md](fe/forest-render-mechanism.md) | How the **forest/nature** scene is drawn: instanced + animated GLBs, seasonal recolor, bird gotchas, **the Sketchfab constraint** | Before adding a forest 3D asset |
 | [fe/forest-realism-roadmap.md](fe/forest-realism-roadmap.md) | **What realism level the forest is at**, the coupled water/wander radii, the animal-jitter fix, what to improve next, perf knobs | Before any "make the forest look better" task |
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
-| [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | **Execution plan for the two open FE items:** dynamic family chunks and the forest fidelity metrics. Source-verified, **not approved** | Before starting either of those; before assuming they were forgotten |
+| [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution plans: Part A dynamic family chunks (**shipped**), Part B forest fidelity metrics (**open**) | Before starting Part B; for what Part A actually measured |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
 | [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe and Nature communicate through NATS/Redis and own data | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
@@ -57,13 +57,13 @@ date; it is not the original creation date.
 | `be/source-overview.md` | Implemented | Matches Gateway plus DNA/Universe/Nature NATS services; local container lifecycle verified |
 | `be/refactor-plan.md` | Historical | Old Universe-only sequence; current work moved to `user-stories/` |
 | `fe/source-overview.md` | Active | Matches async polling/recovery, family renderers and one gateway origin |
-| `fe/threejs-scene-architecture.md` | Active | Registry exists; the lazy-loading upgrade is still pending |
+| `fe/threejs-scene-architecture.md` | Active | Registry exists and is now lazy per family; measured First Load JS recorded in §Family chunks |
 | `fe/universe-render-mechanism.md` | Active | Matches the solar-system renderer and asset catalogs |
 | `fe/forest-render-mechanism.md` | Active | Matches Forest schema 1.2 and current asset pipeline; decoder self-hosting is a pending task |
 | `fe/forest-realism-roadmap.md` | Active | Assessed 2026-07-27 on `feat/fe-be/scene-realism-pass`; the perf budget in it is **unmeasured** |
 | `fe/refactor-plan.md` | Needs re-baseline | Several unchecked items already exist in source; do not use its status table as backlog |
 | `fe/3d-development-limitations.md` | Reference | Principles remain useful; the room-demo branch references are historical |
-| `fe/deferred-work-plan.md` | Planned, not approved | Verified against source 2026-08-02; execution needs owner approval per item |
+| `fe/deferred-work-plan.md` | Part A implemented, Part B planned | Part A shipped with measured before/after; Part B still needs owner approval |
 | `vision/README.md` | Implemented V1 baseline | NATS/Redis/DNA architecture exists; live deployment verification remains |
 | `vision/versions/v1-2026-07-22/` | Current approved V1 | Versioned scale, ownership, messaging, data and deployment baseline |
 | `vision/api-gateway.md` | Historical | Old HTTP peer gateway; V1 versioned architecture is current |
@@ -71,7 +71,7 @@ date; it is not the original creation date.
 | `vision/versions/v1-2026-07-22/contracts-and-roadmap.md` | Active target | New contract inventory, roadmap, risks and fitness checks |
 | `vision/versions/v1-2026-07-22/deployment.md` | Implemented configuration | `render.yaml` now defines Gateway plus three background workers |
 | `vision/frontend-gateway-consolidation.md` | Implemented | One frontend gateway origin exists in source and deployment config |
-| `vision/frontend-plan.md` | Active | Re-baselined: family registry exists, stronger contracts and lazy chunks remain |
+| `vision/frontend-plan.md` | Active | Re-baselined: family registry exists, lazy chunks shipped, stronger runtime contracts remain |
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
 | `vision/city-service-plan.md` | Approved product plan with amendment | City moves to Sprint 3 and consumes canonical DNA/NATS |
