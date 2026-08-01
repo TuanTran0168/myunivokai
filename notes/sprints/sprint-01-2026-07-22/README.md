@@ -124,7 +124,12 @@ overwrites.
 - [x] All Go modules pass `go mod verify`, `go vet ./...`, `go test ./...`, and
       `go build ./...`.
 - [x] Frontend typecheck, lint, tests and production build pass.
-- [ ] Message/DNA/scene/OpenAPI schemas and fixed fixtures pass CI.
+- [x] Message/DNA/scene/OpenAPI schemas and fixed fixtures pass CI. *(The
+      Contracts job validates every committed fixture and both families' golden
+      scenes against their schema, and requires a set of deliberately broken
+      scenes to be rejected — a schema can be vacuous, so "the fixture passed"
+      is not evidence on its own. OpenAPI is linted by the pinned Redocly CLI.
+      See `contracts/go/schema_conformance_test.go`.)*
 - [x] Duplicate compose delivery produces one logical world/result in repository tests.
 - [x] AI/provider tests use mock and no frontend/provider boundary is violated.
 - [ ] Redis outage, NATS retry, consumer restart and database rollback tests pass.
