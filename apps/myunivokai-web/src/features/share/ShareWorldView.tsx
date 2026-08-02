@@ -6,7 +6,9 @@ import { ArrowRight } from "lucide-react";
 import { api, apiErrorMessage, DEFAULT_WORLD_FAMILY } from "@/lib/api";
 import type { PlanetSceneConfig, ShareWorld, WorldFamily } from "@/lib/types";
 import { isForestScene, pointsOfInterestFromScene, sceneFromVariant } from "@/lib/scene";
-import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
 import { StatusMessage } from "@/components/StatusMessage";
@@ -31,6 +33,10 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
 
   useEffect(() => {
     let mounted = true;
+    // The route path already names the family, so the renderer chunk can travel
+    // alongside the share request rather than after it. Share pages are the
+    // cold-cache case that matters most: a visitor arrives from a link.
+    prefetchSceneRendererForFamily(family);
     api
       .getShareWorld(shareSlug, family)
       .then((nextWorld) => mounted && setWorld(nextWorld))
@@ -113,7 +119,11 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
       <div
         id={WORLD_PANELS_ELEMENT_ID}
         className={`immersive-exit relative z-10 flex flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px] ${
-          collapseState.reservesLayoutSpace ? "flex-1" : "h-0 overflow-hidden p-0 sm:p-0"
+          collapseState.reservesLayoutSpace
+            ? // Same footer clearance as the world page: in flow below lg, the
+              // fixed footer sits over whatever this column ends with.
+              "flex-1 pb-[calc(var(--footer-height)+1rem)] lg:pb-0"
+            : "h-0 overflow-hidden p-0 sm:p-0"
         }`}
       >
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

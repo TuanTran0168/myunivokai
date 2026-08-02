@@ -6,10 +6,10 @@ services:
     env_file:
       - ./.env.local
     environment:
-      NEXT_PUBLIC_GATEWAY_BASE_URL: ${NEXT_PUBLIC_GATEWAY_BASE_URL:-http://localhost:8080}
+      NEXT_PUBLIC_GATEWAY_BASE_URL: ${NEXT_PUBLIC_GATEWAY_BASE_URL:-http://localhost:41800}
       WATCHPACK_POLLING: "true"
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_PORT:-41300}:41300"
     volumes:
       - .:/app
       - myunivokai-web-node-modules:/app/node_modules

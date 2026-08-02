@@ -1,7 +1,7 @@
 # Myunivokai Web
 
 The Next.js client for Myunivokai. It knows one public origin through
-`NEXT_PUBLIC_GATEWAY_BASE_URL` (local default `http://localhost:8080`) and never
+`NEXT_PUBLIC_GATEWAY_BASE_URL` (local default `http://localhost:41800`) and never
 receives AI, NATS, Redis, database, or domain-service credentials.
 
 Generation preserves the existing UI flow while using the asynchronous API:

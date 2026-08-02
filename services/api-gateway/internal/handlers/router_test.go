@@ -185,6 +185,89 @@ func TestWorldMutationInvalidatesCacheBeforeAndAfterSuccess(t *testing.T) {
 	}
 }
 
+// The share cache is keyed by slug while mutations arrive keyed by world id, so
+// the slug travels back in the mutation response. Without this the share page
+// served the previously selected variant for a whole TTL, which is how a
+// seed-derived rare feature showed on the dashboard and vanished from the link.
+func TestSelectingAVariantInvalidatesTheCachedShareResponse(t *testing.T) {
+	worldID := "11111111-1111-4111-8111-111111111111"
+	variantID := "22222222-2222-4222-8222-222222222222"
+	shareSlug := "neo-4dfowlscib"
+	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, map[string]any{
+		"variant":   map[string]any{"id": variantID},
+		"shareSlug": shareSlug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeStore := newFakeEdgeStore()
+	shareCacheKey := shareCacheNamespace + ":" + edge.ShareCacheIdentifier(string(contracts.WorldFamilyUniverse), shareSlug)
+	edgeStore.values[shareCacheKey] = []byte(`{"world":{"nickname":"Neo"}}`)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants/"+variantID+"/select", strings.NewReader(`{}`)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, stillCached := edgeStore.values[shareCacheKey]; stillCached {
+		t.Fatal("share response is still cached after the selected variant changed")
+	}
+	if edgeStore.deleteCounts[shareCacheKey] != 1 {
+		t.Fatalf("share cache delete count = %d, want 1", edgeStore.deleteCounts[shareCacheKey])
+	}
+}
+
+// An unpublished world has no share page, and a mutation on it must not fire a
+// delete against a slug-shaped key built from an empty string.
+func TestMutatingAnUnpublishedWorldTouchesNoShareCacheKey(t *testing.T) {
+	worldID := "11111111-1111-4111-8111-111111111111"
+	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusCreated, map[string]any{
+		"variant": map[string]any{"id": "22222222-2222-4222-8222-222222222222"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeStore := newFakeEdgeStore()
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants", strings.NewReader(`{}`)))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	for key := range edgeStore.deleteCounts {
+		if strings.HasPrefix(key, shareCacheNamespace+":") {
+			t.Fatalf("unexpected share cache delete for key %q", key)
+		}
+	}
+}
+
+// Publishing already returns the slug at the response root, so the same peek
+// covers it: a republish of a world whose share was read moments earlier must not
+// leave the pre-publish body in place.
+func TestPublishingInvalidatesTheCachedShareResponse(t *testing.T) {
+	worldID := "11111111-1111-4111-8111-111111111111"
+	shareSlug := "neo-64x3rcsu3a"
+	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, map[string]any{
+		"shareSlug": shareSlug,
+		"shareUrl":  "http://localhost/universe/share/worlds/" + shareSlug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeStore := newFakeEdgeStore()
+	shareCacheKey := shareCacheNamespace + ":" + edge.ShareCacheIdentifier(string(contracts.WorldFamilyNature), shareSlug)
+	edgeStore.values[shareCacheKey] = []byte(`{"world":{"nickname":"Neo"}}`)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/nature/worlds/"+worldID+"/publish", strings.NewReader(`{}`)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, stillCached := edgeStore.values[shareCacheKey]; stillCached {
+		t.Fatal("share response is still cached after publish")
+	}
+}
+
 func TestActiveJobUsesShortCacheTTL(t *testing.T) {
 	job := contracts.Job{JobID: "job-1", Family: contracts.WorldFamilyNature, Status: contracts.JobStatusProcessing, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	responseEnvelope, err := contracts.SuccessRPCEnvelope("request-1", http.StatusOK, job)
@@ -227,18 +310,18 @@ func TestGatewayRejectsOversizedBodyBeforePublishing(t *testing.T) {
 func TestGatewayCORSIsOwnedAtPublicEdge(t *testing.T) {
 	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 	request := httptest.NewRequest(http.MethodOptions, "/api/universe/worlds", nil)
-	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Origin", "http://localhost:41300")
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:41300" {
 		t.Fatalf("preflight status=%d origin=%q", response.Code, response.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
 
 func testGatewayConfig() config.Config {
 	return config.Config{
-		AppEnvironment: "test", AppName: "Gateway Test", AllowedOrigins: []string{"http://localhost:3000"},
+		AppEnvironment: "test", AppName: "Gateway Test", AllowedOrigins: []string{"http://localhost:41300"},
 		RateLimitRequestsPerSecond: 1000, RateLimitBurst: 1000, MaximumRequestBodyBytes: 64 * 1024,
 		NATSPublishTimeout: time.Second, NATSRequestTimeout: time.Second, JobCacheTimeToLive: time.Minute,
 		WorldCacheTimeToLive: time.Minute, ShareCacheTimeToLive: time.Minute,

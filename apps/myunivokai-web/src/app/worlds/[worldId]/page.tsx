@@ -14,7 +14,9 @@ import type { PlanetSceneConfig, World, WorldFamily, WorldVariant } from "@/lib/
 import { StatusMessage } from "@/components/StatusMessage";
 import { PlanetDetailsPanel } from "@/components/PlanetDetailsPanel";
 import { RareFeatureBadge } from "@/components/RareFeatureBadge";
-import { UniverseCanvas, planetIdentityKey } from "@/components/UniverseCanvas";
+import { UniverseCanvas } from "@/components/UniverseCanvas";
+import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { VariantList } from "@/components/VariantList";
 import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
 import { WORLD_PANELS_ELEMENT_ID } from "@/lib/formRailCollapse";
@@ -71,6 +73,9 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    // Start the renderer chunk now instead of when the response lands: `?family=`
+    // already says which one, so the two requests overlap rather than queue.
+    prefetchSceneRendererForFamily(family);
     api
       .getWorld(worldId, family)
       .then((nextWorld) => {
@@ -247,7 +252,12 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
       <div
         id={WORLD_PANELS_ELEMENT_ID}
         className={`immersive-exit relative z-10 flex flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px] ${
-          collapseState.reservesLayoutSpace ? "flex-1" : "h-0 overflow-hidden p-0 sm:p-0"
+          collapseState.reservesLayoutSpace
+            ? // Below lg this column is in flow and the footer is fixed over it, so
+              // the bottom action toolbar ended up underneath the footer bar. The
+              // desktop branch already reserves the same height with lg:bottom.
+              "flex-1 pb-[calc(var(--footer-height)+1rem)] lg:pb-0"
+            : "h-0 overflow-hidden p-0 sm:p-0"
         }`}
       >
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

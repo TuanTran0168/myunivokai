@@ -19,8 +19,13 @@ type WorldListResponse struct {
 	Worlds []WorldResponse `json:"worlds"`
 }
 
+// VariantResponse carries a variant mutation. ShareSlug rides along because
+// selecting a different variant changes what the public share page renders, and
+// the gateway's share cache is keyed by SLUG — only this service can map a world
+// id to it. Empty when the world has never been published.
 type VariantResponse struct {
-	Variant WorldVariant `json:"variant"`
+	Variant   WorldVariant `json:"variant"`
+	ShareSlug string       `json:"shareSlug,omitempty"`
 }
 
 type PublishResponse struct {

@@ -191,7 +191,7 @@ go run cmd/migrate/main.go
   - Server bind vào biến `PORT`, fallback về `8080` khi chạy local không có biến `PORT`.
   - Server chạy trong goroutine riêng, song song với vòng lặp consume NATS.
   - Không có xung đột port giữa các service: mỗi service là container riêng biệt, cả trên Render lẫn qua `docker-compose-local.yaml` (xem `include:` ở root `docker-compose-local.yaml`).
-  - Port bên trong container không lộ ra host, trừ khi có mục `ports:` publish tường minh. Hiện chỉ `api-gateway` publish `8080:8080` ra host local.
+  - Port bên trong container không lộ ra host, trừ khi có mục `ports:` publish tường minh. Hiện chỉ `api-gateway` publish `41800:41800` ra host local.
 - **Quyết định:** `healthCheckPath` trong `render.yaml` không được bật cho 3 service này.
   - Lý do: bật `healthCheckPath` khiến Render tự ping liên tục, khoảng 5s/lần (giống mục 5.3), để giữ service luôn thức.
   - Việc đó ngốn giờ Free tier (750h/tháng) rất nhanh, nếu áp dụng cho cả 3 worker cộng thêm gateway.

@@ -59,7 +59,7 @@ Render image from silently embedding the localhost development fallback.
 The root `docker-compose-local.yaml` uses the same contract:
 
 ```txt
-NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_GATEWAY_BASE_URL=http://localhost:41800
 ```
 
 All browser business traffic therefore exercises Gateway CORS, rate limiting,

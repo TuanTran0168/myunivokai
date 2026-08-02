@@ -204,7 +204,44 @@ on the create form.
   props; compression/tiering comes after the high-fidelity reference is locked.
 - Many repeated objects (asteroids, buildings) -> use `InstancedMesh`: one draw call for thousands of objects.
 
-The registry is sceneType-first but not lazy: `registry.ts` statically imports
-both renderers. A visitor who only needs one family still receives both family
-code graphs. Dynamic family chunks are tracked in
-[../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md).
+### Family chunks
+
+The registry is sceneType-first **and** lazy: `registry.ts` loads each family
+renderer through `React.lazy` over a dynamic `import()`, so a visitor who opens a
+forest never downloads the solar system.
+
+Measured on `feat/fe/lazy-renderer-chunks` — `next build`, before → after:
+
+| Route | Before | After |
+| --- | --- | --- |
+| `/` | 512 kB | 436 kB |
+| `/gallery` | 514 kB | 438 kB |
+| `/universe/share/worlds/[shareSlug]` | 514 kB | 439 kB |
+| `/nature/share/worlds/[shareSlug]` | 514 kB | 439 kB |
+| `/worlds/[worldId]` | 526 kB | 450 kB |
+
+Family chunks: forest 52 kB, universe 64 kB (uncompressed on disk). Neither
+appears under any route in `app-build-manifest.json`.
+
+- three.js, fiber and drei stay in the shared chunk — both families need them.
+  The ~75 kB saved is family-specific renderer code, not the engine. Expect the
+  same shape from any future family: a partial win, never a halving.
+- **`React.lazy`, not `next/dynamic`.** `next/dynamic` in 14.2.x does not
+  suspend: its loadable runtime renders a `loading` component — `null` by
+  default — while the chunk is in flight. The renderer shares its Suspense
+  boundary with `SceneReadySignal`, so a non-suspending wrapper lets that signal
+  mount immediately, lift the opacity veil, and show an empty canvas until the
+  chunk lands. `React.lazy` throws the promise, so the existing
+  `<Suspense fallback={<CanvasLoader />}>` catches it and the veil behaves as it
+  did when only asset loading could suspend.
+- No `ssr: false` is needed. `<Canvas>` children are rendered by the r3f
+  reconciler on the client and never join the server-rendered tree.
+- A chunk that starts loading only when the world response lands trades bytes for
+  a round trip. `prefetchSceneRendererForFamily` exists so callers that know the
+  family earlier start the chunk alongside the world request: share routes from
+  the path, the world page from `?family=`, the create form from its picker.
+- Adding a family = one loader + one registry entry + one `prefetch` branch.
+
+Do not re-export a pure helper from `UniverseCanvas`. It makes this module — and
+three.js behind it — a dependency of anything that only wanted the helper.
+`planetIdentityKey` lives in `scene-renderers/planetIdentity` for that reason.

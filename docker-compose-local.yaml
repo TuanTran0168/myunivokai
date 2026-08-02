@@ -1,8 +1,13 @@
 name: myunivokai-local
 
 # Each included Compose model keeps paths relative to its owning component.
-# The root environment is loaded explicitly for interpolation, so the integrated
-# stack does not depend on callers remembering `--env-file .env.local`.
+#
+# The env_file entries below load the root environment for interpolation, but they
+# are NOT a substitute for `--env-file .env.local` on the command line: Compose
+# auto-loads a root `.env` when the flag is absent, and that file outranks these
+# entries. On a machine holding a deploy-shaped `.env`, the local stack then comes
+# up pointed at production NATS, production Redis and the live AI provider. Always
+# run through `make local-up`, or pass the flag yourself.
 include:
   - path: ./infra/docker-compose-local.yaml
     env_file: ./.env.local

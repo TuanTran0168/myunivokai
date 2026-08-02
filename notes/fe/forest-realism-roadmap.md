@@ -213,6 +213,21 @@ and looks considerably better.
 **Use both numbers.** SDI for how convoluted, kink for how smooth. Optimising
 either alone produces a characteristic failure: a circle, or a splat.
 
+**Both numbers are tests now** (`forestFidelityMetrics.test.ts`), and the table
+above is a hand measurement of configurations that no longer ship — read it as
+history, not as the current score. Measured over 4000 seeds, what ships scores:
+
+| | measured range | threshold |
+|---|---|---|
+| development index | 1.155 - 1.197 | > 1.15 |
+| kink | 7.9 - 17.8 | < 50 |
+
+The index floor sits about 0.005 above its threshold, so any change that rounds
+the shoreline off will trip the test rather than pass quietly.
+
+The same round turned the wave-fold claim into a test and found it false for the
+landmark ponds — see [deferred-work-plan.md](deferred-work-plan.md) Part B.
+
 ### Islands
 
 An unbroken sheet of water reads as a puddle however large. Islands are the

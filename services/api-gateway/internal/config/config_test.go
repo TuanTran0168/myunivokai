@@ -46,7 +46,7 @@ func TestValidationRequiresPositiveOperationalLimits(t *testing.T) {
 func validTestConfig() Config {
 	return Config{
 		AppEnvironment:             "test",
-		AllowedOrigins:             []string{"http://localhost:3000"},
+		AllowedOrigins:             []string{"http://localhost:41300"},
 		MaximumRequestBodyBytes:    64 * 1024,
 		RateLimitRequestsPerSecond: 10,
 		RateLimitBurst:             20,

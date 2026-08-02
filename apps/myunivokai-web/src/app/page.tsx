@@ -14,6 +14,7 @@ import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChr
 import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { worldPagePath } from "@/lib/worldRoutes";
 import type { GenerationJobStatus, PlanetSceneConfig, WorldFamily } from "@/lib/types";
 
@@ -171,6 +172,18 @@ export default function HomePage() {
     // exact renderer the generated world will use.
     return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
   }, [debouncedPayload, worldFamily]);
+
+  // The preview mounts the selected family immediately, so that chunk is already
+  // in flight. Warm the others as well: this is the one page whose whole job is
+  // choosing between families, and people flick the picker back and forth. A
+  // spinner on every flick is a worse trade than bytes that arrive after first
+  // paint. The world and share routes, which know their family for certain,
+  // still fetch exactly one renderer.
+  useEffect(() => {
+    for (const option of familyOptions) {
+      prefetchSceneRendererForFamily(option.value);
+    }
+  }, []);
 
   // The preview is fully interactive too: clicking a planet/landmark/animal
   // flies the camera to it, exactly like the world page.
@@ -341,7 +354,12 @@ export default function HomePage() {
         id={FORM_RAIL_ELEMENT_ID}
         data-form-rail-collapsed={!formRailCollapseState.isExpanded}
         className={`form-rail-collapse relative z-10 sm:mx-4 lg:absolute lg:bottom-[68px] lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px] ${
-          formRailCollapseState.reservesLayoutSpace ? "mx-3 mb-4 mt-4" : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
+          formRailCollapseState.reservesLayoutSpace
+            ? // The rail is in flow below lg while the footer is fixed over it, so
+              // a plain gap left the submit button under the footer bar. The
+              // desktop branch already reserves that height with lg:bottom.
+              "mx-3 mb-[calc(var(--footer-height)+1rem)] mt-4"
+            : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
         }`}
       >
       <section className="glass-panel glass-panel-glow glass-rise flex w-full flex-col overflow-hidden rounded-3xl lg:h-full">

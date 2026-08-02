@@ -190,7 +190,7 @@ export function SolarSystemRenderer({
           that roll it ever pay the download. */}
       {hasRareFeature(rareFeatures, "black-hole") ? (
         <Suspense fallback={null}>
-          <DistantBlackHole seed={seed} />
+          <DistantBlackHole seed={seed} camera={scene.camera} />
         </Suspense>
       ) : null}
       <Sun coreConfig={scene.core} sun={scene.sun} />

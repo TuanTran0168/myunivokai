@@ -1,7 +1,42 @@
-import type { SceneConfig } from "@/lib/types";
+"use client";
+
+import { lazy } from "react";
+import type { SceneConfig, WorldFamily } from "@/lib/types";
 import type { SceneRendererComponent } from "./types";
-import { SolarSystemRenderer } from "./solar-system/SolarSystemRenderer";
-import { ForestRenderer } from "./forest/ForestRenderer";
+
+/**
+ * Each family renderer is its own chunk, so a visitor who opens a forest never
+ * downloads the solar system and vice versa. The chunk boundary comes from the
+ * dynamic import() itself, not from the wrapper around it.
+ *
+ * The loaders are named rather than inlined because prefetching has to go
+ * through the SAME import() call the chunk resolves through — a second,
+ * separately written import() of the same module is a second request.
+ */
+const importSolarSystemRenderer = () =>
+  import("./solar-system/SolarSystemRenderer").then((module) => ({ default: module.SolarSystemRenderer }));
+const importForestRenderer = () =>
+  import("./forest/ForestRenderer").then((module) => ({ default: module.ForestRenderer }));
+
+/**
+ * React.lazy, deliberately NOT next/dynamic.
+ *
+ * next/dynamic (14.2.x) does not suspend — its loadable runtime renders a
+ * `loading` component, defaulting to null, while the chunk is in flight. The
+ * renderer shares its Suspense boundary in UniverseCanvas with SceneReadySignal,
+ * so a non-suspending wrapper would let that signal mount immediately, lift the
+ * opacity veil and show an empty canvas until the chunk landed.
+ *
+ * React.lazy throws the promise instead, so the existing
+ * <Suspense fallback={<CanvasLoader />}> catches it and the veil behaves exactly
+ * as it did when only asset loading could suspend.
+ *
+ * No `ssr: false` equivalent is needed: a scene renderer only ever mounts inside
+ * the r3f <Canvas> root, whose children are rendered by the r3f reconciler on
+ * the client and are never part of the server-rendered tree.
+ */
+const SolarSystemRenderer = lazy(importSolarSystemRenderer);
+const ForestRenderer = lazy(importForestRenderer);
 
 /**
  * Two-level renderer resolution:
@@ -14,8 +49,8 @@ import { ForestRenderer } from "./forest/ForestRenderer";
  * 2. Within the universe family, `theme` picks the renderer exactly as before.
  *
  * Adding a scene family = new folder under scene-renderers/ implementing
- * SceneRendererProps + one entry in SCENE_TYPE_RENDERER_REGISTRY. The backend
- * contract does not change.
+ * SceneRendererProps + one lazy loader + one entry in
+ * SCENE_TYPE_RENDERER_REGISTRY. The backend contract does not change.
  */
 const SCENE_TYPE_RENDERER_REGISTRY: Record<string, SceneRendererComponent> = {
   forest: ForestRenderer
@@ -48,4 +83,21 @@ export function resolveSceneTypeRenderer(scene?: SceneConfig): SceneRendererComp
     return SCENE_TYPE_RENDERER_REGISTRY[scene.sceneType];
   }
   return null;
+}
+
+/**
+ * Warm a family's chunk before its scene config exists.
+ *
+ * Without this the split would trade bundle size for a visible extra round
+ * trip: the renderer only starts downloading once the world response arrives.
+ * Every caller already knows its family earlier than that — the share routes
+ * carry it in the path, the world page in `?family=`, the create form in its
+ * picker — so the chunk can travel alongside the world request instead of
+ * after it.
+ *
+ * Safe to call repeatedly; the module registry resolves a loaded chunk from
+ * cache.
+ */
+export function prefetchSceneRendererForFamily(family: WorldFamily): void {
+  void (family === "nature" ? importForestRenderer() : importSolarSystemRenderer());
 }

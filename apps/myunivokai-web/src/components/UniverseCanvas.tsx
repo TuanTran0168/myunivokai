@@ -10,16 +10,24 @@ import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { resolveSceneRenderer, resolveSceneTypeRenderer } from "@/features/scene-renderers/registry";
 import { FallbackUniverseRenderer } from "@/features/scene-renderers/fallback/FallbackUniverseRenderer";
 import { forestShoreCameraFraming } from "@/features/scene-renderers/forest/forestMath";
+import {
+  cameraDistanceFromConfig,
+  cameraFieldOfViewFromConfig,
+  universeCameraPosition
+} from "@/features/scene-renderers/universeCameraFraming";
 import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
 import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
 import { PlanetPositionTrackerContext } from "@/features/scene-renderers/shared/PlanetPositionTracker";
 
-export { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
+// planetIdentityKey is deliberately NOT re-exported here. It is a pure string
+// helper, and re-exporting it made this module — with three.js behind it — a
+// dependency of anything that only needed the key. Import it from
+// scene-renderers/planetIdentity instead.
 
-const DEFAULT_CAMERA_DISTANCE = 9;
-const DEFAULT_CAMERA_FIELD_OF_VIEW = 50;
-const CAMERA_HEIGHT_RATIO = 0.42;
+// The opening-shot numbers moved to universeCameraFraming: anything that has to
+// place an object IN FRAME needs them too, and a private copy is what let the
+// black hole drift behind the camera.
 
 // Forest camera envelope: wide zoom-out to take in the whole treeline, and a
 // polar clamp so the camera never dives under the ground plane (universe
@@ -92,8 +100,8 @@ export function UniverseCanvas({
 
   const seed = String(scene?.seed ?? CANONICAL_FALLBACK_SEED);
   const backgroundColor = backgroundColorFromScene(scene);
-  const cameraDistance = scene?.camera?.distance ?? DEFAULT_CAMERA_DISTANCE;
-  const cameraFieldOfView = scene?.camera?.fov ?? DEFAULT_CAMERA_FIELD_OF_VIEW;
+  const cameraDistance = cameraDistanceFromConfig(scene?.camera);
+  const cameraFieldOfView = cameraFieldOfViewFromConfig(scene?.camera);
   // Planets for universe scenes, landmarks for forest scenes — one adapter so
   // hover/select/camera-focus work identically across families.
   const pointsOfInterest = pointsOfInterestFromScene(scene);
@@ -116,7 +124,7 @@ export function UniverseCanvas({
   );
   const cameraPosition: [number, number, number] = forestCameraFraming
     ? [0, forestCameraFraming.height, forestCameraFraming.distance]
-    : [0, cameraDistance * CAMERA_HEIGHT_RATIO, cameraDistance];
+    : universeCameraPosition(scene?.camera);
 
   const hoveredPlanetKey = hoveredPlanet
     ? planetIdentityKey(

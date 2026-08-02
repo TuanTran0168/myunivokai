@@ -67,13 +67,17 @@ Tasks:
 - [x] Give the shoreline bays, headlands and islands (PR #85).
 - [x] Replace the reflector with a translucent surface over a painted bed (PR #85).
 - [x] Replace summed sines with Gerstner waves; prove no mesh folding (PR #85).
+      **Corrected on `feat/fe/forest-fidelity-metrics`:** that proof was an
+      argument, not a measurement, and it was wrong for the landmark ponds. Once
+      US-FOREST-002 turned it into a test, triangles were inverting on the
+      1.7-unit pond on real seeds. Now clamped and asserted.
 - [x] Open the camera from the bank instead of above the middle
       (`feat/fe/forest-lake-framing`).
 
 ## US-FOREST-002 — Judge fidelity against something other than opinion
 
-Status: Planned
-Priority: Unranked — proposed, not approved
+Status: Implemented on `feat/fe/forest-fidelity-metrics`
+Priority: Was unranked; approved and executed 2026-08-02
 
 As the implementer,
 I want each fidelity change checked against a stated measurement,
@@ -93,6 +97,31 @@ Notes:
   `notes/fe/forest-realism-roadmap.md`.
 - SDI on its own is gameable: it was once pushed to 1.58 with high harmonics and
   produced a worse, jagged shape. Any single metric needs its counterweight.
+
+Tasks:
+
+- [x] Frame-share of water and camera sight-lines — already in
+      `forestMath.test.ts` before this story; verified 2026-08-02.
+- [x] Shoreline development index and its kink counterweight, in
+      `forestFidelityMetrics.ts` and its test.
+- [x] Extract the wave field out of `ForestPondWater.tsx` into
+      `forestWaterMath.ts`, so it can be measured at all.
+- [x] Triangle-inversion test across every surface size, seed and time sample —
+      which found and fixed a real fold on the landmark ponds.
+
+What the measurements say:
+
+- Shipped shoreline over 4000 seeds: development index 1.155-1.197, kink 7.9-17.8.
+  The index floor clears its 1.15 threshold by about 0.005, so that threshold is a
+  live constraint and not slack.
+- The gaming failure is now itself a test. A high-harmonic outline scores 2.04 on
+  the index — far better than what ships — and the kink metric rejects it at 82.
+- The published fold metric was wrong as written. "Lateral shift never exceeds
+  local vertex spacing" is a proxy that fails in both directions: it reads as a
+  fold across open water, where nothing is wrong, and it passed the pond, which
+  folded. The test measures signed triangle area instead.
+- Full execution record: [../fe/deferred-work-plan.md](../fe/deferred-work-plan.md)
+  Part B.
 
 ## Known limits, accepted deliberately
 
