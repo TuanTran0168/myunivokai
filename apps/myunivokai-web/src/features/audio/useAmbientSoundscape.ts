@@ -1,0 +1,216 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildAmbientSoundscapeRecipe } from "@/lib/ambientSoundscape";
+import { readAmbientSoundPreference, writeAmbientSoundPreference } from "@/lib/ambientSoundPreference";
+import type { SceneConfig } from "@/lib/types";
+import { createAmbientSoundscapeGraph, type AmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
+
+// --- Ambience lifecycle ------------------------------------------------------
+//
+// Three constraints shape this hook, and each one is why a piece of it exists:
+//
+// 1. A browser refuses to make sound before the visitor has interacted with the
+//    page. So the AudioContext is constructed inside the click handler, never in
+//    an effect, and a remembered "on" preference arms a one-shot gesture
+//    listener instead of starting playback directly.
+// 2. An AudioContext is a real audio-thread resource. Leaving one open per
+//    visited world would keep the device's audio hardware awake, so the context
+//    is closed on unmount and suspended whenever the tab is hidden.
+// 3. Selecting a variant changes the scene, and the sound has to follow it
+//    without a gap. The graph is keyed by the recipe signature: React tears the
+//    old graph down and builds the new one, and because the old one fades out
+//    over the same window the new one fades in, that is a crossfade.
+
+const FADE_IN_SECONDS = 2.5;
+const FADE_OUT_SECONDS = 1.2;
+// The tail after a graph is asked to stop, before the context may close.
+const GRAPH_RELEASE_MILLISECONDS = FADE_OUT_SECONDS * 1000;
+
+const ACTIVATION_GESTURE_EVENTS = ["pointerdown", "keydown"] as const;
+
+type WebAudioWindow = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+function resolveAudioContextConstructor(): typeof AudioContext | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const webAudioWindow = window as WebAudioWindow;
+  return window.AudioContext ?? webAudioWindow.webkitAudioContext ?? null;
+}
+
+export type AmbientSoundscapeController = {
+  /** False when the browser has no Web Audio support; the toggle disables. */
+  isSupported: boolean;
+  isEnabled: boolean;
+  toggle: () => void;
+};
+
+/**
+ * Plays the scene's deterministic ambience, and hands back the state a toggle
+ * button needs. Pass `isAvailable: false` for canvases that must stay silent
+ * (decorative backdrops, the create-page preview whose seed changes on every
+ * form keystroke).
+ */
+export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable: boolean): AmbientSoundscapeController {
+  const [isSupported, setIsSupported] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(false);
+  const audioContextReference = useRef<AudioContext | null>(null);
+  const activeGraphReference = useRef<AmbientSoundscapeGraph | null>(null);
+
+  const recipe = useMemo(() => buildAmbientSoundscapeRecipe(scene), [scene]);
+  // The recipe object is rebuilt whenever the scene object identity changes —
+  // which a hover does. Only its signature decides whether the audio graph has
+  // to be rebuilt, so the graph effect reads the recipe through a ref and
+  // depends on the signature alone.
+  const recipeSignature = recipe.signature;
+  const latestRecipeReference = useRef(recipe);
+  latestRecipeReference.current = recipe;
+
+  useEffect(() => {
+    setIsSupported(resolveAudioContextConstructor() !== null);
+  }, []);
+
+  /**
+   * Returns the live context, creating it on first use. MUST be reached from a
+   * user gesture: a context created outside one starts suspended, and resuming
+   * it needs an activation the page may not have yet.
+   */
+  const ensureAudioContext = useCallback((): AudioContext | null => {
+    if (audioContextReference.current) {
+      void audioContextReference.current.resume();
+      return audioContextReference.current;
+    }
+    const AudioContextConstructor = resolveAudioContextConstructor();
+    if (!AudioContextConstructor) {
+      return null;
+    }
+    const audioContext = new AudioContextConstructor();
+    audioContextReference.current = audioContext;
+    void audioContext.resume();
+    return audioContext;
+  }, []);
+
+  // Deliberately not a functional state update: creating an AudioContext is a
+  // side effect, and a state updater is not allowed to have one (React invokes
+  // updaters twice in development).
+  const toggle = useCallback(() => {
+    if (isEnabled) {
+      writeAmbientSoundPreference(false);
+      setIsEnabled(false);
+      return;
+    }
+    if (!ensureAudioContext()) {
+      return;
+    }
+    writeAmbientSoundPreference(true);
+    setIsEnabled(true);
+  }, [isEnabled, ensureAudioContext]);
+
+  // A remembered "on" cannot start playback on its own. Arm the next gesture
+  // anywhere on the page instead — the visitor already opted in on this device,
+  // and the toggle shows the state either way.
+  useEffect(() => {
+    if (!isAvailable || isEnabled || !readAmbientSoundPreference()) {
+      return;
+    }
+    function startFromRememberedPreference() {
+      if (ensureAudioContext()) {
+        setIsEnabled(true);
+      }
+    }
+    for (const eventName of ACTIVATION_GESTURE_EVENTS) {
+      window.addEventListener(eventName, startFromRememberedPreference, { once: true });
+    }
+    return () => {
+      for (const eventName of ACTIVATION_GESTURE_EVENTS) {
+        window.removeEventListener(eventName, startFromRememberedPreference);
+      }
+    };
+  }, [isAvailable, isEnabled, ensureAudioContext]);
+
+  // The graph itself. Keyed by signature, so a hover re-render leaves the audio
+  // untouched and a variant change crossfades into the new world.
+  useEffect(() => {
+    if (!isEnabled || !isAvailable) {
+      return;
+    }
+    const audioContext = audioContextReference.current;
+    if (!audioContext) {
+      return;
+    }
+    const graph = createAmbientSoundscapeGraph(audioContext, latestRecipeReference.current, FADE_IN_SECONDS);
+    activeGraphReference.current = graph;
+    return () => {
+      graph.stop(FADE_OUT_SECONDS);
+      if (activeGraphReference.current === graph) {
+        activeGraphReference.current = null;
+      }
+    };
+  }, [isEnabled, isAvailable, recipeSignature]);
+
+  // Turning the sound off leaves the context open so re-enabling is instant,
+  // but an open running context keeps the device's audio path awake. Suspend it
+  // once the fade has finished.
+  useEffect(() => {
+    if (isEnabled) {
+      return;
+    }
+    const audioContext = audioContextReference.current;
+    if (!audioContext) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      if (audioContext.state === "running") {
+        void audioContext.suspend();
+      }
+    }, GRAPH_RELEASE_MILLISECONDS);
+    return () => clearTimeout(timeoutId);
+  }, [isEnabled]);
+
+  // Silence a backgrounded tab. Suspending stops the audio thread entirely,
+  // which a gain ramp does not.
+  useEffect(() => {
+    if (!isEnabled) {
+      return;
+    }
+    function applyVisibilityState() {
+      const audioContext = audioContextReference.current;
+      if (!audioContext || audioContext.state === "closed") {
+        return;
+      }
+      if (document.hidden) {
+        void audioContext.suspend();
+        return;
+      }
+      void audioContext.resume();
+    }
+    document.addEventListener("visibilitychange", applyVisibilityState);
+    return () => document.removeEventListener("visibilitychange", applyVisibilityState);
+  }, [isEnabled]);
+
+  // Release the audio hardware when the page goes away. The delay lets the
+  // graph's fade finish; closing immediately would cut it into a click.
+  useEffect(() => {
+    return () => {
+      const audioContext = audioContextReference.current;
+      audioContextReference.current = null;
+      if (!audioContext) {
+        return;
+      }
+      activeGraphReference.current?.stop(FADE_OUT_SECONDS);
+      activeGraphReference.current = null;
+      setTimeout(() => {
+        if (audioContext.state !== "closed") {
+          void audioContext.close().catch(() => {
+            // Closing races with a browser that already tore the context down.
+          });
+        }
+      }, GRAPH_RELEASE_MILLISECONDS);
+    };
+  }, []);
+
+  return { isSupported, isEnabled, toggle };
+}

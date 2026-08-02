@@ -15,6 +15,8 @@ import {
   cameraFieldOfViewFromConfig,
   universeCameraPosition
 } from "@/features/scene-renderers/universeCameraFraming";
+import { AmbientSoundToggle } from "@/components/AmbientSoundToggle";
+import { useAmbientSoundscape } from "@/features/audio/useAmbientSoundscape";
 import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
 import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
@@ -75,6 +77,13 @@ type UniverseCanvasProps = {
   devicePixelRatioRange?: [number, number];
   /** Decorative backdrops (gallery) disable WASD/arrow camera movement. */
   enableKeyboardMove?: boolean;
+  /**
+   * Offer the scene's procedural ambience. Off by default, and deliberately so:
+   * the gallery mounts several canvases at once, and the create page reseeds its
+   * preview on every form change — both would be worse with sound. Only the
+   * world and share pages, which show one settled scene, opt in.
+   */
+  enableAmbientSound?: boolean;
 };
 
 /**
@@ -89,8 +98,10 @@ export function UniverseCanvas({
   onSelectPlanet,
   preserveDrawingBuffer = false,
   devicePixelRatioRange = CANVAS_DEVICE_PIXEL_RATIO_RANGE,
-  enableKeyboardMove = true
+  enableKeyboardMove = true,
+  enableAmbientSound = false
 }: UniverseCanvasProps) {
+  const ambientSoundscape = useAmbientSoundscape(scene, enableAmbientSound);
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
   // Readiness is DERIVED from the remount key instead of reset in an effect:
@@ -217,11 +228,23 @@ export function UniverseCanvas({
         </div>
       ) : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-lowest/65 to-transparent" />
-      {enableKeyboardMove && isSceneReady ? (
-        <div className="pointer-events-none absolute bottom-[68px] right-4 z-10 hidden rounded-md border border-white/10 bg-black/50 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/50 backdrop-blur sm:block">
-          WASD / arrows to move · drag to orbit · scroll to zoom
-        </div>
-      ) : null}
+      {/* Bottom-right cluster. One positioned container rather than two: the
+          sound toggle stacks above the movement hint, and the hint is hidden on
+          phones, so two absolute boxes would leave a gap on mobile. */}
+      <div className="pointer-events-none absolute bottom-[68px] right-4 z-10 flex flex-col items-end gap-2">
+        {enableAmbientSound && isSceneReady ? (
+          <AmbientSoundToggle
+            isEnabled={ambientSoundscape.isEnabled}
+            isSupported={ambientSoundscape.isSupported}
+            onToggle={ambientSoundscape.toggle}
+          />
+        ) : null}
+        {enableKeyboardMove && isSceneReady ? (
+          <p className="hidden rounded-md border border-white/10 bg-black/50 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/50 backdrop-blur sm:block">
+            WASD / arrows to move · drag to orbit · scroll to zoom
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
