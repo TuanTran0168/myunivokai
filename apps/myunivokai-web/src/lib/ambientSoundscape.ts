@@ -37,6 +37,45 @@ import type { SceneConfig } from "./types";
 export type AmbientWaveform = "sine" | "triangle";
 export type AmbientBedFilterType = "lowpass" | "bandpass";
 
+/**
+ * Timbre of the melodic layer. Each one is a different small synth in the graph
+ * module, not a different setting on one synth — a bell and a plucked string
+ * differ in their harmonic content and their envelope, not in their filter
+ * cutoff.
+ */
+export type AmbientInstrument = "bell" | "glass" | "pluck" | "marimba";
+
+export type AmbientMelodyRecipe = {
+  instrument: AmbientInstrument;
+  /** Semitone offsets of one octave of the scale, from the melodic root. */
+  scaleSemitones: number[];
+  rootFrequencyHertz: number;
+  octaveCount: number;
+  /** Notes arrive at a rolled gap inside this range — never on a grid. */
+  minimumGapSeconds: number;
+  maximumGapSeconds: number;
+  decaySeconds: number;
+  gain: number;
+  /** Probability a slot plays a second note just behind the first. */
+  graceNoteChance: number;
+};
+
+export type AmbientChordProgressionRecipe = {
+  /** Semitone offsets applied to the pad root, cycled in order. */
+  rootOffsetsSemitones: number[];
+  changeIntervalSeconds: number;
+  /** How long the pad glides between chords. Long, so it reads as drift. */
+  glideSeconds: number;
+};
+
+export type AmbientSpaceRecipe = {
+  reverbDecaySeconds: number;
+  reverbWetMix: number;
+  delayTimeSeconds: number;
+  delayFeedback: number;
+  delayMix: number;
+};
+
 export type AmbientDroneVoiceRecipe = {
   frequencyHertz: number;
   waveform: AmbientWaveform;
@@ -66,6 +105,14 @@ export type AmbientSoundscapeRecipe = {
   bedSweepDepthHertz: number;
   /** Seed for the looping noise buffer, so even the hiss is reproducible. */
   bedNoiseSeed: string;
+  /** The layer that makes this music rather than a drone. */
+  melody: AmbientMelodyRecipe;
+  /** Slow harmonic movement under it, so the pad is not one chord forever. */
+  chordProgression: AmbientChordProgressionRecipe;
+  /** Reverb and delay. Without these the synths read as clinical and dry. */
+  space: AmbientSpaceRecipe;
+  /** Seed for the reverb impulse response and the note scheduler. */
+  performanceSeed: string;
 };
 
 const AMBIENT_AUDIO_SEED_SUFFIX = "-ambient-audio";
@@ -127,8 +174,10 @@ const DRONE_INTERVAL_STACKS_BY_VOICE_COUNT: Record<number, number[][]> = {
   ]
 };
 
-// Upper partials carry less weight, or the pad turns into a whistle.
-const DRONE_BASE_VOICE_GAIN = 0.5;
+// Upper partials carry less weight, or the pad turns into a whistle. The base
+// level sits well under half: the pad is the floor the melody stands on, and it
+// used to be the whole piece, which is exactly why it read as a drone.
+const DRONE_BASE_VOICE_GAIN = 0.22;
 const DRONE_VOICE_GAIN_FALLOFF_PER_INDEX = 0.85;
 const MAXIMUM_DRONE_DETUNE_CENTS = 7;
 const MINIMUM_BREATH_RATE_HERTZ = 0.025;
@@ -141,7 +190,7 @@ const MAXIMUM_DRONE_FREQUENCY_HERTZ = 2000;
 const MINIMUM_FILTER_CUTOFF_HERTZ = 90;
 const MAXIMUM_FILTER_CUTOFF_HERTZ = 6000;
 const MINIMUM_BED_GAIN = 0;
-const MAXIMUM_BED_GAIN = 0.35;
+const MAXIMUM_BED_GAIN = 0.16;
 const MINIMUM_FILTER_QUALITY = 0.2;
 const MAXIMUM_FILTER_QUALITY = 4;
 const MINIMUM_SWEEP_RATE_HERTZ = 0.01;
@@ -172,7 +221,7 @@ const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
     rootFrequencyHertz: 110, // A2
     waveform: "sine",
     droneFilterCutoffHertz: 1250,
-    bedGain: 0.09,
+    bedGain: 0.055,
     bedFilterType: "lowpass",
     bedFilterFrequencyHertz: 700,
     bedFilterQuality: 0.6,
@@ -183,7 +232,7 @@ const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
     rootFrequencyHertz: 98, // G2
     waveform: "sine",
     droneFilterCutoffHertz: 1050,
-    bedGain: 0.1,
+    bedGain: 0.06,
     bedFilterType: "lowpass",
     bedFilterFrequencyHertz: 600,
     bedFilterQuality: 0.5,
@@ -194,7 +243,7 @@ const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
     rootFrequencyHertz: 146.83, // D3
     waveform: "triangle",
     droneFilterCutoffHertz: 2400,
-    bedGain: 0.07,
+    bedGain: 0.042,
     bedFilterType: "lowpass",
     bedFilterFrequencyHertz: 1100,
     bedFilterQuality: 0.9,
@@ -205,7 +254,7 @@ const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
     rootFrequencyHertz: 130.81, // C3
     waveform: "sine",
     droneFilterCutoffHertz: 1700,
-    bedGain: 0.095,
+    bedGain: 0.058,
     bedFilterType: "lowpass",
     bedFilterFrequencyHertz: 900,
     bedFilterQuality: 0.7,
@@ -216,7 +265,7 @@ const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
     rootFrequencyHertz: 123.47, // B2
     waveform: "triangle",
     droneFilterCutoffHertz: 2000,
-    bedGain: 0.09,
+    bedGain: 0.055,
     bedFilterType: "lowpass",
     bedFilterFrequencyHertz: 850,
     bedFilterQuality: 1.1,
@@ -234,7 +283,7 @@ const FOREST_BASE_CHARACTER: SoundscapeCharacter = {
   rootFrequencyHertz: 146.83, // D3
   waveform: "triangle",
   droneFilterCutoffHertz: 2000,
-  bedGain: 0.16,
+  bedGain: 0.085,
   bedFilterType: "bandpass",
   bedFilterFrequencyHertz: 900,
   bedFilterQuality: 0.9,
@@ -263,7 +312,10 @@ const WEATHER_BED_MODIFIERS: Record<string, WeatherBedModifier> = {
   clear: NEUTRAL_WEATHER_BED_MODIFIER,
   sunRays: { gainMultiplier: 0.85, frequencyMultiplier: 1.05, qualityMultiplier: 1.1, sweepRateMultiplier: 0.85 },
   overcast: { gainMultiplier: 1.15, frequencyMultiplier: 0.8, qualityMultiplier: 0.75, sweepRateMultiplier: 0.9 },
-  rain: { gainMultiplier: 1.9, frequencyMultiplier: 1.7, qualityMultiplier: 0.4, sweepRateMultiplier: 1.5 },
+  // Rain opens the bed, but measured at frequencyMultiplier 1.7 with a Q of
+  // 0.4 it was effectively white noise: 52% of all energy above 1200 Hz,
+  // burying the music it was supposed to sit under.
+  rain: { gainMultiplier: 1.25, frequencyMultiplier: 1.3, qualityMultiplier: 0.8, sweepRateMultiplier: 1.5 },
   snow: { gainMultiplier: 0.7, frequencyMultiplier: 0.6, qualityMultiplier: 0.6, sweepRateMultiplier: 0.55 }
 };
 
@@ -308,6 +360,125 @@ const MINIMUM_ENERGY_CUTOFF_MULTIPLIER = 0.75;
 const ENERGY_CUTOFF_MULTIPLIER_SPREAD = 0.6;
 const MINIMUM_ENERGY_BREATH_MULTIPLIER = 0.7;
 const ENERGY_BREATH_MULTIPLIER_SPREAD = 0.8;
+
+// --- The melodic layer -------------------------------------------------------
+//
+// A sustained chord with no events in it is a drone, and a drone in a minor
+// register is a funeral. What turns this into music is the same thing every
+// generative-ambient system does: a sparse stream of short notes over the pad,
+// drawn from a scale, with a long reverb tail holding them together.
+//
+// Scales are pentatonic or hexatonic on purpose. With five or six notes and no
+// semitone clashes, notes picked in any order still sound consonant — which is
+// what makes an unattended random generator safe to listen to for an hour. The
+// major seventh is dropped from the modal scales for the same reason.
+
+const SEMITONES_PER_OCTAVE = 12;
+
+const SCALE_SEMITONES: Record<string, number[]> = {
+  majorPentatonic: [0, 2, 4, 7, 9], // open, warm, unambiguously bright
+  minorPentatonic: [0, 3, 5, 7, 10], // introspective without being mournful
+  kumoi: [0, 2, 3, 7, 9], // Japanese; still, spacious, a little wistful
+  lydian: [0, 2, 4, 6, 7, 9], // raised fourth — wonder, distance, weightlessness
+  dorian: [0, 2, 3, 5, 7, 9] // gentle melancholy that still resolves upward
+};
+
+const DEFAULT_SCALE_KEY = "majorPentatonic";
+
+// Pad root movement, in semitones. Small intervals so the pad never leaves its
+// register, and every progression returns home.
+const CHORD_PROGRESSIONS: number[][] = [
+  [0, -3, -5, -3], // down to the relative minor and back
+  [0, 2, -3, -5], // step up, then a long settle downward
+  [0, -5, -7, -5], // fourth, fifth, fourth — plainly tonal
+  [0, 3, 5, 3] // upward and open
+];
+
+const MINIMUM_CHORD_CHANGE_SECONDS = 18;
+const CHORD_CHANGE_SPREAD_SECONDS = 16;
+// The glide is most of the interval on purpose: the pad should never be heard
+// arriving at a chord, only found already in one.
+const CHORD_GLIDE_RATIO = 0.55;
+
+// The melodic root sits two octaves above the pad, which is where "tone cao"
+// actually lives — 400-1600 Hz, the band a laptop speaker reproduces best.
+const MELODY_OCTAVES_ABOVE_PAD = 2;
+const MELODY_OCTAVE_COUNT = 2;
+const MAXIMUM_MELODY_ROOT_HERTZ = 700;
+
+const MINIMUM_NOTE_GAP_SECONDS = 1.4;
+const NOTE_GAP_SPREAD_SECONDS = 2.2;
+// High-energy worlds play more often; calm ones leave more air.
+const ENERGY_NOTE_GAP_MULTIPLIER_AT_ZERO = 1.6;
+const ENERGY_NOTE_GAP_MULTIPLIER_SPREAD = -0.9;
+const MINIMUM_GRACE_NOTE_CHANCE = 0.12;
+const GRACE_NOTE_CHANCE_SPREAD = 0.25;
+
+type InstrumentCharacter = {
+  instrument: AmbientInstrument;
+  decaySeconds: number;
+  gain: number;
+};
+
+const INSTRUMENT_CHARACTERS: Record<AmbientInstrument, InstrumentCharacter> = {
+  bell: { instrument: "bell", decaySeconds: 4.5, gain: 0.52 },
+  glass: { instrument: "glass", decaySeconds: 6, gain: 0.46 },
+  pluck: { instrument: "pluck", decaySeconds: 2.4, gain: 0.5 },
+  marimba: { instrument: "marimba", decaySeconds: 1.6, gain: 0.55 }
+};
+
+type MelodicIdentity = { instrument: AmbientInstrument; scaleKey: string };
+
+// Universe: the theme already decided the visual character, so it decides the
+// instrument and the mode too.
+const UNIVERSE_MELODIC_IDENTITY_BY_THEME: Record<string, MelodicIdentity> = {
+  "cosmic-galaxy": { instrument: "bell", scaleKey: "majorPentatonic" },
+  nebula: { instrument: "glass", scaleKey: "kumoi" },
+  crystal: { instrument: "glass", scaleKey: "lydian" },
+  aurora: { instrument: "bell", scaleKey: "lydian" },
+  "cyber-orbit": { instrument: "pluck", scaleKey: "minorPentatonic" }
+};
+
+const DEFAULT_UNIVERSE_MELODIC_IDENTITY: MelodicIdentity = { instrument: "bell", scaleKey: "majorPentatonic" };
+
+// Forest: season sets the mode the way it sets the foliage, and the weather
+// decides whether the notes ring out or are struck dry.
+const FOREST_SCALE_KEY_BY_SEASON: Record<string, string> = {
+  spring: "majorPentatonic",
+  summer: "majorPentatonic",
+  autumn: "dorian",
+  winter: "kumoi"
+};
+
+const FOREST_INSTRUMENT_BY_WEATHER: Record<string, AmbientInstrument> = {
+  clear: "marimba",
+  sunRays: "marimba",
+  overcast: "pluck",
+  rain: "pluck",
+  snow: "glass"
+};
+
+const DEFAULT_FOREST_INSTRUMENT: AmbientInstrument = "marimba";
+
+// --- Space -------------------------------------------------------------------
+//
+// The single biggest reason the first version sounded hard and clinical: it had
+// none. Dry synthesis has no room around it, and an ear reads that as cheap.
+// Every ambient reference applies a long reverb or delay so notes overlap into
+// each other rather than ending.
+
+const MINIMUM_REVERB_DECAY_SECONDS = 2.6;
+const REVERB_DECAY_SPREAD_SECONDS = 2.8;
+const MINIMUM_REVERB_WET_MIX = 0.4;
+const REVERB_WET_MIX_SPREAD = 0.22;
+const MINIMUM_DELAY_TIME_SECONDS = 0.28;
+const DELAY_TIME_SPREAD_SECONDS = 0.34;
+const MINIMUM_DELAY_FEEDBACK = 0.24;
+const DELAY_FEEDBACK_SPREAD = 0.2;
+const MINIMUM_DELAY_MIX = 0.16;
+const DELAY_MIX_SPREAD = 0.16;
+
+const PERFORMANCE_SEED_SUFFIX = "-ambient-performance";
 
 function clampToRange(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) {
@@ -413,6 +584,71 @@ function buildDroneVoices(
   });
 }
 
+function resolveMelodicIdentity(scene: SceneConfig, isForest: boolean): MelodicIdentity {
+  if (!isForest) {
+    const theme = typeof scene.theme === "string" ? scene.theme : "";
+    return UNIVERSE_MELODIC_IDENTITY_BY_THEME[theme] ?? DEFAULT_UNIVERSE_MELODIC_IDENTITY;
+  }
+  const seasonKind = typeof scene.season?.kind === "string" ? scene.season.kind : "";
+  const weatherKind = typeof scene.weather?.kind === "string" ? scene.weather.kind : "";
+  return {
+    instrument: FOREST_INSTRUMENT_BY_WEATHER[weatherKind] ?? DEFAULT_FOREST_INSTRUMENT,
+    scaleKey: FOREST_SCALE_KEY_BY_SEASON[seasonKind] ?? DEFAULT_SCALE_KEY
+  };
+}
+
+function buildMelodyRecipe(
+  padRootFrequencyHertz: number,
+  identity: MelodicIdentity,
+  energyRatio: number,
+  nextRandomValue: () => number
+): AmbientMelodyRecipe {
+  const instrumentCharacter = INSTRUMENT_CHARACTERS[identity.instrument];
+  const rootFrequencyHertz = Math.min(
+    padRootFrequencyHertz * Math.pow(2, MELODY_OCTAVES_ABOVE_PAD),
+    MAXIMUM_MELODY_ROOT_HERTZ
+  );
+  const noteGapMultiplier = ENERGY_NOTE_GAP_MULTIPLIER_AT_ZERO + energyRatio * ENERGY_NOTE_GAP_MULTIPLIER_SPREAD;
+  const minimumGapSeconds = MINIMUM_NOTE_GAP_SECONDS * noteGapMultiplier;
+  return {
+    instrument: identity.instrument,
+    scaleSemitones: SCALE_SEMITONES[identity.scaleKey] ?? SCALE_SEMITONES[DEFAULT_SCALE_KEY],
+    rootFrequencyHertz,
+    octaveCount: MELODY_OCTAVE_COUNT,
+    minimumGapSeconds,
+    maximumGapSeconds: minimumGapSeconds + NOTE_GAP_SPREAD_SECONDS * noteGapMultiplier,
+    decaySeconds: instrumentCharacter.decaySeconds,
+    gain: instrumentCharacter.gain,
+    graceNoteChance: MINIMUM_GRACE_NOTE_CHANCE + nextRandomValue() * GRACE_NOTE_CHANCE_SPREAD
+  };
+}
+
+function buildChordProgressionRecipe(nextRandomValue: () => number): AmbientChordProgressionRecipe {
+  const progressionIndex = Math.floor(nextRandomValue() * CHORD_PROGRESSIONS.length);
+  const changeIntervalSeconds =
+    MINIMUM_CHORD_CHANGE_SECONDS + nextRandomValue() * CHORD_CHANGE_SPREAD_SECONDS;
+  return {
+    rootOffsetsSemitones: CHORD_PROGRESSIONS[progressionIndex] ?? CHORD_PROGRESSIONS[0],
+    changeIntervalSeconds,
+    glideSeconds: changeIntervalSeconds * CHORD_GLIDE_RATIO
+  };
+}
+
+function buildSpaceRecipe(nextRandomValue: () => number): AmbientSpaceRecipe {
+  return {
+    reverbDecaySeconds: MINIMUM_REVERB_DECAY_SECONDS + nextRandomValue() * REVERB_DECAY_SPREAD_SECONDS,
+    reverbWetMix: MINIMUM_REVERB_WET_MIX + nextRandomValue() * REVERB_WET_MIX_SPREAD,
+    delayTimeSeconds: MINIMUM_DELAY_TIME_SECONDS + nextRandomValue() * DELAY_TIME_SPREAD_SECONDS,
+    delayFeedback: MINIMUM_DELAY_FEEDBACK + nextRandomValue() * DELAY_FEEDBACK_SPREAD,
+    delayMix: MINIMUM_DELAY_MIX + nextRandomValue() * DELAY_MIX_SPREAD
+  };
+}
+
+/** Frequency ratio for a semitone offset. Exported for the graph's scheduler. */
+export function semitoneRatio(semitones: number): number {
+  return Math.pow(2, semitones / SEMITONES_PER_OCTAVE);
+}
+
 /**
  * Short stable string identifying the soundscape a config asks for. Used as the
  * effect dependency that rebuilds the audio graph: the recipe object is rebuilt
@@ -501,6 +737,15 @@ export function buildAmbientSoundscapeRecipe(scene?: SceneConfig): AmbientSounds
     bedFilterQuality: clampToRange(character.bedFilterQuality, MINIMUM_FILTER_QUALITY, MAXIMUM_FILTER_QUALITY),
     bedSweepRateHertz: clampToRange(character.bedSweepRateHertz, MINIMUM_SWEEP_RATE_HERTZ, MAXIMUM_SWEEP_RATE_HERTZ),
     bedSweepDepthHertz: character.bedSweepDepthHertz,
-    bedNoiseSeed: `${seed}${BED_NOISE_SEED_SUFFIX}`
+    bedNoiseSeed: `${seed}${BED_NOISE_SEED_SUFFIX}`,
+    melody: buildMelodyRecipe(
+      jitteredCharacter.rootFrequencyHertz,
+      resolveMelodicIdentity(resolvedScene, isForest),
+      energyRatio,
+      nextRandomValue
+    ),
+    chordProgression: buildChordProgressionRecipe(nextRandomValue),
+    space: buildSpaceRecipe(nextRandomValue),
+    performanceSeed: `${seed}${PERFORMANCE_SEED_SUFFIX}`
   };
 }

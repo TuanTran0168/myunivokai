@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildAmbientSoundscapeRecipe } from "@/lib/ambientSoundscape";
 import type { SceneConfig } from "@/lib/types";
 import { createAmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
@@ -8,10 +8,15 @@ import { createAmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
 // forgetting to start a source, throws nothing and simply makes no sound. These
 // tests run the real graph builder against a fake context and assert the
 // topology, because a node environment cannot assert on what it hears.
+//
+// What it sounds like is a separate question these cannot answer. That one is
+// settled by rendering the real graph offline to WAV — see
+// notes/fe/ambient-audio-mechanism.md.
 
 const FAKE_SAMPLE_RATE = 48000;
 const FADE_IN_SECONDS = 2.5;
 const FADE_OUT_SECONDS = 1.2;
+const SCHEDULER_INTERVAL_MILLISECONDS = 250;
 
 type ScheduledCall = { method: string; value: number; time: number };
 
@@ -30,6 +35,10 @@ class FakeAudioParam {
 
   linearRampToValueAtTime(value: number, time: number) {
     this.calls.push({ method: "linearRampToValueAtTime", value, time });
+  }
+
+  exponentialRampToValueAtTime(value: number, time: number) {
+    this.calls.push({ method: "exponentialRampToValueAtTime", value, time });
   }
 
   cancelScheduledValues(time: number) {
@@ -61,6 +70,18 @@ class FakeBiquadFilterNode extends FakeAudioNode {
   readonly Q = new FakeAudioParam(1);
 }
 
+class FakeDelayNode extends FakeAudioNode {
+  readonly delayTime = new FakeAudioParam(0);
+}
+
+class FakeStereoPannerNode extends FakeAudioNode {
+  readonly pan = new FakeAudioParam(0);
+}
+
+class FakeConvolverNode extends FakeAudioNode {
+  buffer: FakeAudioBuffer | null = null;
+}
+
 class FakeSourceNode extends FakeAudioNode {
   startTimes: number[] = [];
   stopTimes: number[] = [];
@@ -82,9 +103,14 @@ class FakeOscillatorNode extends FakeSourceNode {
 }
 
 class FakeAudioBufferSourceNode extends FakeSourceNode {
-  buffer: { channels: Float32Array[] } | null = null;
+  buffer: FakeAudioBuffer | null = null;
   loop = false;
 }
+
+type FakeAudioBuffer = {
+  channels: Float32Array[];
+  getChannelData: (channelIndex: number) => Float32Array;
+};
 
 class FakeAudioContext {
   currentTime = 0;
@@ -94,6 +120,9 @@ class FakeAudioContext {
   readonly filterNodes: FakeBiquadFilterNode[] = [];
   readonly oscillatorNodes: FakeOscillatorNode[] = [];
   readonly bufferSourceNodes: FakeAudioBufferSourceNode[] = [];
+  readonly convolverNodes: FakeConvolverNode[] = [];
+  readonly delayNodes: FakeDelayNode[] = [];
+  readonly pannerNodes: FakeStereoPannerNode[] = [];
 
   createGain() {
     const node = new FakeGainNode();
@@ -119,12 +148,27 @@ class FakeAudioContext {
     return node;
   }
 
-  createBuffer(channelCount: number, frameCount: number) {
+  createConvolver() {
+    const node = new FakeConvolverNode();
+    this.convolverNodes.push(node);
+    return node;
+  }
+
+  createDelay() {
+    const node = new FakeDelayNode();
+    this.delayNodes.push(node);
+    return node;
+  }
+
+  createStereoPanner() {
+    const node = new FakeStereoPannerNode();
+    this.pannerNodes.push(node);
+    return node;
+  }
+
+  createBuffer(channelCount: number, frameCount: number): FakeAudioBuffer {
     const channels = Array.from({ length: channelCount }, () => new Float32Array(frameCount));
-    return {
-      channels,
-      getChannelData: (channelIndex: number) => channels[channelIndex]
-    };
+    return { channels, getChannelData: (channelIndex: number) => channels[channelIndex] };
   }
 }
 
@@ -139,37 +183,39 @@ const FOREST_SCENE: SceneConfig = {
 function buildGraphAgainstFakeContext(scene: SceneConfig) {
   const audioContext = new FakeAudioContext();
   const recipe = buildAmbientSoundscapeRecipe(scene);
-  const graph = createAmbientSoundscapeGraph(
-    audioContext as unknown as AudioContext,
-    recipe,
-    FADE_IN_SECONDS
-  );
-  return { audioContext, recipe, graph };
+  const graph = createAmbientSoundscapeGraph(audioContext as unknown as AudioContext, recipe, FADE_IN_SECONDS);
+  const padOscillatorCount = recipe.droneVoices.length * 2 + 1;
+  return { audioContext, recipe, graph, padOscillatorCount };
 }
 
-describe("createAmbientSoundscapeGraph topology", () => {
-  it("starts every source it creates", () => {
-    const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    const allSources = [...audioContext.oscillatorNodes, ...audioContext.bufferSourceNodes];
+function findMasterGain(audioContext: FakeAudioContext) {
+  return audioContext.gainNodes.find((gainNode) => gainNode.connectedTo.includes(audioContext.destination));
+}
 
-    expect(allSources.length).toBeGreaterThan(0);
-    for (const source of allSources) {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("sustained layers", () => {
+  it("starts every sustained source it creates", () => {
+    const { audioContext, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const sustainedSources = [...audioContext.oscillatorNodes.slice(0, padOscillatorCount), ...audioContext.bufferSourceNodes];
+
+    for (const source of sustainedSources) {
       expect(source.startTimes).toHaveLength(1);
     }
   });
 
-  it("creates one drone oscillator and one breath LFO per voice, plus the bed sweep", () => {
-    const { audioContext, recipe } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    const expectedOscillatorCount = recipe.droneVoices.length * 2 + 1;
+  it("creates one pad oscillator and one breath LFO per voice, plus the bed sweep", () => {
+    const { audioContext, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
 
-    expect(audioContext.oscillatorNodes).toHaveLength(expectedOscillatorCount);
+    // No notes are due yet, so the pad is all there is at construction.
+    expect(audioContext.oscillatorNodes).toHaveLength(padOscillatorCount);
     expect(audioContext.bufferSourceNodes).toHaveLength(1);
   });
 
   it("routes each modulator into an AudioParam rather than into a node", () => {
     const { audioContext, recipe } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    // Depth gains are the last hop before a param. Every one of them must land
-    // on an AudioParam — this is the mistake that produces silence.
     const depthGainTargets = audioContext.gainNodes
       .flatMap((gainNode) => gainNode.connectedTo)
       .filter((target) => target instanceof FakeAudioParam);
@@ -179,18 +225,16 @@ describe("createAmbientSoundscapeGraph topology", () => {
 
   it("reaches the destination through exactly one master gain", () => {
     const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    const nodesConnectedToDestination = audioContext.gainNodes.filter((gainNode) =>
+    const mastersConnectedToDestination = audioContext.gainNodes.filter((gainNode) =>
       gainNode.connectedTo.includes(audioContext.destination)
     );
 
-    expect(nodesConnectedToDestination).toHaveLength(1);
+    expect(mastersConnectedToDestination).toHaveLength(1);
   });
 
   it("fades in from silence to the recipe level", () => {
     const { audioContext, recipe } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    const masterGain = audioContext.gainNodes.find((gainNode) =>
-      gainNode.connectedTo.includes(audioContext.destination)
-    );
+    const masterGain = findMasterGain(audioContext);
 
     expect(masterGain?.gain.calls[0]).toEqual({ method: "setValueAtTime", value: 0, time: 0 });
     expect(masterGain?.gain.calls[1]).toEqual({
@@ -203,13 +247,12 @@ describe("createAmbientSoundscapeGraph topology", () => {
   it("loops a deterministic noise buffer for the bed", () => {
     const first = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
     const second = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    const firstBuffer = first.audioContext.bufferSourceNodes[0];
-    const secondBuffer = second.audioContext.bufferSourceNodes[0];
+    const firstBed = first.audioContext.bufferSourceNodes[0];
+    const secondBed = second.audioContext.bufferSourceNodes[0];
 
-    expect(firstBuffer.loop).toBe(true);
-    expect(firstBuffer.buffer?.channels[0]).toHaveLength(FAKE_SAMPLE_RATE * 4);
-    expect(Array.from(firstBuffer.buffer?.channels[0].slice(0, 32) ?? [])).toEqual(
-      Array.from(secondBuffer.buffer?.channels[0].slice(0, 32) ?? [])
+    expect(firstBed.loop).toBe(true);
+    expect(Array.from(firstBed.buffer?.channels[0].slice(0, 32) ?? [])).toEqual(
+      Array.from(secondBed.buffer?.channels[0].slice(0, 32) ?? [])
     );
   });
 
@@ -227,20 +270,142 @@ describe("createAmbientSoundscapeGraph topology", () => {
   });
 });
 
-describe("createAmbientSoundscapeGraph teardown", () => {
-  it("fades out and stops every source at the end of the fade", () => {
-    const { audioContext, graph } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
-    audioContext.currentTime = 10;
-    graph.stop(FADE_OUT_SECONDS);
-    const allSources = [...audioContext.oscillatorNodes, ...audioContext.bufferSourceNodes];
-    const masterGain = audioContext.gainNodes.find((gainNode) =>
-      gainNode.connectedTo.includes(audioContext.destination)
+describe("space", () => {
+  it("builds a stereo reverb tail as long as the recipe asks for", () => {
+    const { audioContext, recipe } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const impulseResponse = audioContext.convolverNodes[0]?.buffer;
+
+    expect(audioContext.convolverNodes).toHaveLength(1);
+    expect(impulseResponse?.channels).toHaveLength(2);
+    expect(impulseResponse?.channels[0]).toHaveLength(
+      Math.floor(FAKE_SAMPLE_RATE * recipe.space.reverbDecaySeconds)
+    );
+  });
+
+  it("decays the impulse response instead of leaving flat noise", () => {
+    const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const tail = audioContext.convolverNodes[0]?.buffer?.channels[0];
+    function averageMagnitude(samples: Float32Array): number {
+      let total = 0;
+      for (const sample of samples) {
+        total += Math.abs(sample);
+      }
+      return total / samples.length;
+    }
+
+    const headLevel = averageMagnitude(tail?.slice(0, 2000) ?? new Float32Array(1));
+    const tailLevel = averageMagnitude(tail?.slice(-2000) ?? new Float32Array(1));
+    expect(headLevel).toBeGreaterThan(tailLevel * 10);
+  });
+
+  it("closes the delay feedback loop back into the delay", () => {
+    const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const delayNode = audioContext.delayNodes[0];
+    // The feedback gain is the one that is BOTH a target of the delay and a
+    // source into it. Searching only for "connects into the delay" also matches
+    // the delay's input gain, which is not a loop.
+    const feedbackGain = audioContext.gainNodes.find(
+      (gainNode) => gainNode.connectedTo.includes(delayNode) && delayNode.connectedTo.includes(gainNode)
     );
 
-    for (const source of allSources) {
-      expect(source.stopTimes).toEqual([10 + FADE_OUT_SECONDS]);
+    expect(delayNode).toBeDefined();
+    expect(feedbackGain).toBeDefined();
+  });
+
+  it("keeps the noise bed out of the reverb", () => {
+    const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const convolver = audioContext.convolverNodes[0];
+    const reverbInput = audioContext.gainNodes.find((gainNode) => gainNode.connectedTo.includes(convolver));
+    // The bed gain is the one fed by the bed filter.
+    const bedFilter = audioContext.filterNodes.find((filterNode) => filterNode.type !== "lowpass" || filterNode !== audioContext.filterNodes[0]);
+    const bedGain = audioContext.gainNodes.find((gainNode) => bedFilter?.connectedTo.includes(gainNode));
+
+    expect(bedGain).toBeDefined();
+    expect(bedGain?.connectedTo).not.toContain(reverbInput);
+    expect(bedGain?.connectedTo).not.toContain(convolver);
+  });
+});
+
+describe("the melodic performance", () => {
+  it("plays no notes at the very start, then plays them once they are due", () => {
+    vi.useFakeTimers();
+    const { audioContext, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+
+    expect(audioContext.oscillatorNodes).toHaveLength(padOscillatorCount);
+
+    for (let elapsedSeconds = 0; elapsedSeconds < 20; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
     }
-    expect(masterGain?.gain.calls.at(-1)).toEqual({
+
+    expect(audioContext.oscillatorNodes.length).toBeGreaterThan(padOscillatorCount);
+    expect(audioContext.pannerNodes.length).toBeGreaterThan(0);
+  });
+
+  it("pans notes across the stereo field", () => {
+    vi.useFakeTimers();
+    const { audioContext } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    for (let elapsedSeconds = 0; elapsedSeconds < 30; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
+    }
+    const panValues = audioContext.pannerNodes.map((panner) => panner.pan.value);
+
+    expect(new Set(panValues).size).toBeGreaterThan(1);
+    for (const panValue of panValues) {
+      expect(Math.abs(panValue)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("glides the pad to a new chord instead of jumping", () => {
+    vi.useFakeTimers();
+    const { audioContext, recipe, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const untilSeconds = recipe.chordProgression.changeIntervalSeconds + 2;
+    for (let elapsedSeconds = 0; elapsedSeconds < untilSeconds; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
+    }
+    const padOscillators = audioContext.oscillatorNodes.slice(0, padOscillatorCount);
+    const glideCalls = padOscillators.flatMap((oscillator) =>
+      oscillator.frequency.calls.filter((call) => call.method === "linearRampToValueAtTime")
+    );
+
+    expect(glideCalls.length).toBeGreaterThan(0);
+  });
+
+  it("stops scheduling new notes once stopped", () => {
+    vi.useFakeTimers();
+    const { audioContext, graph } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    for (let elapsedSeconds = 0; elapsedSeconds < 12; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
+    }
+    graph.stop(FADE_OUT_SECONDS);
+    const oscillatorCountAtStop = audioContext.oscillatorNodes.length;
+
+    for (let elapsedSeconds = 12; elapsedSeconds < 30; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
+    }
+
+    expect(audioContext.oscillatorNodes).toHaveLength(oscillatorCountAtStop);
+  });
+});
+
+describe("teardown", () => {
+  it("fades out and stops every sustained source at the end of the fade", () => {
+    const { audioContext, graph, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    audioContext.currentTime = 10;
+    graph.stop(FADE_OUT_SECONDS);
+    const sustainedSources = [
+      ...audioContext.oscillatorNodes.slice(0, padOscillatorCount),
+      ...audioContext.bufferSourceNodes
+    ];
+
+    for (const source of sustainedSources) {
+      expect(source.stopTimes).toContain(10 + FADE_OUT_SECONDS);
+    }
+    expect(findMasterGain(audioContext)?.gain.calls.at(-1)).toEqual({
       method: "linearRampToValueAtTime",
       value: 0,
       time: 10 + FADE_OUT_SECONDS
@@ -251,35 +416,46 @@ describe("createAmbientSoundscapeGraph teardown", () => {
     const { audioContext, graph } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
     audioContext.currentTime = 10;
     graph.stop(FADE_OUT_SECONDS);
-    const masterGain = audioContext.gainNodes.find((gainNode) =>
-      gainNode.connectedTo.includes(audioContext.destination)
-    );
-    const methodOrder = masterGain?.gain.calls.slice(-3).map((call) => call.method);
+    const methodOrder = findMasterGain(audioContext)?.gain.calls.slice(-3).map((call) => call.method);
 
     expect(methodOrder).toEqual(["cancelScheduledValues", "setValueAtTime", "linearRampToValueAtTime"]);
   });
 
-  it("releases the graph from the destination once the last source ends", () => {
+  it("cuts notes still ringing when the world goes away", () => {
+    vi.useFakeTimers();
+    const { audioContext, graph, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    for (let elapsedSeconds = 0; elapsedSeconds < 12; elapsedSeconds += 0.25) {
+      audioContext.currentTime = elapsedSeconds;
+      vi.advanceTimersByTime(SCHEDULER_INTERVAL_MILLISECONDS);
+    }
+    const noteSources = audioContext.oscillatorNodes.slice(padOscillatorCount);
+    graph.stop(FADE_OUT_SECONDS);
+
+    expect(noteSources.length).toBeGreaterThan(0);
+    for (const noteSource of noteSources) {
+      expect(noteSource.stopTimes).toContain(audioContext.currentTime + FADE_OUT_SECONDS);
+    }
+  });
+
+  it("releases the graph from the destination once the last sustained source ends", () => {
     const { audioContext, graph } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
     graph.stop(FADE_OUT_SECONDS);
-    const masterGain = audioContext.gainNodes.find((gainNode) =>
-      gainNode.connectedTo.includes(audioContext.destination)
-    );
-    const endedSources = [...audioContext.oscillatorNodes, ...audioContext.bufferSourceNodes].filter(
+    const masterGain = findMasterGain(audioContext);
+    const releaseSource = [...audioContext.oscillatorNodes, ...audioContext.bufferSourceNodes].find(
       (source) => source.onended !== null
     );
 
-    expect(endedSources).toHaveLength(1);
-    endedSources[0].onended?.();
+    expect(releaseSource).toBeDefined();
+    releaseSource?.onended?.();
     expect(masterGain?.disconnectCount).toBe(1);
   });
 
   it("ignores a second stop", () => {
-    const { audioContext, graph } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
+    const { audioContext, graph, padOscillatorCount } = buildGraphAgainstFakeContext(UNIVERSE_SCENE);
     graph.stop(FADE_OUT_SECONDS);
     graph.stop(FADE_OUT_SECONDS);
 
-    for (const source of audioContext.oscillatorNodes) {
+    for (const source of audioContext.oscillatorNodes.slice(0, padOscillatorCount)) {
       expect(source.stopTimes).toHaveLength(1);
     }
   });
