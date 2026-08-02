@@ -1,23 +1,34 @@
-import { isForestScene, randomFromSeed } from "./scene";
+import { isForestScene, pointsOfInterestFromScene, randomFromSeed } from "./scene";
 import type { SceneConfig } from "./types";
 
 // --- Procedural ambient soundscape recipe ------------------------------------
 //
-// The audio counterpart of the scene config: a pure numeric recipe for a drone
-// pad plus a filtered noise bed, derived from the SAME seed the visuals use.
-// Nothing here touches the Web Audio API — this module is the deterministic
-// half, unit-testable in a node environment. features/audio turns a recipe into
-// actual nodes.
+// The audio counterpart of the scene config: a drone pad plus a filtered noise
+// bed, derived from the SAME seed and the SAME DNA-shaped fields the visuals
+// use. Nothing here touches the Web Audio API — this module is the
+// deterministic half, unit-testable in a node environment. features/audio turns
+// a recipe into actual nodes.
 //
-// Two rules carried over from the scene builders:
+// Rules carried over from the scene builders:
 //
 // 1. `Math.random()` is banned. Every rolled value comes from randomFromSeed on
 //    a dedicated stream suffix, so the same world always sounds the same, and
 //    adding an audio roll can never shift a visual roll.
-// 2. Character comes from the config the backend already produced — the
-//    universe `theme`, the forest `weather`/`lighting`/`season` — not from a
-//    parallel table of moods the scene does not carry. A rainy dusk forest is
-//    audibly a rainy dusk forest.
+// 2. Character comes from the config the backend already produced — not from a
+//    parallel table. Two visitors hear different music for the same reason they
+//    see different worlds:
+//
+//      how many planets / landmarks  ->  how many voices in the chord
+//      their average energy          ->  how bright and how fast it breathes
+//      universe theme                ->  root pitch and the colour of the bed
+//      forest weather / intensity    ->  how loud and how wide the bed opens
+//      forest time of day            ->  how far the pad drops and dulls
+//      forest season                 ->  how full the chord stays
+//      postFX bloom                  ->  how open the pad filter sits
+//
+//    That is the same ProfileDNA reaching the ears that reaches the eyes: the
+//    planet count is the visitor's interests, the energy is theirs, and the
+//    theme came out of their preferred world style.
 //
 // Every output is clamped. A soundscape is played straight into someone's ears,
 // so an out-of-range config must degrade to something quiet and dull rather
@@ -45,12 +56,12 @@ export type AmbientSoundscapeRecipe = {
   droneVoices: AmbientDroneVoiceRecipe[];
   droneFilterCutoffHertz: number;
   droneFilterQuality: number;
-  /** Filtered noise under the pad: space rumble, or wind through leaves. */
+  /** Filtered noise under the pad: space air, or wind through leaves. */
   bedGain: number;
   bedFilterType: AmbientBedFilterType;
   bedFilterFrequencyHertz: number;
   bedFilterQuality: number;
-  /** Slow sweep of the bed filter — gusts in a forest, tide in space. */
+  /** Slow sweep of the bed filter — gusts in a forest, drift in space. */
   bedSweepRateHertz: number;
   bedSweepDepthHertz: number;
   /** Seed for the looping noise buffer, so even the hiss is reproducible. */
@@ -66,21 +77,55 @@ const FOREST_FAMILY_KEY = "forest";
 
 // Deliberately quiet. This plays behind a scene nobody opened for the audio;
 // it should sit under a conversation, not over one.
-const MASTER_GAIN = 0.22;
+const MASTER_GAIN = 0.28;
+
+// REGISTER — the constraint that decides whether any of this is audible at all.
+//
+// The first version of this file put the universe pad at 47-106 Hz with the
+// noise bed lowpassed to 170-320 Hz. On studio monitors that is a deep, correct
+// space rumble. On the laptop and phone speakers people actually use, which
+// roll off steeply below roughly 150 Hz, it is silence — the feature shipped
+// mute while every unit test stayed green, because they checked determinism and
+// bounds and never asked whether the output lands where a speaker can produce
+// it.
+//
+// So: roots sit at or above 98 Hz, every interval stack reaches at least an
+// octave above its root, and the noise bed is centred in the midrange where
+// even a phone speaker has output. The audibility test in ambientSoundscape.test.ts
+// is the guard that keeps it that way.
+export const SMALL_SPEAKER_PRESENCE_FLOOR_HERTZ = 180;
+export const SMALL_SPEAKER_BED_FLOOR_HERTZ = 400;
 
 const MINIMUM_DRONE_VOICE_COUNT = 3;
-const DRONE_VOICE_COUNT_SPREAD = 2;
+const MAXIMUM_DRONE_VOICE_COUNT = 5;
 
 // Harmonic ratios above the root. Fixed stacks rather than rolled intervals:
 // random ratios produce beating dissonance about as often as they produce a
 // chord, and a pad that is subtly out of tune is worse than no pad.
-const DRONE_INTERVAL_STACKS: number[][] = [
-  [1, 1.5, 2], // root, fifth, octave — open and stable
-  [1, 1.5, 2, 3], // adds the twelfth for air at the top
-  [1, 4 / 3, 2], // root, fourth, octave — suspended, unresolved
-  [1, 1.2, 1.5], // root, minor third, fifth — inward
-  [1, 1.25, 1.5, 2] // root, major third, fifth, octave — warm
-];
+//
+// Keyed by voice count rather than truncated to it. Slicing a five-note stack
+// down to three used to drop [1, 1.25, 1.5, 2, 3] to [1, 1.25, 1.5], whose top
+// note is a fifth rather than an octave — which pushed the whole chord back
+// under the small-speaker floor. Every stack here tops out at 2x or above, so
+// the chord keeps its presence at any width.
+const DRONE_INTERVAL_STACKS_BY_VOICE_COUNT: Record<number, number[][]> = {
+  3: [
+    [1, 1.5, 2], // root, fifth, octave — open and stable
+    [1, 4 / 3, 2], // root, fourth, octave — suspended
+    [1, 1.2, 2] // minor third then octave — inward
+  ],
+  4: [
+    [1, 1.5, 2, 3], // adds the twelfth for air at the top
+    [1, 4 / 3, 2, 8 / 3], // fourth, octave, eleventh
+    [1, 1.2, 1.8, 2.4], // minor third and its octave
+    [1, 1.25, 1.5, 2] // major triad plus octave — warm
+  ],
+  5: [
+    [1, 1.25, 1.5, 2, 3], // major triad, octave, twelfth — full
+    [1, 1.5, 2, 2.5, 3], // fifth-led stack, evenly spread
+    [1, 4 / 3, 2, 8 / 3, 4] // suspended, two octaves wide
+  ]
+};
 
 // Upper partials carry less weight, or the pad turns into a whistle.
 const DRONE_BASE_VOICE_GAIN = 0.5;
@@ -96,7 +141,7 @@ const MAXIMUM_DRONE_FREQUENCY_HERTZ = 2000;
 const MINIMUM_FILTER_CUTOFF_HERTZ = 90;
 const MAXIMUM_FILTER_CUTOFF_HERTZ = 6000;
 const MINIMUM_BED_GAIN = 0;
-const MAXIMUM_BED_GAIN = 0.3;
+const MAXIMUM_BED_GAIN = 0.35;
 const MINIMUM_FILTER_QUALITY = 0.2;
 const MAXIMUM_FILTER_QUALITY = 4;
 const MINIMUM_SWEEP_RATE_HERTZ = 0.01;
@@ -120,80 +165,81 @@ type SoundscapeCharacter = {
   bedSweepDepthHertz: number;
 };
 
-// Universe themes. Low sine roots and a deep lowpass bed: the reference is a
-// pressurised hull, not weather.
+// Universe themes. Sine or triangle roots in the low midrange with a wide-open
+// lowpass bed: the reference is a pressurised hull, not weather.
 const UNIVERSE_CHARACTER_BY_THEME: Record<string, SoundscapeCharacter> = {
   "cosmic-galaxy": {
-    rootFrequencyHertz: 55, // A1
+    rootFrequencyHertz: 110, // A2
     waveform: "sine",
-    droneFilterCutoffHertz: 620,
-    bedGain: 0.05,
+    droneFilterCutoffHertz: 1250,
+    bedGain: 0.09,
     bedFilterType: "lowpass",
-    bedFilterFrequencyHertz: 200,
+    bedFilterFrequencyHertz: 700,
     bedFilterQuality: 0.6,
     bedSweepRateHertz: 0.035,
-    bedSweepDepthHertz: 70
+    bedSweepDepthHertz: 220
   },
   nebula: {
-    rootFrequencyHertz: 49, // G1
+    rootFrequencyHertz: 98, // G2
     waveform: "sine",
-    droneFilterCutoffHertz: 520,
-    bedGain: 0.06,
+    droneFilterCutoffHertz: 1050,
+    bedGain: 0.1,
     bedFilterType: "lowpass",
-    bedFilterFrequencyHertz: 170,
+    bedFilterFrequencyHertz: 600,
     bedFilterQuality: 0.5,
     bedSweepRateHertz: 0.028,
-    bedSweepDepthHertz: 60
+    bedSweepDepthHertz: 190
   },
   crystal: {
-    rootFrequencyHertz: 73.42, // D2
+    rootFrequencyHertz: 146.83, // D3
     waveform: "triangle",
-    droneFilterCutoffHertz: 1400,
-    bedGain: 0.035,
+    droneFilterCutoffHertz: 2400,
+    bedGain: 0.07,
     bedFilterType: "lowpass",
-    bedFilterFrequencyHertz: 320,
+    bedFilterFrequencyHertz: 1100,
     bedFilterQuality: 0.9,
     bedSweepRateHertz: 0.05,
-    bedSweepDepthHertz: 110
+    bedSweepDepthHertz: 320
   },
   aurora: {
-    rootFrequencyHertz: 65.41, // C2
+    rootFrequencyHertz: 130.81, // C3
     waveform: "sine",
-    droneFilterCutoffHertz: 900,
-    bedGain: 0.055,
+    droneFilterCutoffHertz: 1700,
+    bedGain: 0.095,
     bedFilterType: "lowpass",
-    bedFilterFrequencyHertz: 260,
+    bedFilterFrequencyHertz: 900,
     bedFilterQuality: 0.7,
     bedSweepRateHertz: 0.04,
-    bedSweepDepthHertz: 90
+    bedSweepDepthHertz: 260
   },
   "cyber-orbit": {
-    rootFrequencyHertz: 61.74, // B1
+    rootFrequencyHertz: 123.47, // B2
     waveform: "triangle",
-    droneFilterCutoffHertz: 1100,
-    bedGain: 0.05,
+    droneFilterCutoffHertz: 2000,
+    bedGain: 0.09,
     bedFilterType: "lowpass",
-    bedFilterFrequencyHertz: 240,
+    bedFilterFrequencyHertz: 850,
     bedFilterQuality: 1.1,
     bedSweepRateHertz: 0.07,
-    bedSweepDepthHertz: 130
+    bedSweepDepthHertz: 300
   }
 };
 
 const DEFAULT_UNIVERSE_CHARACTER: SoundscapeCharacter = UNIVERSE_CHARACTER_BY_THEME["cosmic-galaxy"];
 
-// Forest base. Higher triangle root and a bandpass bed centred where wind in
-// foliage actually lives; weather and time of day bend it from here.
+// Forest base. Triangle root a fourth above the universe default, and a bandpass
+// bed centred where wind in foliage actually lives; weather and time of day bend
+// it from here.
 const FOREST_BASE_CHARACTER: SoundscapeCharacter = {
-  rootFrequencyHertz: 98, // G2
+  rootFrequencyHertz: 146.83, // D3
   waveform: "triangle",
-  droneFilterCutoffHertz: 1200,
-  bedGain: 0.12,
+  droneFilterCutoffHertz: 2000,
+  bedGain: 0.16,
   bedFilterType: "bandpass",
-  bedFilterFrequencyHertz: 760,
+  bedFilterFrequencyHertz: 900,
   bedFilterQuality: 0.9,
   bedSweepRateHertz: 0.1,
-  bedSweepDepthHertz: 260
+  bedSweepDepthHertz: 300
 };
 
 type WeatherBedModifier = {
@@ -253,6 +299,16 @@ const BLOOM_CUTOFF_INFLUENCE = 0.35;
 const MINIMUM_BLOOM_INTENSITY = 0.2;
 const MAXIMUM_BLOOM_INTENSITY = 2;
 
+// The visitor's own energy, averaged across their planets or landmarks. This is
+// the most directly personal number in the whole config, so it gets the two
+// things an ear notices first: brightness, and how fast the pad breathes.
+const NEUTRAL_POINT_ENERGY = 50;
+const MAXIMUM_POINT_ENERGY = 100;
+const MINIMUM_ENERGY_CUTOFF_MULTIPLIER = 0.75;
+const ENERGY_CUTOFF_MULTIPLIER_SPREAD = 0.6;
+const MINIMUM_ENERGY_BREATH_MULTIPLIER = 0.7;
+const ENERGY_BREATH_MULTIPLIER_SPREAD = 0.8;
+
 function clampToRange(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) {
     return minimum;
@@ -264,15 +320,34 @@ function blendTowardNeutral(modifierValue: number, blendAmount: number): number 
   return 1 + (modifierValue - 1) * blendAmount;
 }
 
+/**
+ * How many planets or landmarks the scene carries, and how energetic they are.
+ * Both come straight from the ProfileDNA: the count is how many interests and
+ * traits the visitor gave, the energy is the value the AI assigned each one.
+ */
+function resolveDnaSignals(scene: SceneConfig): { pointCount: number; averageEnergy: number } {
+  const pointsOfInterest = pointsOfInterestFromScene(scene);
+  if (pointsOfInterest.length === 0) {
+    return { pointCount: 0, averageEnergy: NEUTRAL_POINT_ENERGY };
+  }
+  const energyValues = pointsOfInterest
+    .map((pointOfInterest) => pointOfInterest.energy)
+    .filter((energy): energy is number => typeof energy === "number" && Number.isFinite(energy));
+  if (energyValues.length === 0) {
+    return { pointCount: pointsOfInterest.length, averageEnergy: NEUTRAL_POINT_ENERGY };
+  }
+  const energyTotal = energyValues.reduce((runningTotal, energy) => runningTotal + energy, 0);
+  return {
+    pointCount: pointsOfInterest.length,
+    averageEnergy: clampToRange(energyTotal / energyValues.length, 0, MAXIMUM_POINT_ENERGY)
+  };
+}
+
 function resolveWeatherBedModifier(scene: SceneConfig): WeatherBedModifier {
   const weatherKind = typeof scene.weather?.kind === "string" ? scene.weather.kind : "";
   const modifier = WEATHER_BED_MODIFIERS[weatherKind] ?? NEUTRAL_WEATHER_BED_MODIFIER;
   const rawIntensity = scene.weather?.intensity;
-  const intensity = clampToRange(
-    typeof rawIntensity === "number" ? rawIntensity : DEFAULT_WEATHER_INTENSITY,
-    0,
-    1
-  );
+  const intensity = clampToRange(typeof rawIntensity === "number" ? rawIntensity : DEFAULT_WEATHER_INTENSITY, 0, 1);
   return {
     gainMultiplier: blendTowardNeutral(modifier.gainMultiplier, intensity),
     frequencyMultiplier: blendTowardNeutral(modifier.frequencyMultiplier, intensity),
@@ -320,6 +395,7 @@ function seasonVoiceCountOffset(scene: SceneConfig): number {
 function buildDroneVoices(
   character: SoundscapeCharacter,
   intervalStack: number[],
+  breathRateMultiplier: number,
   nextRandomValue: () => number
 ): AmbientDroneVoiceRecipe[] {
   return intervalStack.map((intervalRatio, voiceIndex) => {
@@ -330,16 +406,10 @@ function buildDroneVoices(
     );
     const gain = DRONE_BASE_VOICE_GAIN * Math.pow(DRONE_VOICE_GAIN_FALLOFF_PER_INDEX, voiceIndex);
     const detuneCents = (nextRandomValue() * 2 - 1) * MAXIMUM_DRONE_DETUNE_CENTS;
-    const breathRateHertz = MINIMUM_BREATH_RATE_HERTZ + nextRandomValue() * BREATH_RATE_SPREAD_HERTZ;
+    const breathRateHertz =
+      (MINIMUM_BREATH_RATE_HERTZ + nextRandomValue() * BREATH_RATE_SPREAD_HERTZ) * breathRateMultiplier;
     const breathDepth = MINIMUM_BREATH_DEPTH + nextRandomValue() * BREATH_DEPTH_SPREAD;
-    return {
-      frequencyHertz,
-      waveform: character.waveform,
-      gain,
-      detuneCents,
-      breathRateHertz,
-      breathDepth
-    };
+    return { frequencyHertz, waveform: character.waveform, gain, detuneCents, breathRateHertz, breathDepth };
   });
 }
 
@@ -354,16 +424,18 @@ export function ambientSoundscapeSignature(scene?: SceneConfig): string {
     return `${FALLBACK_SCENE_SEED}|${UNIVERSE_FAMILY_KEY}`;
   }
   const seed = String(scene.seed ?? FALLBACK_SCENE_SEED);
+  const { pointCount, averageEnergy } = resolveDnaSignals(scene);
+  const dnaPart = `${pointCount}|${averageEnergy.toFixed(1)}`;
   if (isForestScene(scene)) {
     const weatherKind = String(scene.weather?.kind ?? "");
     const weatherIntensity = String(scene.weather?.intensity ?? "");
     const timeOfDay = String(scene.lighting?.timeOfDay ?? "");
     const seasonKind = String(scene.season?.kind ?? "");
-    return `${seed}|${FOREST_FAMILY_KEY}|${seasonKind}|${timeOfDay}|${weatherKind}|${weatherIntensity}`;
+    return `${seed}|${FOREST_FAMILY_KEY}|${dnaPart}|${seasonKind}|${timeOfDay}|${weatherKind}|${weatherIntensity}`;
   }
   const theme = String(scene.theme ?? "");
   const bloomIntensity = String(scene.postFX?.bloomIntensity ?? "");
-  return `${seed}|${UNIVERSE_FAMILY_KEY}|${theme}|${bloomIntensity}`;
+  return `${seed}|${UNIVERSE_FAMILY_KEY}|${dnaPart}|${theme}|${bloomIntensity}`;
 }
 
 /**
@@ -377,35 +449,44 @@ export function buildAmbientSoundscapeRecipe(scene?: SceneConfig): AmbientSounds
   const nextRandomValue = randomFromSeed(`${seed}${AMBIENT_AUDIO_SEED_SUFFIX}`);
   const isForest = isForestScene(resolvedScene);
   const character = isForest ? resolveForestCharacter(resolvedScene) : resolveUniverseCharacter(resolvedScene);
+  const { pointCount, averageEnergy } = resolveDnaSignals(resolvedScene);
 
   const rootFrequencyJitter = 1 + (nextRandomValue() * 2 - 1) * ROOT_FREQUENCY_JITTER_RATIO;
   const cutoffJitter = 1 + (nextRandomValue() * 2 - 1) * CUTOFF_JITTER_RATIO;
+  const rolledVoiceCount = MINIMUM_DRONE_VOICE_COUNT + Math.floor(nextRandomValue() * 2);
 
-  const requestedVoiceCount =
-    MINIMUM_DRONE_VOICE_COUNT +
-    Math.floor(nextRandomValue() * DRONE_VOICE_COUNT_SPREAD) +
-    (isForest ? seasonVoiceCountOffset(resolvedScene) : 0);
-  const voiceCount = clampToRange(
-    requestedVoiceCount,
-    MINIMUM_DRONE_VOICE_COUNT,
-    MINIMUM_DRONE_VOICE_COUNT + DRONE_VOICE_COUNT_SPREAD
+  // The chord is as wide as the visitor's world is populated. A scene with no
+  // points of interest yet (an empty preview) falls back to the rolled count.
+  const dnaVoiceCount = pointCount > 0 ? pointCount : rolledVoiceCount;
+  const voiceCount = Math.round(
+    clampToRange(
+      dnaVoiceCount + (isForest ? seasonVoiceCountOffset(resolvedScene) : 0),
+      MINIMUM_DRONE_VOICE_COUNT,
+      MAXIMUM_DRONE_VOICE_COUNT
+    )
   );
 
-  const intervalStackIndex = Math.floor(nextRandomValue() * DRONE_INTERVAL_STACKS.length);
-  const intervalStack = DRONE_INTERVAL_STACKS[intervalStackIndex] ?? DRONE_INTERVAL_STACKS[0];
+  const energyRatio = averageEnergy / MAXIMUM_POINT_ENERGY;
+  const energyCutoffMultiplier = MINIMUM_ENERGY_CUTOFF_MULTIPLIER + energyRatio * ENERGY_CUTOFF_MULTIPLIER_SPREAD;
+  const energyBreathMultiplier = MINIMUM_ENERGY_BREATH_MULTIPLIER + energyRatio * ENERGY_BREATH_MULTIPLIER_SPREAD;
+
+  const candidateStacks =
+    DRONE_INTERVAL_STACKS_BY_VOICE_COUNT[voiceCount] ?? DRONE_INTERVAL_STACKS_BY_VOICE_COUNT[MINIMUM_DRONE_VOICE_COUNT];
+  const intervalStackIndex = Math.floor(nextRandomValue() * candidateStacks.length);
+  const intervalStack = candidateStacks[intervalStackIndex] ?? candidateStacks[0];
 
   const jitteredCharacter: SoundscapeCharacter = {
     ...character,
     rootFrequencyHertz: character.rootFrequencyHertz * rootFrequencyJitter
   };
-  const droneVoices = buildDroneVoices(jitteredCharacter, intervalStack.slice(0, voiceCount), nextRandomValue);
+  const droneVoices = buildDroneVoices(jitteredCharacter, intervalStack, energyBreathMultiplier, nextRandomValue);
 
   return {
     signature: ambientSoundscapeSignature(resolvedScene),
     masterGain: MASTER_GAIN,
     droneVoices,
     droneFilterCutoffHertz: clampToRange(
-      character.droneFilterCutoffHertz * cutoffJitter * bloomCutoffMultiplier(resolvedScene),
+      character.droneFilterCutoffHertz * cutoffJitter * energyCutoffMultiplier * bloomCutoffMultiplier(resolvedScene),
       MINIMUM_FILTER_CUTOFF_HERTZ,
       MAXIMUM_FILTER_CUTOFF_HERTZ
     ),

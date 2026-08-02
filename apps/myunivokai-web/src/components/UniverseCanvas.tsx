@@ -78,10 +78,10 @@ type UniverseCanvasProps = {
   /** Decorative backdrops (gallery) disable WASD/arrow camera movement. */
   enableKeyboardMove?: boolean;
   /**
-   * Offer the scene's procedural ambience. Off by default, and deliberately so:
-   * the gallery mounts several canvases at once, and the create page reseeds its
-   * preview on every form change — both would be worse with sound. Only the
-   * world and share pages, which show one settled scene, opt in.
+   * Offer the scene's procedural ambience. Opted into by the create, world and
+   * share pages — every route that shows one scene the visitor is looking at.
+   * The gallery stays out: it mounts several canvases at once, and they would
+   * all play over each other.
    */
   enableAmbientSound?: boolean;
 };

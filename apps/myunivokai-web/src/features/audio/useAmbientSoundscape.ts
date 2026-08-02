@@ -27,6 +27,13 @@ const FADE_OUT_SECONDS = 1.2;
 // The tail after a graph is asked to stop, before the context may close.
 const GRAPH_RELEASE_MILLISECONDS = FADE_OUT_SECONDS * 1000;
 
+// How long a scene has to hold still before its sound is rebuilt. The world and
+// share pages settle instantly and never notice this. The create page reseeds
+// its preview on every option the visitor touches, and without a settle window
+// each flick would start another crossfade on top of the last one — a pile of
+// overlapping pads instead of an ambience.
+const SIGNATURE_SETTLE_MILLISECONDS = 700;
+
 const ACTIVATION_GESTURE_EVENTS = ["pointerdown", "keydown"] as const;
 
 type WebAudioWindow = Window & {
@@ -69,6 +76,17 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
   const latestRecipeReference = useRef(recipe);
   latestRecipeReference.current = recipe;
 
+  // The signature the graph is actually built from: the live one, once it has
+  // stopped changing.
+  const [settledSignature, setSettledSignature] = useState(recipeSignature);
+  useEffect(() => {
+    if (settledSignature === recipeSignature) {
+      return;
+    }
+    const timeoutId = setTimeout(() => setSettledSignature(recipeSignature), SIGNATURE_SETTLE_MILLISECONDS);
+    return () => clearTimeout(timeoutId);
+  }, [recipeSignature, settledSignature]);
+
   useEffect(() => {
     setIsSupported(resolveAudioContextConstructor() !== null);
   }, []);
@@ -109,9 +127,11 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     setIsEnabled(true);
   }, [isEnabled, ensureAudioContext]);
 
-  // A remembered "on" cannot start playback on its own. Arm the next gesture
-  // anywhere on the page instead — the visitor already opted in on this device,
-  // and the toggle shows the state either way.
+  // Ambience defaults to on, but "on" cannot start playback by itself — the
+  // browser requires a gesture first. So arm the next gesture anywhere on the
+  // page. On a world page that is the first orbit-drag, which happens within
+  // seconds; the toggle shows the real state until then, and a visitor who
+  // muted keeps their silence because the mute is stored explicitly.
   useEffect(() => {
     if (!isAvailable || isEnabled || !readAmbientSoundPreference()) {
       return;
@@ -149,7 +169,7 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
         activeGraphReference.current = null;
       }
     };
-  }, [isEnabled, isAvailable, recipeSignature]);
+  }, [isEnabled, isAvailable, settledSignature]);
 
   // Turning the sound off leaves the context open so re-enabling is instant,
   // but an open running context keeps the device's audio path awake. Suspend it
