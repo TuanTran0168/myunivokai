@@ -260,7 +260,18 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
             : "h-0 overflow-hidden p-0 sm:p-0"
         }`}
       >
-        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        {/* `lg:min-h-0` is what keeps the action toolbar below off the footer.
+            This row is a flex item in a column whose height is fixed by
+            top/bottom above, and a column flex item defaults to
+            `min-height: auto` — it refuses to shrink below its content. Tall
+            islands therefore pushed the toolbar out of the bottom of the box
+            and straight over the footer's centre text. The islands' own
+            `lg:max-h-full` could not save it either: a percentage max-height
+            resolves to `none` against an indefinite height, so their
+            `overflow-y-auto` never engaged. With `min-h-0` the row shrinks to
+            the height flex actually assigns it, `max-h-full` resolves, and the
+            islands scroll inside instead of growing. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity + variants */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[320px] lg:min-h-0 lg:overflow-y-auto">
             <div className="glass-panel glass-panel-glow glass-rise rounded-2xl p-5">
