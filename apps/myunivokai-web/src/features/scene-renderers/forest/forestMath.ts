@@ -459,15 +459,14 @@ const WATER_OUTLINE_SEGMENTS = 192;
  *
  * Measured by shoreline development index (perimeter over the perimeter of a
  * circle of equal area — the standard limnological measure; 1.00 is a perfect
- * circle, real lakes run 1.5-3.0):
+ * circle, real lakes run 1.5-3.0). The eight-harmonic figures this comment used
+ * to quote were from a configuration that no longer ships; what ships now scores
+ * 1.155 to 1.197 across 4000 seeds, and the numbers come from
+ * forestFidelityMetrics.test.ts rather than from a hand measurement that can go
+ * stale the way those did.
  *
- *     5 smooth harmonics, no gain   SDI 1.09   <- read as a puddle
- *     8 harmonics, no gain          SDI 1.28
- *     8 harmonics, gain 2.0         SDI 1.60   <- shipped
- *     8 harmonics, gain 3.0         SDI 1.77
- *
- * Raising amplitudes instead reaches only ~1.37 and costs 2.5 units of tree
- * band, because it grows the headlands as well as the bays.
+ * Raising amplitudes instead of gaining the bays reaches a higher index and costs
+ * tree band, because it grows the headlands as well as the bays.
  */
 const WATER_OUTLINE_BAY_DEPTH_GAIN = 2.0;
 const MINIMUM_WATER_OUTLINE_FACTOR = 0.3;
