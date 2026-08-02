@@ -126,7 +126,10 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
             : "h-0 overflow-hidden p-0 sm:p-0"
         }`}
       >
-        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        {/* `min-h-0` for the same reason as the world page: without it this row
+            keeps its content height, overflows the box that top/bottom fixed,
+            and pushes whatever follows over the footer. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           {/* Left island: identity */}
           <div className="pointer-events-auto flex w-full flex-col gap-4 lg:max-h-full lg:w-[340px] lg:min-h-0 lg:overflow-y-auto">
             <div className="glass-panel glass-panel-glow rounded-2xl p-5">
