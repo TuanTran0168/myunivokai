@@ -119,7 +119,11 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
       <div
         id={WORLD_PANELS_ELEMENT_ID}
         className={`immersive-exit relative z-10 flex flex-col gap-4 p-4 sm:p-6 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:bottom-[57px] lg:top-[57px] ${
-          collapseState.reservesLayoutSpace ? "flex-1" : "h-0 overflow-hidden p-0 sm:p-0"
+          collapseState.reservesLayoutSpace
+            ? // Same footer clearance as the world page: in flow below lg, the
+              // fixed footer sits over whatever this column ends with.
+              "flex-1 pb-[calc(var(--footer-height)+1rem)] lg:pb-0"
+            : "h-0 overflow-hidden p-0 sm:p-0"
         }`}
       >
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

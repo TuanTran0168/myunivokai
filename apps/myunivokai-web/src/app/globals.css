@@ -519,15 +519,28 @@ body[data-world-immersive="true"] .chrome-toggle:focus-visible {
 }
 
 /* :focus rather than :focus-visible on purpose — a touch tap focuses without
-   hovering, and that is the only way a touch user ever sees the label. */
-.chrome-toggle:hover .chrome-toggle-label,
-.chrome-toggle:focus .chrome-toggle-label {
-  grid-template-columns: 1fr;
-}
+   hovering, and that is the only way a touch user ever sees the label.
 
-.chrome-toggle:hover .chrome-toggle-label-text,
-.chrome-toggle:focus .chrome-toggle-label-text {
-  opacity: 1;
+   Which is also why the label cannot unroll on a narrow screen. The dock is
+   centred and absolutely positioned, so the pill grows out over whatever the
+   header has at that height: at 390px it landed on top of the wordmark on one
+   side and the Create World button on the other, and a tap is enough to trigger
+   it. The pill needs roughly 165px centred, clear of a ~131px wordmark and a
+   ~208px nav, which wants about 580px of viewport; 640px is the breakpoint this
+   header already uses to drop the API link for the same reason.
+
+   Nothing is lost below it. The button keeps its aria-label, so the accessible
+   name never depended on this. */
+@media (min-width: 640px) {
+  .chrome-toggle:hover .chrome-toggle-label,
+  .chrome-toggle:focus .chrome-toggle-label {
+    grid-template-columns: 1fr;
+  }
+
+  .chrome-toggle:hover .chrome-toggle-label-text,
+  .chrome-toggle:focus .chrome-toggle-label-text {
+    opacity: 1;
+  }
 }
 
 .chrome-toggle-icon {
