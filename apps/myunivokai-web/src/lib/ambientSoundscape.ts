@@ -174,10 +174,14 @@ const DRONE_INTERVAL_STACKS_BY_VOICE_COUNT: Record<number, number[][]> = {
   ]
 };
 
-// Upper partials carry less weight, or the pad turns into a whistle. The base
-// level sits well under half: the pad is the floor the melody stands on, and it
-// used to be the whole piece, which is exactly why it read as a drone.
-const DRONE_BASE_VOICE_GAIN = 0.22;
+// Upper partials carry less weight, or the pad turns into a whistle.
+//
+// Measured by rendering the layers in isolation: at 0.22 the pad was 4.3x the
+// melody in RMS (0.052 against 0.012). A continuous oscillator four times louder
+// than the notes over it is not accompaniment, it is the sustained "eeeee" the
+// whole thing was reported as. The pad is now a floor you notice only when it
+// stops.
+const DRONE_BASE_VOICE_GAIN = 0.075;
 const DRONE_VOICE_GAIN_FALLOFF_PER_INDEX = 0.85;
 const MAXIMUM_DRONE_DETUNE_CENTS = 7;
 const MINIMUM_BREATH_RATE_HERTZ = 0.025;
