@@ -4,11 +4,15 @@ import { smoothstepValue, type WaterOutline } from "./forestMath";
  * The water surface's wave field and vertex grid.
  *
  * These numbers lived inside ForestPondWater, which made them unmeasurable: the
- * anti-fold guarantee in US-FOREST-001 ("the Gerstner lateral shift never exceeds
- * local vertex spacing") is a relationship between the wave table, the steepness
- * and the grid spacing, and a test cannot reach any of it through a component
- * that only writes GPU buffers. Nothing here touches three.js — the component
- * owns the buffers, this module owns the arithmetic.
+ * anti-fold guarantee in US-FOREST-001 ("no triangle inverts") is a relationship
+ * between the wave table, the steepness and the grid, and a test cannot reach any
+ * of it through a component that only writes GPU buffers. Nothing here touches
+ * three.js — the component owns the buffers, this module owns the arithmetic.
+ *
+ * That story also offered a shorthand for the guarantee — that the lateral shift
+ * never exceeds local vertex spacing. Do not use it. It is wrong in both
+ * directions, and forestWaterMath.test.ts measures inverted area instead. See
+ * TRIANGLE_FOLD_SAFETY_FRACTION.
  */
 
 export type SurfaceWave = {
@@ -49,10 +53,13 @@ export const WAVE_STEEPNESS = 0.35;
 
 /**
  * Angular segments in the water GRID, independent of the outline's own segment
- * count. Gerstner displacement folds the mesh wherever the lateral shift exceeds
- * the local vertex spacing, and spacing shrinks as segments rise — at the
- * outline's 192 the surface folded almost everywhere. 96 still resolves the
- * shoreline comfortably (its highest harmonic is 11).
+ * count. Finer segments mean thinner triangles and less room to absorb the
+ * sideways shift, which is why the outline's own 192 folded the surface almost
+ * everywhere. 96 still resolves the shoreline comfortably (its highest harmonic
+ * is 11).
+ *
+ * Fixed rather than scaled by radius, which is why the 1.7-unit landmark pond
+ * ends up over-tessellated and leans hardest on the fold clamp.
  */
 export const WATER_SURFACE_SEGMENT_COUNT = 96;
 
@@ -62,7 +69,9 @@ export const WATER_SURFACE_SEGMENT_COUNT = 96;
  * crowding needs limiting, and near the middle it is invisible anyway.
  *
  * This one is about the centre, where all the angular segments meet. It is NOT
- * what keeps the mesh from folding near the shore — see SHORE_FADE_GRADIENT_LIMIT.
+ * what keeps the mesh from folding near the shore — see
+ * TRIANGLE_FOLD_SAFETY_FRACTION. Re-expressing this constant in ring units was
+ * the first attempt at that fold and changed the worst case by nothing at all.
  */
 export const LATERAL_CENTRE_CALM_FRACTION = 0.45;
 
