@@ -41,7 +41,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="relative flex min-h-screen flex-col">
           {/* Floating gallery deck: warm-black Liquid Glass with a faint brass
               bottom edge. Height must stay 57px (HEADER_OFFSET_PIXELS contract). */}
-          <header className="immersive-exit immersive-exit-up chrome-bar pointer-events-none fixed top-0 z-50 w-full border-b border-hairline bg-mount/10 backdrop-saturate-[1.25]">
+          {/* Opaque and blurred below lg, all but transparent from lg up. From lg
+              the page insets itself between the two bars and nothing ever passes
+              behind them except the world, which is what the near-transparent
+              treatment is for. Below lg the page is an ordinary scrolling
+              document that runs underneath, and at 10% opacity with no blur the
+              panel text came straight through the wordmark. */}
+          <header className="immersive-exit immersive-exit-up chrome-bar pointer-events-none fixed top-0 z-50 w-full border-b border-hairline bg-mount/80 backdrop-blur-xl backdrop-saturate-[1.25] lg:bg-mount/10 lg:backdrop-blur-none">
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between px-margin-mobile py-3 md:px-margin-desktop">
               <Link
                 href="/"
@@ -92,7 +98,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               viewport. Its rows collapse to one line so 57px is enough at every
               width — the copyright sentence is the part that would have
               wrapped, so it hides on the narrowest screens. */}
-          <footer className="immersive-exit chrome-bar pointer-events-none fixed bottom-0 z-50 w-full border-t border-hairline bg-void/10 backdrop-saturate-[1.25]">
+          <footer className="immersive-exit chrome-bar pointer-events-none fixed bottom-0 z-50 w-full border-t border-hairline bg-void/80 backdrop-blur-xl backdrop-saturate-[1.25] lg:bg-void/10 lg:backdrop-blur-none">
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between gap-4 px-margin-mobile py-3 md:px-margin-desktop">
               <span className="pointer-events-auto font-display text-base font-semibold text-paper">Myunivokai</span>
               <span className="pointer-events-auto hidden font-body text-xs text-on-surface-variant sm:inline">
