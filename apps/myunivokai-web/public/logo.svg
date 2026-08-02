@@ -1,56 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Myunivokai">
-  <!-- The Myunivokai mark: a core with one orbit around it. Transparent by
-       design — it sits on the warm-black void, on a bright forest canopy and on
-       a browser tab, and any plate behind it would be wrong on at least one.
-       Colours are the brass ramp from globals.css.
+  <!-- The Myunivokai mark: an M drawn as a ridge, with a disc rising behind it.
 
-       The ring is drawn twice, and the core is deliberately WIDER than the ring's
-       minor axis. Both are the same point: the near arc has to cross the core for
-       this to read as an orbit. With the core inside the ring it reads as a flat
-       disc with a ball parked on it, which is what the first cut looked like.
+       The name is My Unique OK AI, not "my universe", and the product builds
+       forests, cities and oceans as readily as solar systems — so the mark cannot
+       be a planet. A ridge is the one silhouette that reads as all of them:
+       summits, a skyline, a swell. It is also, at these proportions, the letter M.
+       The disc behind it is whatever the world needs it to be — sun, moon, or the
+       star a system orbits.
 
-       Kept in step with scripts/build-brand-mark.mjs, which rasterises the same
-       numbers for the PNG. -->
+       The disc sits behind the RIGHT summit rather than in the valley: down there
+       the two arms close over it and all that shows is a smudge.
+
+       Transparent by design — it sits on the warm-black void, on a bright forest
+       canopy and on a browser tab, and any plate behind it would be wrong on at
+       least one. Colours are the brass ramp from globals.css, and the numbers are
+       kept in step with scripts/build-brand-mark.mjs, which rasterises the same
+       mark for the PNG. -->
   <defs>
-    <linearGradient id="myunivokai-orbit" x1="48" y1="80" x2="464" y2="432" gradientUnits="userSpaceOnUse">
+    <linearGradient id="myunivokai-ridge" x1="48" y1="120" x2="464" y2="424" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#E4CF9C" />
       <stop offset="0.55" stop-color="#C9A35B" />
       <stop offset="1" stop-color="#A8843F" />
     </linearGradient>
-    <linearGradient id="myunivokai-core" x1="160" y1="160" x2="352" y2="352" gradientUnits="userSpaceOnUse">
+    <linearGradient id="myunivokai-disc" x1="300" y1="104" x2="404" y2="208" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#F2EEE6" />
       <stop offset="0.5" stop-color="#E4CF9C" />
       <stop offset="1" stop-color="#C9A35B" />
     </linearGradient>
-    <!-- Everything below the orbit's own centre line, in the orbit's own frame:
-         that is exactly the half tilted toward the viewer. -->
-    <clipPath id="myunivokai-near-half">
-      <rect x="-256" y="256" width="1024" height="512" transform="rotate(-28 256 256)" />
-    </clipPath>
   </defs>
-  <ellipse
-    cx="256"
-    cy="256"
-    rx="216"
-    ry="104"
+  <circle cx="352" cy="156" r="66" fill="url(#myunivokai-disc)" />
+  <polyline
+    points="68,400 172,214 256,292 338,170 444,400"
     fill="none"
-    stroke="url(#myunivokai-orbit)"
-    stroke-width="36"
-    transform="rotate(-28 256 256)"
+    stroke="url(#myunivokai-ridge)"
+    stroke-width="46"
+    stroke-linecap="round"
+    stroke-linejoin="round"
   />
-  <circle cx="256" cy="256" r="128" fill="url(#myunivokai-core)" />
-  <g clip-path="url(#myunivokai-near-half)">
-    <ellipse
-      cx="256"
-      cy="256"
-      rx="216"
-      ry="104"
-      fill="none"
-      stroke="url(#myunivokai-orbit)"
-      stroke-width="36"
-      transform="rotate(-28 256 256)"
-    />
-  </g>
-  <!-- On the ellipse at 150 degrees, so it can never drift off the ring. -->
-  <circle cx="68.94" cy="308" r="30" fill="#E4CF9C" transform="rotate(-28 256 256)" />
 </svg>

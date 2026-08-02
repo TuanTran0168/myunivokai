@@ -72,24 +72,53 @@ function encodePng(size, rgba) {
 }
 
 // --- The mark ----------------------------------------------------------------
-// Authored against a 512 grid and scaled, so these read as the SVG's numbers.
+//
+// An M drawn as a ridge, with a disc rising behind it.
+//
+// The name is My Unique OK AI, not "my universe", and the product builds forests,
+// cities and oceans as readily as solar systems — so the mark cannot be a planet.
+// A ridge is the one silhouette that reads as all of them: summits, a skyline,
+// a swell. It is also, at these proportions, the letter M. The disc behind it is
+// whatever the world needs it to be — sun, moon, or the star a system orbits.
+//
+// Authored against a 512 grid and scaled, so these read as the SVGs' numbers.
 
 const DESIGN_SIZE = 512;
-const CENTRE = 256;
-const ORBIT_TILT_DEGREES = -28;
-/** Where the satellite sits on the un-tilted ellipse, so it cannot drift off it. */
-const SATELLITE_ANGLE_DEGREES = 150;
 
 /**
  * Two cuts of one mark, matching public/logo.svg and src/app/icon.svg.
  *
- * The tab icon is not the logo shrunk. At 16px the full mark's bead is under a
- * pixel across and its ring is a hairline, so that cut drops the bead, fattens
- * the ring and grows the core until the silhouette still reads.
+ * The tab icon is not the logo shrunk. At 16px a fine ridge turns to mud, so that
+ * cut thickens the stroke, shortens the run and lifts the disc until the
+ * silhouette still reads.
  */
 const MARK_VARIANTS = {
-  logo: { orbitRadiusX: 216, orbitRadiusY: 104, orbitStroke: 36, coreRadius: 128, satelliteRadius: 30 },
-  icon: { orbitRadiusX: 212, orbitRadiusY: 92, orbitStroke: 50, coreRadius: 140, satelliteRadius: 0 }
+  logo: {
+    ridge: [
+      [68, 400],
+      [172, 214],
+      [256, 292],
+      [338, 170],
+      [444, 400]
+    ],
+    ridgeStroke: 46,
+    // Behind the right summit rather than down in the valley: in the valley the
+    // two arms close over it and all that shows is a smudge.
+    discCentre: [352, 156],
+    discRadius: 66
+  },
+  icon: {
+    ridge: [
+      [76, 396],
+      [176, 220],
+      [256, 292],
+      [334, 180],
+      [436, 396]
+    ],
+    ridgeStroke: 62,
+    discCentre: [350, 166],
+    discRadius: 68
+  }
 };
 
 /** Brass, from globals.css: --paper, --brass lightened, --brass, --brass-deep. */
@@ -115,66 +144,46 @@ function rampColor(stops, position) {
   return mixColor(stops[index], stops[index + 1], (clamped - index * span) / span);
 }
 
-/**
- * Signed distance to the ellipse, to first order: the implicit function divided
- * by its own gradient. Exact enough for a stroke this narrow against a curve this
- * gentle, and the supersampling below is what actually smooths the edge.
- */
-function orbitAt(variant, x, y) {
-  const tilt = (-ORBIT_TILT_DEGREES * Math.PI) / 180;
-  const offsetX = x - CENTRE;
-  const offsetY = y - CENTRE;
-  const localX = offsetX * Math.cos(tilt) - offsetY * Math.sin(tilt);
-  const localY = offsetX * Math.sin(tilt) + offsetY * Math.cos(tilt);
-  const radiusXSquared = variant.orbitRadiusX * variant.orbitRadiusX;
-  const radiusYSquared = variant.orbitRadiusY * variant.orbitRadiusY;
-  const implicit = (localX * localX) / radiusXSquared + (localY * localY) / radiusYSquared - 1;
-  const gradient = Math.hypot((2 * localX) / radiusXSquared, (2 * localY) / radiusYSquared);
-  return {
-    distance: gradient > 0 ? implicit / gradient : Infinity,
-    // Local +Y tilts toward the lower edge of the frame, which is the arc nearest
-    // the viewer. Drawing that half OVER the core is the whole difference between
-    // a ring around a sphere and a disc behind a circle.
-    isNearSide: localY > 0
-  };
+/** Distance to a segment — a round-capped, round-joined stroke is its offset. */
+function distanceToSegment(x, y, [startX, startY], [endX, endY]) {
+  const runX = endX - startX;
+  const runY = endY - startY;
+  const lengthSquared = runX * runX + runY * runY;
+  const along =
+    lengthSquared > 0
+      ? Math.min(1, Math.max(0, ((x - startX) * runX + (y - startY) * runY) / lengthSquared))
+      : 0;
+  return Math.hypot(x - (startX + along * runX), y - (startY + along * runY));
 }
 
-function rotatedSatellite(variant) {
-  const orbitAngle = (SATELLITE_ANGLE_DEGREES * Math.PI) / 180;
-  const tilt = (ORBIT_TILT_DEGREES * Math.PI) / 180;
-  const offsetX = variant.orbitRadiusX * Math.cos(orbitAngle);
-  const offsetY = variant.orbitRadiusY * Math.sin(orbitAngle);
-  return {
-    x: CENTRE + offsetX * Math.cos(tilt) - offsetY * Math.sin(tilt),
-    y: CENTRE + offsetX * Math.sin(tilt) + offsetY * Math.cos(tilt)
-  };
-}
-
-function orbitColor(x, y) {
-  const along = (x + y) / (DESIGN_SIZE * 2);
-  return rampColor([BRASS_LIGHT, BRASS, BRASS_DEEP], along);
+function isOnRidge(variant, x, y) {
+  for (let index = 0; index < variant.ridge.length - 1; index += 1) {
+    if (distanceToSegment(x, y, variant.ridge[index], variant.ridge[index + 1]) <= variant.ridgeStroke / 2) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Topmost element covering this design-space point, or null. */
-function colorAt(variant, satellite, x, y) {
-  if (variant.satelliteRadius > 0 && Math.hypot(x - satellite.x, y - satellite.y) <= variant.satelliteRadius) {
-    return BRASS_LIGHT;
+function colorAt(variant, x, y) {
+  // Ridge first: the disc reads as rising BEHIND it, which is the whole reason
+  // the two overlap at all.
+  if (isOnRidge(variant, x, y)) {
+    // Darker as it falls away to the left and right, so the ridge has depth
+    // rather than reading as a flat zigzag.
+    return rampColor([BRASS_LIGHT, BRASS, BRASS_DEEP], (x + y) / (DESIGN_SIZE * 2));
   }
-  const orbit = orbitAt(variant, x, y);
-  const onOrbit = Math.abs(orbit.distance) <= variant.orbitStroke / 2;
-  if (onOrbit && orbit.isNearSide) {
-    return orbitColor(x, y);
-  }
-  if (Math.hypot(x - CENTRE, y - CENTRE) <= variant.coreRadius) {
+  const [discX, discY] = variant.discCentre;
+  if (Math.hypot(x - discX, y - discY) <= variant.discRadius) {
     // Lit from the upper left, like every other raised surface in the interface.
-    const lighting = (x - CENTRE + (y - CENTRE)) / (variant.coreRadius * 2) + 0.5;
+    const lighting = (x - discX + (y - discY)) / (variant.discRadius * 2) + 0.5;
     return rampColor([HIGHLIGHT, BRASS_LIGHT, BRASS], lighting);
   }
-  return onOrbit ? orbitColor(x, y) : null;
+  return null;
 }
 
 function renderMark(variant, size) {
-  const satellite = rotatedSatellite(variant);
   const rgba = new Uint8Array(size * size * 4);
   const scale = DESIGN_SIZE / size;
   const step = 1 / SAMPLES_PER_AXIS;
@@ -189,7 +198,6 @@ function renderMark(variant, size) {
         for (let sampleX = 0; sampleX < SAMPLES_PER_AXIS; sampleX += 1) {
           const color = colorAt(
             variant,
-            satellite,
             (pixelX + (sampleX + 0.5) * step) * scale,
             (pixelY + (sampleY + 0.5) * step) * scale
           );
