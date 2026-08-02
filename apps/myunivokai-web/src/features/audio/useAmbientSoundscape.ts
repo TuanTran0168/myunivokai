@@ -4,34 +4,36 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildAmbientSoundscapeRecipe } from "@/lib/ambientSoundscape";
 import { readAmbientSoundPreference, writeAmbientSoundPreference } from "@/lib/ambientSoundPreference";
 import type { SceneConfig } from "@/lib/types";
-import { createAmbientSoundscapeGraph, type AmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
+import { createAmbientSoundscapeGraph, type AmbientInstrumentSet, type AmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
+import { loadSampledInstrument } from "./instrumentSamples";
 
 // --- Ambience lifecycle ------------------------------------------------------
 //
-// Three constraints shape this hook, and each one is why a piece of it exists:
+// Four constraints shape this hook, and each is why a piece of it exists:
 //
 // 1. A browser refuses to make sound before the visitor has interacted with the
 //    page. So the AudioContext is constructed inside the click handler, never in
-//    an effect, and a remembered "on" preference arms a one-shot gesture
-//    listener instead of starting playback directly.
-// 2. An AudioContext is a real audio-thread resource. Leaving one open per
+//    an effect, and a remembered preference arms a one-shot gesture listener
+//    instead of starting playback directly.
+// 2. The instruments are recorded samples that have to be fetched and decoded.
+//    That is asynchronous, so the graph cannot be built in the same tick the
+//    visitor asks for sound; it is built once its instruments have landed.
+// 3. An AudioContext is a real audio-thread resource. Leaving one open per
 //    visited world would keep the device's audio hardware awake, so the context
 //    is closed on unmount and suspended whenever the tab is hidden.
-// 3. Selecting a variant changes the scene, and the sound has to follow it
+// 4. Selecting a variant changes the scene, and the sound has to follow it
 //    without a gap. The graph is keyed by the recipe signature: React tears the
 //    old graph down and builds the new one, and because the old one fades out
 //    over the same window the new one fades in, that is a crossfade.
 
-const FADE_IN_SECONDS = 2.5;
+const FADE_IN_SECONDS = 3;
 const FADE_OUT_SECONDS = 1.2;
-// The tail after a graph is asked to stop, before the context may close.
 const GRAPH_RELEASE_MILLISECONDS = FADE_OUT_SECONDS * 1000;
 
 // How long a scene has to hold still before its sound is rebuilt. The world and
 // share pages settle instantly and never notice this. The create page reseeds
 // its preview on every option the visitor touches, and without a settle window
-// each flick would start another crossfade on top of the last one — a pile of
-// overlapping pads instead of an ambience.
+// each flick would start another crossfade on top of the last one.
 const SIGNATURE_SETTLE_MILLISECONDS = 700;
 
 const ACTIVATION_GESTURE_EVENTS = ["pointerdown", "keydown"] as const;
@@ -52,14 +54,15 @@ export type AmbientSoundscapeController = {
   /** False when the browser has no Web Audio support; the toggle disables. */
   isSupported: boolean;
   isEnabled: boolean;
+  /** True between the visitor asking for sound and the instruments arriving. */
+  isLoading: boolean;
   toggle: () => void;
 };
 
 /**
  * Plays the scene's deterministic ambience, and hands back the state a toggle
  * button needs. Pass `isAvailable: false` for canvases that must stay silent
- * (decorative backdrops, the create-page preview whose seed changes on every
- * form keystroke).
+ * (the gallery, which mounts several at once).
  */
 export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable: boolean): AmbientSoundscapeController {
   const [isSupported, setIsSupported] = useState(false);
@@ -75,6 +78,11 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
   const recipeSignature = recipe.signature;
   const latestRecipeReference = useRef(recipe);
   latestRecipeReference.current = recipe;
+
+  const instrumentPairKey = `${recipe.melody.instrument}+${recipe.harmony.instrument}`;
+  const [loadedInstruments, setLoadedInstruments] = useState<{ pairKey: string; set: AmbientInstrumentSet } | null>(
+    null
+  );
 
   // The signature the graph is actually built from: the live one, once it has
   // stopped changing.
@@ -151,8 +159,8 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     };
   }, [isAvailable, isEnabled, ensureAudioContext]);
 
-  // The graph itself. Keyed by signature, so a hover re-render leaves the audio
-  // untouched and a variant change crossfades into the new world.
+  // Fetch and decode the two instruments this scene calls for. Encoded bytes are
+  // cached across worlds, so switching back to a theme heard before is instant.
   useEffect(() => {
     if (!isEnabled || !isAvailable) {
       return;
@@ -161,7 +169,43 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     if (!audioContext) {
       return;
     }
-    const graph = createAmbientSoundscapeGraph(audioContext, latestRecipeReference.current, FADE_IN_SECONDS);
+    const { melody, harmony } = latestRecipeReference.current;
+    let hasBeenCancelled = false;
+    void Promise.all([
+      loadSampledInstrument(audioContext, melody.instrument),
+      loadSampledInstrument(audioContext, harmony.instrument)
+    ])
+      .then(([melodyInstrument, harmonyInstrument]) => {
+        if (!hasBeenCancelled) {
+          setLoadedInstruments({
+            pairKey: `${melody.instrument}+${harmony.instrument}`,
+            set: { melody: melodyInstrument, harmony: harmonyInstrument }
+          });
+        }
+      })
+      .catch(() => {
+        // A failed sample fetch leaves the world silent rather than broken.
+      });
+    return () => {
+      hasBeenCancelled = true;
+    };
+  }, [isEnabled, isAvailable, instrumentPairKey]);
+
+  // The graph itself. Keyed by signature, so a hover re-render leaves the audio
+  // untouched and a variant change crossfades into the new world.
+  useEffect(() => {
+    if (!isEnabled || !isAvailable) {
+      return;
+    }
+    const audioContext = audioContextReference.current;
+    const currentRecipe = latestRecipeReference.current;
+    const expectedPairKey = `${currentRecipe.melody.instrument}+${currentRecipe.harmony.instrument}`;
+    // The loader effect runs alongside this one; skip until its result matches
+    // the scene being played, or the first frames use the previous instruments.
+    if (!audioContext || loadedInstruments?.pairKey !== expectedPairKey) {
+      return;
+    }
+    const graph = createAmbientSoundscapeGraph(audioContext, currentRecipe, FADE_IN_SECONDS, loadedInstruments.set);
     activeGraphReference.current = graph;
     return () => {
       graph.stop(FADE_OUT_SECONDS);
@@ -169,7 +213,7 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
         activeGraphReference.current = null;
       }
     };
-  }, [isEnabled, isAvailable, settledSignature]);
+  }, [isEnabled, isAvailable, settledSignature, loadedInstruments]);
 
   // Turning the sound off leaves the context open so re-enabling is instant,
   // but an open running context keeps the device's audio path awake. Suspend it
@@ -232,5 +276,7 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     };
   }, []);
 
-  return { isSupported, isEnabled, toggle };
+  const isLoading = isEnabled && loadedInstruments === null;
+
+  return { isSupported, isEnabled, isLoading, toggle };
 }

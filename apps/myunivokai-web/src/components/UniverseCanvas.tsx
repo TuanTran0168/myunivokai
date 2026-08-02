@@ -236,6 +236,7 @@ export function UniverseCanvas({
           <AmbientSoundToggle
             isEnabled={ambientSoundscape.isEnabled}
             isSupported={ambientSoundscape.isSupported}
+            isLoading={ambientSoundscape.isLoading}
             onToggle={ambientSoundscape.toggle}
           />
         ) : null}
