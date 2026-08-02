@@ -14,6 +14,13 @@ import {
 } from "three";
 import { randomFromSeed } from "@/lib/scene";
 import { createWaterOutline, type WaterOutline } from "./forestMath";
+import {
+  applyGerstnerSurfaceDisplacement,
+  createSurfaceDisplacement,
+  waterSurfaceRestGrid,
+  waterSurfaceRingCount,
+  waterSurfaceTriangleIndices
+} from "./forestWaterMath";
 
 // Real-looking water needs FOUR things, and the biggest one is geometry.
 //
@@ -38,53 +45,11 @@ import { createWaterOutline, type WaterOutline } from "./forestMath";
 // neither ripple nor shade by depth.
 
 // --- Surface displacement ----------------------------------------------------
-
-/**
- * Travelling waves, longest first. Directions are deliberately NOT aligned and
- * the wavelengths are not integer multiples of each other, so the sum never
- * settles into a repeating pattern the way a tidy harmonic series would.
- * Amplitudes are in world units — a lake this size reads best with a few
- * centimetres of relief; more looks like a storm at sea.
- */
-const SURFACE_WAVES = [
-  { directionX: 0.93, directionY: 0.37, wavelength: 12.7, amplitude: 0.125, speed: 0.6 },
-  { directionX: 0.64, directionY: 0.77, wavelength: 9.1, amplitude: 0.088, speed: 0.68 },
-  { directionX: -0.41, directionY: 0.91, wavelength: 6.3, amplitude: 0.062, speed: 0.79 },
-  { directionX: 0.99, directionY: -0.14, wavelength: 4.7, amplitude: 0.045, speed: 0.9 },
-  { directionX: 0.72, directionY: -0.69, wavelength: 3.3, amplitude: 0.032, speed: 1.02 },
-  { directionX: -0.19, directionY: -0.98, wavelength: 2.4, amplitude: 0.023, speed: 1.16 },
-  { directionX: -0.87, directionY: -0.49, wavelength: 1.7, amplitude: 0.015, speed: 1.33 },
-  { directionX: 0.34, directionY: 0.94, wavelength: 1.2, amplitude: 0.009, speed: 1.5 }
-];
-/**
- * Gerstner steepness. Plain summed sines give symmetric, rounded swells — which
- * is what made the surface read as regular diagonal banding rather than water.
- * Real waves are SHARP at the crest and flat in the trough, and that asymmetry
- * comes from vertices moving HORIZONTALLY toward the crests, not from a taller
- * vertical wave. Above ~0.5 the displacement starts to fold the mesh over itself.
- */
-const WAVE_STEEPNESS = 0.35;
-/**
- * Angular segments in the water GRID, independent of the outline's own segment
- * count. Gerstner displacement folds the mesh wherever the lateral shift exceeds
- * the local vertex spacing, and spacing shrinks as segments rise — at the
- * outline's 192 the surface folded almost everywhere. 96 still resolves the
- * shoreline comfortably (its highest harmonic is 11).
- */
-const WATER_SURFACE_SEGMENT_COUNT = 96;
-/**
- * Lateral displacement fades toward the centre, where all the angular segments
- * converge and spacing becomes tiny. Height is unaffected — only the sideways
- * crowding needs limiting, and near the middle it is invisible anyway.
- */
-const LATERAL_CENTRE_CALM_FRACTION = 0.45;
-
-// Rings of tessellation from centre to shore. This is the knob that decides
-// whether the surface has relief at all: at 1 it is the old flat fan.
-const SURFACE_RING_COUNT = 22;
-// Waves fade out over this fraction of the radius so the sheet stays welded to
-// the bank — an undulating edge would tear away from the shoreline band.
-const SHORE_CALM_FRACTION = 0.16;
+//
+// The wave table, the Gerstner steepness and the grid formulas live in
+// forestWaterMath.ts. They are the subject of a geometric guarantee — the lateral
+// shift must never reach local vertex spacing, or the mesh folds — and that
+// cannot be tested through a component whose only output is a GPU buffer.
 
 const RIPPLE_TEXTURE_SIZE = 256;
 // Enough overlapping waves that the interference reads as noise rather than as a
@@ -222,82 +187,45 @@ type WaterSurfaceMesh = {
 };
 
 /**
- * Tessellated disc whose boundary follows the seeded organic outline. Built in
- * the XY plane so the caller's -PI/2 X rotation lays it flat, which means the
- * surface height is the LOCAL Z coordinate.
+ * Tessellated disc whose boundary follows the seeded organic outline.
  *
- * The interior is a real radial grid rather than a fan: displacement needs
- * vertices to displace, and a fan has none between the centre and the rim.
+ * The rest layout and the triangle list come from forestWaterMath, which is also
+ * what the fold test measures — this function only turns them into GPU buffers
+ * and paints the depth gradient.
  */
 function buildWaterSurfaceMesh(radius: number, outline: WaterOutline, ringCount: number): WaterSurfaceMesh {
-  const segments = WATER_SURFACE_SEGMENT_COUNT;
-  const vertexCount = 1 + ringCount * (segments + 1);
+  const { restPositions, waveScales, lateralScales, ringFractions } = waterSurfaceRestGrid(
+    radius,
+    outline,
+    ringCount
+  );
+  const vertexCount = ringFractions.length;
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Float32Array(vertexCount * 3);
-  const waveScales = new Float32Array(vertexCount);
-  const restPositions = new Float32Array(vertexCount * 2);
-  const lateralScales = new Float32Array(vertexCount);
-  const indices: number[] = [];
 
-  // Centre vertex.
-  uvs[0] = 0;
-  uvs[1] = 0;
-  normals[2] = 1;
-  colors[0] = DEEP_CENTRE_BRIGHTNESS;
-  colors[1] = DEEP_CENTRE_BRIGHTNESS;
-  colors[2] = DEEP_CENTRE_BRIGHTNESS;
-  waveScales[0] = 1;
+  for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+    const x = restPositions[vertexIndex * 2];
+    const y = restPositions[vertexIndex * 2 + 1];
 
-  for (let ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
-    // Rings bunch up toward the rim, where the depth gradient and the wave
-    // fade-out both change fastest.
-    const ringFraction = Math.sqrt((ringIndex + 1) / ringCount);
-    for (let segmentIndex = 0; segmentIndex <= segments; segmentIndex += 1) {
-      const angle = (segmentIndex / segments) * Math.PI * 2;
-      const shoreRadius = radius * outline.radiusFactorAt(angle);
-      const vertexRadius = shoreRadius * ringFraction;
-      const x = Math.cos(angle) * vertexRadius;
-      const y = Math.sin(angle) * vertexRadius;
-      const vertexIndex = 1 + ringIndex * (segments + 1) + segmentIndex;
+    positions[vertexIndex * 3] = x;
+    positions[vertexIndex * 3 + 1] = y;
+    normals[vertexIndex * 3 + 2] = 1;
+    // UVs in WORLD units so a ripple tile is the same physical size whatever the
+    // surface's radius.
+    uvs[vertexIndex * 2] = x;
+    uvs[vertexIndex * 2 + 1] = y;
 
-      positions[vertexIndex * 3] = x;
-      positions[vertexIndex * 3 + 1] = y;
-      restPositions[vertexIndex * 2] = x;
-      restPositions[vertexIndex * 2 + 1] = y;
-      normals[vertexIndex * 3 + 2] = 1;
-      // UVs in WORLD units so a ripple tile is the same physical size whatever
-      // the surface's radius.
-      uvs[vertexIndex * 2] = x;
-      uvs[vertexIndex * 2 + 1] = y;
-
-      const shallowness = ringFraction * ringFraction;
-      const brightness = DEEP_CENTRE_BRIGHTNESS + (SHALLOW_EDGE_BRIGHTNESS - DEEP_CENTRE_BRIGHTNESS) * shallowness;
-      colors[vertexIndex * 3] = brightness;
-      colors[vertexIndex * 3 + 1] = brightness;
-      colors[vertexIndex * 3 + 2] = brightness;
-
-      // Smoothstep, not linear: a linear taper leaves a visible crease where it
-      // starts, and it keeps too much amplitude right at the rim — enough for a
-      // trough to dip through the shoreline band it overlaps.
-      const shoreFade = Math.min(1, (1 - ringFraction) / SHORE_CALM_FRACTION);
-      waveScales[vertexIndex] = shoreFade * shoreFade * (3 - 2 * shoreFade);
-      const centreFade = Math.min(1, ringFraction / LATERAL_CENTRE_CALM_FRACTION);
-      lateralScales[vertexIndex] = centreFade * centreFade * (3 - 2 * centreFade);
-
-      if (segmentIndex < segments) {
-        if (ringIndex === 0) {
-          indices.push(0, vertexIndex, vertexIndex + 1);
-        } else {
-          const inner = vertexIndex - (segments + 1);
-          indices.push(inner, vertexIndex, vertexIndex + 1);
-          indices.push(inner, vertexIndex + 1, inner + 1);
-        }
-      }
-    }
+    const ringFraction = ringFractions[vertexIndex];
+    const shallowness = ringFraction * ringFraction;
+    const brightness = DEEP_CENTRE_BRIGHTNESS + (SHALLOW_EDGE_BRIGHTNESS - DEEP_CENTRE_BRIGHTNESS) * shallowness;
+    colors[vertexIndex * 3] = brightness;
+    colors[vertexIndex * 3 + 1] = brightness;
+    colors[vertexIndex * 3 + 2] = brightness;
   }
 
+  const indices = waterSurfaceTriangleIndices(ringCount);
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new BufferAttribute(normals, 3));
@@ -325,45 +253,31 @@ function displaceWaterSurface(
   const normalAttribute = geometry.getAttribute("normal") as BufferAttribute;
   const positions = positionAttribute.array as Float32Array;
   const normals = normalAttribute.array as Float32Array;
+  // One reused target for the whole pass: this runs for every vertex of every
+  // water surface every frame.
+  const displacement = createSurfaceDisplacement();
 
   for (let vertexIndex = 0; vertexIndex < waveScales.length; vertexIndex += 1) {
     const offset = vertexIndex * 3;
     const restX = restPositions[vertexIndex * 2];
     const restY = restPositions[vertexIndex * 2 + 1];
-    const waveScale = waveScales[vertexIndex];
-    const lateralScale = lateralScales[vertexIndex];
 
-    let height = 0;
-    let shiftX = 0;
-    let shiftY = 0;
-    let slopeX = 0;
-    let slopeY = 0;
-    for (const wave of SURFACE_WAVES) {
-      const angularFrequency = (Math.PI * 2) / wave.wavelength;
-      const phase =
-        (wave.directionX * restX + wave.directionY * restY) * angularFrequency -
-        elapsedSeconds * wave.speed * angularFrequency;
-      const amplitude = wave.amplitude * waveScale;
-      const sinPhase = Math.sin(phase);
-      const cosPhase = Math.cos(phase);
-      height += amplitude * sinPhase;
-      // Gerstner: vertices crowd toward the crests, which sharpens them and
-      // flattens the troughs. Scaled by waveScale as well, so the rim stays put.
-      const lateral = WAVE_STEEPNESS * amplitude * lateralScale * cosPhase;
-      shiftX += lateral * wave.directionX;
-      shiftY += lateral * wave.directionY;
-      const slopeTerm = amplitude * angularFrequency * cosPhase;
-      slopeX += slopeTerm * wave.directionX;
-      slopeY += slopeTerm * wave.directionY;
-    }
+    applyGerstnerSurfaceDisplacement(
+      displacement,
+      restX,
+      restY,
+      elapsedSeconds,
+      waveScales[vertexIndex],
+      lateralScales[vertexIndex]
+    );
 
-    positions[offset] = restX + shiftX;
-    positions[offset + 1] = restY + shiftY;
-    positions[offset + 2] = height;
+    positions[offset] = restX + displacement.shiftX;
+    positions[offset + 1] = restY + displacement.shiftY;
+    positions[offset + 2] = displacement.height;
     // Local +Z is the surface up-axis, so the normal is (-dh/dx, -dh/dy, 1).
-    const length = Math.hypot(slopeX, slopeY, 1) || 1;
-    normals[offset] = -slopeX / length;
-    normals[offset + 1] = -slopeY / length;
+    const length = Math.hypot(displacement.slopeX, displacement.slopeY, 1) || 1;
+    normals[offset] = -displacement.slopeX / length;
+    normals[offset + 1] = -displacement.slopeY / length;
     normals[offset + 2] = 1 / length;
   }
 
@@ -390,7 +304,7 @@ export function ForestPondWater({ radius, tintColor, shapeSeed, reflective = tru
   const outline = useMemo(() => createWaterOutline(shapeSeed), [shapeSeed]);
   const { geometry, waveScales, restPositions, lateralScales } = useMemo(
     // A pond does not need a lake's tessellation; scale rings with radius.
-    () => buildWaterSurfaceMesh(radius, outline, Math.max(6, Math.round(SURFACE_RING_COUNT * Math.min(1, radius / 8)))),
+    () => buildWaterSurfaceMesh(radius, outline, waterSurfaceRingCount(radius)),
     [outline, radius]
   );
 
