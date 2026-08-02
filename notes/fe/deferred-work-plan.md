@@ -1,20 +1,16 @@
 # FE deferred work — execution plan
 
-> **Document status:** Part A implemented; Part B planned, not approved
+> **Document status:** Both parts implemented; kept as the execution record
 > **Last source review:** 2026-08-02
 
 Two FE items were recorded across three documents with no execution plan
-anywhere. This file is that plan, so a round starts from source facts instead of
-re-reading the whole frontend.
-
-- Part B is not approved. Do not execute without the owner's word.
-- Each part is independently shippable — one branch each, not one big branch.
-- Both parts were verified against source on 2026-08-02; findings are inline.
+anywhere. This file was that plan. Both parts have now shipped, and it is kept for
+what the plans got wrong — each correction cost real time to find.
 
 | Item | Origin document | State |
 | --- | --- | --- |
-| [Part A — dynamic family chunks](#part-a--deferred-fe-lazy-001-dynamic-family-chunks) | [threejs-scene-architecture.md](threejs-scene-architecture.md) §Family chunks, [../user-stories/engineering-backlog.md](../user-stories/engineering-backlog.md) | **Shipped** on `feat/fe/lazy-renderer-chunks` |
-| [Part B — forest fidelity metrics](#part-b--us-forest-002-codify-the-fidelity-metrics) | [../user-stories/scene-fidelity.md](../user-stories/scene-fidelity.md) US-FOREST-002 | Planned / Unranked — proposed, not approved |
+| [Part A — dynamic family chunks](#part-a--deferred-fe-lazy-001-dynamic-family-chunks) | [threejs-scene-architecture.md](threejs-scene-architecture.md) §Family chunks | **Shipped** on `feat/fe/lazy-renderer-chunks` |
+| [Part B — forest fidelity metrics](#part-b--us-forest-002-codify-the-fidelity-metrics) | [../user-stories/scene-fidelity.md](../user-stories/scene-fidelity.md) US-FOREST-002 | **Shipped** on `feat/fe/forest-fidelity-metrics` |
 
 ---
 
@@ -135,6 +131,76 @@ Small. One session. The risky part is step 6, not the split itself.
 ## Part B — US-FOREST-002 codify the fidelity metrics
 
 Goal: every fidelity claim is a test, not a screenshot.
+
+### Outcome — shipped, and it found a bug
+
+Implemented on `feat/fe/forest-fidelity-metrics`. Two new modules
+(`forestFidelityMetrics.ts`, `forestWaterMath.ts`) and two test files; the FE suite
+goes from 126 tests to 142.
+
+**The measurement paid for itself immediately.** US-FOREST-001 ticked "prove no
+mesh folding" on the strength of an argument. Turned into a test, the claim was
+false: on the 1.7-unit landmark pond the water mesh inverts triangles on real
+seeds — worst signed-area ratio **-0.24**. It is now +0.53 at worst there, and
+0.74+ on every lake.
+
+Getting to that took three attempts, and the two wrong ones are the lesson:
+
+1. **Blamed the centre.** The centre vertex never shifts sideways while ring 0
+   does, so the triangles joining them looked like the candidates. Re-expressing
+   the centre fade in ring units changed the worst ratio by nothing at all —
+   `-0.2383` before and after, to four decimals.
+2. **Blamed the shore fade's gradient.** The fade runs the shift to zero across
+   `SHORE_CALM_FRACTION` of the shore radius, which for a small pond is a gradient
+   above 1 — a genuine fold condition, just not this one. Clamping it moved the
+   ratio from -0.2383 to -0.2302.
+3. **Stopped guessing and printed the failing triangle.** Rings 4,5,5 at radii
+   1.2300 / 1.3474 / 1.1337 — the shoreline is steep enough that an interior-ring
+   vertex sits FURTHER out than the rim vertex beside it. The triangle is a sliver
+   0.07 units thick; the rim is frozen by the shore fade and the interior vertex is
+   not, so it walks through the opposite edge. The cause was shoreline steepness,
+   which neither hypothesis mentioned.
+
+The fix follows the actual geometry: clamp the sideways field to a fraction of each
+triangle's own smallest altitude. Scaling all three vertices of a triangle by one
+factor scales every pairwise difference by exactly that factor, so one pass is
+sufficient rather than approximate.
+
+What it costs, measured over 200 seeds per size:
+
+| radius | vertices clamped | smallest factor |
+| --- | --- | --- |
+| 1.70 pond | 88% | 0.001x |
+| 10.80 smallest lake | 0.046% | 0.85x |
+| 12.15 and above | none | 1.0x |
+
+So the hero water is effectively untouched and the pond gives up most of its
+sideways crowding — which it was buying with inverted triangles. Wave height is
+untouched everywhere, so nothing loses relief. A better fix exists if it ever
+matters: the pond is over-tessellated at 96 angular segments for a 1.7-unit
+radius, and scaling segments with radius the way rings already are would give it
+room to keep more of the field.
+
+### Corrections to what this plan predicted
+
+- **The published fold metric is wrong as written.** "The Gerstner lateral shift
+  never exceeds local vertex spacing" (US-FOREST-001, repeated in step 4 below) is
+  a proxy that fails in both directions. It reads as a fold across open water,
+  where neighbouring vertices move together and nothing is wrong, and it passed the
+  pond, which folded. The acceptance sentence — "no triangle inverts" — is
+  measurable directly, and that is what the test does.
+- **The grid had to be extracted too, not just the displacement.** Step 3 only
+  called for the wave function. A test that rebuilt the vertex layout itself would
+  have proved a property of its own copy, so `waterSurfaceRestGrid` and
+  `waterSurfaceTriangleIndices` are now shared by the renderer and the test.
+- **Per-triangle `expect()` does not scale.** The fold sweep walks about a million
+  triangles; asserting each one timed the test out at 5s. Accumulating the worst
+  ratio and asserting once per radius runs the same sweep in about a second.
+- **A stale comment was found while reading.** `forestMath.ts` documented the
+  shipped outline as "8 harmonics, gain 2.0, SDI 1.60" — a configuration replaced
+  long ago, in a file whose own code says the top harmonics are gone. Corrected to
+  the measured 1.155-1.197, with the test named as the source. This is the failure
+  mode US-FOREST-002 exists to end.
 
 ### Already satisfied — do not redo
 

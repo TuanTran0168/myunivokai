@@ -35,7 +35,7 @@ date; it is not the original creation date.
 | [fe/forest-render-mechanism.md](fe/forest-render-mechanism.md) | How the **forest/nature** scene is drawn: instanced + animated GLBs, seasonal recolor, bird gotchas, **the Sketchfab constraint** | Before adding a forest 3D asset |
 | [fe/forest-realism-roadmap.md](fe/forest-realism-roadmap.md) | **What realism level the forest is at**, the coupled water/wander radii, the animal-jitter fix, what to improve next, perf knobs | Before any "make the forest look better" task |
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
-| [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution plans: Part A dynamic family chunks (**shipped**), Part B forest fidelity metrics (**open**) | Before starting Part B; for what Part A actually measured |
+| [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution record for dynamic family chunks and the forest fidelity metrics, both shipped — including what each plan predicted wrongly | When a plan of yours meets a measurement that disagrees |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
 | [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe and Nature communicate through NATS/Redis and own data | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
@@ -63,7 +63,7 @@ date; it is not the original creation date.
 | `fe/forest-realism-roadmap.md` | Active | Assessed 2026-07-27 on `feat/fe-be/scene-realism-pass`; the perf budget in it is **unmeasured** |
 | `fe/refactor-plan.md` | Needs re-baseline | Several unchecked items already exist in source; do not use its status table as backlog |
 | `fe/3d-development-limitations.md` | Reference | Principles remain useful; the room-demo branch references are historical |
-| `fe/deferred-work-plan.md` | Part A implemented, Part B planned | Part A shipped with measured before/after; Part B still needs owner approval |
+| `fe/deferred-work-plan.md` | Both parts implemented | Kept as the execution record; Part B's measurement found a real mesh fold on the landmark ponds |
 | `vision/README.md` | Implemented V1 baseline | NATS/Redis/DNA architecture exists; live deployment verification remains |
 | `vision/versions/v1-2026-07-22/` | Current approved V1 | Versioned scale, ownership, messaging, data and deployment baseline |
 | `vision/api-gateway.md` | Historical | Old HTTP peer gateway; V1 versioned architecture is current |
