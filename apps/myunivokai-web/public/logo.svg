@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Myunivokai">
+  <!-- The Myunivokai mark: an M drawn as a ridge, with a disc rising behind it.
+
+       The name is My Unique OK AI, not "my universe", and the product builds
+       forests, cities and oceans as readily as solar systems — so the mark cannot
+       be a planet. A ridge is the one silhouette that reads as all of them:
+       summits, a skyline, a swell. It is also, at these proportions, the letter M.
+       The disc behind it is whatever the world needs it to be — sun, moon, or the
+       star a system orbits.
+
+       The disc sits behind the RIGHT summit rather than in the valley: down there
+       the two arms close over it and all that shows is a smudge.
+
+       Transparent by design — it sits on the warm-black void, on a bright forest
+       canopy and on a browser tab, and any plate behind it would be wrong on at
+       least one. Colours are the brass ramp from globals.css, and the numbers are
+       kept in step with scripts/build-brand-mark.mjs, which rasterises the same
+       mark for the PNG. -->
+  <defs>
+    <linearGradient id="myunivokai-ridge" x1="48" y1="120" x2="464" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E4CF9C" />
+      <stop offset="0.55" stop-color="#C9A35B" />
+      <stop offset="1" stop-color="#A8843F" />
+    </linearGradient>
+    <linearGradient id="myunivokai-disc" x1="300" y1="104" x2="404" y2="208" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2EEE6" />
+      <stop offset="0.5" stop-color="#E4CF9C" />
+      <stop offset="1" stop-color="#C9A35B" />
+    </linearGradient>
+  </defs>
+  <circle cx="352" cy="156" r="66" fill="url(#myunivokai-disc)" />
+  <polyline
+    points="68,400 172,214 256,292 338,170 444,400"
+    fill="none"
+    stroke="url(#myunivokai-ridge)"
+    stroke-width="46"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

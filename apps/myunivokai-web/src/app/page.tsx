@@ -354,7 +354,12 @@ export default function HomePage() {
         id={FORM_RAIL_ELEMENT_ID}
         data-form-rail-collapsed={!formRailCollapseState.isExpanded}
         className={`form-rail-collapse relative z-10 sm:mx-4 lg:absolute lg:bottom-[68px] lg:left-6 lg:top-[72px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[384px] ${
-          formRailCollapseState.reservesLayoutSpace ? "mx-3 mb-4 mt-4" : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
+          formRailCollapseState.reservesLayoutSpace
+            ? // The rail is in flow below lg while the footer is fixed over it, so
+              // a plain gap left the submit button under the footer bar. The
+              // desktop branch already reserves that height with lg:bottom.
+              "mx-3 mb-[calc(var(--footer-height)+1rem)] mt-4"
+            : "mx-3 mb-0 mt-0 h-0 overflow-hidden"
         }`}
       >
       <section className="glass-panel glass-panel-glow glass-rise flex w-full flex-col overflow-hidden rounded-3xl lg:h-full">

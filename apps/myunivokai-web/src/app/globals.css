@@ -418,8 +418,20 @@ footer.chrome-bar {
    icon until pointed at, so the resting screen is world and nothing else.
 
    Both offsets come from --header-height, so the 57px contract is stated once. */
+/* Below the header on a phone, inside it from 640px up.
+   The dock is centred across the whole viewport, so in the header band it lands
+   wherever the nav's leftmost item happens to be — at 390px that is the Gallery
+   link, and the 44px circle sat straight on top of it. Gating only the label was
+   not enough: the circle itself is the collision. Under the header it has the
+   world to itself. */
 .chrome-toggle-dock {
-  top: calc((var(--header-height) - var(--chrome-toggle-size)) / 2);
+  top: calc(var(--header-height) + 10px);
+}
+
+@media (min-width: 640px) {
+  .chrome-toggle-dock {
+    top: calc((var(--header-height) - var(--chrome-toggle-size)) / 2);
+  }
 }
 
 .chrome-toggle {
@@ -519,15 +531,28 @@ body[data-world-immersive="true"] .chrome-toggle:focus-visible {
 }
 
 /* :focus rather than :focus-visible on purpose — a touch tap focuses without
-   hovering, and that is the only way a touch user ever sees the label. */
-.chrome-toggle:hover .chrome-toggle-label,
-.chrome-toggle:focus .chrome-toggle-label {
-  grid-template-columns: 1fr;
-}
+   hovering, and that is the only way a touch user ever sees the label.
 
-.chrome-toggle:hover .chrome-toggle-label-text,
-.chrome-toggle:focus .chrome-toggle-label-text {
-  opacity: 1;
+   Which is also why the label cannot unroll on a narrow screen. The dock is
+   centred and absolutely positioned, so the pill grows out over whatever the
+   header has at that height: at 390px it landed on top of the wordmark on one
+   side and the Create World button on the other, and a tap is enough to trigger
+   it. The pill needs roughly 165px centred, clear of a ~131px wordmark and a
+   ~208px nav, which wants about 580px of viewport; 640px is the breakpoint this
+   header already uses to drop the API link for the same reason.
+
+   Nothing is lost below it. The button keeps its aria-label, so the accessible
+   name never depended on this. */
+@media (min-width: 640px) {
+  .chrome-toggle:hover .chrome-toggle-label,
+  .chrome-toggle:focus .chrome-toggle-label {
+    grid-template-columns: 1fr;
+  }
+
+  .chrome-toggle:hover .chrome-toggle-label-text,
+  .chrome-toggle:focus .chrome-toggle-label-text {
+    opacity: 1;
+  }
 }
 
 .chrome-toggle-icon {
