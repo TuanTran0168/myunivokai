@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { Toaster } from "sonner";
 import { gatewayOriginUrl } from "@/lib/gateway";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// The Vietnamese subset is not decoration: the footer credit carries ầ, Đ, ă and
+// ấ, and a latin-only unicode-range drops them onto whatever the OS supplies —
+// a different face, mid-word, in the one line that names a person.
+const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 const jetBrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
 
@@ -41,8 +45,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="mx-auto flex w-full max-w-container-max items-center justify-between px-margin-mobile py-3 md:px-margin-desktop">
               <Link
                 href="/"
-                className="pointer-events-auto font-display text-xl font-semibold tracking-normal text-paper"
+                className="pointer-events-auto flex items-center gap-2 font-display text-xl font-semibold tracking-normal text-paper"
               >
+                {/* `unoptimized` because the source is an SVG: the image
+                    optimizer refuses those without dangerouslyAllowSVG, and a
+                    1KB vector has nothing to optimise anyway. Empty alt — the
+                    wordmark beside it already names the link. */}
+                <Image src="/logo.svg" alt="" width={24} height={24} unoptimized priority />
                 Myunivokai
               </Link>
               <nav className="pointer-events-auto flex items-center gap-3 sm:gap-6">
@@ -89,7 +98,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <span className="pointer-events-auto hidden font-body text-xs text-on-surface-variant sm:inline">
                 © {COPYRIGHT_YEAR} Myunivokai — turn your personality into a living 3D world.
               </span>
-              <span className="pointer-events-auto font-mono text-xs uppercase tracking-widest text-secondary">MVP</span>
+              {/* A name, so not the mono uppercase treatment the build stage
+                  label used: wide-tracked caps mangle Vietnamese diacritics. */}
+              <span className="pointer-events-auto whitespace-nowrap font-body text-xs text-secondary">
+                Trần Đăng Tuấn
+              </span>
             </div>
           </footer>
         </div>

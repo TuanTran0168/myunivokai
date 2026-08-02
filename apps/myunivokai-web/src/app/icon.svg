@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The tab icon. Deliberately not public/logo.svg scaled down: at 16px that
+       mark's satellite bead is under a pixel across and its ring is a hairline,
+       so this cut drops the bead, fattens the ring and grows the core until the
+       silhouette still reads. Same brass ramp, same tilt, still transparent — a
+       tab strip can be light or dark and neither may win.
+
+       Kept in step with scripts/build-brand-mark.mjs, which rasterises the same
+       numbers for the PNG fallback. -->
+  <defs>
+    <linearGradient id="myunivokai-icon-orbit" x1="56" y1="88" x2="456" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E4CF9C" />
+      <stop offset="0.55" stop-color="#C9A35B" />
+      <stop offset="1" stop-color="#A8843F" />
+    </linearGradient>
+    <linearGradient id="myunivokai-icon-core" x1="148" y1="148" x2="364" y2="364" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2EEE6" />
+      <stop offset="0.5" stop-color="#E4CF9C" />
+      <stop offset="1" stop-color="#C9A35B" />
+    </linearGradient>
+    <clipPath id="myunivokai-icon-near-half">
+      <rect x="-256" y="256" width="1024" height="512" transform="rotate(-28 256 256)" />
+    </clipPath>
+  </defs>
+  <ellipse
+    cx="256"
+    cy="256"
+    rx="212"
+    ry="92"
+    fill="none"
+    stroke="url(#myunivokai-icon-orbit)"
+    stroke-width="50"
+    transform="rotate(-28 256 256)"
+  />
+  <circle cx="256" cy="256" r="140" fill="url(#myunivokai-icon-core)" />
+  <g clip-path="url(#myunivokai-icon-near-half)">
+    <ellipse
+      cx="256"
+      cy="256"
+      rx="212"
+      ry="92"
+      fill="none"
+      stroke="url(#myunivokai-icon-orbit)"
+      stroke-width="50"
+      transform="rotate(-28 256 256)"
+    />
+  </g>
+</svg>

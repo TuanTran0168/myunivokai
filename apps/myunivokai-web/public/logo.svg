@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Myunivokai">
+  <!-- The Myunivokai mark: a core with one orbit around it. Transparent by
+       design — it sits on the warm-black void, on a bright forest canopy and on
+       a browser tab, and any plate behind it would be wrong on at least one.
+       Colours are the brass ramp from globals.css.
+
+       The ring is drawn twice, and the core is deliberately WIDER than the ring's
+       minor axis. Both are the same point: the near arc has to cross the core for
+       this to read as an orbit. With the core inside the ring it reads as a flat
+       disc with a ball parked on it, which is what the first cut looked like.
+
+       Kept in step with scripts/build-brand-mark.mjs, which rasterises the same
+       numbers for the PNG. -->
+  <defs>
+    <linearGradient id="myunivokai-orbit" x1="48" y1="80" x2="464" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E4CF9C" />
+      <stop offset="0.55" stop-color="#C9A35B" />
+      <stop offset="1" stop-color="#A8843F" />
+    </linearGradient>
+    <linearGradient id="myunivokai-core" x1="160" y1="160" x2="352" y2="352" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2EEE6" />
+      <stop offset="0.5" stop-color="#E4CF9C" />
+      <stop offset="1" stop-color="#C9A35B" />
+    </linearGradient>
+    <!-- Everything below the orbit's own centre line, in the orbit's own frame:
+         that is exactly the half tilted toward the viewer. -->
+    <clipPath id="myunivokai-near-half">
+      <rect x="-256" y="256" width="1024" height="512" transform="rotate(-28 256 256)" />
+    </clipPath>
+  </defs>
+  <ellipse
+    cx="256"
+    cy="256"
+    rx="216"
+    ry="104"
+    fill="none"
+    stroke="url(#myunivokai-orbit)"
+    stroke-width="36"
+    transform="rotate(-28 256 256)"
+  />
+  <circle cx="256" cy="256" r="128" fill="url(#myunivokai-core)" />
+  <g clip-path="url(#myunivokai-near-half)">
+    <ellipse
+      cx="256"
+      cy="256"
+      rx="216"
+      ry="104"
+      fill="none"
+      stroke="url(#myunivokai-orbit)"
+      stroke-width="36"
+      transform="rotate(-28 256 256)"
+    />
+  </g>
+  <!-- On the ellipse at 150 degrees, so it can never drift off the ring. -->
+  <circle cx="68.94" cy="308" r="30" fill="#E4CF9C" transform="rotate(-28 256 256)" />
+</svg>
