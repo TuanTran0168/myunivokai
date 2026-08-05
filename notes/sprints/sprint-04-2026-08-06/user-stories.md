@@ -1,0 +1,441 @@
+# Sprint 04 user stories — auth-service, analytics read model, admin app
+
+> **Document status:** Planned
+> **Sprint starts:** 2026-08-06
+> **Last source review:** 2026-08-06
+
+Two epics, ordered by dependency rather than by document. Phases 0 of both
+tracks and analytics phases 0–3 have no dependency on each other and can run
+in parallel; only `S4-ANALYTICS-005` and `S4-ANALYTICS-007` join the two
+tracks, at auth phases 1–2 and the admin app shell respectively.
+
+**Supersession note:** `auth-and-admin-plan.md`'s original phase 4
+(`feat/be/admin-query-subjects`) and phases 5–6 (`feat/fe/admin-records`,
+`feat/fe/admin-charts`) are replaced by `S4-ANALYTICS-005` and
+`S4-ANALYTICS-007` below and must not be built separately — see
+[analytics-service-plan.md §Changes this forces in auth-and-admin-plan.md](../../vision/analytics-service-plan.md#changes-this-forces-in-auth-and-admin-planmd).
+
+## EPIC-S4-AUTH-001 — Staff identity and the internal admin app
+
+### S4-AUTH-001 — Freeze auth/admin contracts
+
+Status: Ready
+Priority: P0
+
+As a service developer,
+I want versioned auth subjects, JSON schemas and a separate admin OpenAPI file,
+so that the admin surface never appears in the public API contract and every
+later phase has a frozen wire format to build against.
+
+Scenario: Contracts exist before any handler
+
+Given the seven owner decisions in `auth-and-admin-plan.md` are answered
+When phase 0 lands on `feat/repo/auth-admin-contracts`
+Then `contracts/openapi-admin.yaml` exists as a file separate from the public
+OpenAPI spec
+And auth subjects (login/refresh/logout/account/role/permission) and their
+JSON schemas are defined in `contracts/go`
+And the existing Go/TypeScript contract-drift test covers the new schemas.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §Phases, Phase 0
+- notes/coding/ci-quality-gates.md — the contract-drift gate being extended
+
+Tasks:
+- [ ] Define auth subjects and account/role/permission JSON schemas in `contracts/go`.
+- [ ] Add `contracts/openapi-admin.yaml` with the admin route surface only.
+- [ ] Extend the contract-drift test to the new schemas.
+
+### S4-AUTH-002 — Stand up auth-service core
+
+Status: Blocked on S4-AUTH-001
+Priority: P0
+
+As a staff member,
+I want to log in, refresh and log out through a dedicated identity service,
+so that admin access is centrally issued, revocable and audited rather than a
+shared password.
+
+Scenario: Bootstrap and authenticate
+
+Given an operator-supplied bootstrap password and no self-signup path
+When the first admin account is created and logs in
+Then `auth-service` issues an Ed25519 access JWT (10 minute expiry) and a
+rotating opaque refresh token (14 day, single-use, stored hashed)
+And the login is written to `audit_events` with actor, action, result and
+source address
+And a wrong password returns the same constant-time response whether or not
+the account exists.
+
+Scenario: Revoke immediately
+
+Given a logged-in staff account
+When an operator disables the account or changes its password
+Then `auth-service` bumps `accounts.tokenVersion` and writes it to Redis
+And the gateway's next Redis-backed check rejects the account's existing
+session, without a per-request call to `auth-service`.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §auth-service (Tokens, Passwords, Schema)
+- notes/vision/auth-and-admin-plan.md — §Owner decisions, decision 2
+
+Tasks:
+- [ ] Create `services/auth-service` and `myunivokai_auth` migrations (`accounts`, `roles`, `permissions`, `role_permissions`, `account_roles`, `refresh_tokens`, `audit_events`).
+- [ ] Implement login/refresh/logout, Argon2id tuned for 512 MB instances, per-account/per-IP lockout.
+- [ ] Implement the code-declared permission sync; seed `super_admin` flag and `basic_user` role.
+- [ ] Implement the bootstrap command — operator-supplied password, forced change on first login, no default password anywhere in the repository.
+- [ ] Write lockout-guard tests (last super admin cannot be disabled or lose the flag, an account cannot revoke its own `account:manage`/`role:manage`).
+
+### S4-AUTH-003 — Gateway admin route group with default-deny
+
+Status: Blocked on S4-AUTH-002
+Priority: P0
+
+As a platform operator,
+I want the admin API to be a separately protected route group on the existing
+gateway,
+so that one misconfiguration cannot expose admin surface to the public
+product edge.
+
+Scenario: Every admin route defaults to deny
+
+Given the `/api/admin` sub-router is mounted with its own middleware stack
+When a router test enumerates every registered admin route
+Then each route declares a required permission or the test fails
+And an unauthenticated request to any admin route is rejected
+And the admin CORS handler allows exactly one origin, never a wildcard.
+
+Scenario: Verify without a network hop per request
+
+Given a staff access token and the Redis `tokenVersion` cache
+When the gateway handles an admin request
+Then it verifies the Ed25519 signature locally and reads the cached
+`tokenVersion`
+And only a cache miss calls `auth-service` once to repopulate it
+And `auth-service` being asleep blocks login/refresh only, not already
+authenticated navigation.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §Amended: one gateway, two route groups
+- notes/vision/auth-and-admin-plan.md — §How B works
+
+Tasks:
+- [ ] Add a distinct `chi` sub-router at `/api/admin` with its own middleware stack.
+- [ ] Implement local JWT verification plus the Redis `tokenVersion` check and documented cache-miss fallback.
+- [ ] Add the enumerating default-deny router test.
+- [ ] Add the admin-only CORS handler, rate limits, and `ADMIN_ROUTES_ENABLED` switch.
+- [ ] Extend the gateway's NATS user with admin publish permissions only.
+
+### S4-AUTH-004 — Admin app shell and staff login
+
+Status: Blocked on S4-AUTH-003
+Priority: P0
+
+As a staff member,
+I want a dedicated Next.js admin app with login and RBAC-aware navigation,
+so that I can reach the panel with no exposure to or dependency on the 3D web
+app.
+
+Scenario: Log in and see only permitted navigation
+
+Given a staff account with an assigned role
+When the staff member logs in to `apps/myunivokai-admin`
+Then the access/refresh tokens are set as `httpOnly`, `Secure`,
+`SameSite=Lax` cookies
+And every route other than login is denied by middleware without a valid
+session
+And navigation items are hidden, not just disabled, for permissions the
+account lacks
+And a CI check proves zero imports from `apps/myunivokai-web` or `three.js`.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §The admin app
+
+Tasks:
+- [ ] Scaffold `apps/myunivokai-admin` (Next.js 15 App Router, TypeScript strict, Tailwind v4, shadcn/ui, TanStack Query v5).
+- [ ] Implement the login page and session middleware, default-deny except login.
+- [ ] Implement RBAC-aware navigation from the caller's permission list.
+- [ ] Add the CI check for zero `apps/myunivokai-web` / `three.js` imports.
+
+### S4-AUTH-005 — Auth hardening
+
+Status: Planned
+Priority: P1
+
+As an operator,
+I want an invite flow, a role-management UI and a key-rotation drill,
+so that adding staff and managing roles does not require direct database
+access.
+
+Scenario: Manage roles without touching the database
+
+Given a super admin account
+When they create a role, assign permissions to it, and grant it to another
+account
+Then the lockout guards hold (an in-use role cannot be deleted; an account
+cannot revoke its own `account:manage`/`role:manage`)
+And every role write invalidates the gateway's cached role map immediately.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §Lockout guards
+- notes/vision/auth-and-admin-plan.md — §Phases, Phase 7
+
+Tasks:
+- [ ] Build the invite flow and account/role management screens.
+- [ ] Implement role-map cache invalidation on every role write.
+- [ ] Run and document a key-rotation drill with two active public keys.
+- [ ] Tune lockout thresholds from real usage.
+
+### S4-AUTH-006 — Deploy auth-service and the admin app
+
+Status: Planned
+Priority: P0
+
+As a platform operator,
+I want `auth-service` and the admin app in the production deployment topology,
+so that staff can reach the panel outside local development.
+
+Scenario: Production topology includes the new services
+
+Given `render.yaml` and the admin app's Vercel project
+When phase 8 deploys
+Then `myunivokai-auth` runs alongside the existing fleet with its own Neon
+database
+And `apps/myunivokai-admin` is deployed to its own domain with its own
+`.env.example`
+And every credential is entered directly in the Render/Vercel dashboards,
+never through the repo.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §Phases, Phase 8
+
+Tasks:
+- [ ] Add the `auth-service` `render.yaml` entry and Neon database.
+- [ ] Add gateway env additions for the admin route group.
+- [ ] Provision the admin app's Vercel project and domain.
+- [ ] Write the deployment runbook.
+
+## EPIC-S4-ANALYTICS-001 — A read model for the admin app
+
+### S4-ANALYTICS-001 — Freeze analytics contracts
+
+Status: Ready
+Priority: P0
+
+As a service developer,
+I want `WorldSnapshot`, `FamilyWorldChangedData`, the two `world.changed`
+subjects and the four query subjects frozen in `contracts/go` with fixtures,
+so that the event-emitting phase and the consuming phase can be built
+independently without drifting.
+
+Scenario: Contracts and fixtures exist first
+
+Given the snapshot-events design in `analytics-service-plan.md`
+When phase 0 lands on `feat/repo/analytics-contracts`
+Then `WorldSnapshot` and `FamilyWorldChangedData` exist in `contracts/go`
+And `myunivokai.events.{universe,nature}.world.changed.v1` and the four
+`queries.analytics.*` subjects are defined
+And `contracts/fixtures/` gains JSON fixtures for the new events — the first
+event fixtures in the repository.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Design decision: snapshot events, not fine-grained events
+- notes/vision/analytics-service-plan.md — §Phases, Phase 0
+
+Tasks:
+- [ ] Add `WorldSnapshot` and `FamilyWorldChangedData` to `contracts/go`.
+- [ ] Define the two `world.changed` subjects and four `queries.analytics.*` subjects.
+- [ ] Add JSON fixtures for the new events under `contracts/fixtures/`.
+
+### S4-ANALYTICS-002 — Start emitting world-change events
+
+Status: Blocked on S4-ANALYTICS-001
+Priority: P0 — ordered first among implementation work; the only phase whose
+delay causes permanent data loss
+
+As the analytics read model's future consumer,
+I want universe and nature to start emitting a revision-stamped snapshot on
+every world mutation now,
+so that no event that will ever be needed is lost to JetStream's 7-day
+retention before `analytics-service` exists to consume it.
+
+Scenario: Every mutation increments revision and emits a snapshot
+
+Given a world in universe or nature
+When a variant is created, a variant is selected, or a world is published
+Then the `revision` column increments in the same transaction as the mutation
+And an outbox row is written with message id `world_id:rev:<n>`
+And the completed event is enriched with the full `WorldSnapshot` fields.
+
+Scenario: No analytics service exists yet
+
+Given no consumer is subscribed to the new subjects
+When these events publish
+Then they accumulate durably in `MYUNIVOKAI_EVENTS`
+And dna-service's explicit `ConsumerFilterSubjects` remains unaffected.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Design decision: a revision column on worlds
+- notes/vision/analytics-service-plan.md — §The event gap
+- notes/vision/analytics-service-plan.md — §Phases, Phase 1
+
+Tasks:
+- [ ] Add `revision INTEGER NOT NULL DEFAULT 1` to `worlds` in universe and nature migrations.
+- [ ] Increment `revision` and write an outbox row inside the existing variant-create/select/publish transactions.
+- [ ] Enrich `FamilyCompletedData` with the full `WorldSnapshot` fields (additive, backward compatible).
+- [ ] Add a repository test asserting every mutating store method writes an outbox row — the drift guard the plan names as the real long-term cost.
+
+### S4-ANALYTICS-003 — Stand up analytics-service's own consumer and projections
+
+Status: Blocked on S4-ANALYTICS-001 (parallel to S4-ANALYTICS-002)
+Priority: P0
+
+As the admin app,
+I want `analytics-service` to consume events into `world_projections` and
+`job_projections` with idempotent upserts,
+so that duplicate or out-of-order delivery from JetStream never corrupts the
+read model.
+
+Scenario: Idempotent projection from a durable consumer
+
+Given `analytics-service` starts fresh against `MYUNIVOKAI_EVENTS`
+When it processes `dna.generated`, `dna.failed`, `family.completed`,
+`family.failed` and `world.changed` events
+Then it writes to `inbox_messages` with `ON CONFLICT (message_id) DO NOTHING`
+before projecting
+And `world_projections` upserts only when the incoming revision is greater
+than the stored one
+And no `outbox_messages` table exists in this service's schema.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Analytics schema
+- notes/vision/analytics-service-plan.md — §What the existing infrastructure already provides (`dnaResultsDurableName` precedent)
+- notes/vision/analytics-service-plan.md — §Phases, Phase 2
+
+Tasks:
+- [ ] Scaffold `services/analytics-service` (config, pool, migrations, hollow health server) copied from `universe-service`.
+- [ ] Add the durable consumer modeled on `dnaResultsDurableName`, `MaxDeliver(-1)`, wildcard filter on `myunivokai.events.>`.
+- [ ] Implement inbox idempotency and the revision-guarded upsert into `world_projections`/`job_projections`.
+- [ ] Add the analytics NATS user (subscribe `events.>`, subscribe/publish `queries.analytics.>`, no domain publish permission).
+
+### S4-ANALYTICS-004 — Serve analytics queries
+
+Status: Blocked on S4-ANALYTICS-003
+Priority: P0
+
+As the admin app,
+I want paginated overview, world-list, job-list and timeseries queries
+answered entirely inside `analytics-service`,
+so that every aggregate is computed once in SQL rather than summed at the
+edge.
+
+Scenario: Every aggregate is computed in SQL
+
+Given `world_projections` and `job_projections` are populated
+When the gateway relays `queries.analytics.overview.get.v1`, `world.list.v1`,
+`job.list.v1` or `timeseries.get.v1`
+Then `analytics-service` answers using `QueueSubscribe` with the
+`analytics-service-v1` queue group
+And every response is paginated, including `world.list`, given the 2500ms
+request/reply deadline
+And the gateway performs no summation or grouping of the returned rows.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Query contract
+- notes/vision/analytics-service-plan.md — §Phases, Phase 3
+
+Tasks:
+- [ ] Implement the four query subjects and their SQL aggregates.
+- [ ] Add mandatory pagination to every list/aggregate response.
+- [ ] Add the `analytics-service-v1` queue group and `QueueSubscribe` wiring.
+
+### S4-ANALYTICS-005 — Wire gateway admin routes to analytics
+
+Status: Blocked on S4-AUTH-002, S4-AUTH-003, S4-ANALYTICS-004
+Priority: P0
+
+As a staff member,
+I want `/api/admin/*` read routes to call `analytics-service` instead of
+fanning out to universe/nature/dna,
+so that an admin page only ever waits on analytics and auth, never on a
+domain service.
+
+Scenario: Admin reads touch only two services
+
+Given a staff member requests any admin read screen
+When the gateway handles `/api/admin/*`
+Then it verifies the token (locally, or via `auth-service` on a cache miss)
+and queries `analytics-service` only
+And no domain service (dna/universe/nature) receives any request on this path
+And this replaces `auth-and-admin-plan.md`'s original admin-query-subjects
+phase rather than adding to it.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Admin request path
+- notes/vision/analytics-service-plan.md — §Changes this forces in auth-and-admin-plan.md
+- notes/vision/analytics-service-plan.md — §Phases, Phase 4
+
+Tasks:
+- [ ] Bind `/api/admin/*` read routes to the analytics query subjects.
+- [ ] Do not build the `auth-and-admin-plan.md` phase-4 domain-service aggregate subjects.
+- [ ] Add a gateway-level test proving no domain-service subject is published on this path.
+
+### S4-ANALYTICS-006 — Deploy analytics-service
+
+Status: Blocked on S4-ANALYTICS-004
+Priority: P0
+
+As a platform operator,
+I want `analytics-service` in the production deployment topology,
+so that the read model exists outside local development.
+
+Scenario: Production topology includes analytics-service
+
+Given `render.yaml` and a Neon database budget
+When phase 5 deploys
+Then `myunivokai-analytics` runs alongside the existing fleet with its own
+Neon database (or shares a project per the documented fallback)
+And the analytics NATS user block from the plan is added to
+`nats-server.conf`
+And `contracts/openapi-admin.yaml` gains the analytics-backed admin route
+entries.
+
+Source evidence:
+- notes/vision/analytics-service-plan.md — §Phases, Phase 5
+- notes/vision/analytics-service-plan.md — §What this costs
+
+Tasks:
+- [ ] Add the analytics NATS user block to `nats-server.conf`.
+- [ ] Add the `render.yaml` service entry and Neon database — verify the account's instance-hour and project limits first.
+- [ ] Add the admin OpenAPI entries for the analytics-backed routes.
+
+### S4-ANALYTICS-007 — Ship admin analytics screens
+
+Status: Blocked on S4-AUTH-004, S4-ANALYTICS-005
+Priority: P0
+
+As a staff member,
+I want a dashboard, a worlds table and a jobs table in the admin app,
+so that I can see business and job-health data without querying any database
+directly.
+
+Scenario: Render the dashboard and record tables from analytics only
+
+Given the admin app shell and the analytics query subjects both exist
+When a staff member with `chart:read` and `world:read` opens the admin app
+Then the dashboard renders totals per family, failure rate, publish rate and
+archetype/style distribution
+And the worlds table and jobs table use cursor pagination against
+`analytics-service`
+And this delivers the record-list and chart work described in
+`auth-and-admin-plan.md`'s original phases 5–6, superseded to read from
+analytics instead of a domain-service fan-out.
+
+Source evidence:
+- notes/vision/auth-and-admin-plan.md — §Charts
+- notes/vision/analytics-service-plan.md — §Phases, Phase 6
+
+Tasks:
+- [ ] Build the dashboard screen (totals, failure rate, publish rate, distributions).
+- [ ] Build the worlds table and jobs table with TanStack Table and cursor pagination.
+- [ ] Wire TanStack Query against the analytics query subjects only.

@@ -48,7 +48,7 @@ date; it is not the original creation date.
 | [vision/service-wake-mechanism.md](vision/service-wake-mechanism.md) | Confirmed production defect: sleeping free-tier domain services never wake from a NATS message. Proactive/reactive wake design, status-code contract, removal path once off free tier. **Deferred behind auth/analytics/admin** | Before touching gateway error handling, `/healthz`, or if this defect causes a visible incident |
 | [ops/render-deployment.md](ops/render-deployment.md) | Current Render background-worker deployment entry point | Before deploying |
 | [user-stories/](user-stories/README.md) | Source-grounded product stories and prioritized engineering tasks, with Given/When/Then acceptance | Before selecting the next feature branch |
-| [sprints/](sprints/README.md) | Dated Sprint 1–3 commitments, Definition of Done and Sprint 1 deployment guide | Before implementation or deployment scheduling |
+| [sprints/](sprints/README.md) | Dated Sprint 1–4 commitments, Definition of Done and Sprint 1 deployment guide | Before implementation or deployment scheduling |
 | [design/](design/) | Stitch UI mockups (v1, v2) | When polishing UI |
 | [references/](references/README.md) | External brand research, Three.js asset sources, licenses and tooling links | Before selecting a name or downloading a 3D asset |
 | [archive/](archive/) | Finished/historical plans (original implementation plan, perf, sky-from-DB, visual-diversity, 3D next-steps) | Reference only |
@@ -80,11 +80,11 @@ date; it is not the original creation date.
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
 | `vision/city-service-plan.md` | Approved product plan with amendment | City moves to Sprint 3 and consumes canonical DNA/NATS |
-| `vision/auth-and-admin-plan.md` | Approved with amendments, not implemented | Drafted and amended 2026-08-05: one gateway with an admin route group, Django-style runtime-editable RBAC, and a token/role model that must extend to 3D-web accounts. All seven owner decisions settled; phase 1 is unblocked. Its read path is superseded by `analytics-service-plan.md` |
-| `vision/analytics-service-plan.md` | Proposed, not implemented | Drafted 2026-08-05. Verified against the events stream, both publisher ACLs and dna-service's second consumer: no stream or permission change is needed to emit the new events. Records the variant/publish event gap that must close first; the wake-mechanism finding moved to its own document |
-| `vision/service-wake-mechanism.md` | Proposed, deferred, not implemented | Drafted 2026-08-05 after a live 202-then-503 reproduction in production. Owner explicitly deprioritized this behind auth-service, analytics-service and the admin app — recorded as a known defect, not scheduled work |
+| `vision/auth-and-admin-plan.md` | Approved with amendments, scheduled | Drafted and amended 2026-08-05: one gateway with an admin route group, Django-style runtime-editable RBAC, and a token/role model that must extend to 3D-web accounts. All seven owner decisions settled. Its read path is superseded by `analytics-service-plan.md`. Scheduled as `EPIC-S4-AUTH-001` in [Sprint 4](sprints/sprint-04-2026-08-06/README.md) |
+| `vision/analytics-service-plan.md` | Proposed, scheduled | Drafted 2026-08-05. Verified against the events stream, both publisher ACLs and dna-service's second consumer: no stream or permission change is needed to emit the new events. Records the variant/publish event gap that must close first; the wake-mechanism finding moved to its own document. Scheduled as `EPIC-S4-ANALYTICS-001` in [Sprint 4](sprints/sprint-04-2026-08-06/README.md) |
+| `vision/service-wake-mechanism.md` | Proposed, deferred, not implemented | Drafted 2026-08-05 after a live 202-then-503 reproduction in production. Owner explicitly deprioritized this behind auth-service, analytics-service and the admin app — recorded as a known defect, out of Sprint 4's scope |
 | `ops/render-deployment.md` | Active entry point | Routes operators to the Sprint 1 NATS/Redis deployment guide |
-| `sprints/` | Active schedule | Sprint 1 complete migration, Sprint 2 hardening, Sprint 3 City |
+| `sprints/` | Active schedule | Sprint 1 complete migration, Sprint 2 hardening, Sprint 3 City, Sprint 4 auth/analytics/admin |
 | `design/**/DESIGN.md` | Superseded reference | Layout ideas remain; purple/cyan visual language is not the active design system |
 | `references/` | Reference catalog | External links are dated research inputs; re-check availability and asset-level licenses before use |
 | `archive/*.md` | Archived | Historical only |
