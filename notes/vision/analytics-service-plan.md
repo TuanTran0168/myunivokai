@@ -6,6 +6,10 @@
 > [auth-and-admin-plan.md](auth-and-admin-plan.md) — Option B is promoted from
 > "later, on a trigger" to a planned service. Read that document first; this one
 > only replaces its §Read path and its partial-results requirement.
+> **Priority:** owner confirmed 2026-08-05 — auth-service, this plan, and
+> `apps/myunivokai-admin` are the active track.
+> [service-wake-mechanism.md](service-wake-mechanism.md) is deliberately
+> deferred behind all three.
 
 ## What this service is, in one sentence
 
@@ -295,34 +299,26 @@ eventually exceed it.
 
 ## The wake problem
 
-This is a real gap in the current system, not only in this plan.
+**Confirmed in production, 2026-08-05** — this is no longer a hypothesis. A
+live test produced `202 Accepted` on `POST /api/nature/worlds` followed by
+`503 Service Unavailable` on the resulting job's status query. The 503, not
+504, proves the failure was immediate — a Core NATS `no-responders` reply, not
+a timed-out request — because no consumer was listening on dna-service's query
+subject. Render free web instances spin down when idle and spin up only on an
+**HTTP** request; a NATS message cannot wake one. Full analysis, reproduction
+steps, and the fix design live in
+[service-wake-mechanism.md](service-wake-mechanism.md), which is **deferred by
+the owner behind auth-service, analytics-service and the admin app** — recorded
+as a known production defect, not scheduled work.
 
-A Render free web instance spins down when idle and spins up on an **HTTP**
-request. A NATS message does not wake it. Searching the repository finds no code
-that pings any service:
-
-- `services/api-gateway` contains exactly one match for `healthz` —
-  [router.go:47](../../services/api-gateway/internal/handlers/router.go#L47),
-  its own liveness route. It never calls another service over HTTP.
-- `apps/myunivokai-web` references only the gateway origin.
-
-So a query published while a domain service sleeps waits until the 2500ms
-request/reply timeout expires, and a queued command waits in JetStream until
-something wakes the service. **This should be verified in production before the
-analytics work starts** — it plausibly affects the first world creation after an
-idle period today, which is a separate finding from this plan and, if real,
-deserves its own branch.
-
-For the admin app the requirement is explicit: **gateway exposes
-`POST /api/admin/wake`**, which fires a short-timeout HTTP GET at the analytics
-and auth health endpoints and returns immediately. The admin app calls it once
-on mount, before its first query. The gateway owns it because the admin app
-should not know service URLs and because it avoids cross-origin requests to
-`*.onrender.com`.
-
-Note that the gateway's own CSP — `default-src 'none'` in
-[security_headers.go:7](../../services/api-gateway/internal/middleware/security_headers.go#L7)
-— is a response header and does not restrict outbound calls from the Go process.
+That document's design already covers the admin app's case: the gateway gets a
+reactive wake mechanism for every read path with no per-app opt-in, so
+analytics-service's admin queries are woken the same way any other sleeping
+service's queries would be. **No dedicated wake endpoint is needed here** — an
+earlier draft of this plan proposed `POST /api/admin/wake`; that is removed.
+When the mechanism in that document ships, this service is covered by it
+automatically. Until then, the admin app is subject to the same cold-start
+defect as every other client, with no special-casing.
 
 ## Retention, and the one way data can be lost
 
@@ -352,7 +348,7 @@ only work whose delay causes permanent data loss.
 | 1 | `feat/be/world-change-events` | **Start emitting.** `revision` column + migration in universe and nature; increment and write an outbox row inside the existing transactions for variant create, variant select and publish; enrich the completed event. No analytics service yet — events accumulate in the stream |
 | 2 | `feat/be/analytics-service` | Service skeleton copied from universe-service: config, pool, migrations, hollow health server; the events consumer modelled on `dnaResultsDurableName` with `MaxDeliver(-1)`; inbox idempotency; the projection writer |
 | 3 | `feat/be/analytics-queries` | The four query subjects, SQL aggregates, pagination, `QueueSubscribe` with the `analytics-service-v1` queue group |
-| 4 | `feat/be/gateway-analytics-routes` | `/api/admin/*` read routes bound to the analytics queries, plus `POST /api/admin/wake`. **Depends on auth-service phases 1–2** for token verification |
+| 4 | `feat/be/gateway-analytics-routes` | `/api/admin/*` read routes bound to the analytics queries. **Depends on auth-service phases 1–2** for token verification |
 | 5 | `feat/ci/analytics-deployment` | NATS user block, `render.yaml` service, Neon database, `contracts/openapi-admin.yaml` entries |
 | 6 | `feat/fe/admin-analytics-screens` | Dashboard, worlds table, jobs table in `apps/myunivokai-admin` |
 
@@ -409,7 +405,7 @@ never inconsistent in history.
    personal field.
 2. **Snapshot events versus fine-grained events** — recommend snapshot.
 3. **Daily rollups now or later** — recommend later.
-4. **Wake via `POST /api/admin/wake` or from the browser** — recommend the
-   gateway route.
-5. **Verify the production wake behaviour of the existing three services** — a
-   separate finding this plan surfaced; recommend checking before phase 1.
+4. **When to build [service-wake-mechanism.md](service-wake-mechanism.md)** —
+   confirmed production defect; explicitly deferred by the owner behind this
+   plan. Until it ships, analytics-service is subject to the same cold-start
+   defect as every other client, with no special-casing planned here.
