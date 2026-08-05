@@ -82,6 +82,55 @@ The same ProfileDNA that reaches the eyes reaches the ears:
 | `postFX.bloomIntensity` | How open the tone filter sits |
 | Seed | Key jitter, which phrase it opens on, the room, the humanising |
 
+## Does this survive the switch to a real AI provider?
+
+Yes, with one gap worth knowing about. Recorded here because it was asked
+directly and the answer is not visible from the audio code alone.
+
+The music reads exactly one input: `SceneConfig`. It never calls a provider — the
+frontend calling AI is banned outright — and it sits *downstream* of schema
+validation, so it cannot tell whether `mock`, Gemini or OpenAI produced the DNA.
+Swapping the provider is an environment variable
+([`aifactory/factory.go`](../../services/dna-service/internal/aifactory/factory.go)),
+so there is nothing on the audio side to change.
+
+How much freedom each field carries matters more than the swap itself:
+
+| Field | What it decides | How far a live provider moves it |
+| --- | --- | --- |
+| Point `energy` | Tempo | Continuous — the widest audible effect |
+| Point count | Chord fullness | Follows how much the visitor wrote |
+| `season` + `lighting.timeOfDay` | Transposition | 4 x 3 = 12 combinations |
+| `theme` / `weather.kind` | **The piece and the instruments** | Closed enum, five values each |
+| Seed | Opening phrase, room, humanising | Unbounded |
+
+The two fields that choose the music are closed enums in the contract —
+[personality-dna.schema.json](../../contracts/schemas/personality-dna.schema.json)
+and [forest-scene-config.schema.json](../../contracts/scenes/forest-scene-config.schema.json)
+— and the identity maps cover all ten values. A provider cannot invent a sixth
+theme: validation rejects it and the orchestrator repairs. Every lookup falls
+back with `?? DEFAULT` and every number is type-checked and clamped besides, so
+the worst a malformed payload produces is the default piece — not silence, and
+not a throw.
+
+A live provider therefore makes the music **more** varied than the mock presets
+do, but only along tempo, key and density. Piece and instrument variety is
+bounded by the enums, not by the model.
+
+**The gap.** Add a sixth theme to the enum later and the music silently falls
+back to the default piece, and *no test fails* — the recipe test sweeps a theme
+list written inside the test file instead of read from the contract. Whoever adds
+the theme has to remember a file nowhere near the one they are editing. A test
+that reads the enum out of the schema and asserts the identity map covers it
+would close this.
+
+**If a provider should choose the music directly**, that needs a contract field
+beside `visualHints`, Go validation, and a mapping row. Map **mood to our
+whitelist** — never let a model return a piece or a song title. Asked for
+"reflective piano" a model will name *River Flows in You* or a Ghibli cue within
+a sentence, and both are firmly in copyright. A whitelist can be licence-checked
+in CI; a generated title cannot.
+
 ## Constraints that are not negotiable
 
 **Register.** Two floors, because a recording is not a sine. A sine at 110 Hz on a

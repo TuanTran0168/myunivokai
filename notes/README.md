@@ -34,6 +34,7 @@ date; it is not the original creation date.
 | [fe/universe-render-mechanism.md](fe/universe-render-mechanism.md) | How the **universe** is drawn: 4 model layers, texture/GLB pipelines, determinism | Before adding a universe 3D asset |
 | [fe/forest-render-mechanism.md](fe/forest-render-mechanism.md) | How the **forest/nature** scene is drawn: instanced + animated GLBs, seasonal recolor, bird gotchas, **the Sketchfab constraint** | Before adding a forest 3D asset |
 | [fe/forest-realism-roadmap.md](fe/forest-realism-roadmap.md) | **What realism level the forest is at**, the coupled water/wander radii, the animal-jitter fix, what to improve next, perf knobs | Before any "make the forest look better" task |
+| [fe/ambient-audio-mechanism.md](fe/ambient-audio-mechanism.md) | How every world gets **music**: public-domain scores, recorded instruments, what the DNA arranges, why three earlier versions shipped verified-and-wrong, and how to audition and measure it | Before touching any audio code or asset |
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
 | [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution record for dynamic family chunks and the forest fidelity metrics, both shipped — including what each plan predicted wrongly | When a plan of yours meets a measurement that disagrees |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
@@ -62,6 +63,7 @@ date; it is not the original creation date.
 | `fe/forest-render-mechanism.md` | Active | Matches Forest schema 1.2 and current asset pipeline; decoder self-hosting is a pending task |
 | `fe/forest-realism-roadmap.md` | Active | Assessed 2026-07-27 on `feat/fe-be/scene-realism-pass`; the perf budget in it is **unmeasured** |
 | `fe/refactor-plan.md` | Needs re-baseline | Several unchecked items already exist in source; do not use its status table as backlog |
+| `fe/ambient-audio-mechanism.md` | Active | Assessed 2026-08-05 on `feat/fe/procedural-ambient-audio`; matches the six shipped scores and the measured balance. **Nothing in it has been judged by ear yet** |
 | `fe/3d-development-limitations.md` | Reference | Principles remain useful; the room-demo branch references are historical |
 | `fe/deferred-work-plan.md` | Both parts implemented | Kept as the execution record; Part B's measurement found a real mesh fold on the landmark ponds |
 | `vision/README.md` | Implemented V1 baseline | NATS/Redis/DNA architecture exists; live deployment verification remains |
