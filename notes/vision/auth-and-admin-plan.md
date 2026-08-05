@@ -7,6 +7,12 @@
 > are marked **Amended** and state the current decision.
 > **Decisions:** all seven answered 2026-08-05 — see
 > [Owner decisions](#owner-decisions--answered-2026-08-05). Phase 1 is unblocked.
+> **Read path under revision:** the owner has chosen to build Option B as a real
+> service. [analytics-service-plan.md](analytics-service-plan.md) proposes it and
+> lists the sections here it replaces — the read-path table, the partial-results
+> requirement, and the aggregate work in phase 4. Nothing in this document has
+> been rewritten yet; do not implement the gateway fan-out for admin screens
+> without reading that plan first.
 
 Two new deliverables, deliberately kept apart from the 3D product:
 
