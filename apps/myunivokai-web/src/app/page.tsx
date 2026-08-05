@@ -299,6 +299,7 @@ export default function HomePage() {
           className="h-full"
           selectedPlanetKey={selectedPreviewPointKey}
           onSelectPlanet={handleSelectPreviewPoint}
+          enableAmbientSound
         />
 
         {/* Floating identity island (desktop): live state, the curatorial

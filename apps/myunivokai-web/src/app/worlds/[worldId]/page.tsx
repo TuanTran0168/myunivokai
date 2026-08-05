@@ -236,6 +236,7 @@ function WorldPageContent({ worldId, family }: { worldId: string; family: WorldF
           selectedPlanetKey={selectedPlanetKey}
           onSelectPlanet={handleSelectPlanet}
           preserveDrawingBuffer
+          enableAmbientSound
         />
       </div>
 
