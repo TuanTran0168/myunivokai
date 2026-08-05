@@ -107,6 +107,27 @@ jobs:
       - name: Build
         run: go build ./...
 
+  auth-service-checks:
+    name: Auth service (go vet + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/auth-service/go.mod
+          cache-dependency-path: services/auth-service/go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+
   api-gateway-checks:
     name: API gateway (go vet + test + build)
     runs-on: ubuntu-latest

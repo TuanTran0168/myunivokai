@@ -62,7 +62,7 @@ Tasks:
 
 ### S4-AUTH-002 — Stand up auth-service core
 
-Status: Blocked on S4-AUTH-001
+Status: Implemented
 Priority: P0
 
 As a staff member,
@@ -84,25 +84,54 @@ the account exists.
 Scenario: Revoke immediately
 
 Given a logged-in staff account
-When an operator disables the account or changes its password
+When an operator disables the account
 Then `auth-service` bumps `accounts.tokenVersion` and writes it to Redis
+And every refresh token family the account holds is revoked
 And the gateway's next Redis-backed check rejects the account's existing
 session, without a per-request call to `auth-service`.
+
+Scenario: The last super admin cannot be disabled
+
+Given exactly one enabled account with `is_super_admin`
+When a disable is attempted against that account
+Then the disable is refused with `LAST_SUPER_ADMIN`
+And the account remains enabled — this is the one bypass path back into an
+otherwise-unadministerable system, and losing it is the bricking failure the
+plan's lockout guards exist to prevent.
+
+**Narrower than the original scenario, honestly:** "or changes its password"
+is removed from the revoke scenario above. A self-service change-password
+subject was never in this phase's source plan (`auth-and-admin-plan.md`'s
+phase-1 bullet list names login/refresh/logout, not password change), and
+building one now would have been scope creep beyond what phase 1 actually
+needs. `bumpAndCacheTokenVersion` is written as the one shared revocation
+primitive precisely so a future password-change handler reuses it rather than
+duplicating the Redis-write logic.
 
 Source evidence:
 - notes/vision/auth-and-admin-plan.md — §auth-service (Tokens, Passwords, Schema)
 - notes/vision/auth-and-admin-plan.md — §Owner decisions, decision 2
+- notes/vision/auth-and-admin-plan.md — §Lockout guards — enforced server-side, not in the UI
+- services/auth-service/internal/services/auth_service.go
+- services/auth-service/migrations/000001_init.sql
 
 Tasks:
-- [ ] Create `services/auth-service` and `myunivokai_auth` migrations (`accounts`, `roles`, `permissions`, `role_permissions`, `account_roles`, `refresh_tokens`, `audit_events`).
-- [ ] Implement login/refresh/logout, Argon2id tuned for 512 MB instances, per-account/per-IP lockout.
-- [ ] Implement the code-declared permission sync; seed `super_admin` flag and `basic_user` role.
-- [ ] Implement the bootstrap command — operator-supplied password, forced change on first login, no default password anywhere in the repository.
-- [ ] Write lockout-guard tests (last super admin cannot be disabled or lose the flag, an account cannot revoke its own `account:manage`/`role:manage`).
+- [x] Create `services/auth-service` and `myunivokai_auth` migrations (`accounts`, `roles`, `permissions`, `role_permissions`, `account_roles`, `refresh_tokens`, `audit_events`).
+- [x] Implement login/refresh/logout, Argon2id tuned for 512 MB instances, per-account lockout (per-IP limiting is the gateway's existing rate-limit layer, not duplicated here).
+- [x] Implement the code-declared permission sync; seed `basic_user` role with `chart:read` only. `super_admin` is the bypass flag on `accounts`, not a role, so nothing is "seeded" for it beyond the bootstrap account itself.
+- [x] Implement the bootstrap command — operator-supplied email/password (flags or env vars), forced change flagged on first login, no default password anywhere in the repository.
+- [x] Implement refresh-token rotation with reuse detection (a replayed used token revokes its whole family) and the last-super-admin disable guard.
+- [x] Write tests: password hash/verify, Ed25519 token issue/verify (wrong key, expiry), refresh-token hashing, login/lockout/reuse/logout/disable business logic against a real in-memory `Store`, permission-sync idempotency.
+
+**Deferred to a later phase, not silently dropped:** a self-service
+change-password subject; per-account audit-event query surface (frozen in
+contracts, not yet answered by a handler — that is phase 5/7 territory);
+`account:manage`/`role:manage` self-revocation guards, which only become
+meaningful once role management itself exists.
 
 ### S4-AUTH-003 — Gateway admin route group with default-deny
 
-Status: Blocked on S4-AUTH-002
+Status: Ready
 Priority: P0
 
 As a platform operator,

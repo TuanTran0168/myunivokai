@@ -75,14 +75,15 @@ type AccessTokenClaims struct {
 }
 
 type AccountSummary struct {
-	AccountID    string      `json:"accountId"`
-	Email        string      `json:"email"`
-	Kind         AccountKind `json:"kind"`
-	Roles        []string    `json:"roles"`
-	Permissions  []string    `json:"permissions"`
-	IsSuperAdmin bool        `json:"isSuperAdmin"`
-	Disabled     bool        `json:"disabled"`
-	CreatedAt    time.Time   `json:"createdAt"`
+	AccountID           string      `json:"accountId"`
+	Email               string      `json:"email"`
+	Kind                AccountKind `json:"kind"`
+	Roles               []string    `json:"roles"`
+	Permissions         []string    `json:"permissions"`
+	IsSuperAdmin        bool        `json:"isSuperAdmin"`
+	Disabled            bool        `json:"disabled"`
+	ForcePasswordChange bool        `json:"forcePasswordChange"`
+	CreatedAt           time.Time   `json:"createdAt"`
 }
 
 type RoleSummary struct {
@@ -112,10 +113,15 @@ type AuditEventSummary struct {
 
 // LoginData carries the credential pair auth-service verifies with Argon2id.
 // Password policy is enforced there, not here — this type only fixes the
-// wire shape between the gateway and auth-service.
+// wire shape between the gateway and auth-service. SourceAddress is carried
+// here, not derived by auth-service, because the gateway is the only
+// component that ever terminates the HTTP connection and therefore the only
+// one that knows the caller's address — NATS request/reply does not expose
+// it to the responder.
 type LoginData struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email         string `json:"email"`
+	Password      string `json:"password"`
+	SourceAddress string `json:"sourceAddress"`
 }
 
 // LoginResponseData is returned by both login and refresh: a refresh always
@@ -129,11 +135,13 @@ type LoginResponseData struct {
 }
 
 type RefreshData struct {
-	RefreshToken string `json:"refreshToken"`
+	RefreshToken  string `json:"refreshToken"`
+	SourceAddress string `json:"sourceAddress"`
 }
 
 type LogoutData struct {
-	RefreshToken string `json:"refreshToken"`
+	RefreshToken  string `json:"refreshToken"`
+	SourceAddress string `json:"sourceAddress"`
 }
 
 type TokenVersionQueryData struct {
@@ -161,12 +169,20 @@ type AccountGetQueryData struct {
 	AccountID string `json:"accountId"`
 }
 
+// AccountDisableData and AccountEnableData carry ActorAccountID and
+// SourceAddress for the same reason LoginData does: auth-service's audit
+// row needs to name who performed the action, and only the gateway (which
+// already verified the actor's own token) knows that.
 type AccountDisableData struct {
-	AccountID string `json:"accountId"`
+	AccountID      string `json:"accountId"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type AccountEnableData struct {
-	AccountID string `json:"accountId"`
+	AccountID      string `json:"accountId"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type RoleListResponseData struct {

@@ -51,12 +51,13 @@ sky, belt, sun and grade — one theme would fix a fifth of the surface.
 
 ## Backend jobs
 
-Four independent jobs run in:
+Five independent jobs run in:
 
 - `services/dna-service`;
 - `services/universe-service`;
 - `services/nature-service`;
-- `services/api-gateway`.
+- `services/api-gateway`;
+- `services/auth-service`.
 
 Each runs:
 
@@ -81,12 +82,13 @@ requiring the containers to start.
 
 ## Branch protection
 
-Require all seven jobs before merging to `staging` or `main`:
+Require all eight jobs before merging to `staging` or `main`:
 
 - `Contracts (lint + vet + test + build)`;
 - `Backend (go vet + test)` (legacy display name; the job now also builds);
 - `Nature service (go vet + test)` (legacy display name; also builds);
 - `DNA service (go vet + test + build)`;
+- `Auth service (go vet + test + build)`;
 - `API gateway (go vet + test + build)`;
 - `Frontend (typecheck + lint + test + build)`;
 - `Local Compose configuration`.

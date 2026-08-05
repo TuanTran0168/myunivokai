@@ -32,6 +32,9 @@ services:
       NATURE_DATABASE_NAME: ${NATURE_DATABASE_NAME:-myunivokai_nature}
       NATURE_DATABASE_USER: ${NATURE_DATABASE_USER:-myunivokai_nature_app}
       NATURE_DATABASE_PASSWORD: ${NATURE_DATABASE_PASSWORD:-myunivokai_local_nature}
+      AUTH_DATABASE_NAME: ${AUTH_DATABASE_NAME:-myunivokai_auth}
+      AUTH_DATABASE_USER: ${AUTH_DATABASE_USER:-myunivokai_auth_app}
+      AUTH_DATABASE_PASSWORD: ${AUTH_DATABASE_PASSWORD:-myunivokai_local_auth}
     volumes:
       - ./postgres/init-databases.sh:/scripts/init-databases.sh:ro
     entrypoint: ["/bin/sh", "/scripts/init-databases.sh"]
@@ -52,6 +55,8 @@ services:
       NATS_UNIVERSE_PASSWORD: ${NATS_UNIVERSE_PASSWORD:-myunivokai_local_universe}
       NATS_NATURE_USERNAME: ${NATS_NATURE_USERNAME:-myunivokai_nature}
       NATS_NATURE_PASSWORD: ${NATS_NATURE_PASSWORD:-myunivokai_local_nature}
+      NATS_AUTH_USERNAME: ${NATS_AUTH_USERNAME:-myunivokai_auth}
+      NATS_AUTH_PASSWORD: ${NATS_AUTH_PASSWORD:-myunivokai_local_auth}
       NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
       NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
     ports:
