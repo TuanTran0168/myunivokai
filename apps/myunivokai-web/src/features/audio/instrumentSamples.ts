@@ -16,6 +16,7 @@
 
 export type SampledInstrumentKey =
   | "piano"
+  | "pianoBass"
   | "harp"
   | "glockenspiel"
   | "vibraphone"
@@ -25,6 +26,7 @@ export type SampledInstrumentKey =
 
 export const SAMPLED_INSTRUMENT_KEYS: SampledInstrumentKey[] = [
   "piano",
+  "pianoBass",
   "harp",
   "glockenspiel",
   "vibraphone",
@@ -34,8 +36,17 @@ export const SAMPLED_INSTRUMENT_KEYS: SampledInstrumentKey[] = [
 ];
 
 // File names on disk. "s" stands in for a sharp so the names are URL-safe.
+//
+// `pianoBass` is a separate entry rather than four more notes on `piano`
+// because it is only ever used for the bass line: the written scores reach down
+// to MIDI 27 and every other instrument here starts at C4. Keeping it separate
+// means a world with a harp melody loads four low notes, not a whole second
+// piano it will never play above the stave.
 export const SAMPLED_INSTRUMENT_NOTE_NAMES: Record<SampledInstrumentKey, string[]> = {
   piano: ["C4", "D4", "E4", "Fs4", "Gs4", "C5"],
+  // Three notes, not four: the bass is floored at MIDI 43 for audibility, and a
+  // C2 sample at 36 is never the nearest to anything at or above that.
+  pianoBass: ["Fs2", "C3", "Fs3"],
   harp: ["D4", "F4", "A4", "C5", "E5", "G5"],
   glockenspiel: ["G4", "C5", "G5", "C6"],
   vibraphone: ["D4", "F4", "A4", "C5", "E5"],

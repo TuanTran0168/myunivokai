@@ -5,6 +5,7 @@ import { buildAmbientSoundscapeRecipe } from "@/lib/ambientSoundscape";
 import { readAmbientSoundPreference, writeAmbientSoundPreference } from "@/lib/ambientSoundPreference";
 import type { SceneConfig } from "@/lib/types";
 import { createAmbientSoundscapeGraph, type AmbientInstrumentSet, type AmbientSoundscapeGraph } from "./ambientSoundscapeGraph";
+import { loadArrangement, type Arrangement } from "./arrangements";
 import { loadSampledInstrument } from "./instrumentSamples";
 
 // --- Ambience lifecycle ------------------------------------------------------
@@ -15,9 +16,10 @@ import { loadSampledInstrument } from "./instrumentSamples";
 //    page. So the AudioContext is constructed inside the click handler, never in
 //    an effect, and a remembered preference arms a one-shot gesture listener
 //    instead of starting playback directly.
-// 2. The instruments are recorded samples that have to be fetched and decoded.
-//    That is asynchronous, so the graph cannot be built in the same tick the
-//    visitor asks for sound; it is built once its instruments have landed.
+// 2. The instruments are recorded samples that have to be fetched and decoded,
+//    and the notes are a written score that has to be fetched too. All of that
+//    is asynchronous, so the graph cannot be built in the same tick the visitor
+//    asks for sound; it is built once every asset has landed.
 // 3. An AudioContext is a real audio-thread resource. Leaving one open per
 //    visited world would keep the device's audio hardware awake, so the context
 //    is closed on unmount and suspended whenever the tab is hidden.
@@ -79,10 +81,21 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
   const latestRecipeReference = useRef(recipe);
   latestRecipeReference.current = recipe;
 
-  const instrumentPairKey = `${recipe.melody.instrument}+${recipe.harmony.instrument}`;
-  const [loadedInstruments, setLoadedInstruments] = useState<{ pairKey: string; set: AmbientInstrumentSet } | null>(
-    null
-  );
+  // Everything that has to be fetched before a note can be played: three
+  // instruments and the written score. One key covers all four, so the graph can
+  // check in a single comparison that what landed is what the current scene asks
+  // for.
+  const performanceAssetKey = [
+    recipe.performance.pieceId,
+    recipe.performance.melody.instrument,
+    recipe.performance.harmony.instrument,
+    recipe.performance.bass.instrument
+  ].join("+");
+  const [loadedPerformance, setLoadedPerformance] = useState<{
+    assetKey: string;
+    instruments: AmbientInstrumentSet;
+    arrangement: Arrangement;
+  } | null>(null);
 
   // The signature the graph is actually built from: the live one, once it has
   // stopped changing.
@@ -159,8 +172,9 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     };
   }, [isAvailable, isEnabled, ensureAudioContext]);
 
-  // Fetch and decode the two instruments this scene calls for. Encoded bytes are
-  // cached across worlds, so switching back to a theme heard before is instant.
+  // Fetch the score and decode the three instruments this scene calls for.
+  // Encoded sample bytes and parsed arrangements are both cached across worlds,
+  // so returning to a theme heard before is instant.
   useEffect(() => {
     if (!isEnabled || !isAvailable) {
       return;
@@ -169,27 +183,36 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     if (!audioContext) {
       return;
     }
-    const { melody, harmony } = latestRecipeReference.current;
+    const { performance } = latestRecipeReference.current;
+    const assetKey = [
+      performance.pieceId,
+      performance.melody.instrument,
+      performance.harmony.instrument,
+      performance.bass.instrument
+    ].join("+");
     let hasBeenCancelled = false;
     void Promise.all([
-      loadSampledInstrument(audioContext, melody.instrument),
-      loadSampledInstrument(audioContext, harmony.instrument)
+      loadSampledInstrument(audioContext, performance.melody.instrument),
+      loadSampledInstrument(audioContext, performance.harmony.instrument),
+      loadSampledInstrument(audioContext, performance.bass.instrument),
+      loadArrangement(performance.pieceId)
     ])
-      .then(([melodyInstrument, harmonyInstrument]) => {
+      .then(([melodyInstrument, harmonyInstrument, bassInstrument, arrangement]) => {
         if (!hasBeenCancelled) {
-          setLoadedInstruments({
-            pairKey: `${melody.instrument}+${harmony.instrument}`,
-            set: { melody: melodyInstrument, harmony: harmonyInstrument }
+          setLoadedPerformance({
+            assetKey,
+            instruments: { melody: melodyInstrument, harmony: harmonyInstrument, bass: bassInstrument },
+            arrangement
           });
         }
       })
       .catch(() => {
-        // A failed sample fetch leaves the world silent rather than broken.
+        // A failed fetch leaves the world silent rather than broken.
       });
     return () => {
       hasBeenCancelled = true;
     };
-  }, [isEnabled, isAvailable, instrumentPairKey]);
+  }, [isEnabled, isAvailable, performanceAssetKey]);
 
   // The graph itself. Keyed by signature, so a hover re-render leaves the audio
   // untouched and a variant change crossfades into the new world.
@@ -199,13 +222,24 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     }
     const audioContext = audioContextReference.current;
     const currentRecipe = latestRecipeReference.current;
-    const expectedPairKey = `${currentRecipe.melody.instrument}+${currentRecipe.harmony.instrument}`;
+    const expectedAssetKey = [
+      currentRecipe.performance.pieceId,
+      currentRecipe.performance.melody.instrument,
+      currentRecipe.performance.harmony.instrument,
+      currentRecipe.performance.bass.instrument
+    ].join("+");
     // The loader effect runs alongside this one; skip until its result matches
-    // the scene being played, or the first frames use the previous instruments.
-    if (!audioContext || loadedInstruments?.pairKey !== expectedPairKey) {
+    // the scene being played, or the first bars use the previous world's score.
+    if (!audioContext || loadedPerformance?.assetKey !== expectedAssetKey) {
       return;
     }
-    const graph = createAmbientSoundscapeGraph(audioContext, currentRecipe, FADE_IN_SECONDS, loadedInstruments.set);
+    const graph = createAmbientSoundscapeGraph(
+      audioContext,
+      currentRecipe,
+      FADE_IN_SECONDS,
+      loadedPerformance.instruments,
+      loadedPerformance.arrangement
+    );
     activeGraphReference.current = graph;
     return () => {
       graph.stop(FADE_OUT_SECONDS);
@@ -213,7 +247,7 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
         activeGraphReference.current = null;
       }
     };
-  }, [isEnabled, isAvailable, settledSignature, loadedInstruments]);
+  }, [isEnabled, isAvailable, settledSignature, loadedPerformance]);
 
   // Turning the sound off leaves the context open so re-enabling is instant,
   // but an open running context keeps the device's audio path awake. Suspend it
@@ -276,7 +310,7 @@ export function useAmbientSoundscape(scene: SceneConfig | undefined, isAvailable
     };
   }, []);
 
-  const isLoading = isEnabled && loadedInstruments === null;
+  const isLoading = isEnabled && loadedPerformance === null;
 
   return { isSupported, isEnabled, isLoading, toggle };
 }

@@ -9,12 +9,12 @@ import { Loader2, Volume2, VolumeX } from "lucide-react";
 const PLAY_ACCESSIBLE_LABEL = "Play world ambience";
 const MUTE_ACCESSIBLE_LABEL = "Mute world ambience";
 const UNSUPPORTED_ACCESSIBLE_LABEL = "World ambience is not available in this browser";
-const LOADING_ACCESSIBLE_LABEL = "Loading the world's instruments";
+const LOADING_ACCESSIBLE_LABEL = "Loading the world's music";
 
 type AmbientSoundToggleProps = {
   isEnabled: boolean;
   isSupported: boolean;
-  /** The instruments are recorded samples, so there is a real fetch to show. */
+  /** The score and the recorded instruments are fetched, so there is a real wait. */
   isLoading: boolean;
   onToggle: () => void;
 };

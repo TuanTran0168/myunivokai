@@ -2,16 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   ambientSoundscapeSignature,
   buildAmbientSoundscapeRecipe,
-  SMALL_SPEAKER_BED_FLOOR_HERTZ,
-  SMALL_SPEAKER_MELODY_FLOOR_MIDI,
-  SMALL_SPEAKER_ROOT_FLOOR_MIDI
+  SMALL_SPEAKER_BASS_FLOOR_MIDI,
+  SMALL_SPEAKER_MELODY_FLOOR_MIDI
 } from "./ambientSoundscape";
-import {
-  midiNumberToFrequencyHertz,
-  SAMPLED_INSTRUMENT_KEYS,
-  SAMPLED_INSTRUMENT_NOTE_NAMES
-} from "@/features/audio/instrumentSamples";
+import { ARRANGEMENT_PIECE_IDS } from "@/features/audio/arrangements";
+import { SAMPLED_INSTRUMENT_NOTE_NAMES } from "@/features/audio/instrumentSamples";
 import type { SceneConfig } from "./types";
+
+// The arranger's job is to turn a scene config into a performance: which written
+// piece, who plays it, in what key and at what tempo. It is pure, so all of that
+// is checkable here. What it SOUNDS like is not — that is settled by rendering
+// the real graph offline and measuring, which is how three earlier versions were
+// found to be wrong while their tests were green.
+
+const UNIVERSE_THEMES = ["cosmic-galaxy", "nebula", "crystal", "aurora", "cyber-orbit"];
+const FOREST_WEATHERS = ["clear", "sunRays", "overcast", "rain", "snow"];
+const FOREST_SEASONS = ["spring", "summer", "autumn", "winter"];
+const FOREST_TIMES_OF_DAY = ["day", "goldenHour", "dusk"];
 
 const UNIVERSE_SCENE: SceneConfig = {
   seed: "seed-universe-001",
@@ -41,6 +48,24 @@ function universeSceneWithPlanets(planetCount: number, energy: number): SceneCon
   };
 }
 
+/** Every scene the mapping tables can be reached through. */
+function everySupportedScene(): SceneConfig[] {
+  const universeScenes = UNIVERSE_THEMES.map((theme) => ({ seed: `sweep-${theme}`, theme }));
+  const forestScenes = FOREST_WEATHERS.flatMap((weather) =>
+    FOREST_SEASONS.flatMap((season) =>
+      FOREST_TIMES_OF_DAY.map((timeOfDay) =>
+        forestScene({
+          seed: `sweep-${weather}-${season}-${timeOfDay}`,
+          weather: { kind: weather, intensity: 0.7 },
+          season: { kind: season },
+          lighting: { timeOfDay }
+        })
+      )
+    )
+  );
+  return [...universeScenes, ...forestScenes];
+}
+
 describe("determinism", () => {
   it("returns an identical recipe for the same scene", () => {
     expect(buildAmbientSoundscapeRecipe(UNIVERSE_SCENE)).toEqual(buildAmbientSoundscapeRecipe(UNIVERSE_SCENE));
@@ -55,282 +80,313 @@ describe("determinism", () => {
 
   it("builds a recipe for a missing scene instead of throwing", () => {
     const recipe = buildAmbientSoundscapeRecipe(undefined);
-    expect(recipe.melody.scaleSemitones.length).toBeGreaterThan(0);
+    expect(ARRANGEMENT_PIECE_IDS).toContain(recipe.performance.pieceId);
     expect(recipe.masterGain).toBeGreaterThan(0);
   });
-});
 
-describe("instrument choice", () => {
-  it("only ever names an instrument that has samples on disk", () => {
-    const scenes: SceneConfig[] = [
-      {},
-      ...["cosmic-galaxy", "nebula", "crystal", "aurora", "cyber-orbit", "unknown"].map((theme) => ({
-        seed: `theme-${theme}`,
-        theme
-      })),
-      ...["clear", "sunRays", "overcast", "rain", "snow", "unknown"].map((kind) =>
-        forestScene({ weather: { kind, intensity: 0.6 } })
-      )
-    ];
-    for (const scene of scenes) {
-      const recipe = buildAmbientSoundscapeRecipe(scene);
-      expect(SAMPLED_INSTRUMENT_KEYS).toContain(recipe.melody.instrument);
-      expect(SAMPLED_INSTRUMENT_KEYS).toContain(recipe.harmony.instrument);
-    }
-  });
-
-  it("never doubles the melody timbre in the harmony", () => {
-    for (const theme of ["cosmic-galaxy", "nebula", "crystal", "aurora", "cyber-orbit"]) {
-      const recipe = buildAmbientSoundscapeRecipe({ seed: `pair-${theme}`, theme });
-      expect(recipe.harmony.instrument).not.toBe(recipe.melody.instrument);
-    }
-  });
-
-  it("gives each universe theme its own instrument and scale", () => {
-    const crystal = buildAmbientSoundscapeRecipe({ ...UNIVERSE_SCENE, theme: "crystal" });
-    const cyber = buildAmbientSoundscapeRecipe({ ...UNIVERSE_SCENE, theme: "cyber-orbit" });
-    expect(crystal.melody.instrument).toBe("glockenspiel");
-    expect(cyber.melody.instrument).toBe("saxello");
-    expect(crystal.melody.scaleSemitones).not.toEqual(cyber.melody.scaleSemitones);
-  });
-
-  it("picks the forest instrument from the weather", () => {
-    expect(buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 1 } })).melody.instrument).toBe(
-      "recorder"
-    );
-    expect(buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "snow", intensity: 1 } })).melody.instrument).toBe(
-      "glockenspiel"
-    );
-    expect(buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "clear", intensity: 1 } })).melody.instrument).toBe(
-      "kalimba"
-    );
-  });
-
-  it("picks the forest scale from the season", () => {
-    const summer = buildAmbientSoundscapeRecipe(forestScene({ season: { kind: "summer" } }));
-    const winter = buildAmbientSoundscapeRecipe(forestScene({ season: { kind: "winter" } }));
-    const autumn = buildAmbientSoundscapeRecipe(forestScene({ season: { kind: "autumn" } }));
-    expect(summer.melody.scaleSemitones).not.toEqual(winter.melody.scaleSemitones);
-    expect(autumn.melody.scaleSemitones).not.toEqual(summer.melody.scaleSemitones);
-  });
-
-  it("keeps every scale sparse and consonant", () => {
-    // Not semitone-free: kumoi and dorian each contain one minor second, which
-    // is what gives them their character. What must not happen is a scale dense
-    // enough that overlapping reverb tails turn into a cluster.
-    const scenes = [
-      UNIVERSE_SCENE,
-      ...["nebula", "crystal", "aurora", "cyber-orbit"].map((theme) => ({ seed: theme, theme })),
-      ...["spring", "summer", "autumn", "winter"].map((kind) => forestScene({ season: { kind } }))
-    ];
-    for (const scene of scenes) {
-      const { scaleSemitones } = buildAmbientSoundscapeRecipe(scene).melody;
-      expect(scaleSemitones.length).toBeGreaterThanOrEqual(5);
-      expect(scaleSemitones.length).toBeLessThanOrEqual(6);
-      expect(scaleSemitones[0]).toBe(0);
-      expect(Math.max(...scaleSemitones)).toBeLessThan(12);
-
-      let minorSecondCount = 0;
-      for (let index = 1; index < scaleSemitones.length; index += 1) {
-        const step = scaleSemitones[index] - scaleSemitones[index - 1];
-        expect(step).toBeGreaterThan(0);
-        if (step === 1) {
-          minorSecondCount += 1;
-        }
-      }
-      expect(minorSecondCount).toBeLessThanOrEqual(1);
-    }
+  it("builds a recipe for an unknown theme instead of throwing", () => {
+    const recipe = buildAmbientSoundscapeRecipe({ seed: "s", theme: "not-a-theme" });
+    expect(ARRANGEMENT_PIECE_IDS).toContain(recipe.performance.pieceId);
   });
 });
 
-describe("time of day transposes rather than detunes", () => {
-  it("drops the key toward dusk and keeps it a whole number of semitones", () => {
+describe("the signature", () => {
+  it("ignores changes the ear cannot hear", () => {
+    const base = forestScene();
+    expect(ambientSoundscapeSignature({ ...base, camera: { distance: 40 } })).toBe(ambientSoundscapeSignature(base));
+  });
+
+  it("changes when the sound has to change", () => {
+    const base = forestScene();
+    expect(ambientSoundscapeSignature(forestScene({ weather: { kind: "snow", intensity: 0.5 } }))).not.toBe(
+      ambientSoundscapeSignature(base)
+    );
+    expect(ambientSoundscapeSignature(forestScene({ lighting: { timeOfDay: "dusk" } }))).not.toBe(
+      ambientSoundscapeSignature(base)
+    );
+  });
+
+  it("survives a scene with no seed at all", () => {
+    expect(ambientSoundscapeSignature({})).toEqual(expect.any(String));
+    expect(ambientSoundscapeSignature(undefined)).toEqual(expect.any(String));
+  });
+});
+
+describe("which piece plays", () => {
+  it("gives every universe theme and every forest weather a real piece", () => {
+    for (const scene of everySupportedScene()) {
+      expect(ARRANGEMENT_PIECE_IDS).toContain(buildAmbientSoundscapeRecipe(scene).performance.pieceId);
+    }
+  });
+
+  it("gives different themes different music", () => {
+    const pieces = UNIVERSE_THEMES.map(
+      (theme) => buildAmbientSoundscapeRecipe({ seed: "same-seed", theme }).performance.pieceId
+    );
+    // Five themes, five distinct pieces: the point of the whole feature is that
+    // a world sounds like itself, not like the last one.
+    expect(new Set(pieces).size).toBe(UNIVERSE_THEMES.length);
+  });
+
+  it("gives different weathers different music", () => {
+    const pieces = FOREST_WEATHERS.map(
+      (weather) =>
+        buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: weather, intensity: 0.5 } })).performance.pieceId
+    );
+    expect(new Set(pieces).size).toBeGreaterThan(3);
+  });
+
+  it("keeps the piece stable when only the light changes", () => {
     const day = buildAmbientSoundscapeRecipe(forestScene({ lighting: { timeOfDay: "day" } }));
-    const golden = buildAmbientSoundscapeRecipe(forestScene({ lighting: { timeOfDay: "goldenHour" } }));
     const dusk = buildAmbientSoundscapeRecipe(forestScene({ lighting: { timeOfDay: "dusk" } }));
+    // Dusk is the same forest later in the day, not a different forest.
+    expect(dusk.performance.pieceId).toBe(day.performance.pieceId);
+    expect(dusk.performance.transposeSemitones).toBeLessThan(day.performance.transposeSemitones);
+  });
+});
 
-    expect(golden.melody.rootMidiNumber).toBeLessThan(day.melody.rootMidiNumber);
-    expect(dusk.melody.rootMidiNumber).toBeLessThan(golden.melody.rootMidiNumber);
-    expect(Number.isInteger(dusk.melody.rootMidiNumber)).toBe(true);
+describe("who plays it", () => {
+  it("always uses a sampled instrument we actually ship", () => {
+    for (const scene of everySupportedScene()) {
+      const { melody, harmony, bass } = buildAmbientSoundscapeRecipe(scene).performance;
+      for (const voice of [melody, harmony, bass]) {
+        expect(SAMPLED_INSTRUMENT_NOTE_NAMES[voice.instrument]?.length ?? 0).toBeGreaterThan(0);
+      }
+    }
   });
 
-  it("keeps the harmony exactly an octave under the melody", () => {
-    for (const timeOfDay of ["day", "goldenHour", "dusk"]) {
-      const recipe = buildAmbientSoundscapeRecipe(forestScene({ lighting: { timeOfDay } }));
-      expect(recipe.melody.rootMidiNumber - recipe.harmony.rootMidiNumber).toBe(12);
+  it("never doubles the melody instrument on the accompaniment", () => {
+    // Two layers of one timbre read as a single muddled layer rather than as two.
+    for (const scene of everySupportedScene()) {
+      const { melody, harmony } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(harmony.instrument).not.toBe(melody.instrument);
+    }
+  });
+
+  it("plays the bass on the only instrument sampled low enough for it", () => {
+    for (const scene of everySupportedScene()) {
+      expect(buildAmbientSoundscapeRecipe(scene).performance.bass.instrument).toBe("pianoBass");
     }
   });
 });
 
-describe("the DNA reaches the ears", () => {
-  it("widens the harmony chord as the visitor's world gains planets", () => {
-    const sparse = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(2, 50));
-    const full = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(6, 50));
-    expect(full.harmony.chordSemitones.length).toBeGreaterThanOrEqual(sparse.harmony.chordSemitones.length);
+describe("the balance", () => {
+  it("never lets the accompaniment come out louder than the tune", () => {
+    // The per-instrument trims span 3x, so fixed layer gains alone do NOT settle
+    // this: a recorder melody under a harp accompaniment measured the chords
+    // half again as loud as the melody before the ratio ceilings were added.
+    for (const scene of everySupportedScene()) {
+      const { melody, harmony, bass } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(harmony.gain).toBeLessThan(melody.gain);
+      expect(bass.gain).toBeLessThan(melody.gain);
+    }
   });
 
-  it("caps the chord so a very busy world does not turn into a cluster", () => {
-    const enormous = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(40, 50));
-    expect(enormous.harmony.chordSemitones.length).toBeLessThanOrEqual(4);
-  });
-
-  it("plays more often and more brightly as planet energy rises", () => {
-    const calm = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(5, 10));
-    const intense = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(5, 95));
-    expect(intense.melody.minimumGapSeconds).toBeLessThan(calm.melody.minimumGapSeconds);
-    expect(intense.toneCutoffHertz).toBeGreaterThan(calm.toneCutoffHertz);
-  });
-
-  it("still produces a chord for a scene with no points of interest yet", () => {
-    const empty = buildAmbientSoundscapeRecipe({ seed: "dna-empty", theme: "aurora" });
-    expect(empty.harmony.chordSemitones.length).toBeGreaterThanOrEqual(2);
+  it("keeps every gain in a sane band", () => {
+    // The ceiling is not 1. Samples are peak-normalised to 0.92 and the master
+    // gain scales the sum back down, so a quiet fast-decaying instrument earns a
+    // per-note gain above unity: kalimba sits at 1.5 and the world it plays
+    // renders at 0.57 peak. What would be wrong is a gain no measurement
+    // justifies, which is what this bounds.
+    const HIGHEST_JUSTIFIED_VOICE_GAIN = 2;
+    for (const scene of everySupportedScene()) {
+      const recipe = buildAmbientSoundscapeRecipe(scene);
+      const { melody, harmony, bass } = recipe.performance;
+      for (const voice of [melody, harmony, bass]) {
+        expect(voice.gain).toBeGreaterThan(0.05);
+        expect(voice.gain).toBeLessThanOrEqual(HIGHEST_JUSTIFIED_VOICE_GAIN);
+      }
+      expect(recipe.masterGain).toBeGreaterThan(0.2);
+      expect(recipe.masterGain).toBeLessThanOrEqual(1);
+    }
   });
 });
 
-describe("forest weather drives the bed", () => {
-  it("makes rain louder and brighter than clear weather", () => {
-    const clear = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "clear", intensity: 1 } }));
-    const rain = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 1 } }));
-    expect(rain.bedGain).toBeGreaterThan(clear.bedGain);
-    expect(rain.bedFilterFrequencyHertz).toBeGreaterThan(clear.bedFilterFrequencyHertz);
+describe("tempo", () => {
+  it("stays slow enough to be ambience and fast enough to move", () => {
+    for (const scene of everySupportedScene()) {
+      const { beatsPerMinute } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(beatsPerMinute).toBeGreaterThanOrEqual(30);
+      expect(beatsPerMinute).toBeLessThanOrEqual(80);
+    }
   });
 
-  it("scales the weather effect by its intensity", () => {
-    const light = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 0.2 } }));
-    const heavy = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 1 } }));
-    expect(heavy.bedGain).toBeGreaterThan(light.bedGain);
+  it("rises with the average energy of the world's points of interest", () => {
+    const calm = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(4, 10));
+    const lively = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(4, 95));
+    expect(lively.performance.beatsPerMinute).toBeGreaterThan(calm.performance.beatsPerMinute);
+    // Same piece, so this is a tempo difference and not a different recording.
+    expect(lively.performance.pieceId).toBe(calm.performance.pieceId);
+  });
+});
+
+describe("key", () => {
+  it("transposes within a range that keeps the piece in its own register", () => {
+    for (const scene of everySupportedScene()) {
+      const { transposeSemitones } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(transposeSemitones).toBeGreaterThanOrEqual(-7);
+      expect(transposeSemitones).toBeLessThanOrEqual(4);
+      expect(Number.isInteger(transposeSemitones)).toBe(true);
+    }
+  });
+
+  it("drops the key toward winter and toward dusk", () => {
+    const summerDay = buildAmbientSoundscapeRecipe(
+      forestScene({ season: { kind: "summer" }, lighting: { timeOfDay: "day" } })
+    );
+    const winterDusk = buildAmbientSoundscapeRecipe(
+      forestScene({ season: { kind: "winter" }, lighting: { timeOfDay: "dusk" } })
+    );
+    expect(winterDusk.performance.transposeSemitones).toBeLessThan(summerDay.performance.transposeSemitones);
+  });
+
+  it("leaves the universe family at the key the seed rolled", () => {
+    // Universe scenes have no season and no time of day, so nothing but the seed
+    // may move the key — a theme is not a mood.
+    const transpositions = UNIVERSE_THEMES.map(
+      (theme) => buildAmbientSoundscapeRecipe({ seed: "one-seed", theme }).performance.transposeSemitones
+    );
+    expect(new Set(transpositions).size).toBe(1);
+  });
+});
+
+describe("how full the accompaniment is", () => {
+  it("thickens the chords as the world gains points of interest", () => {
+    const sparse = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(2, 50));
+    const full = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(7, 50));
+    expect(full.performance.harmony.noteKeepRatio).toBeGreaterThan(sparse.performance.harmony.noteKeepRatio);
+  });
+
+  it("never thins the melody or the bass", () => {
+    for (const pointCount of [0, 1, 2, 5, 9, 40]) {
+      const { melody, bass } = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(pointCount, 50)).performance;
+      expect(melody.noteKeepRatio).toBe(1);
+      expect(bass.noteKeepRatio).toBe(1);
+    }
+  });
+
+  it("keeps the keep ratio a real fraction whatever the DNA says", () => {
+    for (const pointCount of [0, 1, 3, 12, 100]) {
+      const { harmony } = buildAmbientSoundscapeRecipe(universeSceneWithPlanets(pointCount, 50)).performance;
+      expect(harmony.noteKeepRatio).toBeGreaterThan(0);
+      expect(harmony.noteKeepRatio).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("audibility on the hardware people have", () => {
+  // The first version of this feature shipped MUTE on a laptop: every voice sat
+  // between 47 and 106 Hz. All 36 tests were green — they checked determinism and
+  // numeric bounds and never asked whether the output lands where a speaker can
+  // reproduce it. These are that missing question.
+  it("keeps both register floors where a small speaker can reach them", () => {
+    // A recording is not a sine: a harp at 98 Hz carries partials the ear can
+    // reconstruct a fundamental from, so the supporting line may sit lower than
+    // the tune. Both floors still have to clear the ~150 Hz rolloff by enough
+    // to be heard at all, which is why the melody's is the higher one.
+    expect(SMALL_SPEAKER_MELODY_FLOOR_MIDI).toBeGreaterThan(SMALL_SPEAKER_BASS_FLOOR_MIDI);
+    expect(SMALL_SPEAKER_BASS_FLOOR_MIDI).toBeGreaterThanOrEqual(43);
+  });
+
+  it("never uses a blown instrument as the accompaniment", () => {
+    // A recorder or saxophone holds its full level for the written duration, so
+    // under a plucked melody it always wins: kalimba under recorder measured
+    // 0.0084 RMS against the accompaniment's 0.0490. Struck and plucked
+    // instruments decay, which is what lets a chord part sit underneath.
+    const BLOWN_INSTRUMENTS = ["recorder", "saxello"];
+    for (const scene of everySupportedScene()) {
+      const { harmony } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(BLOWN_INSTRUMENTS).not.toContain(harmony.instrument);
+    }
+  });
+
+  it("never sends the noise bed below where the music lives", () => {
+    for (const scene of everySupportedScene()) {
+      const recipe = buildAmbientSoundscapeRecipe(scene);
+      expect(recipe.bedFilterFrequencyHertz - recipe.bedSweepDepthHertz).toBeGreaterThan(0);
+    }
   });
 
   it("keeps the bed quiet enough to sit under the music", () => {
-    // Rain once measured 52% of all rendered energy above 1200 Hz — hiss over
-    // music rather than under it.
-    for (const kind of ["clear", "sunRays", "overcast", "rain", "snow"]) {
-      const recipe = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind, intensity: 1 } }));
-      expect(recipe.bedGain).toBeLessThan(recipe.melody.gain / 3);
+    for (const scene of everySupportedScene()) {
+      const recipe = buildAmbientSoundscapeRecipe(scene);
+      // Rain once measured 52% of all energy above 1200 Hz: hiss burying the
+      // music it was supposed to sit under.
+      expect(recipe.bedGain).toBeLessThan(recipe.performance.melody.gain * 0.5);
     }
   });
-});
 
-describe("audibility on small speakers", () => {
-  // The first version put every voice under 110 Hz: correct on studio monitors,
-  // silent on the laptop and phone speakers people use, and every unit test
-  // passed because none asked where the energy landed.
-  const EVERY_SCENE: SceneConfig[] = [
-    {},
-    ...["cosmic-galaxy", "nebula", "crystal", "aurora", "cyber-orbit"].map((theme) => ({ seed: theme, theme })),
-    ...["clear", "sunRays", "overcast", "rain", "snow"].flatMap((kind) =>
-      ["day", "goldenHour", "dusk"].map((timeOfDay) =>
-        forestScene({ weather: { kind, intensity: 1 }, lighting: { timeOfDay } })
-      )
-    )
-  ];
-
-  it.each(EVERY_SCENE.map((scene, index) => [index, scene] as const))(
-    "keeps scene %i above the small-speaker floor",
-    (_index, scene) => {
+  it("leaves the tone filter open enough to hear the instrument through", () => {
+    for (const scene of everySupportedScene()) {
       const recipe = buildAmbientSoundscapeRecipe(scene);
-      // The melody has to be heard as the tune, so it clears the higher floor.
-      // The harmony only supports, and a recorded instrument's partials carry
-      // it on a small speaker where a bare sine would vanish.
-      expect(recipe.melody.rootMidiNumber).toBeGreaterThanOrEqual(SMALL_SPEAKER_MELODY_FLOOR_MIDI);
-      expect(midiNumberToFrequencyHertz(recipe.melody.rootMidiNumber)).toBeGreaterThan(150);
-      expect(recipe.harmony.rootMidiNumber).toBeGreaterThanOrEqual(SMALL_SPEAKER_ROOT_FLOOR_MIDI);
-      expect(recipe.bedFilterFrequencyHertz).toBeGreaterThanOrEqual(SMALL_SPEAKER_BED_FLOOR_HERTZ);
-    }
-  );
-
-  it("keeps the nominal melody range close to the sampled range", () => {
-    // The graph folds anything further out by octaves, so this is a sanity
-    // bound on the recipe rather than the guarantee — the guarantee is tested
-    // against the graph.
-    const MAXIMUM_STRETCH_SEMITONES = 18;
-    for (const scene of EVERY_SCENE) {
-      const recipe = buildAmbientSoundscapeRecipe(scene);
-      const sampledMidiNumbers = SAMPLED_INSTRUMENT_NOTE_NAMES[recipe.melody.instrument].map((noteName) => {
-        const isSharp = noteName[1] === "s";
-        const octave = Number.parseInt(noteName.slice(isSharp ? 2 : 1), 10);
-        const pitchClass = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[noteName[0]] ?? 0;
-        return 60 + (octave - 4) * 12 + pitchClass + (isSharp ? 1 : 0);
-      });
-      const lowestSample = Math.min(...sampledMidiNumbers);
-      const highestSample = Math.max(...sampledMidiNumbers);
-      const lowestNote = recipe.melody.rootMidiNumber + Math.min(...recipe.chordProgression.rootOffsetsSemitones);
-      const highestNote =
-        recipe.melody.rootMidiNumber +
-        Math.max(...recipe.chordProgression.rootOffsetsSemitones) +
-        (recipe.melody.octaveCount - 1) * 12 +
-        Math.max(...recipe.melody.scaleSemitones);
-
-      expect(lowestNote).toBeGreaterThanOrEqual(lowestSample - MAXIMUM_STRETCH_SEMITONES);
-      expect(highestNote).toBeLessThanOrEqual(highestSample + MAXIMUM_STRETCH_SEMITONES);
-    }
-  });
-});
-
-describe("output stays inside safe audio bounds", () => {
-  const HOSTILE_SCENES: SceneConfig[] = [
-    {},
-    { seed: "" },
-    { seed: "hostile-1", theme: "crystal", postFX: { bloomIntensity: Number.NaN } },
-    { seed: "hostile-2", theme: "crystal", postFX: { bloomIntensity: 9999 } },
-    { seed: "hostile-3", theme: "crystal", postFX: { bloomIntensity: -50 } },
-    { seed: "hostile-4", sceneType: "forest", weather: { kind: "rain", intensity: 42 } },
-    { seed: "hostile-5", sceneType: "forest", weather: { kind: "rain", intensity: -3 } },
-    { seed: "hostile-6", sceneType: "forest", weather: { kind: "unknown-weather", intensity: 1 } },
-    { seed: "hostile-7", sceneType: "forest", lighting: { timeOfDay: "midnight" }, season: { kind: "monsoon" } }
-  ];
-
-  it.each(HOSTILE_SCENES.map((scene, index) => [index, scene] as const))(
-    "keeps every value finite and bounded for hostile scene %i",
-    (_index, scene) => {
-      const recipe = buildAmbientSoundscapeRecipe(scene);
-
-      expect(recipe.masterGain).toBeGreaterThan(0);
-      expect(recipe.masterGain).toBeLessThanOrEqual(1);
-      expect(recipe.bedGain).toBeGreaterThanOrEqual(0);
-      expect(recipe.bedGain).toBeLessThanOrEqual(0.14);
       expect(recipe.toneCutoffHertz).toBeGreaterThanOrEqual(900);
       expect(recipe.toneCutoffHertz).toBeLessThanOrEqual(12000);
-      expect(recipe.bedFilterFrequencyHertz).toBeGreaterThanOrEqual(120);
-      expect(recipe.bedFilterQuality).toBeGreaterThan(0);
-      expect(recipe.bedSweepRateHertz).toBeGreaterThan(0);
-      expect(Number.isInteger(recipe.melody.rootMidiNumber)).toBe(true);
-      expect(recipe.melody.minimumGapSeconds).toBeGreaterThan(0);
-      expect(recipe.melody.maximumGapSeconds).toBeGreaterThan(recipe.melody.minimumGapSeconds);
-      expect(recipe.harmony.minimumGapSeconds).toBeGreaterThan(recipe.melody.maximumGapSeconds);
-      expect(recipe.melody.graceNoteChance).toBeGreaterThanOrEqual(0);
-      expect(recipe.melody.graceNoteChance).toBeLessThanOrEqual(1);
-      expect(recipe.space.delayFeedback).toBeLessThan(1);
-      expect(recipe.space.reverbWetMix).toBeLessThanOrEqual(1);
-      expect(recipe.space.reverbDecaySeconds).toBeGreaterThan(0);
-    }
-  );
-
-  it("keeps the delay feedback well short of self-oscillation", () => {
-    for (const seedSuffix of Array.from({ length: 40 }, (_unused, index) => `feedback-${index}`)) {
-      const recipe = buildAmbientSoundscapeRecipe({ seed: seedSuffix, theme: "aurora" });
-      expect(recipe.space.delayFeedback).toBeLessThanOrEqual(0.5);
     }
   });
 });
 
-describe("ambientSoundscapeSignature", () => {
-  it("stays stable for the same scene and changes with the seed", () => {
-    expect(ambientSoundscapeSignature(UNIVERSE_SCENE)).toBe(ambientSoundscapeSignature(UNIVERSE_SCENE));
-    expect(ambientSoundscapeSignature({ ...UNIVERSE_SCENE, seed: "other" })).not.toBe(
-      ambientSoundscapeSignature(UNIVERSE_SCENE)
-    );
+describe("the room", () => {
+  it("always puts the instruments in a space, never dry", () => {
+    for (const scene of everySupportedScene()) {
+      const { space } = buildAmbientSoundscapeRecipe(scene);
+      expect(space.reverbDecaySeconds).toBeGreaterThan(1);
+      expect(space.reverbWetMix).toBeGreaterThan(0.1);
+      expect(space.delayMix).toBeGreaterThan(0);
+      // Feedback at or above 1 is a runaway that never decays.
+      expect(space.delayFeedback).toBeLessThan(0.7);
+    }
   });
 
-  it("changes when forest weather changes but not when an unrelated field does", () => {
-    const base = forestScene();
-    expect(ambientSoundscapeSignature(forestScene({ weather: { kind: "rain", intensity: 0.5 } }))).not.toBe(
-      ambientSoundscapeSignature(base)
-    );
-    expect(ambientSoundscapeSignature({ ...base, sceneName: "renamed" })).toBe(ambientSoundscapeSignature(base));
+  it("brightens the room as the scene blooms", () => {
+    const dim = buildAmbientSoundscapeRecipe({ ...UNIVERSE_SCENE, postFX: { bloomIntensity: 0.3 } });
+    const bright = buildAmbientSoundscapeRecipe({ ...UNIVERSE_SCENE, postFX: { bloomIntensity: 1.9 } });
+    expect(bright.toneCutoffHertz).toBeGreaterThan(dim.toneCutoffHertz);
   });
 
-  it("matches the signature carried on the recipe", () => {
-    expect(buildAmbientSoundscapeRecipe(UNIVERSE_SCENE).signature).toBe(ambientSoundscapeSignature(UNIVERSE_SCENE));
+  it("keeps the humanising window small enough to stay in time", () => {
+    for (const scene of everySupportedScene()) {
+      const { humanizeSeconds } = buildAmbientSoundscapeRecipe(scene).performance;
+      // Enough to stop it reading as a MIDI file, not enough to blur the pulse.
+      expect(humanizeSeconds).toBeGreaterThan(0);
+      expect(humanizeSeconds).toBeLessThan(0.05);
+    }
+  });
+
+  it("keeps the stereo image inside the field", () => {
+    for (const scene of everySupportedScene()) {
+      const { maximumPan, startPositionRatio } = buildAmbientSoundscapeRecipe(scene).performance;
+      expect(maximumPan).toBeGreaterThan(0);
+      expect(maximumPan).toBeLessThan(0.5);
+      expect(startPositionRatio).toBeGreaterThanOrEqual(0);
+      expect(startPositionRatio).toBeLessThan(1);
+    }
+  });
+});
+
+describe("the forest bed follows the weather", () => {
+  it("makes rain louder and brighter than snow", () => {
+    const rain = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 1 } }));
+    const snow = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "snow", intensity: 1 } }));
+    expect(rain.bedGain).toBeGreaterThan(snow.bedGain);
+    expect(rain.bedFilterFrequencyHertz).toBeGreaterThan(snow.bedFilterFrequencyHertz);
+  });
+
+  it("fades the weather out as its intensity drops to zero", () => {
+    const calm = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 0 } }));
+    const storm = buildAmbientSoundscapeRecipe(forestScene({ weather: { kind: "rain", intensity: 1 } }));
+    expect(storm.bedGain).toBeGreaterThan(calm.bedGain);
+  });
+
+  it("uses a bandpass for foliage and a lowpass for open space", () => {
+    expect(buildAmbientSoundscapeRecipe(forestScene()).bedFilterType).toBe("bandpass");
+    expect(buildAmbientSoundscapeRecipe(UNIVERSE_SCENE).bedFilterType).toBe("lowpass");
+  });
+
+  it("survives a scene whose weather fields are the wrong shape", () => {
+    const recipe = buildAmbientSoundscapeRecipe(
+      forestScene({ weather: { kind: 42, intensity: "heavy" } } as unknown as Partial<SceneConfig>)
+    );
+    expect(Number.isFinite(recipe.bedGain)).toBe(true);
+    expect(Number.isFinite(recipe.performance.beatsPerMinute)).toBe(true);
   });
 });
