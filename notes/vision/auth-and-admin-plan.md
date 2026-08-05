@@ -1,10 +1,14 @@
 # Auth service and internal admin app — plan
 
-> **Document status:** Proposed plan; no source exists yet
+> **Document status:** Approved with amendments; no source exists yet
 > **Last source review:** 2026-08-05
 > **Amended:** 2026-08-05 by the owner — see [Owner amendments](#owner-amendments--2026-08-05).
 > Three decisions in the original draft were reversed; the sections they touch
 > are marked **Amended** and state the current decision.
+> **Decisions:** answered 2026-08-05 — see
+> [Owner decisions](#owner-decisions--answered-2026-08-05). Six are settled;
+> decision 2 reopened on the owner's instruction that verification go through
+> auth-service, and blocks phase 1's token middleware only.
 
 Two new deliverables, deliberately kept apart from the 3D product:
 
@@ -194,9 +198,11 @@ requirement, not a preference:
   offline during an incident without redeploying the product edge — the one
   property the separate service gave for free.
 
-The IP allowlist from the original argument becomes a decision the owner still
-owes (see the decisions section); it is enforceable at the admin route group,
-but it is a policy choice, not a consequence of this amendment.
+The IP allowlist from the original argument is **not adopted** — the owner
+decided staff log in from anywhere (decision 1). It stays enforceable at the
+admin route group if that ever changes, and it is the one requirement that would
+justify splitting the edge back out, since the product routes could not tolerate
+it.
 
 ## auth-service
 
@@ -219,6 +225,27 @@ Owns `myunivokai_auth`.
 therefore **up to 10 minutes**, stated here so nobody discovers it during an
 incident. Anything shorter needs a per-request check against auth-service and
 gives up the cold-start property above.
+
+**Reopened 2026-08-05.** The owner instructed that authentication must go
+through auth-service, and that both an access token and a refresh token are
+mandatory. The second half was never in doubt — auth-service is the only issuer
+of either token, and no other component may mint one. The first half is a real
+fork, because *issuing* and *verifying* are separate questions:
+
+| | Verification | Revocation | Cost when auth-service is asleep |
+| --- | --- | --- | --- |
+| **A. Per-request call to auth-service** | Gateway asks auth-service on every request | Immediate | **The whole panel is unusable** until it wakes — not just login. Every navigation pays the cold start |
+| **B. Local verify + revocation state in Redis** | Gateway verifies the signature locally, then checks `tokenVersion` in Redis, which auth-service writes on disable or password change | Immediate | None. Redis is always awake, and the gateway already holds a Redis client |
+| **C. Local verify only** | Signature and expiry only | Up to 10 minutes | None |
+
+`B` is the recommendation. It satisfies the instruction — auth-service remains
+the issuer and the sole authority over revocation state — while keeping the
+property that decision 4 depends on. `A` and decision 4 fight each other: the
+panel would be unusable for the length of a cold start on every visit after an
+idle period, which for an admin who logs in rarely is close to every visit.
+
+Pending the owner's choice between A and B. If A is chosen, decision 4 should be
+revisited, because accepting cold starts costs far more under A than under C.
 
 **Key handling.** Private key in the environment, never in git. Publish the
 public key by value to the edges. Support two active public keys so rotation
@@ -450,7 +477,7 @@ One branch each, per [git-convention.md](../coding/git-convention.md).
 | 4 | `feat/be/admin-query-subjects` | List/search/aggregate subjects in dna, universe and nature; cursor-per-family pagination |
 | 5 | `feat/fe/admin-records` | Record lists and detail views, first audited mutations |
 | 6 | `feat/fe/admin-charts` | The chart set above |
-| 7 | `feat/be/auth-hardening` | TOTP two-factor, invite flow, account and **role management** UI, lockout tuning, key rotation drill |
+| 7 | `feat/be/auth-hardening` | Invite flow, account and **role management** UI, lockout tuning, key rotation drill. TOTP two-factor available here but not required — see decision 3 |
 | 8 | `feat/repo/admin-deployment` | `render.yaml` entry for auth-service, gateway env additions, Vercel project, secrets, runbook |
 
 Phases 1–3 are the smallest set that produces a usable panel: log in, see
@@ -491,26 +518,50 @@ is the cost of the flexibility that was asked for. The lockout guards and the
 super-admin bypass flag are what keep it recoverable; they are requirements, not
 polish, and phase 1 is not done without them.
 
-## Decisions the owner should confirm before phase 1
+## Owner decisions — answered 2026-08-05
 
-1. **Admin domain and IP allowlist** — a separate domain is assumed. Is an IP
-   allowlist acceptable for staff, or will people log in from anywhere?
-2. **Revocation window** — is up to 10 minutes acceptable in exchange for no
-   auth round trip per request?
-3. **Two-factor timing** — phase 7 as planned, or required from the first
-   account because this panel reads personal data?
-4. **Warm instance** — pay for one for auth-service, or accept cold-start login
-   latency internally?
+Six settled, one reopened. Each answer and what it settles:
 
-Added by the amendments:
+| # | Decision | Answer |
+| --- | --- | --- |
+| 1 | Admin domain and IP allowlist | **No allowlist.** Staff log in from anywhere; admins use the panel rarely. Separate domain still assumed |
+| 2 | Revocation window | **Reopened.** The owner requires verification through auth-service and mandates both tokens. Choice between per-request verification and locally-verified tokens with revocation state in Redis is open — see [Revocation](#tokens) |
+| 3 | Two-factor | **Not required.** TOTP stays in phase 7 as available work, not a prerequisite |
+| 4 | Warm instance | **Accept cold starts.** No paid instance for auth-service |
+| 5 | App name | **`apps/myunivokai-admin`** |
+| 6 | Custom permission rows | **Out of scope.** Permissions are declared in Go and synced; roles stay freely creatable |
+| 7 | Who may edit roles | Not separately answered. With one operator, `role:manage` sits with the super admin in practice; the guards are built as specified regardless, because they cost little and a second staff member changes the answer |
 
-5. **App name** — this document says `apps/myunivokai-admin`; the owner has also
-   called it `myunivokai-ops`. One name has to win, and it should be the one that
-   describes the job: this app manages product records, it does not display
-   infrastructure metrics. `admin` is the recommendation.
-6. **Custom permission rows** — confirmed out of scope for phase 1, so the
-   permission table stays a projection of code? Roles remain freely creatable
-   either way.
-7. **Who may edit roles** — is `role:manage` held only by super admins in
-   practice, or genuinely delegated? It decides how defensive the guards around
-   role editing need to be.
+### Legacy worlds without an owner
+
+Also decided: worlds that already exist may become the super admin's or stay
+empty — the owner accepted either. **They stay `NULL`**, for two reasons:
+
+- `NULL` is true. These worlds have no owner, and recording one fabricates a
+  fact that later queries will trust. A claim flow, if it is ever built, needs
+  to distinguish *never owned* from *owned by someone*, and assigning them
+  destroys that distinction irreversibly.
+- If ownership ever grants read access to a world's source material, making one
+  account the owner of every historical world hands it a path to every
+  visitor's personal text that bypasses `profile:reveal` and its audit row.
+
+This is a note on direction, not an approval to add the column — see
+[Owner amendments](#owner-amendments--2026-08-05).
+
+### Accepted risk: password-only admin access
+
+Decisions 1 and 3 together mean a password is the only barrier to a panel that
+can read the most personal text the platform holds. Recorded as accepted, not
+overlooked. The compensating controls were already in this design rather than
+added in response:
+
+- Operator-supplied bootstrap password, forced change on first login, and no
+  default password anywhere in the repository.
+- Per-account and per-IP attempt limits with lockout, constant-time response.
+- Argon2id, tuned for the real instance size.
+- `httpOnly` cookies, so XSS cannot lift a token.
+- `profile:reveal` as its own permission, raw input masked by default, an audit
+  row per reveal, and no bulk export of personal text in phase 1.
+
+The residual exposure is a guessed or reused password, and TOTP in phase 7 is
+the answer if that becomes a real concern.
