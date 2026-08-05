@@ -141,6 +141,82 @@ is a **cursor per family** — `{universe: cursor, nature: cursor}` — merged b
 `createdAt` in the edge. Say this in the contract now; retrofitting it after a
 UI is built against page numbers is a rewrite of both ends.
 
+### Where the fan-out lives, and the line it may not cross
+
+Option A puts composition in the gateway rather than in a dedicated aggregator.
+That is deliberate, and it is the position the published patterns support — but
+only up to a specific line, so the line is written here rather than left to
+judgement in review.
+
+Microsoft's [Gateway Aggregation
+pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/gateway-aggregation)
+documents exactly this shape and then bounds it: the approach "works well when
+the gateway performs **lightweight composition, shaping, and response
+assembly**", and when aggregation "requires custom domain logic, complex
+transformations, or longer-running orchestration", that work belongs in "a
+dedicated custom service behind the gateway". The same page lists placing an
+aggregation service behind the gateway as the alternative to building it in.
+Thoughtworks holds
+[overambitious API gateways](https://www.thoughtworks.com/radar/platforms/overambitious-api-gateways)
+for the same reason — "any domain smarts should live in applications or
+services" — which is the *smart endpoints, dumb pipes* rule this backend already
+follows.
+
+| The gateway may | The gateway may not |
+| --- | --- |
+| Fan out to the family services in parallel | Run `GROUP BY` over raw rows from more than one service |
+| Interleave per-family lists by `createdAt` | Join across families on a business rule |
+| Sum counts the owning services already computed | Decide which records qualify for a statistic |
+| Carry a cursor per family | Transform payloads according to domain logic |
+
+This is why the domain services expose **aggregate** subjects and not just list
+subjects: `GROUP BY date_trunc(...)` runs where the data lives, so the gateway
+only ever merges. Shipping raw rows to the edge to be counted there is the first
+step across the line, not an optimisation.
+
+**Chosen for this project because it is also the cheapest topology here.** A
+dedicated aggregator would make the path
+`admin app -> gateway -> admin-service -> family services` — one more NATS hop on
+every request, and one more free-plan service that sleeps. That is the same cost
+already rejected when per-request auth verification was rejected, and the same
+reason one gateway was chosen over two edges.
+
+**Extraction trigger.** Split an `admin-service` out when the gateway needs
+domain logic to answer a screen — when *call, interleave, sum already-computed
+numbers* is no longer enough. At that moment the gateway has become that service
+without a name or tests of its own. This sits alongside the three triggers for
+option B above; any of the four is sufficient.
+
+### Partial results are a normal response, not an error
+
+This is a requirement, not a refinement, and the free plan is why. Composition
+makes availability multiplicative — the
+[API Composition pattern](https://microservices.io/patterns/data/api-composition.html)
+is explicit that overall availability falls as providers are added — and these
+providers sleep after roughly fifteen minutes of inactivity. An admin who signs
+in rarely will therefore find one or more family services cold on almost every
+visit. Fan-out is parallel, so the wait is the slowest leg rather than the sum,
+but if a screen needs every leg to succeed then one sleeping service blanks the
+whole page.
+
+The Azure guidance is to make that behaviour an explicit decision: it "might be
+acceptable to time out and return a partial set of data", and the choice must be
+explicit "so that clients experience predictable behavior". So:
+
+- Every admin list and aggregate response carries **per-family status**, and a
+  missing family is data rather than a failed request:
+  `{universe: {data: [...]}, nature: {status: "unavailable", reason: "timeout"}}`.
+- The admin app renders what arrived and says plainly which family did not,
+  with a retry. It never blanks a page because one service was asleep.
+- Per-leg timeout, and a circuit breaker so a cold service is not hammered by a
+  page that retries.
+- The correlation ID already carried by
+  [`RequestContext`](../../services/api-gateway/internal/middleware/request_context.go)
+  propagates across every leg, so a partial response can be explained after the
+  fact.
+- Counts computed from a partial fan-out are **labelled partial in the response**
+  and in the UI. A total that silently omits a family is worse than no total.
+
 ## Target topology
 
 ```text
@@ -206,6 +282,12 @@ it.
 
 A NATS worker like the family services — no HTTP listener, no published port.
 Owns `myunivokai_auth`.
+
+**Its boundary.** auth-service handles identity and nothing else: it never reads
+a world, a variant or a job. But listing accounts, roles and audit events *is*
+its own data, so those queries belong here and are not scope creep. "Only auth"
+constrains which tables it touches, not whether it may answer questions about
+them.
 
 ### Tokens
 
@@ -496,7 +578,7 @@ One branch each, per [git-convention.md](../coding/git-convention.md).
 | 1 | `feat/be/auth-service` | auth-service, `myunivokai_auth`, login/refresh/logout, Argon2id, bootstrap admin, audit events, the code-declared permission sync, seeded `super_admin` flag and `basic_user` role, lockout guards, tests |
 | 2 | `feat/be/gateway-admin-routes` | The `/api/admin` route group on the existing gateway: token verification, default-deny route policy with the enumerating router test, own CORS handler for one origin, own rate limits, `ADMIN_ROUTES_ENABLED` switch |
 | 3 | `feat/fe/admin-app-shell` | Next.js 15 app, login, session, RBAC-aware navigation, one record list end to end |
-| 4 | `feat/be/admin-query-subjects` | List/search/aggregate subjects in dna, universe and nature; cursor-per-family pagination |
+| 4 | `feat/be/admin-query-subjects` | List/search/aggregate subjects in dna, universe and nature, each aggregating inside the owning service; cursor-per-family pagination; the per-family partial-status envelope with per-leg timeouts |
 | 5 | `feat/fe/admin-records` | Record lists and detail views, first audited mutations |
 | 6 | `feat/fe/admin-charts` | The chart set above |
 | 7 | `feat/be/auth-hardening` | Invite flow, account and **role management** UI, lockout tuning, key rotation drill. TOTP two-factor available here but not required — see decision 3 |
