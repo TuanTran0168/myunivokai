@@ -43,6 +43,7 @@ date; it is not the original creation date.
 | [vision/](vision/README.md) | Approved event-driven target plus source/target boundary, NATS, Redis, DNA/family ownership and scale roadmap | Before any architecture decision |
 | [vision/versions/v1-2026-07-22/](vision/versions/v1-2026-07-22/README.md) | **Current architecture baseline:** V1 approved 2026-07-22 | Before backend, messaging, data or deployment work |
 | [vision/city-service-plan.md](vision/city-service-plan.md) | Approved City peer plan and high-fidelity-first implementation phases; not implemented source | Before any City contract, BE, gateway, asset or FE branch |
+| [vision/auth-and-admin-plan.md](vision/auth-and-admin-plan.md) | Proposed **auth-service** and the separate **internal admin app**: why staff auth does not violate the deferred identity decision, how admin reads data three services own, RBAC, token design, phases | Before any auth, admin edge or admin FE branch |
 | [ops/render-deployment.md](ops/render-deployment.md) | Current Render background-worker deployment entry point | Before deploying |
 | [user-stories/](user-stories/README.md) | Source-grounded product stories and prioritized engineering tasks, with Given/When/Then acceptance | Before selecting the next feature branch |
 | [sprints/](sprints/README.md) | Dated Sprint 1–3 commitments, Definition of Done and Sprint 1 deployment guide | Before implementation or deployment scheduling |
@@ -77,6 +78,7 @@ date; it is not the original creation date.
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
 | `vision/city-service-plan.md` | Approved product plan with amendment | City moves to Sprint 3 and consumes canonical DNA/NATS |
+| `vision/auth-and-admin-plan.md` | Proposed, not implemented | Drafted 2026-08-05. Scoped to staff identity only; four owner decisions listed at the end are unanswered |
 | `ops/render-deployment.md` | Active entry point | Routes operators to the Sprint 1 NATS/Redis deployment guide |
 | `sprints/` | Active schedule | Sprint 1 complete migration, Sprint 2 hardening, Sprint 3 City |
 | `design/**/DESIGN.md` | Superseded reference | Layout ideas remain; purple/cyan visual language is not the active design system |
