@@ -2,6 +2,9 @@
 
 > **Document status:** Proposed plan; no source exists yet
 > **Last source review:** 2026-08-05
+> **Amended:** 2026-08-05 by the owner — see [Owner amendments](#owner-amendments--2026-08-05).
+> Three decisions in the original draft were reversed; the sections they touch
+> are marked **Amended** and state the current decision.
 
 Two new deliverables, deliberately kept apart from the 3D product:
 
@@ -10,7 +13,40 @@ Two new deliverables, deliberately kept apart from the 3D product:
 2. **`apps/myunivokai-admin`** — an internal app for browsing and managing
    records, plus charts. Admin accounts only. No 3D, no public pages.
 
-Nothing in the 3D web changes. The public gateway gains no admin route.
+Nothing in the 3D web changes. The existing gateway gains an admin route group
+that is organised and protected separately from the product routes.
+
+## Owner amendments — 2026-08-05
+
+Recorded after the original draft. Each reverses a decision above; the original
+reasoning is kept in place so the trade-off accepted here stays visible.
+
+| # | Original draft | Owner decision |
+| --- | --- | --- |
+| 1 | A separate `services/admin-gateway` is the only public admin edge | **One gateway.** The admin app calls the existing `api-gateway`, which relays over NATS exactly as the 3D web does. Admin lives in its own route group with its own middleware stack |
+| 2 | Four fixed roles in a static table | **Dynamic RBAC, modelled on Django auth.** Roles and permissions are database rows that staff can create at runtime, with a flag marking system-owned rows such as super admin and basic user |
+| 3 | End-user login is a later, separate question | **Design for it now.** The RBAC and token model must extend to 3D-web accounts so a visitor can log in and keep the history of worlds they created |
+
+Amendment 3 has a consequence the original draft deliberately guarded against,
+and it is written down here rather than discovered later: *"a visitor keeps the
+history of worlds they created"* is **world ownership**, which is the subject of
+[`DEFERRED-AUTH-001`](../user-stories/engineering-backlog.md#deferred-auth-001--define-identity-before-authentication).
+The draft forbade an `owner_account_id` column precisely so ownership could not
+be decided by accident.
+
+The guardrail is therefore restated rather than removed:
+
+- Staff phases (1–3) still add **no** ownership column. Nothing about them
+  pre-decides the question.
+- The RBAC and token design must not *block* ownership either — that is what
+  amendment 3 asks for, and audience-scoped tokens plus a role model with no
+  staff assumptions baked in already satisfy it.
+- Adding `owner_account_id`, anonymous claim/migration, deletion and export
+  remains its own decision with its own approval, taken when the product
+  questions in `DEFERRED-AUTH-001` are answered — not as a side effect of
+  building staff auth.
+
+In short: build so ownership *can* arrive; do not let it arrive unannounced.
 
 ## Scope
 
@@ -108,23 +144,59 @@ UI is built against page numbers is a rewrite of both ends.
 ```text
 admin browser
   -> apps/myunivokai-admin        (Next.js, own domain, httpOnly cookies)
-       -> services/admin-gateway  (the only public admin edge)
+       -> services/api-gateway     /api/admin/*  (its own route group)
             -> auth.*.v1                    Core NATS  -> auth-service -> myunivokai_auth
             -> universe.admin.*.v1          Core NATS  -> universe-service
             -> nature.admin.*.v1            Core NATS  -> nature-service
             -> dna.admin.*.v1               Core NATS  -> dna-service
 
-myunivokai-web (3D)  ->  api-gateway   ... unchanged, no admin route, no auth
+myunivokai-web (3D)  ->  services/api-gateway  /api/{family}/*  ... unchanged
 ```
 
-**Why a separate `admin-gateway` and not routes on the existing gateway.** They
-have opposite threat models. The admin edge wants an IP allowlist, strict rate
-limits, no CORS to any public origin, no cache, and the freedom to be taken
-offline during an incident without touching the product. Bolting it onto the
-public gateway means one misconfigured CORS entry or one route-matching mistake
-exposes admin surface to the internet, and every admin deploy risks the product
-edge. The cost is one more small Go service that reuses `internal/broker` and
-`internal/middleware` almost unchanged.
+### Amended — one gateway, two route groups
+
+The original draft argued for a separate `services/admin-gateway`; the owner
+chose a single gateway. The argument is kept below because what it was
+protecting against is real, and the protection has to be rebuilt inside the one
+edge rather than dropped.
+
+> **Why a separate `admin-gateway` and not routes on the existing gateway.** They
+> have opposite threat models. The admin edge wants an IP allowlist, strict rate
+> limits, no CORS to any public origin, no cache, and the freedom to be taken
+> offline during an incident without touching the product. Bolting it onto the
+> public gateway means one misconfigured CORS entry or one route-matching mistake
+> exposes admin surface to the internet, and every admin deploy risks the product
+> edge. The cost is one more small Go service that reuses `internal/broker` and
+> `internal/middleware` almost unchanged.
+
+What the single gateway must do to keep that protection. Each line is a
+requirement, not a preference:
+
+- **A distinct `chi` sub-router mounted at `/api/admin`**, with its own
+  middleware stack assembled separately from the product group. Not extra routes
+  inside the existing group.
+- **Its own CORS handler.** The product group's `AllowedOrigins`
+  ([`router.go`](../../services/api-gateway/internal/handlers/router.go)) must
+  not reach the admin subtree. The admin group allows exactly one origin — the
+  admin app's domain — and no wildcard is acceptable at any point.
+- **Default deny, proven by test.** Every `/api/admin/*` route rejects an
+  unauthenticated request, and a route with no declared permission refuses
+  rather than falling through. A router test asserts this by enumerating the
+  registered routes, so a new route added without a permission fails CI instead
+  of shipping open.
+- **Its own rate limits and no response caching**, independent of the product
+  group's Redis policy.
+- **No admin subject reachable from a product route**, and no product handler
+  able to publish an `*.admin.*` subject. The NATS user the gateway already
+  holds gains admin publish permissions, which is the one real cost of this
+  amendment: a compromised gateway now reaches more subjects than before.
+- **An `ADMIN_ROUTES_ENABLED` switch**, so the admin surface can be taken
+  offline during an incident without redeploying the product edge — the one
+  property the separate service gave for free.
+
+The IP allowlist from the original argument becomes a decision the owner still
+owes (see the decisions section); it is enforceable at the admin route group,
+but it is a policy choice, not a consequence of this amendment.
 
 ## auth-service
 
@@ -171,6 +243,11 @@ does not log everyone out.
 `accounts`, `roles`, `permissions`, `role_permissions`, `account_roles`,
 `refresh_tokens`, `audit_events`.
 
+Column detail for the RBAC tables — `is_system`, `audience`, and
+`accounts.is_super_admin` — is in [RBAC](#rbac) rather than here, because
+amendment 2 made their semantics the substance of the design rather than a
+schema listing.
+
 `audit_events` lives here because auth-service is the one service that knows who
 the actor is. Every admin mutation and every login, failed login, role change
 and reveal of personal data writes one row: actor, action, target, time, source
@@ -178,31 +255,120 @@ address, result. Written on the request path, not from a log tail.
 
 ## RBAC
 
-Permissions are strings on the resource, verbs explicit:
+### Amended — dynamic, modelled on Django auth
+
+The original draft fixed four roles in this document. The owner chose runtime
+management instead: roles and permissions are database rows, staff can create
+them, and a flag marks the rows the system owns.
+
+The Django model this follows, and the one line of it that matters most:
+Django's `Permission` rows are **generated from code by migrations**, never typed
+into the admin UI. `Group` (our role) is what an administrator actually composes.
+That split is the difference between working authorization and a convincing
+screen, because:
+
+> A permission row that no route checks grants nothing. If staff can invent
+> `world:teleport` in the UI, they have created a control that appears to be
+> enforced and is not.
+
+So the two halves are treated differently:
+
+| | Who creates it | Why |
+| --- | --- | --- |
+| **Permissions** | **Declared in Go, synced into the table** at migration/startup. Staff read them, never invent them | Each one exists only because a route checks it. The table is a projection of code, exactly as in Django |
+| **Roles** | **Created freely at runtime** by staff holding `role:manage` | Composing existing permissions is the flexibility that was actually wanted, and it cannot produce a lie |
+
+Custom permission rows are not in scope for phase 1. If they are ever added,
+they need a documented meaning and a route that consults them; until then the
+sync is authoritative and prunes unknown rows.
+
+### Schema shape
+
+`permissions` — `codename`, `description`, `audience`, `is_system`.
+`roles` — `name`, `description`, `audience`, `is_system`.
+`role_permissions`, `account_roles` — the two joins.
+
+- **`is_system`** means: the row cannot be deleted and its `codename`/`name`
+  cannot be changed. For a system *role*, its permission membership stays
+  editable — `basic_user` is a policy default, and policy changes.
+- **`audience`** (`admin` | `web`) is what makes amendment 3 cheap later. A role
+  or permission scoped to `web` can never be granted on an `admin` token and the
+  reverse, enforced in the same place that already checks the token's `audience`
+  claim. Without this column, the first end-user role added becomes assignable
+  to staff.
+
+### Super admin is a bypass, not a role
+
+`accounts.is_super_admin`, following Django's `is_superuser`: the permission
+check short-circuits to allow. It is **not** a role that happens to hold every
+permission.
+
+The reason is recovery. A role that holds all permissions can be edited into a
+role that holds none, and if that was the only path to `account:manage` the
+system is unadministerable with no way back in. A bypass flag cannot be edited
+away by a permission mistake.
+
+Seeded system rows: `super_admin` is the flag; `basic_user` is a role with
+`chart:read` and nothing else, so a newly created account is inert until roles
+are granted deliberately.
+
+### Lockout guards — enforced server-side, not in the UI
+
+Every one of these is a way a real system gets bricked:
+
+- The last account with `is_super_admin` cannot have the flag removed, and
+  cannot be disabled.
+- An account cannot revoke its own `account:manage` or `role:manage`.
+- A role in use cannot be deleted; it must be unassigned first, and the response
+  says how many accounts hold it.
+- Deleting or editing a role writes an audit row **before** it takes effect.
+
+### Permission strings
+
+Verbs explicit on the resource, unchanged from the original draft plus the two
+the amendments require:
 
 ```txt
 world:read        world:unpublish     variant:read
 job:read          job:retry
 profile:read      profile:reveal      chart:read
 account:read      account:manage      audit:read
+role:read         role:manage
 ```
 
-| Role | Has |
-| --- | --- |
-| `owner` | Everything, including `account:manage` and `audit:read` |
-| `admin` | Everything except `account:manage` |
-| `support` | `*:read`, `job:retry`, `world:unpublish` — no `profile:reveal` |
-| `analyst` | `chart:read` and aggregate reads only; no individual records |
+`role:manage` is separate from `account:manage` on purpose: granting roles and
+editing what a role means are different amounts of power.
 
-Rules that decide whether this is real authorization or decoration:
+### Rules that decide whether this is authorization or decoration
 
-- **Enforced at the admin edge, per route, default deny.** An unknown route and
-  a route with no declared permission both refuse.
-- The UI receives the caller's permission list **only to hide controls**. Hiding
+- **Enforced at the admin route group, per route, default deny.** An unknown
+  route and a route with no declared permission both refuse.
+- The UI receives the caller's permission list **only to hide controls.** Hiding
   a button is not authorization; the edge check is.
 - Roles resolve to permissions at the edge from a cached role map, so revoking a
-  permission takes effect at the next request rather than the next token.
+  permission takes effect at the next request rather than the next token. With
+  runtime-editable roles this matters more than it did: the cache needs an
+  explicit invalidation on every role write, and a bounded TTL as a backstop.
 - `profile:reveal` is separate on purpose. See Risks.
+
+### What end-user accounts will need, so the schema does not get rewritten
+
+Amendment 3 asks that a visitor can log in and keep the worlds they created.
+That is **not** a role grant — it is an ownership check, and the two are
+different mechanisms. Recording the distinction now:
+
+- Staff authorization answers *"may this actor perform this verb?"* — roles.
+- End-user authorization answers *"is this row theirs?"* — ownership, evaluated
+  per object, in the owning service.
+
+An end user therefore needs one `web`-audience role (`world:read:own`,
+`world:write:own`) plus an ownership column the service checks. Roles alone
+cannot express it, and stretching them to try is how object-level permission
+tables become unmaintainable.
+
+The ownership column itself still waits on `DEFERRED-AUTH-001`. What this
+section fixes now is only that the grant model has an `audience` and a place for
+an `:own` scope, so adding it later is additive.
 
 ## The admin app
 
@@ -251,18 +417,25 @@ query rather than a constant in the component.
 
 ## Extending to 3D-web login later
 
+Amendment 3 makes this the direction rather than a possibility, so the list below
+is the plan of record for it — not a sketch.
+
 When DEFERRED-AUTH-001 is approved, the additional work is:
 
 1. `accounts.kind = end_user`, self-signup, email verification, password reset.
-2. `audience: "web"` tokens and a disjoint role set; the admin edge keeps
+2. `audience: "web"` tokens and a disjoint role set; the admin route group keeps
    rejecting them because it only accepts `audience: "admin"`.
-3. Auth verification middleware on the **public** gateway — new code there, but
-   the same public key and the same claim shape.
+3. Auth verification middleware on the product route group. Amendment 1 turns
+   this from new code into **reuse**: the same gateway already verifies admin
+   tokens, so this is a second group opting into the existing middleware with a
+   different accepted audience.
 4. The ownership decisions: `owner_account_id`, anonymous claim/migration,
-   deletion and export.
+   deletion and export — plus the `:own` permission scope noted in
+   [RBAC](#what-end-user-accounts-will-need-so-the-schema-does-not-get-rewritten).
 
-Steps 1–3 are additive. Step 4 is the product decision that was deferred, and
-building auth now does not make it any easier to skip.
+Steps 1–3 are additive, and amendment 1 makes step 3 cheaper than the original
+draft assumed. Step 4 is the product decision that was deferred; building auth
+now does not make it any easier to skip, and amendment 3 does not approve it.
 
 ## Phases
 
@@ -271,14 +444,14 @@ One branch each, per [git-convention.md](../coding/git-convention.md).
 | Phase | Branch | Delivers |
 | --- | --- | --- |
 | 0 | `feat/repo/auth-admin-contracts` | Subjects, JSON schemas, `contracts/openapi-admin.yaml` (separate file so the public spec never advertises admin routes), this plan approved |
-| 1 | `feat/be/auth-service` | auth-service, `myunivokai_auth`, login/refresh/logout, Argon2id, bootstrap admin, audit events, tests |
-| 2 | `feat/be/admin-gateway` | Admin edge, token verification, default-deny route policy, rate limits, CORS for one origin |
+| 1 | `feat/be/auth-service` | auth-service, `myunivokai_auth`, login/refresh/logout, Argon2id, bootstrap admin, audit events, the code-declared permission sync, seeded `super_admin` flag and `basic_user` role, lockout guards, tests |
+| 2 | `feat/be/gateway-admin-routes` | The `/api/admin` route group on the existing gateway: token verification, default-deny route policy with the enumerating router test, own CORS handler for one origin, own rate limits, `ADMIN_ROUTES_ENABLED` switch |
 | 3 | `feat/fe/admin-app-shell` | Next.js 15 app, login, session, RBAC-aware navigation, one record list end to end |
 | 4 | `feat/be/admin-query-subjects` | List/search/aggregate subjects in dna, universe and nature; cursor-per-family pagination |
 | 5 | `feat/fe/admin-records` | Record lists and detail views, first audited mutations |
 | 6 | `feat/fe/admin-charts` | The chart set above |
-| 7 | `feat/be/auth-hardening` | TOTP two-factor, invite flow, account management UI, lockout tuning, key rotation drill |
-| 8 | `feat/repo/admin-deployment` | `render.yaml` entries, Vercel project, secrets, runbook |
+| 7 | `feat/be/auth-hardening` | TOTP two-factor, invite flow, account and **role management** UI, lockout tuning, key rotation drill |
+| 8 | `feat/repo/admin-deployment` | `render.yaml` entry for auth-service, gateway env additions, Vercel project, secrets, runbook |
 
 Phases 1–3 are the smallest set that produces a usable panel: log in, see
 records, nothing else. Ship that before phase 4 widens the query surface.
@@ -304,6 +477,20 @@ rules, and any mutation that would break determinism does not get built.
 handling instead of using this issuer, there are two systems and one of them is
 wrong. The audience claim exists so there never needs to be a second issuer.
 
+**One gateway means one blast radius** (amendment 1). A gateway deploy now risks
+both the product and the admin surface, an admin route bug can exhaust a process
+the product shares, and the gateway's NATS credential now carries admin publish
+permissions. The mitigations are the route-group requirements above — separate
+CORS handler, separate rate limits, the enumerating default-deny test, and the
+`ADMIN_ROUTES_ENABLED` switch. If the admin surface later needs an IP allowlist
+that the product cannot tolerate, splitting the edge back out is the escape
+hatch, and nothing in this design prevents it.
+
+**Runtime-editable roles can be edited into a broken state** (amendment 2). This
+is the cost of the flexibility that was asked for. The lockout guards and the
+super-admin bypass flag are what keep it recoverable; they are requirements, not
+polish, and phase 1 is not done without them.
+
 ## Decisions the owner should confirm before phase 1
 
 1. **Admin domain and IP allowlist** — a separate domain is assumed. Is an IP
@@ -314,3 +501,16 @@ wrong. The audience claim exists so there never needs to be a second issuer.
    account because this panel reads personal data?
 4. **Warm instance** — pay for one for auth-service, or accept cold-start login
    latency internally?
+
+Added by the amendments:
+
+5. **App name** — this document says `apps/myunivokai-admin`; the owner has also
+   called it `myunivokai-ops`. One name has to win, and it should be the one that
+   describes the job: this app manages product records, it does not display
+   infrastructure metrics. `admin` is the recommendation.
+6. **Custom permission rows** — confirmed out of scope for phase 1, so the
+   permission table stays a projection of code? Roles remain freely creatable
+   either way.
+7. **Who may edit roles** — is `role:manage` held only by super admins in
+   practice, or genuinely delegated? It decides how defensive the guards around
+   role editing need to be.
