@@ -5,10 +5,8 @@
 > **Amended:** 2026-08-05 by the owner — see [Owner amendments](#owner-amendments--2026-08-05).
 > Three decisions in the original draft were reversed; the sections they touch
 > are marked **Amended** and state the current decision.
-> **Decisions:** answered 2026-08-05 — see
-> [Owner decisions](#owner-decisions--answered-2026-08-05). Six are settled;
-> decision 2 reopened on the owner's instruction that verification go through
-> auth-service, and blocks phase 1's token middleware only.
+> **Decisions:** all seven answered 2026-08-05 — see
+> [Owner decisions](#owner-decisions--answered-2026-08-05). Phase 1 is unblocked.
 
 Two new deliverables, deliberately kept apart from the 3D product:
 
@@ -238,14 +236,38 @@ fork, because *issuing* and *verifying* are separate questions:
 | **B. Local verify + revocation state in Redis** | Gateway verifies the signature locally, then checks `tokenVersion` in Redis, which auth-service writes on disable or password change | Immediate | None. Redis is always awake, and the gateway already holds a Redis client |
 | **C. Local verify only** | Signature and expiry only | Up to 10 minutes | None |
 
-`B` is the recommendation. It satisfies the instruction — auth-service remains
-the issuer and the sole authority over revocation state — while keeping the
-property that decision 4 depends on. `A` and decision 4 fight each other: the
-panel would be unusable for the length of a cold start on every visit after an
-idle period, which for an admin who logs in rarely is close to every visit.
+**Resolved: B.** It satisfies the instruction — auth-service remains the issuer
+of both tokens and the sole authority over revocation state — while keeping the
+property decision 4 depends on.
 
-Pending the owner's choice between A and B. If A is chosen, decision 4 should be
-revisited, because accepting cold starts costs far more under A than under C.
+`A` was rejected on a cost the cold-start argument understates. An admin request
+is already `gateway -> NATS -> domain service`; adding
+`gateway -> NATS -> auth-service` in front of it makes **two** round trips where
+there was one, on every request, warm or cold. That is a permanent doubling of
+admin API latency, not merely a cold-start penalty.
+
+### How B works
+
+Access claims already carry `tokenVersion`. Revocation compares the claim against
+the current value:
+
+- auth-service writes `<prefix>:auth:tokenversion:<accountId>` to Redis whenever
+  it bumps the version — account disabled, password changed, or all sessions
+  revoked — and seeds it at account creation. TTL longer than the maximum refresh
+  lifetime, so a live session can never outlive its key.
+- The gateway verifies the Ed25519 signature and expiry locally, then reads that
+  key. Claim below the stored value means revoked; the request is refused.
+- **On a cache miss the gateway asks auth-service once** and repopulates the key.
+  A miss must never be read as "not revoked", or expiring a key would silently
+  restore every token it protected.
+- If Redis is unavailable the gateway falls back to asking auth-service per
+  request: correct and secure, merely slow. Admin requests already depend on
+  Redis for rate limiting, so this is a degradation the edge cannot avoid rather
+  than one this design introduces.
+
+The common path is a local signature check plus one Redis read. The revocation
+window is effectively zero, and auth-service is only on the request path for
+login, refresh, logout and a cache miss.
 
 **Key handling.** Private key in the environment, never in git. Publish the
 public key by value to the edges. Support two active public keys so rotation
@@ -520,12 +542,12 @@ polish, and phase 1 is not done without them.
 
 ## Owner decisions — answered 2026-08-05
 
-Six settled, one reopened. Each answer and what it settles:
+Phase 1 is unblocked. Each answer and what it settles:
 
 | # | Decision | Answer |
 | --- | --- | --- |
 | 1 | Admin domain and IP allowlist | **No allowlist.** Staff log in from anywhere; admins use the panel rarely. Separate domain still assumed |
-| 2 | Revocation window | **Reopened.** The owner requires verification through auth-service and mandates both tokens. Choice between per-request verification and locally-verified tokens with revocation state in Redis is open — see [Revocation](#tokens) |
+| 2 | Revocation window | **Effectively zero.** Local signature verification plus a `tokenVersion` read from Redis that auth-service owns (option B). Per-request calls to auth-service rejected — they would double admin API latency permanently. See [Revocation](#tokens) |
 | 3 | Two-factor | **Not required.** TOTP stays in phase 7 as available work, not a prerequisite |
 | 4 | Warm instance | **Accept cold starts.** No paid instance for auth-service |
 | 5 | App name | **`apps/myunivokai-admin`** |

@@ -78,7 +78,7 @@ date; it is not the original creation date.
 | `vision/nature-service-plan.md` | Historical | Decision/round log; its early “future gateway/FE” statements are superseded |
 | `vision/visual-diversity.md` | Active | Re-baselined after the Universe diversity rounds and Forest renderer landed |
 | `vision/city-service-plan.md` | Approved product plan with amendment | City moves to Sprint 3 and consumes canonical DNA/NATS |
-| `vision/auth-and-admin-plan.md` | Approved with amendments, not implemented | Drafted and amended 2026-08-05: one gateway with an admin route group, Django-style runtime-editable RBAC, and a token/role model that must extend to 3D-web accounts. Six of seven owner decisions settled; token verification strategy still open |
+| `vision/auth-and-admin-plan.md` | Approved with amendments, not implemented | Drafted and amended 2026-08-05: one gateway with an admin route group, Django-style runtime-editable RBAC, and a token/role model that must extend to 3D-web accounts. All seven owner decisions settled; phase 1 is unblocked |
 | `ops/render-deployment.md` | Active entry point | Routes operators to the Sprint 1 NATS/Redis deployment guide |
 | `sprints/` | Active schedule | Sprint 1 complete migration, Sprint 2 hardening, Sprint 3 City |
 | `design/**/DESIGN.md` | Superseded reference | Layout ideas remain; purple/cyan visual language is not the active design system |
