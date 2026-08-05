@@ -40,6 +40,9 @@ jobs:
       - name: Lint OpenAPI
         run: npx --yes @redocly/cli@2.20.0 lint contracts/openapi.yaml
         working-directory: .
+      - name: Lint Admin OpenAPI
+        run: npx --yes @redocly/cli@2.20.0 lint contracts/openapi-admin.yaml
+        working-directory: .
 
   backend-checks:
     name: Backend (go vet + test)

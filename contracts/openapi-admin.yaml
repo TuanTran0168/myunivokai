@@ -1,0 +1,135 @@
+openapi: 3.1.0
+info:
+  title: Myunivokai Admin API
+  version: 1.0.0
+  description: >
+    The internal admin API, staff only. Served at /api/admin/* by the same
+    api-gateway process as the public API, but as a separately configured
+    route group with its own CORS policy, its own rate limits and
+    default-deny authorization. This document is deliberately never merged
+    into contracts/openapi.yaml so the public API spec never advertises
+    admin routes. Later Sprint 4 phases add the record-browsing and
+    analytics-backed routes here.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: "{protocol}://{host}"
+    description: Configurable gateway endpoint
+    variables:
+      protocol:
+        default: http
+        enum: [http, https]
+      host:
+        default: localhost:41800
+security: []
+paths:
+  /api/admin/auth/login:
+    post:
+      summary: Authenticate a staff account
+      operationId: adminAuthLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Session established; access and refresh cookies set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/auth/refresh:
+    post:
+      summary: Rotate the refresh token and mint a new access token
+      operationId: adminAuthRefresh
+      security:
+        - refreshTokenCookie: []
+      responses:
+        "200":
+          description: New session pair issued; access and refresh cookies rotated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/auth/logout:
+    post:
+      summary: Revoke the current refresh token family
+      operationId: adminAuthLogout
+      security:
+        - refreshTokenCookie: []
+      responses:
+        "204": { description: Session revoked; access and refresh cookies cleared }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+components:
+  securitySchemes:
+    refreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: myunivokai_admin_refresh
+      description: >-
+        httpOnly, Secure, SameSite=Lax cookie holding the rotating opaque
+        refresh token, scoped to the refresh path only.
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [account, accessExpiresAt, refreshExpiresAt]
+      properties:
+        account: { $ref: "#/components/schemas/Account" }
+        accessExpiresAt: { type: string, format: date-time }
+        refreshExpiresAt: { type: string, format: date-time }
+    Account:
+      type: object
+      additionalProperties: false
+      required: [accountId, email, kind, roles, permissions, isSuperAdmin, disabled, createdAt]
+      properties:
+        accountId: { type: string }
+        email: { type: string, format: email }
+        kind: { type: string, enum: [staff, end_user] }
+        roles: { type: array, items: { type: string } }
+        permissions: { type: array, items: { type: string } }
+        isSuperAdmin: { type: boolean }
+        disabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: array, items: { type: object } }
+        requestId: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unauthorized:
+      description: Missing, invalid, expired or revoked session
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unavailable:
+      description: auth-service or a required edge dependency is unavailable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }

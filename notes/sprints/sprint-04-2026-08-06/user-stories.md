@@ -19,11 +19,11 @@ tracks, at auth phases 1–2 and the admin app shell respectively.
 
 ### S4-AUTH-001 — Freeze auth/admin contracts
 
-Status: Ready
+Status: Implemented
 Priority: P0
 
 As a service developer,
-I want versioned auth subjects, JSON schemas and a separate admin OpenAPI file,
+I want versioned auth subjects and a separate admin OpenAPI file,
 so that the admin surface never appears in the public API contract and every
 later phase has a frozen wire format to build against.
 
@@ -34,17 +34,31 @@ When phase 0 lands on `feat/repo/auth-admin-contracts`
 Then `contracts/openapi-admin.yaml` exists as a file separate from the public
 OpenAPI spec
 And auth subjects (login/refresh/logout/account/role/permission) and their
-JSON schemas are defined in `contracts/go`
-And the existing Go/TypeScript contract-drift test covers the new schemas.
+Go types are defined in `contracts/go`
+And CI lints `contracts/openapi-admin.yaml` as its own job step, alongside
+the existing public spec.
+
+**Built narrower than first scoped, deliberately:** no new `.schema.json`
+files were added. Every payload this phase defines (login, account, role,
+permission, audit) is either internal to Go services (gateway ↔
+auth-service over NATS) or an HTTP body scoped entirely to
+`openapi-admin.yaml`'s own `components.schemas` — neither crosses into a
+different language runtime the way `WorldInput`/`ProfileDNA` do, which is
+the actual reason those two get dedicated schema files and
+`schema_conformance_test.go` coverage. Matching that file to a case that
+doesn't need it would be the abstraction this repo's conventions warn
+against.
 
 Source evidence:
 - notes/vision/auth-and-admin-plan.md — §Phases, Phase 0
-- notes/coding/ci-quality-gates.md — the contract-drift gate being extended
+- notes/coding/ci-quality-gates.md — the contract job the new lint step was added to
+- contracts/go/contracts_auth.go
+- contracts/openapi-admin.yaml
 
 Tasks:
-- [ ] Define auth subjects and account/role/permission JSON schemas in `contracts/go`.
-- [ ] Add `contracts/openapi-admin.yaml` with the admin route surface only.
-- [ ] Extend the contract-drift test to the new schemas.
+- [x] Define auth subjects and account/role/permission Go types in `contracts/go` (`contracts_auth.go`).
+- [x] Add `contracts/openapi-admin.yaml` with the login/refresh/logout route surface; later phases extend it.
+- [x] Add a CI lint step for `contracts/openapi-admin.yaml` alongside the existing `contracts/openapi.yaml` step.
 
 ### S4-AUTH-002 — Stand up auth-service core
 
