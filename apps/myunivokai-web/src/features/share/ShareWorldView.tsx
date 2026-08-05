@@ -109,6 +109,7 @@ export function ShareWorldView({ shareSlug, family = DEFAULT_WORLD_FAMILY }: Sha
           className="h-full"
           selectedPlanetKey={selectedPlanetKey}
           onSelectPlanet={handleSelectPlanet}
+          enableAmbientSound
         />
       </div>
 

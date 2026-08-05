@@ -126,6 +126,21 @@ flowchart TB
 - The same seed always produces the same scene, on any page, forever.
 - `Math.random()` is banned in scene code; the frontend mirrors the seeded PRNG.
 
+### Every world plays music, and the same DNA arranges it
+
+- The notes are **real compositions in the public domain**, shipped as note data.
+- Six pieces — Satie, Bach, Debussy — 84 kB for all six; a world fetches one.
+- The sound comes from CC0 recorded instruments: 39 samples, 1.27 MB total.
+- The DNA chooses the piece, the instruments, the tempo, the key and how full
+  the chords are; the seed chooses the opening phrase, the room and the timing.
+- `Math.random()` is banned here exactly as in scene code — same seed, same
+  performance, on every page and every reload.
+- Famous modern songs are not an option however freely their sheet music
+  circulates: a composition is copyrighted for 70 years after the composer's
+  death, and playing it with our own samples is what a sync licence covers.
+- Audio never reaches for a provider, so swapping to a live AI changes nothing
+  on this path. See [notes/fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md).
+
 ### Single public edge with interchangeable AI providers
 
 - The browser talks to the gateway and nothing else.
@@ -145,6 +160,7 @@ flowchart TB
 | **Variant** | An alternative scene config for the same world. Generated from a new seed at zero AI cost. One variant is marked as the selected one. |
 | **Mood Scene Profiles** | Per-mood rendering parameters, mirrored in both Go and TypeScript to keep visuals consistent. |
 | **Share Slug** | Publishing mints one permanent slug per world. Republishing reuses it. |
+| **Ambient Soundscape** | The music a world plays: a public-domain score performed by recorded instrument samples, with the piece, the instruments, the tempo, the key and the chord density all resolved from the DNA and the seed. |
 | **Rare Features** | Black hole, binary suns, meteor shower. Rolled on the frontend from the seed, never stored, so the same seed must reach every page. |
 | **Async Job & Polling** | Gateway returns `202 + jobId`. Frontend polls `GET /api/jobs/{jobId}` until the result is ready. |
 
@@ -173,6 +189,7 @@ flowchart TB
 | **React Three Fiber** | three.js integration for 3D rendering |
 | **@react-three/drei** | three.js helpers and abstractions |
 | **@react-three/postprocessing** | Post-processing effects (bloom, vignette) |
+| **Web Audio API** | Ambient music: sampled instruments, convolution reverb, lookahead scheduling |
 | **Tailwind CSS** | Styling with custom design tokens (Vitrine + Liquid Glass) |
 | **vitest** | Unit testing |
 
@@ -343,11 +360,12 @@ environment:
 │   └── myunivokai-web/               # Next.js 14 + React Three Fiber frontend
 │       ├── .env.example              # Template: NEXT_PUBLIC_GATEWAY_BASE_URL
 │       ├── Dockerfile.prod           # Production container
-│       ├── public/                   # Static 3D assets (GLB models)
+│       ├── public/                   # Static assets: GLB models, textures, audio samples and scores
 │       └── src/
 │           ├── app/                  # App Router pages and API route proxies
 │           ├── components/           # Shared UI components (Vitrine + Liquid Glass)
 │           ├── features/             # Feature modules and scene renderers
+│           │   ├── audio/            # Instrument samples, arrangements, the performing graph
 │           │   └── scene-renderers/  # SceneType registry (solar-system/, forest/, fallback/)
 │           └── lib/                  # API clients, polling hooks, state utilities
 ├── services/
@@ -427,4 +445,5 @@ Key docs:
 - [coding/coding-style.md](notes/coding/coding-style.md) — code style rules
 - [be/source-overview.md](notes/be/source-overview.md) — backend architecture
 - [fe/source-overview.md](notes/fe/source-overview.md) — frontend architecture
+- [fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md) — how the music is made, and how to audition it
 - [contracts/openapi.yaml](contracts/openapi.yaml) — API specification
