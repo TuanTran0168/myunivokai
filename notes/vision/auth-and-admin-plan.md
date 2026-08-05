@@ -2,6 +2,8 @@
 
 > **Document status:** Approved with amendments; no source exists yet
 > **Last source review:** 2026-08-05
+> **Scheduled:** [Sprint 4](../sprints/sprint-04-2026-08-06/README.md), as
+> `EPIC-S4-AUTH-001` — first in the owner's priority order.
 > **Amended:** 2026-08-05 by the owner — see [Owner amendments](#owner-amendments--2026-08-05).
 > Three decisions in the original draft were reversed; the sections they touch
 > are marked **Amended** and state the current decision.

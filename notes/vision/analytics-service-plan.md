@@ -10,6 +10,8 @@
 > `apps/myunivokai-admin` are the active track.
 > [service-wake-mechanism.md](service-wake-mechanism.md) is deliberately
 > deferred behind all three.
+> **Scheduled:** [Sprint 4](../sprints/sprint-04-2026-08-06/README.md), as
+> `EPIC-S4-ANALYTICS-001` — second in the owner's priority order.
 
 ## What this service is, in one sentence
 

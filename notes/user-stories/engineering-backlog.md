@@ -353,9 +353,94 @@ Tasks:
 - [ ] Add deterministic high-fidelity renderer and complete public flow.
 - [ ] Extend Compose/deployment/monitoring and pass production smoke.
 
+## EPIC-S4-AUTH-001 — Staff identity and the internal admin app
+
+Status: Ready
+Priority: P0
+Sprint: [Sprint 4 — starts 2026-08-06](../sprints/sprint-04-2026-08-06/README.md)
+
+As a staff member,
+I want a dedicated identity service and an internal admin app separate from the
+3D product,
+so that I can log in, be granted exactly the roles I need, and browse
+records without the panel becoming a second, worse way to reach production
+data.
+
+Scenario: Staff identity never touches ownership
+
+Given no visitor identity exists yet
+When auth-service and the admin app are built
+Then no `owner_account_id` column is added anywhere
+And access/refresh tokens carry `audience: "admin"`, disjoint from any future
+`audience: "web"` token
+And [`DEFERRED-AUTH-001`](#deferred-auth-001--define-identity-before-authentication)
+remains untouched — staff auth answers "may this actor act?", not "who owns
+this row?".
+
+Scenario: One gateway, two blast radii kept apart
+
+Given the existing public gateway gains an `/api/admin` route group
+When the admin route group is exercised
+Then every route rejects an unauthenticated request by default, proven by an
+enumerating router test
+And the admin group's CORS, rate limits and NATS admin-publish permissions
+are isolated from the product group.
+
+Epic exit:
+
+- [ ] Every Sprint 4 `S4-AUTH-*` story below is Verified.
+- [ ] The admin app renders zero content without a valid staff session.
+- [ ] `role:manage`'s lockout guards are proven by test, not by convention.
+
+Sprint stories: [S4-AUTH-001 through S4-AUTH-006](../sprints/sprint-04-2026-08-06/user-stories.md#epic-s4-auth-001--staff-identity-and-the-internal-admin-app)
+
+Source: [auth-and-admin-plan.md](../vision/auth-and-admin-plan.md)
+
+## EPIC-S4-ANALYTICS-001 — A read model for the admin app
+
+Status: Ready
+Priority: P0
+Sprint: [Sprint 4 — starts 2026-08-06](../sprints/sprint-04-2026-08-06/README.md)
+
+As a staff member,
+I want the admin app's reads served by a dedicated analytics read model rather
+than a live fan-out across dna, universe and nature,
+so that an admin page only ever waits on analytics and auth, and a sleeping
+domain service never blanks a screen it has nothing to do with.
+
+Scenario: The read model is the only writer to its own database
+
+Given events already flow through `MYUNIVOKAI_EVENTS`
+When analytics-service is built
+Then it is the only writer to its own database, fed solely by its own event
+consumer
+And every HTTP or NATS path into it is read-only
+And no domain service ever receives a request on an admin read path.
+
+Scenario: Close the event gap before it becomes permanent
+
+Given variant creation, variant selection and publish emit no event today
+When Sprint 4 starts
+Then universe and nature begin emitting a revision-stamped `WorldSnapshot` on
+every mutation before analytics-service exists to consume it
+And no event needed for a later admin screen is lost to JetStream's 7-day
+retention window.
+
+Epic exit:
+
+- [ ] Every Sprint 4 `S4-ANALYTICS-*` story below is Verified.
+- [ ] `analytics-service`'s schema has no `outbox_messages` table.
+- [ ] The admin dashboard, worlds table and jobs table read from analytics only.
+
+Sprint stories: [S4-ANALYTICS-001 through S4-ANALYTICS-007](../sprints/sprint-04-2026-08-06/user-stories.md#epic-s4-analytics-001--a-read-model-for-the-admin-app)
+
+Source: [analytics-service-plan.md](../vision/analytics-service-plan.md)
+
 ## DEFERRED-AUTH-001 — Define identity before authentication
 
-Status: Deferred by owner decision on 2026-07-22
+Status: Deferred by owner decision on 2026-07-22. **Unaffected by Sprint 4** —
+staff identity in `EPIC-S4-AUTH-001` never adds ownership; see that epic's
+first scenario.
 Priority: Discovery
 
 As a future account holder,

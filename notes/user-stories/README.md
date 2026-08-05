@@ -17,6 +17,7 @@ acceptance evidence live beside each dated sprint in `notes/sprints/*/user-stori
 | [Sprint 1 stories](../sprints/sprint-01-2026-07-22/user-stories.md) | Migration implementation and pending environment evidence |
 | [Sprint 2 stories](../sprints/sprint-02-2026-08-05/user-stories.md) | Resilience and scale commitments |
 | [Sprint 3 stories](../sprints/sprint-03-2026-08-19/user-stories.md) | City vertical-slice commitments |
+| [Sprint 4 stories](../sprints/sprint-04-2026-08-06/user-stories.md) | auth-service, analytics read model and admin app commitments |
 
 The dated delivery commitments live in [../sprints/](../sprints/README.md).
 Sprint 1 is the complete platform migration, including local and production
@@ -28,6 +29,9 @@ Approved architecture/feature plans referenced by this backlog:
   DNA/family boundaries, data ownership and scale model.
 - [City Service implementation plan](../vision/city-service-plan.md) — third
   family, now implemented on the new platform only after Sprints 1–2.
+- [Auth-service and internal admin app plan](../vision/auth-and-admin-plan.md)
+  and [Analytics-service plan](../vision/analytics-service-plan.md) — Sprint 4,
+  in that priority order.
 
 ## Story format
 

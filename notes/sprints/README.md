@@ -10,7 +10,13 @@ Git history, links and deployment evidence.
 | --- | --- | --- |
 | [Sprint 01](sprint-01-2026-07-22/README.md) | 2026-07-22 | Complete NATS/Redis/DNA architecture migration, local runtime, production deploy and cutover |
 | [Sprint 02](sprint-02-2026-08-05/README.md) | 2026-08-05 | Resilience, observability, capacity and horizontal-scale proof |
+| [Sprint 04](sprint-04-2026-08-06/README.md) | 2026-08-06 | auth-service, the analytics read model and the internal admin app, in that priority order; the confirmed wake-mechanism defect is deliberately deferred |
 | [Sprint 03](sprint-03-2026-08-19/README.md) | 2026-08-19 | City bounded-context and high-fidelity vertical slice on the new platform |
+
+Sprint 04 is numbered after Sprint 03 because it was scoped later, but its
+start date places it here: it runs alongside Sprint 02's resilience work and
+ahead of Sprint 03, which is unaffected — City and the admin/auth/analytics
+track touch disjoint services and databases.
 
 Sprint status is evidence-based:
 
