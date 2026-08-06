@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://render.com/schema/render.yaml.json
-# Managed NATS, Redis, and three Neon URLs are supplied through the dashboard.
+# Managed NATS, Redis, and four Neon URLs are supplied through the dashboard.
 # Domain names describe responsibilities; Render's `worker` type describes the process.
 services:
 # =============================================================================
