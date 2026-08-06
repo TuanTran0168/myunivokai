@@ -20,10 +20,17 @@ type fakeBroker struct {
 	mutex             sync.Mutex
 	publishedEnvelope contracts.Envelope[contracts.GenerateDNAData]
 	requestedSubject  string
+	requestedSubjects []string
 	response          contracts.Envelope[contracts.RPCResponseData]
-	publishError      error
-	requestError      error
-	pingError         error
+	// responsesBySubject lets a test answer two different NATS subjects
+	// differently in one request (e.g. RequireAdminPermission's
+	// AuthAccountPermissionsQuerySubject vs. the route's own subject) — a
+	// subject missing from this map falls back to `response`, so every
+	// existing single-response test keeps working unchanged.
+	responsesBySubject map[string]contracts.Envelope[contracts.RPCResponseData]
+	publishError       error
+	requestError       error
+	pingError          error
 }
 
 func (brokerClient *fakeBroker) PublishGeneration(_ context.Context, envelope contracts.Envelope[contracts.GenerateDNAData]) error {
@@ -37,6 +44,10 @@ func (brokerClient *fakeBroker) Request(_ context.Context, subject string, _ any
 	brokerClient.mutex.Lock()
 	defer brokerClient.mutex.Unlock()
 	brokerClient.requestedSubject = subject
+	brokerClient.requestedSubjects = append(brokerClient.requestedSubjects, subject)
+	if response, found := brokerClient.responsesBySubject[subject]; found {
+		return response, brokerClient.requestError
+	}
 	return brokerClient.response, brokerClient.requestError
 }
 
@@ -44,15 +55,36 @@ func (brokerClient *fakeBroker) Ping(context.Context) error { return brokerClien
 func (brokerClient *fakeBroker) Close()                     {}
 
 type fakeEdgeStore struct {
-	mutex        sync.Mutex
-	values       map[string][]byte
-	timeToLives  map[string]time.Duration
-	deleteCounts map[string]int
-	pingError    error
+	mutex         sync.Mutex
+	values        map[string][]byte
+	timeToLives   map[string]time.Duration
+	deleteCounts  map[string]int
+	pingError     error
+	tokenVersions map[string]int
 }
 
 func newFakeEdgeStore() *fakeEdgeStore {
-	return &fakeEdgeStore{values: make(map[string][]byte), timeToLives: make(map[string]time.Duration), deleteCounts: make(map[string]int)}
+	return &fakeEdgeStore{
+		values: make(map[string][]byte), timeToLives: make(map[string]time.Duration),
+		deleteCounts: make(map[string]int), tokenVersions: make(map[string]int),
+	}
+}
+
+func (store *fakeEdgeStore) GetTokenVersion(_ context.Context, accountID string) (int, error) {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	tokenVersion, found := store.tokenVersions[accountID]
+	if !found {
+		return 0, edge.ErrCacheMiss
+	}
+	return tokenVersion, nil
+}
+
+func (store *fakeEdgeStore) SetTokenVersion(_ context.Context, accountID string, tokenVersion int, _ time.Duration) error {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	store.tokenVersions[accountID] = tokenVersion
+	return nil
 }
 
 func (store *fakeEdgeStore) Allow(context.Context, string, string, float64, int) (bool, time.Duration, error) {

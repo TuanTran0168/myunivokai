@@ -23,27 +23,29 @@ type memoryRole struct {
 // memory_roles_permissions.go / memory_audit.go for the same reason
 // PostgresStore is — see postgres_store.go's package comment.
 type MemoryStore struct {
-	mu                   sync.RWMutex
-	accountsByID         map[string]Account
-	accountIDByEmail     map[string]string
-	permissions          map[string]PermissionDefinition
-	roles                map[string]*memoryRole
-	roleIDByName         map[string]string
-	accountRoleIDs       map[string]map[string]struct{}
-	refreshTokensByID    map[string]RefreshToken
-	refreshTokenIDByHash map[string]string
-	auditEvents          []AuditEvent
+	mu                         sync.RWMutex
+	accountsByID               map[string]Account
+	accountIDByEmail           map[string]string
+	accountIDByInviteTokenHash map[string]string
+	permissions                map[string]PermissionDefinition
+	roles                      map[string]*memoryRole
+	roleIDByName               map[string]string
+	accountRoleIDs             map[string]map[string]struct{}
+	refreshTokensByID          map[string]RefreshToken
+	refreshTokenIDByHash       map[string]string
+	auditEvents                []AuditEvent
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		accountsByID:         map[string]Account{},
-		accountIDByEmail:     map[string]string{},
-		permissions:          map[string]PermissionDefinition{},
-		roles:                map[string]*memoryRole{},
-		roleIDByName:         map[string]string{},
-		accountRoleIDs:       map[string]map[string]struct{}{},
-		refreshTokensByID:    map[string]RefreshToken{},
-		refreshTokenIDByHash: map[string]string{},
+		accountsByID:               map[string]Account{},
+		accountIDByEmail:           map[string]string{},
+		accountIDByInviteTokenHash: map[string]string{},
+		permissions:                map[string]PermissionDefinition{},
+		roles:                      map[string]*memoryRole{},
+		roleIDByName:               map[string]string{},
+		accountRoleIDs:             map[string]map[string]struct{}{},
+		refreshTokensByID:          map[string]RefreshToken{},
+		refreshTokenIDByHash:       map[string]string{},
 	}
 }

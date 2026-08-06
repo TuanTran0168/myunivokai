@@ -240,7 +240,7 @@ Tasks:
 
 ### S4-AUTH-005 — Auth hardening
 
-Status: Planned
+Status: Implemented
 Priority: P1
 
 As an operator,
@@ -257,15 +257,46 @@ Then the lockout guards hold (an in-use role cannot be deleted; an account
 cannot revoke its own `account:manage`/`role:manage`)
 And every role write invalidates the gateway's cached role map immediately.
 
+**Narrower/different than scoped, deliberately:**
+- "Every role write invalidates the gateway's cached role map immediately"
+  assumed a Redis-cached role→permissions map at the gateway that was never
+  actually built (S4-AUTH-003 only cached `tokenVersion`). Rather than add
+  that cache now, `RequireAdminPermission`
+  (`services/api-gateway/internal/middleware/admin_permission.go`) queries
+  auth-service fresh on every management request via a new
+  `AuthAccountPermissionsQuerySubject`. Admin-management traffic is a
+  handful of staff, not the hot path the tokenVersion cache exists for —
+  adding a cache with nothing yet to invalidate would be solving a load
+  problem this route group doesn't have. There is consequently no
+  invalidation bug to have either: a role edit is visible on the very next
+  request.
+- No invite subject existed in `contracts/go` before this phase (checked;
+  the vision doc names the goal but never froze a wire shape for it) — added
+  `AuthInviteCreateQuerySubject`/`AuthInviteAcceptQuerySubject` and the
+  matching data types, plus nullable `accounts.password_hash` and
+  invite-token columns (`migrations/000002_invite_flow.sql`). No email
+  infrastructure exists, so the raw invite token is returned once to the
+  inviting staff member to relay out of band (surfaced in the admin UI's
+  invite dialog).
+- "Tune lockout thresholds from real usage" has no real usage to tune
+  against yet (no deployment — see S4-AUTH-006, deliberately sequenced
+  after analytics exists). Left at S4-AUTH-002's original defaults.
+- Established the repo's first cursor-pagination convention (opaque
+  `base64(occurredAt-or-createdAt-nanos:id)`, keyset on `(timestamp, id)
+  DESC`) for account and audit-event lists — see
+  `services/auth-service/internal/repositories/cursor.go`. Role lists stay
+  unpaginated: roles are staff-composed, not user-generated, and
+  realistically number in the dozens.
+
 Source evidence:
 - notes/vision/auth-and-admin-plan.md — §Lockout guards
 - notes/vision/auth-and-admin-plan.md — §Phases, Phase 7
 
 Tasks:
-- [ ] Build the invite flow and account/role management screens.
-- [ ] Implement role-map cache invalidation on every role write.
-- [ ] Run and document a key-rotation drill with two active public keys.
-- [ ] Tune lockout thresholds from real usage.
+- [x] Build the invite flow and account/role management screens.
+- [x] Implement role-map cache invalidation on every role write (superseded — see the note above; no cache exists to invalidate).
+- [x] Run and document a key-rotation drill with two active public keys (`notes/ops/admin-key-rotation-drill.md`).
+- [ ] Tune lockout thresholds from real usage — deferred, no real usage yet.
 
 ### S4-AUTH-006 — Deploy auth-service and the admin app
 

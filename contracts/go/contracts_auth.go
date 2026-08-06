@@ -19,6 +19,14 @@ const (
 	AuthRoleRevokeQuerySubject     = "myunivokai.queries.auth.role.revoke.v1"
 	AuthPermissionListQuerySubject = "myunivokai.queries.auth.permission.list.v1"
 	AuthAuditListQuerySubject      = "myunivokai.queries.auth.audit.list.v1"
+	AuthInviteCreateQuerySubject   = "myunivokai.queries.auth.invite.create.v1"
+	AuthInviteAcceptQuerySubject   = "myunivokai.queries.auth.invite.accept.v1"
+	// AuthAccountPermissionsQuerySubject answers the gateway's permission
+	// check for management routes (RequireAdminPermission) — a fresh lookup
+	// per request rather than a cache, since admin-management traffic is low
+	// volume staff usage, not the hot path S4-AUTH-003's tokenVersion cache
+	// exists for. See services/api-gateway/internal/middleware/admin_permission.go.
+	AuthAccountPermissionsQuerySubject = "myunivokai.queries.auth.account.permissions.get.v1"
 
 	AccountAudienceAdmin AccountAudience = "admin"
 	AccountAudienceWeb   AccountAudience = "web"
@@ -190,31 +198,45 @@ type RoleListResponseData struct {
 	NextCursor string        `json:"nextCursor,omitempty"`
 }
 
+// ActorAccountID and SourceAddress were added to every role mutation below
+// at implementation time (S4-AUTH-005): the gateway is the only component
+// that knows either, same reason AccountDisableData/AccountEnableData
+// already carry them, and no consumer existed yet to break by adding them.
 type RoleCreateData struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Audience    AccountAudience `json:"audience"`
-	Permissions []string        `json:"permissions"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description,omitempty"`
+	Audience       AccountAudience `json:"audience"`
+	Permissions    []string        `json:"permissions"`
+	ActorAccountID string          `json:"actorAccountId"`
+	SourceAddress  string          `json:"sourceAddress"`
 }
 
 type RoleUpdateData struct {
-	RoleID      string   `json:"roleId"`
-	Description string   `json:"description,omitempty"`
-	Permissions []string `json:"permissions"`
+	RoleID         string   `json:"roleId"`
+	Description    string   `json:"description,omitempty"`
+	Permissions    []string `json:"permissions"`
+	ActorAccountID string   `json:"actorAccountId"`
+	SourceAddress  string   `json:"sourceAddress"`
 }
 
 type RoleDeleteData struct {
-	RoleID string `json:"roleId"`
+	RoleID         string `json:"roleId"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type RoleAssignData struct {
-	AccountID string `json:"accountId"`
-	RoleID    string `json:"roleId"`
+	AccountID      string `json:"accountId"`
+	RoleID         string `json:"roleId"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type RoleRevokeData struct {
-	AccountID string `json:"accountId"`
-	RoleID    string `json:"roleId"`
+	AccountID      string `json:"accountId"`
+	RoleID         string `json:"roleId"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type PermissionListResponseData struct {
@@ -224,4 +246,39 @@ type PermissionListResponseData struct {
 type AuditListResponseData struct {
 	Events     []AuditEventSummary `json:"events"`
 	NextCursor string              `json:"nextCursor,omitempty"`
+}
+
+// InviteCreateData creates an account with no password, identified only by
+// a one-time token the operator relays out of band — no email infrastructure
+// exists yet, so the token is returned once in InviteCreateResponseData and
+// never stored anywhere but its hash.
+type InviteCreateData struct {
+	Email          string   `json:"email"`
+	RoleIDs        []string `json:"roleIds"`
+	ActorAccountID string   `json:"actorAccountId"`
+	SourceAddress  string   `json:"sourceAddress"`
+}
+
+type InviteCreateResponseData struct {
+	AccountID       string    `json:"accountId"`
+	InviteToken     string    `json:"inviteToken"`
+	InviteExpiresAt time.Time `json:"inviteExpiresAt"`
+}
+
+// InviteAcceptData sets the invited account's first password. The response
+// is a LoginResponseData: accepting an invite logs the account in, the same
+// way a normal login would.
+type InviteAcceptData struct {
+	InviteToken   string `json:"inviteToken"`
+	Password      string `json:"password"`
+	SourceAddress string `json:"sourceAddress"`
+}
+
+type AccountPermissionsQueryData struct {
+	AccountID string `json:"accountId"`
+}
+
+type AccountPermissionsResponseData struct {
+	Permissions  []string `json:"permissions"`
+	IsSuperAdmin bool     `json:"isSuperAdmin"`
 }

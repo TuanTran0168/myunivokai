@@ -42,6 +42,7 @@ func testConfig() config.Config {
 		TokenVersionCacheTTL:  15 * 24 * time.Hour,
 		MaximumFailedAttempts: 3,
 		LockoutDuration:       15 * time.Minute,
+		InviteTokenTTL:        time.Hour,
 	}
 }
 

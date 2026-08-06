@@ -1,9 +1,12 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"testing"
 	"time"
 )
+
+var testAdminPublicKey, _, _ = ed25519.GenerateKey(nil)
 
 func TestProductionValidationRequiresTrustedProxyAndExactOrigins(t *testing.T) {
 	serviceConfig := validTestConfig()
@@ -93,5 +96,7 @@ func validTestConfig() Config {
 		WorldCacheTimeToLive:       time.Minute,
 		ShareCacheTimeToLive:       time.Minute,
 		ShutdownTimeout:            time.Second,
+		AdminAccessPublicKeys:      []ed25519.PublicKey{testAdminPublicKey},
+		AdminTokenVersionCacheTTL:  time.Minute,
 	}
 }

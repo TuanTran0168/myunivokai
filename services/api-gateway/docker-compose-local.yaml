@@ -30,6 +30,11 @@ services:
       ADMIN_ALLOWED_ORIGIN: http://localhost:${ADMIN_PORT:-41900}
       ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND: ${ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND:-10}
       ADMIN_RATE_LIMIT_BURST: ${ADMIN_RATE_LIMIT_BURST:-50}
+      # Public half of AUTH_ACCESS_PRIVATE_KEY (auth-service/.env.local) —
+      # never the private key itself. Comma-separated so a key-rotation
+      # drill can list both the outgoing and incoming key at once (S4-AUTH-005).
+      ADMIN_ACCESS_PUBLIC_KEYS: ${ADMIN_ACCESS_PUBLIC_KEYS}
+      ADMIN_TOKEN_VERSION_CACHE_TTL: ${ADMIN_TOKEN_VERSION_CACHE_TTL:-360h}
       JOB_CACHE_TTL: ${JOB_CACHE_TTL:-30s}
       WORLD_CACHE_TTL: ${WORLD_CACHE_TTL:-60s}
       SHARE_CACHE_TTL: ${SHARE_CACHE_TTL:-60s}

@@ -63,6 +63,19 @@ func (runtime *Runtime) Run(_ context.Context) error {
 		{subject: contracts.AuthTokenVersionQuerySubject, handler: runtime.natsHandler.HandleTokenVersionQuery},
 		{subject: contracts.AuthAccountDisableQuerySubject, handler: runtime.natsHandler.HandleAccountDisableQuery},
 		{subject: contracts.AuthAccountEnableQuerySubject, handler: runtime.natsHandler.HandleAccountEnableQuery},
+		{subject: contracts.AuthInviteCreateQuerySubject, handler: runtime.natsHandler.HandleInviteCreateQuery},
+		{subject: contracts.AuthInviteAcceptQuerySubject, handler: runtime.natsHandler.HandleInviteAcceptQuery},
+		{subject: contracts.AuthAccountPermissionsQuerySubject, handler: runtime.natsHandler.HandleAccountPermissionsQuery},
+		{subject: contracts.AuthAccountListQuerySubject, handler: runtime.natsHandler.HandleAccountListQuery},
+		{subject: contracts.AuthAccountGetQuerySubject, handler: runtime.natsHandler.HandleAccountGetQuery},
+		{subject: contracts.AuthRoleListQuerySubject, handler: runtime.natsHandler.HandleRoleListQuery},
+		{subject: contracts.AuthRoleCreateQuerySubject, handler: runtime.natsHandler.HandleRoleCreateQuery},
+		{subject: contracts.AuthRoleUpdateQuerySubject, handler: runtime.natsHandler.HandleRoleUpdateQuery},
+		{subject: contracts.AuthRoleDeleteQuerySubject, handler: runtime.natsHandler.HandleRoleDeleteQuery},
+		{subject: contracts.AuthRoleAssignQuerySubject, handler: runtime.natsHandler.HandleRoleAssignQuery},
+		{subject: contracts.AuthRoleRevokeQuerySubject, handler: runtime.natsHandler.HandleRoleRevokeQuery},
+		{subject: contracts.AuthPermissionListQuerySubject, handler: runtime.natsHandler.HandlePermissionListQuery},
+		{subject: contracts.AuthAuditListQuerySubject, handler: runtime.natsHandler.HandleAuditListQuery},
 	}
 	for _, binding := range queryBindings {
 		subscription, err := runtime.connection.QueueSubscribe(binding.subject, queryQueueName, binding.handler)

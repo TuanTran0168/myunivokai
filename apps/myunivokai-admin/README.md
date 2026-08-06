@@ -39,6 +39,32 @@ non-httpOnly `myunivokai_admin_account` cookie (roles/permissions/email only,
 never a token) since this phase ships no `/session` query endpoint — login
 and refresh already return that data, so caching their response is enough.
 
+## Accounts, roles and audit (S4-AUTH-005)
+
+`src/app/api/admin/[...path]/route.ts` is a generic BFF relay for every
+`/api/admin/*` management call (accounts, roles, permissions, audit) —
+unlike the auth routes, it sets no cookies of its own; it only forwards the
+caller's already-first-party access cookie to the gateway and relays the
+JSON response verbatim. This is what lets `src/lib/admin-api.ts` call
+`/api/admin/accounts`, `/api/admin/roles`, etc. as same-origin fetches from
+the browser without a dedicated Route Handler file per endpoint.
+
+Screens: `accounts` (list, invite, disable/enable), `accounts/[accountId]`
+(assign/revoke roles), `roles` (create/edit/delete, permission checkboxes),
+`audit` (cursor-paginated event log). The invite dialog surfaces the raw
+invite token once — no email infrastructure exists yet, so a staff member
+relays it out of band.
+
+## Design
+
+Light "liquid glass" theme (`src/app/globals.css`): a fixed, slow-drifting
+blurred color field (`.liquid-field`) behind bright, blurred glass panels
+(`.glass-panel`), brass as the one accent — same brand as
+`apps/myunivokai-web`, inverted from dark-no-blur to light-genuinely-blurred
+since nothing 3D renders behind these panels. `motion` (`src/components/page-transition.tsx`,
+the sidebar's active-nav pill, card/dialog entrances) supplies the subtle
+animation; nothing here uses CSS-only transitions where a spring reads better.
+
 ```powershell
 npm ci
 npm run dev

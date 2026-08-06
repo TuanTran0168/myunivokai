@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 )
 
@@ -36,16 +37,129 @@ func (store *PostgresStore) GetAccountByID(ctx context.Context, accountID string
 func (store *PostgresStore) scanAccount(ctx context.Context, predicate, value string) (Account, error) {
 	var account Account
 	var kind string
+	// password_hash is NULL for an invited account that has not yet accepted
+	// (migrations/000002_invite_flow.sql) - scanned through a pointer and
+	// normalized to "" so every other call site keeps treating PasswordHash
+	// as a plain string.
+	var passwordHash *string
 	err := store.pool.QueryRow(ctx, `SELECT id::text, email, password_hash, kind, is_super_admin, disabled, token_version,
-			failed_attempts, locked_until, force_password_change, created_at, updated_at
+			failed_attempts, locked_until, force_password_change, invited_at, invite_expires_at, created_at, updated_at
 		FROM accounts WHERE `+predicate, value,
-	).Scan(&account.ID, &account.Email, &account.PasswordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
-		&account.TokenVersion, &account.FailedAttempts, &account.LockedUntil, &account.ForcePasswordChange, &account.CreatedAt, &account.UpdatedAt)
+	).Scan(&account.ID, &account.Email, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
+		&account.TokenVersion, &account.FailedAttempts, &account.LockedUntil, &account.ForcePasswordChange,
+		&account.InvitedAt, &account.InviteExpiresAt, &account.CreatedAt, &account.UpdatedAt)
 	if err != nil {
 		return Account{}, mapNotFound(err)
 	}
+	if passwordHash != nil {
+		account.PasswordHash = *passwordHash
+	}
 	account.Kind = contracts.AccountKind(kind)
 	return account, nil
+}
+
+// ListAccounts orders created_at DESC, id DESC (see cursor.go) and fetches
+// one extra row to detect whether a next page exists without a second
+// COUNT query.
+func (store *PostgresStore) ListAccounts(ctx context.Context, cursor string, pageSize int) ([]Account, string, error) {
+	var rows pgx.Rows
+	var err error
+	const selectColumns = `id::text, email, password_hash, kind, is_super_admin, disabled, token_version,
+			failed_attempts, locked_until, force_password_change, invited_at, invite_expires_at, created_at, updated_at`
+	if cursor == "" {
+		rows, err = store.pool.Query(ctx, `SELECT `+selectColumns+`
+			FROM accounts ORDER BY created_at DESC, id DESC LIMIT $1`, pageSize+1)
+	} else {
+		cursorTime, cursorID, decodeErr := decodeCursor(cursor)
+		if decodeErr != nil {
+			return nil, "", decodeErr
+		}
+		rows, err = store.pool.Query(ctx, `SELECT `+selectColumns+`
+			FROM accounts WHERE (created_at, id) < ($1, $2::uuid) ORDER BY created_at DESC, id DESC LIMIT $3`, cursorTime, cursorID, pageSize+1)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+
+	accounts := make([]Account, 0, pageSize)
+	for rows.Next() {
+		var account Account
+		var kind string
+		var passwordHash *string
+		if err := rows.Scan(&account.ID, &account.Email, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
+			&account.TokenVersion, &account.FailedAttempts, &account.LockedUntil, &account.ForcePasswordChange,
+			&account.InvitedAt, &account.InviteExpiresAt, &account.CreatedAt, &account.UpdatedAt); err != nil {
+			return nil, "", err
+		}
+		if passwordHash != nil {
+			account.PasswordHash = *passwordHash
+		}
+		account.Kind = contracts.AccountKind(kind)
+		accounts = append(accounts, account)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(accounts) > pageSize {
+		last := accounts[pageSize-1]
+		nextCursor = encodeCursor(last.CreatedAt, last.ID)
+		accounts = accounts[:pageSize]
+	}
+	return accounts, nextCursor, nil
+}
+
+// CreateInvite writes an account with no password (migrations/000002_invite_flow.sql's
+// check constraint requires the invite columns to be set instead) and grants
+// the given roles in the same transaction, so an invite never exists
+// role-less for an observer racing the two writes.
+func (store *PostgresStore) CreateInvite(ctx context.Context, params InviteAccountParams) (Account, error) {
+	transaction, err := store.pool.Begin(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	defer transaction.Rollback(ctx)
+
+	var account Account
+	err = transaction.QueryRow(ctx, `INSERT INTO accounts (email, kind, invited_at, invite_token_hash, invite_expires_at)
+			VALUES ($1, 'staff', NOW(), $2, $3)
+		RETURNING id::text, disabled, token_version, failed_attempts, force_password_change, invited_at, invite_expires_at, created_at, updated_at`,
+		params.Email, params.InviteTokenHash, params.InviteExpiresAt,
+	).Scan(&account.ID, &account.Disabled, &account.TokenVersion, &account.FailedAttempts, &account.ForcePasswordChange,
+		&account.InvitedAt, &account.InviteExpiresAt, &account.CreatedAt, &account.UpdatedAt)
+	if err != nil {
+		return Account{}, mapConstraintViolation(err)
+	}
+	account.Email = params.Email
+	account.Kind = contracts.AccountKindStaff
+
+	for _, roleID := range params.RoleIDs {
+		if _, err := transaction.Exec(ctx, `INSERT INTO account_roles (account_id, role_id) VALUES ($1, $2::uuid)`, account.ID, roleID); err != nil {
+			return Account{}, mapConstraintViolation(err)
+		}
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		return Account{}, err
+	}
+	return account, nil
+}
+
+func (store *PostgresStore) GetAccountByInviteTokenHash(ctx context.Context, tokenHash string) (Account, error) {
+	return store.scanAccount(ctx, `invite_token_hash=$1`, tokenHash)
+}
+
+// AcceptInvite sets the account's first password and clears the invite
+// columns in one statement, satisfying the password-or-invite check
+// constraint at every point in between.
+func (store *PostgresStore) AcceptInvite(ctx context.Context, accountID, passwordHash string) (Account, error) {
+	_, err := store.pool.Exec(ctx, `UPDATE accounts SET password_hash = $2, invited_at = NULL, invite_token_hash = NULL, invite_expires_at = NULL, updated_at = NOW()
+		WHERE id = $1`, accountID, passwordHash)
+	if err != nil {
+		return Account{}, mapNotFound(err)
+	}
+	return store.GetAccountByID(ctx, accountID)
 }
 
 func (store *PostgresStore) AccountRolesAndPermissions(ctx context.Context, accountID string) ([]string, []string, error) {

@@ -21,6 +21,7 @@ const (
 	defaultAccessTokenTTL             = 10 * time.Minute
 	defaultRefreshTokenTTL            = 14 * 24 * time.Hour
 	defaultTokenVersionCacheTTL       = 15 * 24 * time.Hour
+	defaultInviteTokenTTL             = 7 * 24 * time.Hour
 	defaultArgon2MemoryKiB            = 19 * 1024
 	defaultArgon2Iterations           = 2
 	defaultArgon2Parallelism          = 1
@@ -49,6 +50,7 @@ type Config struct {
 	AccessTokenTTL             time.Duration
 	RefreshTokenTTL            time.Duration
 	TokenVersionCacheTTL       time.Duration
+	InviteTokenTTL             time.Duration
 	Argon2MemoryKiB            uint32
 	Argon2Iterations           uint32
 	Argon2Parallelism          uint8
@@ -83,6 +85,7 @@ func Load() (Config, error) {
 		AccessTokenTTL:             getDuration("AUTH_ACCESS_TOKEN_TTL", defaultAccessTokenTTL),
 		RefreshTokenTTL:            getDuration("AUTH_REFRESH_TOKEN_TTL", defaultRefreshTokenTTL),
 		TokenVersionCacheTTL:       getDuration("AUTH_TOKEN_VERSION_CACHE_TTL", defaultTokenVersionCacheTTL),
+		InviteTokenTTL:             getDuration("AUTH_INVITE_TOKEN_TTL", defaultInviteTokenTTL),
 		Argon2MemoryKiB:            uint32(getInt("AUTH_ARGON2_MEMORY_KIB", defaultArgon2MemoryKiB)),
 		Argon2Iterations:           uint32(getInt("AUTH_ARGON2_ITERATIONS", defaultArgon2Iterations)),
 		Argon2Parallelism:          uint8(getInt("AUTH_ARGON2_PARALLELISM", defaultArgon2Parallelism)),
@@ -119,7 +122,7 @@ func (loadedConfig Config) Validate() error {
 	if loadedConfig.QueryTimeout <= 0 || loadedConfig.ShutdownTimeout <= 0 {
 		return errors.New("query and shutdown timeouts must be positive")
 	}
-	if loadedConfig.AccessTokenTTL <= 0 || loadedConfig.RefreshTokenTTL <= 0 || loadedConfig.TokenVersionCacheTTL <= 0 {
+	if loadedConfig.AccessTokenTTL <= 0 || loadedConfig.RefreshTokenTTL <= 0 || loadedConfig.TokenVersionCacheTTL <= 0 || loadedConfig.InviteTokenTTL <= 0 {
 		return errors.New("token lifetimes must be positive")
 	}
 	if loadedConfig.Argon2MemoryKiB == 0 || loadedConfig.Argon2Iterations == 0 || loadedConfig.Argon2Parallelism == 0 || loadedConfig.Argon2SaltLength == 0 || loadedConfig.Argon2KeyLength == 0 {

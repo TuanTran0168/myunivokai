@@ -68,6 +68,26 @@ func (handler *AdminAuthHandler) Login(responseWriter http.ResponseWriter, reque
 	})
 }
 
+// AcceptInvite is public, like Login: the caller has only the one-time
+// invite token, no session yet, so it cannot sit behind RequireAdminAccessToken
+// or RequireAdminPermission.
+func (handler *AdminAuthHandler) AcceptInvite(responseWriter http.ResponseWriter, request *http.Request) {
+	var body struct {
+		InviteToken string `json:"inviteToken"`
+		Password    string `json:"password"`
+	}
+	if !decodeJSONBody(responseWriter, request, &body) {
+		return
+	}
+	if strings.TrimSpace(body.InviteToken) == "" || body.Password == "" {
+		httpx.WriteError(responseWriter, request, http.StatusBadRequest, "VALIDATION_ERROR", "Invite token and password are required.")
+		return
+	}
+	handler.completeSession(responseWriter, request, contracts.AuthInviteAcceptQuerySubject, contracts.InviteAcceptData{
+		InviteToken: body.InviteToken, Password: body.Password, SourceAddress: httpx.ClientIP(request.Context()),
+	})
+}
+
 func (handler *AdminAuthHandler) Refresh(responseWriter http.ResponseWriter, request *http.Request) {
 	handler.completeSession(responseWriter, request, contracts.AuthRefreshQuerySubject, contracts.RefreshData{
 		RefreshToken: middleware.AdminRefreshToken(request.Context()), SourceAddress: httpx.ClientIP(request.Context()),

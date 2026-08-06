@@ -246,17 +246,7 @@ func (service *AuthService) issueSession(ctx context.Context, account repositori
 		AccessExpiresAt:  accessExpiresAt,
 		RefreshToken:     rawRefreshToken,
 		RefreshExpiresAt: refreshExpiresAt,
-		Account: contracts.AccountSummary{
-			AccountID:           account.ID,
-			Email:               account.Email,
-			Kind:                account.Kind,
-			Roles:               roles,
-			Permissions:         permissions,
-			IsSuperAdmin:        account.IsSuperAdmin,
-			Disabled:            account.Disabled,
-			ForcePasswordChange: account.ForcePasswordChange,
-			CreatedAt:           account.CreatedAt,
-		},
+		Account:          toAccountSummary(account, roles, permissions),
 	}, nil
 }
 

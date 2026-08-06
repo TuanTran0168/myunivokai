@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { motion } from "motion/react";
 import {
   Sidebar,
   SidebarContent,
@@ -40,19 +41,30 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={pathname === item.href}
-                    render={
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    }
-                  />
-                </SidebarMenuItem>
-              ))}
+              {visibleNavItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      className="relative overflow-hidden data-[active=true]:bg-transparent"
+                      render={
+                        <Link href={item.href}>
+                          {isActive ? (
+                            <motion.span
+                              layoutId="nav-active-pill"
+                              className="absolute inset-0 rounded-md bg-primary/15"
+                              transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                            />
+                          ) : null}
+                          <item.icon className="relative z-10" />
+                          <span className="relative z-10">{item.label}</span>
+                        </Link>
+                      }
+                    />
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
