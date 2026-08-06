@@ -22,6 +22,14 @@ services:
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-myunivokai}
       RATE_LIMIT_REQUESTS_PER_SECOND: ${RATE_LIMIT_REQUESTS_PER_SECOND:-2}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-20}
+      # /api/admin is off by default in production until apps/myunivokai-admin
+      # exists (S4-AUTH-004); local dev turns it on so the route group and its
+      # tests actually run against a live stack. See
+      # notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
+      ADMIN_ROUTES_ENABLED: ${ADMIN_ROUTES_ENABLED:-true}
+      ADMIN_ALLOWED_ORIGIN: http://localhost:${ADMIN_PORT:-41900}
+      ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND: ${ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND:-2}
+      ADMIN_RATE_LIMIT_BURST: ${ADMIN_RATE_LIMIT_BURST:-20}
       JOB_CACHE_TTL: ${JOB_CACHE_TTL:-30s}
       WORLD_CACHE_TTL: ${WORLD_CACHE_TTL:-60s}
       SHARE_CACHE_TTL: ${SHARE_CACHE_TTL:-60s}

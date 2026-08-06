@@ -61,6 +61,19 @@ services:
         value: 60s
       - key: SHARE_CACHE_TTL
         value: 60s
+      # Off until apps/myunivokai-admin exists (S4-AUTH-004) and
+      # ADMIN_ALLOWED_ORIGIN is filled in below — flipping this to "true"
+      # with an empty/wildcard origin fails config validation and the whole
+      # gateway (product routes included) refuses to start. See
+      # notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
+      - key: ADMIN_ROUTES_ENABLED
+        value: "false"
+      - key: ADMIN_ALLOWED_ORIGIN
+        sync: false
+      - key: ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND
+        value: "2"
+      - key: ADMIN_RATE_LIMIT_BURST
+        value: "20"
 
   - type: web
     name: myunivokai-dna

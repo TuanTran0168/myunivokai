@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,9 +15,10 @@ import (
 var ErrCacheMiss = errors.New("cache miss")
 
 const (
-	rateLimitKeySegment = "rate"
-	cacheKeySegment     = "cache"
-	minimumRetryDelay   = time.Millisecond
+	rateLimitKeySegment     = "rate"
+	cacheKeySegment         = "cache"
+	authTokenVersionSegment = "auth:tokenversion"
+	minimumRetryDelay       = time.Millisecond
 )
 
 var tokenBucketScript = redis.NewScript(`
@@ -91,6 +93,28 @@ func (store *RedisStore) Set(ctx context.Context, namespace, identifier string, 
 
 func (store *RedisStore) Delete(ctx context.Context, namespace, identifier string) error {
 	return store.client.Del(ctx, store.key(cacheKeySegment, namespace, identifier)).Err()
+}
+
+// GetTokenVersion and SetTokenVersion read/write the same
+// <prefix>:auth:tokenversion:<accountId> key auth-service writes on disable
+// or password change — a plain key, not under the "cache:" namespace the
+// rest of this store uses, so both processes agree on it without either
+// hardcoding the other's prefix. See
+// notes/vision/auth-and-admin-plan.md#how-b-works and
+// services/auth-service/internal/redis/client.go.
+func (store *RedisStore) GetTokenVersion(ctx context.Context, accountID string) (int, error) {
+	raw, err := store.client.Get(ctx, store.key(authTokenVersionSegment, accountID)).Result()
+	if errors.Is(err, redis.Nil) {
+		return 0, ErrCacheMiss
+	}
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(raw)
+}
+
+func (store *RedisStore) SetTokenVersion(ctx context.Context, accountID string, tokenVersion int, timeToLive time.Duration) error {
+	return store.client.Set(ctx, store.key(authTokenVersionSegment, accountID), strconv.Itoa(tokenVersion), timeToLive).Err()
 }
 
 func (store *RedisStore) Ping(ctx context.Context) error {

@@ -21,19 +21,20 @@ type EdgeStore interface {
 	Close() error
 }
 
+// productRateLimitRouteKey and adminRateLimitRouteKey give the two route
+// groups independent Redis token buckets. They must never be equal - see
+// middleware.RateLimit.
+const (
+	productRateLimitRouteKey = "product"
+	adminRateLimitRouteKey   = "admin"
+)
+
 func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestContext(serviceConfig.TrustProxyHeaders))
 	router.Use(middleware.Recover)
 	router.Use(middleware.Logging)
 	router.Use(middleware.SecurityHeaders)
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: serviceConfig.AllowedOrigins,
-		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-Id"},
-		ExposedHeaders: []string{"Cache-Control", "Retry-After", "X-Cache", "X-Request-Id"},
-		MaxAge:         corsMaximumAgeSeconds,
-	}))
 	healthHandler := NewHealthHandler(serviceConfig.AppName, brokerClient, edgeStore)
 	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore)
 	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
@@ -48,9 +49,18 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 	router.Get("/api/v1/readyz", healthHandler.Readiness)
 	router.Get("/api/v1/statusz", healthHandler.Readiness)
 
-	rateLimitMiddleware := middleware.RateLimit(edgeStore, serviceConfig.RateLimitRequestsPerSecond, serviceConfig.RateLimitBurst)
+	// The product CORS handler is scoped to this group, not global - it must
+	// never reach /api/admin, which mounts its own further down. See
+	// notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
 	router.Group(func(businessRouter chi.Router) {
-		businessRouter.Use(rateLimitMiddleware)
+		businessRouter.Use(cors.Handler(cors.Options{
+			AllowedOrigins: serviceConfig.AllowedOrigins,
+			AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+			AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-Id"},
+			ExposedHeaders: []string{"Cache-Control", "Retry-After", "X-Cache", "X-Request-Id"},
+			MaxAge:         corsMaximumAgeSeconds,
+		}))
+		businessRouter.Use(middleware.RateLimit(edgeStore, productRateLimitRouteKey, serviceConfig.RateLimitRequestsPerSecond, serviceConfig.RateLimitBurst))
 		businessRouter.Use(middleware.BodyLimit(serviceConfig.MaximumRequestBodyBytes))
 		businessRouter.Get("/api/jobs/{jobID}", dnaJobHandler.GetJob)
 		businessRouter.Route("/api/universe", func(familyRouter chi.Router) {
@@ -61,6 +71,9 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		})
 		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
+	if serviceConfig.AdminRoutesEnabled {
+		router.Mount("/api/admin", newAdminRouter(serviceConfig, edgeStore, rpcTransport))
+	}
 	router.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteError(responseWriter, request, http.StatusNotFound, "ROUTE_NOT_FOUND", "The requested gateway route was not found.")
 	})
