@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import type { AccountSummary } from "@/lib/admin-types";
+import type { AccountSummary } from "./types";
 
 export function AccountRowActions({
   account,

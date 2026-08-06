@@ -33,11 +33,26 @@ path:
 - `src/hooks/use-session-keepalive.ts` refreshes every 5 minutes while the
   dashboard stays open, safely under the access token's 10-minute TTL.
 
-RBAC navigation (`src/components/app-sidebar.tsx`) filters
-`src/components/nav-config.ts` by the account's permission list, cached in a
-non-httpOnly `myunivokai_admin_account` cookie (roles/permissions/email only,
-never a token) since this phase ships no `/session` query endpoint — login
-and refresh already return that data, so caching their response is enough.
+RBAC navigation (`src/components/layout/app-sidebar.tsx`) filters
+`src/components/layout/nav-config.ts` by the account's permission list, cached
+in a non-httpOnly `myunivokai_admin_account` cookie (roles/permissions/email
+only, never a token) since this phase ships no `/session` query endpoint —
+login and refresh already return that data, so caching their response is
+enough.
+
+## Folder structure
+
+Mirrors `apps/myunivokai-web`'s split: one folder per domain under
+`src/features/`, not one folder per file *kind*. `src/features/accounts`,
+`src/features/roles` and `src/features/audit` each own their page component,
+dialogs and `api.ts`/`types.ts` — a route file under `src/app/(dashboard)/*`
+is a one-line re-export of the feature's page component, same as
+`apps/myunivokai-web/src/app/gallery/page.tsx` stays thin over
+`src/features/gallery/*`. `src/components/layout/` holds cross-app chrome
+(sidebar, nav config, page header, the content transition) that isn't any
+one feature's; `src/components/ui/` stays the shared shadcn primitives;
+`src/lib/` keeps only genuinely cross-cutting code (`admin-http.ts`'s fetch
+wrapper, session/cookie handling, the gateway relay).
 
 ## Accounts, roles and audit (S4-AUTH-005)
 
@@ -45,7 +60,8 @@ and refresh already return that data, so caching their response is enough.
 `/api/admin/*` management call (accounts, roles, permissions, audit) —
 unlike the auth routes, it sets no cookies of its own; it only forwards the
 caller's already-first-party access cookie to the gateway and relays the
-JSON response verbatim. This is what lets `src/lib/admin-api.ts` call
+JSON response verbatim. This is what lets each feature's `api.ts` (built on
+`src/lib/admin-http.ts`'s shared `adminRequest` + `AdminApiError`) call
 `/api/admin/accounts`, `/api/admin/roles`, etc. as same-origin fetches from
 the browser without a dedicated Route Handler file per endpoint.
 
@@ -55,15 +71,38 @@ Screens: `accounts` (list, invite, disable/enable), `accounts/[accountId]`
 invite token once — no email infrastructure exists yet, so a staff member
 relays it out of band.
 
+The Roles screen shows two system-level entries, but only one is a database
+row: `basic_user` is the real seeded system role (`permission_sync.go`
+reseeds it at every auth-service startup). "Super Admin" is a pinned,
+read-only card (`src/features/roles/SuperAdminCard.tsx`) built from
+`accounts.is_super_admin` — deliberately NOT a second role row. See
+`notes/vision/auth-and-admin-plan.md#rbac`: a real role row can be edited or
+deleted like any other, which is exactly the "system becomes
+unadministerable" risk the bypass flag exists to prevent, so the UI
+represents it without reversing that design.
+
 ## Design
 
-Light "liquid glass" theme (`src/app/globals.css`): a fixed, slow-drifting
-blurred color field (`.liquid-field`) behind bright, blurred glass panels
-(`.glass-panel`), brass as the one accent — same brand as
-`apps/myunivokai-web`, inverted from dark-no-blur to light-genuinely-blurred
-since nothing 3D renders behind these panels. `motion` (`src/components/page-transition.tsx`,
-the sidebar's active-nav pill, card/dialog entrances) supplies the subtle
-animation; nothing here uses CSS-only transitions where a spring reads better.
+Neutral dashboard chrome (`src/app/globals.css`), not the warm liquid-glass
+wash the first pass shipped with — reviewed live and rejected as reading like
+a copy of Claude.ai's palette rather than an admin tool. Grounded instead in
+how Linear, Vercel's dashboard, Stripe's dashboard and Notion actually look:
+mostly neutral gray/white surfaces, brass spent only as the one accent
+(primary actions, the active-nav pill, focus rings — never a background
+wash), flat bordered cards rather than blur-everywhere. Real glass survives
+in exactly one place, the sticky header (`.glass-panel`), because it's the
+one surface that's actually load-bearing over scrolling content underneath
+it. `src/components/layout/brand-mark.tsx` reuses
+`apps/myunivokai-web/public/logo.svg`'s exact mark rather than inventing a
+second symbol for this app.
+
+`motion` supplies animation, scoped narrowly on purpose: the first pass wrapped
+the entire page (sidebar included) in one `AnimatePresence`, so every nav
+click re-animated the chrome along with the content. `src/components/layout/content-transition.tsx`
+now wraps only the content pane inside `(dashboard)/layout.tsx`'s `<main>` —
+a fast, opacity-only crossfade, no y-translate. The sidebar's active-nav pill
+(`layoutId="nav-active-pill"`) and the login page's own entrance/shake stay
+as they were; both are already scoped to just the element that should move.
 
 ```powershell
 npm ci

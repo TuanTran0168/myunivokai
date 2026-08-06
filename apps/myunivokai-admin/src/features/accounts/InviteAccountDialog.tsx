@@ -15,17 +15,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { adminApi, type AdminApiError } from "@/lib/admin-api";
+import { AdminApiError } from "@/lib/admin-http";
+import { rolesApi } from "@/features/roles/api";
+import { accountsApi } from "./api";
 
 export function InviteAccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [email, setEmail] = useState("");
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: adminApi.listRoles, enabled: open });
+  const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: rolesApi.list, enabled: open });
 
   const inviteMutation = useMutation({
-    mutationFn: () => adminApi.inviteAccount(email, selectedRoleIds),
+    mutationFn: () => accountsApi.invite(email, selectedRoleIds),
     onSuccess: (response) => {
       setIssuedToken(response.inviteToken);
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -48,7 +50,7 @@ export function InviteAccountDialog({ open, onOpenChange }: { open: boolean; onO
         onOpenChange(nextOpen);
       }}
     >
-      <DialogContent className="glass-panel border-none">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Invite staff</DialogTitle>
           <DialogDescription>
@@ -58,7 +60,7 @@ export function InviteAccountDialog({ open, onOpenChange }: { open: boolean; onO
         {issuedToken ? (
           <div className="flex flex-col gap-3">
             <Label>Invite token (shown once)</Label>
-            <div className="glass-panel rounded-md border-none p-3 font-mono text-xs break-all">{issuedToken}</div>
+            <div className="rounded-md border border-border bg-muted p-3 font-mono text-xs break-all">{issuedToken}</div>
             <p className="text-xs text-muted-foreground">
               Share this token with {email}; they enter it on the sign-in page to set their password.
             </p>

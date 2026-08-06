@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { adminApi, type AdminApiError } from "@/lib/admin-api";
-import type { RoleSummary } from "@/lib/admin-types";
+import { AdminApiError } from "@/lib/admin-http";
+import { rolesApi } from "./api";
+import type { RoleSummary } from "./types";
 
 // A single dialog handles both create and edit: RoleUpdateData has no name
 // field (a role's name is immutable after creation, per contracts/go), so
@@ -36,7 +37,7 @@ export function RoleFormDialog({
   const [description, setDescription] = useState(role?.description ?? "");
   const [selectedCodenames, setSelectedCodenames] = useState<string[]>(role?.permissions ?? []);
   const queryClient = useQueryClient();
-  const permissionsQuery = useQuery({ queryKey: ["permissions"], queryFn: adminApi.listPermissions, enabled: open });
+  const permissionsQuery = useQuery({ queryKey: ["permissions"], queryFn: rolesApi.listPermissions, enabled: open });
 
   useEffect(() => {
     if (open) {
@@ -49,8 +50,8 @@ export function RoleFormDialog({
   const mutation = useMutation({
     mutationFn: () =>
       role
-        ? adminApi.updateRole(role.roleId, { description, permissions: selectedCodenames })
-        : adminApi.createRole({ name, description, audience: "admin", permissions: selectedCodenames }),
+        ? rolesApi.update(role.roleId, { description, permissions: selectedCodenames })
+        : rolesApi.create({ name, description, audience: "admin", permissions: selectedCodenames }),
     onSuccess: () => {
       toast.success(role ? "Role updated." : "Role created.");
       queryClient.invalidateQueries({ queryKey: ["roles"] });
@@ -61,7 +62,7 @@ export function RoleFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-panel border-none">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{role ? `Edit ${role.name}` : "New role"}</DialogTitle>
           <DialogDescription>Roles compose freely from the permissions below.</DialogDescription>

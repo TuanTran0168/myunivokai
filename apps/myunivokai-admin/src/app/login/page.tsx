@@ -51,7 +51,7 @@ export default function LoginPage() {
         transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
         className="w-full max-w-sm"
       >
-        <Card className="glass-panel border-none">
+        <Card>
           <CardHeader>
             <CardTitle className="font-heading text-xl">Myunivokai Admin</CardTitle>
             <CardDescription>Staff sign-in</CardDescription>

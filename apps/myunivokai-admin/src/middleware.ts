@@ -56,5 +56,5 @@ export const config = {
   // Never gate the relay routes themselves: login must be reachable with no
   // session at all, and refresh/logout are read by RequireAdminRefreshCookie
   // on the gateway side, not this access-token check.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/admin/auth).*)"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/admin/auth).*)"]
 };

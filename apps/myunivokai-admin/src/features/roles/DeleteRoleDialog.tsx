@@ -12,8 +12,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { adminApi, type AdminApiError } from "@/lib/admin-api";
-import type { RoleSummary } from "@/lib/admin-types";
+import { AdminApiError } from "@/lib/admin-http";
+import { rolesApi } from "./api";
+import type { RoleSummary } from "./types";
 
 export function DeleteRoleDialog({
   open,
@@ -26,7 +27,7 @@ export function DeleteRoleDialog({
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => adminApi.deleteRole(role.roleId),
+    mutationFn: () => rolesApi.remove(role.roleId),
     onSuccess: () => {
       toast.success(`${role.name} deleted.`);
       queryClient.invalidateQueries({ queryKey: ["roles"] });
@@ -40,7 +41,7 @@ export function DeleteRoleDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="glass-panel border-none">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {role.name}?</AlertDialogTitle>
           <AlertDialogDescription>

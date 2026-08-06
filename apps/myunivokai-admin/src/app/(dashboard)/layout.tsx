@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import { ContentTransition } from "@/components/layout/content-transition";
 import { ADMIN_ACCOUNT_COOKIE_NAME, decodeAccountCookieValue } from "@/lib/session";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
@@ -18,10 +19,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <SidebarProvider>
       <AppSidebar account={account} />
       <SidebarInset>
-        <header className="glass-panel sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border/60 px-4">
+        <header className="glass-panel relative sticky top-0 z-10 flex h-14 items-center gap-3 overflow-hidden border-b border-border px-4">
+          <div className="header-glow" aria-hidden="true" />
           <SidebarTrigger />
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6">
+          <ContentTransition>{children}</ContentTransition>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

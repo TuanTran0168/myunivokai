@@ -2,15 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* House palette, ported from apps/myunivokai-web's "Vitrine + Liquid Glass"
-   system, but inverted to a LIGHT glass surface: the dark, no-blur treatment
-   there exists specifically because its glass sits over a live 3D scene
-   (blur flattened a star field to a grey wash — see that file's comment).
-   Nothing renders behind this app's panels, so a bright, genuinely blurred
-   glass — closer to Apple's "Liquid Glass" material than the product app's
-   near-clear one — is the right fit here. Brass stays the one accent so the
-   two apps still read as the same brand. No light/dark toggle: internal
-   staff tool, one fixed theme. */
+/* House palette, v2. v1 washed brass + warm paper across every surface and
+   blurred every card — reviewed against the live app and rejected: it read
+   as a copy of Claude.ai's rust-on-cream interface rather than an admin
+   dashboard. Real reference points (Linear, Vercel's dashboard, Stripe's
+   dashboard, Notion) converge on the same shape instead: neutral gray/white
+   chrome everywhere, ONE accent color spent only on actions/active state,
+   flat bordered surfaces instead of blur-everywhere. Brass survives as that
+   one accent — it's still the same brand as apps/myunivokai-web — it just no
+   longer paints the background, borders or every panel's shadow. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -60,48 +60,40 @@
 
   --brass-rgb: 180 138 66;
   --brass: rgb(var(--brass-rgb));
-  --ink: #241c10;
-  --paper: #fbfaf7;
-  --grey: #6b6252;
-  --faint: #9a917d;
   --vermillion: #d94f34;
-  /* The liquid-glass background's two light sources — warm brass and a
-     cool violet, the complementary pair that gives the material its color
-     shift instead of reading as plain frosted white. */
-  --blob-brass: 214 168 96;
-  --blob-violet: 150 140 214;
 
-  --background: #f4f1ea; /* warm paper ground, not stark white */
-  --foreground: var(--ink);
-  --card: rgba(255, 255, 255, 0.6);
-  --card-foreground: var(--ink);
-  --popover: rgba(255, 255, 255, 0.92);
-  --popover-foreground: var(--ink);
+  /* Neutral zinc scale carries the chrome; brass never appears in it. */
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
   --primary: var(--brass);
   --primary-foreground: #fffaf0;
-  --secondary: rgba(36, 28, 16, 0.06);
-  --secondary-foreground: var(--ink);
-  --muted: rgba(36, 28, 16, 0.05);
-  --muted-foreground: var(--grey);
-  --accent: rgba(180, 138, 66, 0.12);
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: rgba(180, 138, 66, 0.1);
   --accent-foreground: #6b4a1e;
   --destructive: var(--vermillion);
-  --border: rgba(36, 28, 16, 0.1);
-  --input: rgba(36, 28, 16, 0.14);
+  --border: #e4e4e7;
+  --input: #d4d4d8;
   --ring: var(--brass);
   --chart-1: var(--brass);
-  --chart-2: rgb(var(--blob-violet));
+  --chart-2: #6366f1;
   --chart-3: #7a8f6f;
-  --chart-4: var(--grey);
+  --chart-4: #71717a;
   --chart-5: var(--vermillion);
-  --radius: 0.75rem;
-  --sidebar: rgba(255, 255, 255, 0.5);
-  --sidebar-foreground: var(--ink);
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #18181b;
   --sidebar-primary: var(--brass);
   --sidebar-primary-foreground: #fffaf0;
-  --sidebar-accent: rgba(180, 138, 66, 0.12);
+  --sidebar-accent: rgba(180, 138, 66, 0.1);
   --sidebar-accent-foreground: #6b4a1e;
-  --sidebar-border: rgba(36, 28, 16, 0.08);
+  --sidebar-border: #e4e4e7;
   --sidebar-ring: var(--brass);
 }
 
@@ -117,102 +109,42 @@
   }
 }
 
-/* ---------- The liquid-glass light field ----------
-   Three slow-drifting, heavily-blurred color pools behind the chrome — the
-   actual "liquid" in liquid glass: panels above refract and tint depending
-   on what drifts behind them, the way Apple's material does over wallpaper.
-   Fixed + pointer-events:none so it never intercepts a click and never
-   scrolls with the page. transform/opacity-only animation keeps this off
-   the main thread's paint budget. */
-.liquid-field {
-  position: fixed;
+/* ---------- Header glow ----------
+   The one surviving trace of "liquid glass": a single, mostly-static brass
+   radial behind the sticky header only, not a roaming field behind every
+   screen. Constant motion behind a data table was itself part of the
+   "too much animation" complaint, so this doesn't drift or pulse. */
+.header-glow {
+  position: absolute;
   inset: 0;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
 }
 
-.liquid-field > span {
+.header-glow::before {
+  content: "";
   position: absolute;
-  border-radius: 999px;
-  filter: blur(72px);
-  opacity: 0.55;
-  will-change: transform;
+  top: -60%;
+  left: -10%;
+  width: 40%;
+  height: 220%;
+  background: radial-gradient(circle, rgb(var(--brass-rgb) / 0.16), transparent 70%);
+  filter: blur(48px);
 }
 
-.liquid-field > span:nth-child(1) {
-  top: -12%;
-  left: -8%;
-  width: 42vw;
-  height: 42vw;
-  background: radial-gradient(circle, rgb(var(--blob-brass) / 0.55), transparent 70%);
-  animation: drift-a 34s ease-in-out infinite;
-}
-
-.liquid-field > span:nth-child(2) {
-  bottom: -18%;
-  right: -10%;
-  width: 46vw;
-  height: 46vw;
-  background: radial-gradient(circle, rgb(var(--blob-violet) / 0.4), transparent 70%);
-  animation: drift-b 40s ease-in-out infinite;
-}
-
-.liquid-field > span:nth-child(3) {
-  top: 30%;
-  right: 18%;
-  width: 28vw;
-  height: 28vw;
-  background: radial-gradient(circle, rgb(var(--blob-brass) / 0.3), transparent 70%);
-  animation: drift-c 26s ease-in-out infinite;
-}
-
-@keyframes drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(6vw, 8vh) scale(1.12); }
-}
-
-@keyframes drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-7vw, -6vh) scale(1.08); }
-}
-
-@keyframes drift-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-4vw, 5vh) scale(0.92); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .liquid-field > span {
-    animation: none;
-  }
-}
-
-/* ---------- Glass chrome ---------- */
+/* ---------- Glass chrome ----------
+   Reserved for exactly one surface: the sticky top header, which sits over
+   scrolling content and earns the blur. Ordinary content (tables, cards,
+   dialogs) uses the plain shadcn Card surface instead — see card.tsx. */
 .glass-panel {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.22) 60%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.8),
-    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.06),
-    0 20px 50px -20px rgba(90, 66, 20, 0.25);
-  transition: box-shadow 320ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-.glass-panel-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
-    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.12),
-    0 28px 60px -20px rgba(90, 66, 20, 0.32);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glass-panel,
-  .glass-panel-interactive:hover {
-    transition: none;
-    transform: none;
+  .header-glow::before {
+    display: none;
   }
 }

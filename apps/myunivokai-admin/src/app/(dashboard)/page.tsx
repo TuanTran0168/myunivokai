@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { ADMIN_ACCOUNT_COOKIE_NAME, decodeAccountCookieValue } from "@/lib/session";
 
 // Placeholder home screen. The real dashboard (totals per family, failure
@@ -13,17 +14,17 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Card className="glass-panel border-none">
-        <CardHeader>
-          <CardTitle className="font-heading text-xl">Welcome{account ? `, ${account.email}` : ""}</CardTitle>
-          <CardDescription>
-            Analytics and record screens land in S4-ANALYTICS-007, once analytics-service is serving queries.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="font-mono text-xs text-muted-foreground">
-          {account ? `Roles: ${account.roles.join(", ") || "none"}` : null}
-        </CardContent>
-      </Card>
+      <PageHeader
+        title={`Welcome${account ? `, ${account.email}` : ""}`}
+        description="Analytics and record screens land in S4-ANALYTICS-007, once analytics-service is serving queries."
+      />
+      {account ? (
+        <Card>
+          <CardContent className="pt-2 font-mono text-xs text-muted-foreground">
+            Roles: {account.roles.join(", ") || "none"}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

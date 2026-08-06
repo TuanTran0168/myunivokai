@@ -16,7 +16,8 @@ import {
   SidebarMenuItem
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { NAV_ITEMS } from "@/components/nav-config";
+import { NAV_ITEMS } from "@/components/layout/nav-config";
+import { BrandMark } from "@/components/layout/brand-mark";
 import { hasPermission, type AccountSummary } from "@/lib/session";
 import { useLogout } from "@/hooks/use-logout";
 import { useSessionKeepAlive } from "@/hooks/use-session-keepalive";
@@ -30,8 +31,9 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2 px-2 py-1.5 font-heading text-base font-semibold text-sidebar-foreground">
-          Myunivokai
+        <Link href="/" className="flex items-center gap-2 px-2 py-1.5">
+          <BrandMark className="h-5 w-5 shrink-0" />
+          <span className="font-heading text-base font-semibold text-sidebar-foreground">Myunivokai</span>
           <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-primary">
             Admin
           </span>
