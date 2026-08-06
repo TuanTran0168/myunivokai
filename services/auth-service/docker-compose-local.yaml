@@ -4,6 +4,8 @@ services:
       context: ../..
       dockerfile: services/auth-service/Dockerfile.local
     command: ["go", "run", "./cmd/migrate"]
+    env_file:
+      - ./.env.local
     environment:
       DATABASE_URL: postgresql://${AUTH_DATABASE_USER:-myunivokai_auth_app}:${AUTH_DATABASE_PASSWORD:-myunivokai_local_auth}@postgres:5432/${AUTH_DATABASE_NAME:-myunivokai_auth}?sslmode=disable
       DATABASE_DIRECT_URL: postgresql://${AUTH_DATABASE_USER:-myunivokai_auth_app}:${AUTH_DATABASE_PASSWORD:-myunivokai_local_auth}@postgres:5432/${AUTH_DATABASE_NAME:-myunivokai_auth}?sslmode=disable
