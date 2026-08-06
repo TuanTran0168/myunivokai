@@ -7,7 +7,8 @@ export PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}"
 psql --username "${POSTGRES_ADMIN_USER}" --dbname postgres --set ON_ERROR_STOP=1 \
   --set dna_database="${DNA_DATABASE_NAME}" --set dna_user="${DNA_DATABASE_USER}" --set dna_password="${DNA_DATABASE_PASSWORD}" \
   --set universe_database="${UNIVERSE_DATABASE_NAME}" --set universe_user="${UNIVERSE_DATABASE_USER}" --set universe_password="${UNIVERSE_DATABASE_PASSWORD}" \
-  --set nature_database="${NATURE_DATABASE_NAME}" --set nature_user="${NATURE_DATABASE_USER}" --set nature_password="${NATURE_DATABASE_PASSWORD}" <<'SQL'
+  --set nature_database="${NATURE_DATABASE_NAME}" --set nature_user="${NATURE_DATABASE_USER}" --set nature_password="${NATURE_DATABASE_PASSWORD}" \
+  --set auth_database="${AUTH_DATABASE_NAME}" --set auth_user="${AUTH_DATABASE_USER}" --set auth_password="${AUTH_DATABASE_PASSWORD}" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'dna_user', :'dna_password')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'dna_user') \gexec
 SELECT format('ALTER ROLE %I PASSWORD %L', :'dna_user', :'dna_password') \gexec
@@ -25,4 +26,10 @@ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'nature_user') \gexec
 SELECT format('ALTER ROLE %I PASSWORD %L', :'nature_user', :'nature_password') \gexec
 SELECT format('CREATE DATABASE %I OWNER %I', :'nature_database', :'nature_user')
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'nature_database') \gexec
+
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'auth_user', :'auth_password')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'auth_user') \gexec
+SELECT format('ALTER ROLE %I PASSWORD %L', :'auth_user', :'auth_password') \gexec
+SELECT format('CREATE DATABASE %I OWNER %I', :'auth_database', :'auth_user')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'auth_database') \gexec
 SQL
