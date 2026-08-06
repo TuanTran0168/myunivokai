@@ -255,14 +255,14 @@ docker compose --env-file .env.local -f docker-compose-local.yaml up --build
 console until one exists, and there is no self-signup anywhere in the system:
 
 ```powershell
-docker compose --env-file .env.local -f docker-compose-local.yaml exec auth-service go run ./cmd/bootstrap --email you@example.com --password "a-strong-password-12-chars-or-more"
+docker compose --env-file .env.local -f docker-compose-local.yaml exec auth-service go run ./cmd/bootstrap --email admin@myunivokai.local --password "ChangeMe12345Local"
 ```
 
 - Creates one **super admin** account directly in `myunivokai_auth` — every
   permission, always (see `services/auth-service/README.md`).
 - Safe to run again later with a different `--email` to create additional
   accounts; it does not touch or reset any existing account.
-- Log in at http://localhost:41900/login with that email/password.
+- Log in at http://localhost:41900/login with `admin@myunivokai.local` / `ChangeMe12345Local` (or whatever you passed above).
 
 **Step 5.** Stop everything:
 
