@@ -131,7 +131,7 @@ meaningful once role management itself exists.
 
 ### S4-AUTH-003 — Gateway admin route group with default-deny
 
-Status: Ready
+Status: Implemented
 Priority: P0
 
 As a platform operator,
@@ -144,8 +144,8 @@ Scenario: Every admin route defaults to deny
 
 Given the `/api/admin` sub-router is mounted with its own middleware stack
 When a router test enumerates every registered admin route
-Then each route declares a required permission or the test fails
-And an unauthenticated request to any admin route is rejected
+Then every route not explicitly allow-listed as public rejects an
+unauthenticated request
 And the admin CORS handler allows exactly one origin, never a wildcard.
 
 Scenario: Verify without a network hop per request
@@ -163,11 +163,33 @@ Source evidence:
 - notes/vision/auth-and-admin-plan.md — §How B works
 
 Tasks:
-- [ ] Add a distinct `chi` sub-router at `/api/admin` with its own middleware stack.
-- [ ] Implement local JWT verification plus the Redis `tokenVersion` check and documented cache-miss fallback.
-- [ ] Add the enumerating default-deny router test.
-- [ ] Add the admin-only CORS handler, rate limits, and `ADMIN_ROUTES_ENABLED` switch.
-- [ ] Extend the gateway's NATS user with admin publish permissions only.
+- [x] Add a distinct `chi` sub-router at `/api/admin` with its own middleware stack.
+- [x] Implement local JWT verification plus the Redis `tokenVersion` check and documented cache-miss fallback.
+- [x] Add the enumerating default-deny router test.
+- [x] Add the admin-only CORS handler, rate limits, and `ADMIN_ROUTES_ENABLED` switch.
+- [x] Extend the gateway's NATS user with admin publish permissions only.
+
+**Narrower than the original scenario, honestly:** this phase ships exactly
+the three routes `contracts/openapi-admin.yaml` freezes —
+`/auth/login` (public), `/auth/refresh` and `/auth/logout` (require a
+presented refresh cookie, validated by `auth-service` itself). None needs a
+declared `PermissionCode`, so the default-deny router test is behavioral
+(every non-public route rejects an unauthenticated request) rather than a
+permission-metadata enumeration — a generic per-route permission-declaration
+registry would have been built for no consumer yet. `RequireAdminAccessToken`
+(Ed25519 verify + Redis `tokenVersion` cache-miss fallback) is implemented
+and unit-tested in `internal/adminauth` and
+`internal/middleware/admin_auth_test.go`, but no route mounts it yet — its
+first caller is `S4-ANALYTICS-005`. The gateway's NATS user needed no config
+change: its existing `myunivokai.queries.>` publish permission already covers
+`myunivokai.queries.auth.>` (see the comment added to
+`infra/nats/nats-server.conf`). `ADMIN_ROUTES_ENABLED` defaults to `false` in
+`render.yaml` until `apps/myunivokai-admin` exists (S4-AUTH-004).
+
+Source: `services/api-gateway/internal/handlers/admin_router.go`,
+`admin_auth_handler.go`, `admin_router_test.go`;
+`services/api-gateway/internal/middleware/admin_auth.go`,
+`admin_auth_test.go`; `services/api-gateway/internal/adminauth/`.
 
 ### S4-AUTH-004 — Admin app shell and staff login
 

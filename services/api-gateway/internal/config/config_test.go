@@ -43,6 +43,38 @@ func TestValidationRequiresPositiveOperationalLimits(t *testing.T) {
 	}
 }
 
+func TestValidationSkipsAdminChecksWhenDisabled(t *testing.T) {
+	serviceConfig := validTestConfig()
+	serviceConfig.AdminRoutesEnabled = false
+	serviceConfig.AdminAllowedOrigin = ""
+	if err := serviceConfig.Validate(); err != nil {
+		t.Fatalf("admin routes disabled should skip admin validation: %v", err)
+	}
+}
+
+func TestValidationRequiresANonWildcardAdminOriginWhenEnabled(t *testing.T) {
+	serviceConfig := validTestConfig()
+	serviceConfig.AdminRoutesEnabled = true
+	serviceConfig.AdminAllowedOrigin = ""
+	if err := serviceConfig.Validate(); err == nil {
+		t.Fatal("expected empty admin origin to be rejected when admin routes are enabled")
+	}
+	serviceConfig.AdminAllowedOrigin = "https://*.example.com"
+	if err := serviceConfig.Validate(); err == nil {
+		t.Fatal("expected wildcard admin origin to be rejected")
+	}
+	serviceConfig.AdminAllowedOrigin = "https://admin.example.com"
+	serviceConfig.AdminRateLimitRequestsPerSecond = 0
+	if err := serviceConfig.Validate(); err == nil {
+		t.Fatal("expected zero admin rate limit to be rejected")
+	}
+	serviceConfig.AdminRateLimitRequestsPerSecond = 5
+	serviceConfig.AdminRateLimitBurst = 20
+	if err := serviceConfig.Validate(); err != nil {
+		t.Fatalf("valid admin config rejected: %v", err)
+	}
+}
+
 func validTestConfig() Config {
 	return Config{
 		AppEnvironment:             "test",

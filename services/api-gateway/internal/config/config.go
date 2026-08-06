@@ -13,19 +13,25 @@ import (
 )
 
 const (
-	defaultAPIPort                    = "8080"
-	defaultMaximumRequestBodyBytes    = 64 * 1024
-	defaultRateLimitRequestsPerSecond = 2
-	defaultRateLimitBurst             = 20
-	defaultNATSPublishTimeout         = 5 * time.Second
-	defaultNATSRequestTimeout         = 3 * time.Second
-	defaultNATSConnectTimeout         = 5 * time.Second
-	defaultNATSReconnectWait          = 2 * time.Second
-	defaultJobCacheTimeToLive         = 30 * time.Second
-	defaultWorldCacheTimeToLive       = 60 * time.Second
-	defaultShareCacheTimeToLive       = 60 * time.Second
-	defaultShutdownTimeout            = 15 * time.Second
-	defaultRedisKeyPrefix             = "myunivokai"
+	defaultAPIPort                         = "8080"
+	defaultMaximumRequestBodyBytes         = 64 * 1024
+	defaultRateLimitRequestsPerSecond      = 2
+	defaultRateLimitBurst                  = 20
+	defaultNATSPublishTimeout              = 5 * time.Second
+	defaultNATSRequestTimeout              = 3 * time.Second
+	defaultNATSConnectTimeout              = 5 * time.Second
+	defaultNATSReconnectWait               = 2 * time.Second
+	defaultJobCacheTimeToLive              = 30 * time.Second
+	defaultWorldCacheTimeToLive            = 60 * time.Second
+	defaultShareCacheTimeToLive            = 60 * time.Second
+	defaultShutdownTimeout                 = 15 * time.Second
+	defaultRedisKeyPrefix                  = "myunivokai"
+	// A handful of staff, not the public internet, but each admin page load
+	// fans out several analytics queries at once (S4-ANALYTICS-004) rather
+	// than one request at a time, so this needs a higher ceiling than the
+	// product default it used to copy verbatim.
+	defaultAdminRateLimitRequestsPerSecond = 10
+	defaultAdminRateLimitBurst             = 50
 )
 
 type Config struct {
@@ -52,6 +58,15 @@ type Config struct {
 	WorldCacheTimeToLive       time.Duration
 	ShareCacheTimeToLive       time.Duration
 	ShutdownTimeout            time.Duration
+	// AdminRoutesEnabled gates the whole /api/admin sub-router. Default false:
+	// a fresh deploy of this binary must not crash-loop the product edge over
+	// admin-only vars nobody has filled in yet, and the switch itself exists
+	// so the admin surface can be taken offline without redeploying — see
+	// notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
+	AdminRoutesEnabled              bool
+	AdminAllowedOrigin              string
+	AdminRateLimitRequestsPerSecond float64
+	AdminRateLimitBurst             int
 }
 
 func Load() (Config, error) {
@@ -80,6 +95,11 @@ func Load() (Config, error) {
 		WorldCacheTimeToLive:       getDuration("WORLD_CACHE_TTL", defaultWorldCacheTimeToLive),
 		ShareCacheTimeToLive:       getDuration("SHARE_CACHE_TTL", defaultShareCacheTimeToLive),
 		ShutdownTimeout:            getDuration("SERVICE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
+
+		AdminRoutesEnabled:              getBool("ADMIN_ROUTES_ENABLED", false),
+		AdminAllowedOrigin:              get("ADMIN_ALLOWED_ORIGIN", ""),
+		AdminRateLimitRequestsPerSecond: getFloat("ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND", defaultAdminRateLimitRequestsPerSecond),
+		AdminRateLimitBurst:             getInt("ADMIN_RATE_LIMIT_BURST", defaultAdminRateLimitBurst),
 	}
 	if err := loadedConfig.Validate(); err != nil {
 		return Config{}, err
@@ -111,9 +131,21 @@ func (loadedConfig Config) Validate() error {
 			return errors.New("TRUST_PROXY must be true in production")
 		}
 		for _, origin := range loadedConfig.AllowedOrigins {
-			if err := validateProductionOrigin(origin); err != nil {
+			if err := validateOriginFormat(origin); err != nil {
 				return err
 			}
+		}
+	}
+	if loadedConfig.AdminRoutesEnabled {
+		// No wildcard is acceptable here at any point, dev included — the
+		// admin origin check is unconditional, unlike the product group's
+		// (which only tightens in production) — see
+		// notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
+		if err := validateOriginFormat(loadedConfig.AdminAllowedOrigin); err != nil {
+			return fmt.Errorf("ADMIN_ALLOWED_ORIGIN: %w", err)
+		}
+		if loadedConfig.AdminRateLimitRequestsPerSecond <= 0 || loadedConfig.AdminRateLimitBurst <= 0 {
+			return errors.New("admin rate limit values must be positive")
 		}
 	}
 	return nil
@@ -123,14 +155,21 @@ func (loadedConfig Config) Address() string {
 	return loadedConfig.APIHost + ":" + loadedConfig.APIPort
 }
 
+// IsProduction reports whether cookies and other environment-sensitive
+// behavior should use their hardened form (e.g. the admin session cookies'
+// Secure attribute) rather than the dev-friendly default.
+func (loadedConfig Config) IsProduction() bool {
+	return loadedConfig.isProduction()
+}
+
 func (loadedConfig Config) isProduction() bool {
 	normalizedEnvironment := strings.ToLower(strings.TrimSpace(loadedConfig.AppEnvironment))
 	return normalizedEnvironment == "production" || normalizedEnvironment == "prod"
 }
 
-func validateProductionOrigin(origin string) error {
+func validateOriginFormat(origin string) error {
 	if strings.Contains(origin, "*") {
-		return errors.New("wildcard CORS origins are not allowed in production")
+		return errors.New("wildcard CORS origins are not allowed")
 	}
 	parsedOrigin, err := url.Parse(origin)
 	if err != nil || parsedOrigin.Host == "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
