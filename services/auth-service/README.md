@@ -14,6 +14,27 @@ transport; `internal/messaging` owns the NATS connection and subscriptions —
 Core NATS request-reply only, no JetStream command or outbox, since
 auth-service publishes no domain event.
 
+## Repository layout
+
+`internal/repositories` has one `Store` interface and one implementation per
+backend (`PostgresStore`, `MemoryStore`) — matching the pattern
+universe-service, nature-service and dna-service already use elsewhere in
+this repo, rather than a separate repository type per aggregate
+(`AccountRepository`, `RoleRepository`, ...). What's split **within** each
+implementation is the *file*, not the *type*: `postgres_accounts.go`,
+`postgres_refresh_tokens.go`, `postgres_roles_permissions.go` and
+`postgres_audit.go` (mirrored by `memory_*.go`) all define methods on the
+same `*PostgresStore` / `*MemoryStore` receiver — Go has no rule that a
+type's methods live in one file, so this is purely a readability split, not
+an architectural one.
+
+This was a deliberate choice over per-aggregate repositories: a second
+interface per aggregate would be inconsistent with every other service in
+this repo, and would cost real wiring (multiple constructor arguments, a
+composed interface, more mocks in tests) for an auth database with five
+tables. Reconsider if a table set here ever grows enough that one file per
+concern stops being enough on its own — that has not happened yet.
+
 ## First run
 
 Generate an Ed25519 seed for `AUTH_ACCESS_PRIVATE_KEY` (32 raw bytes,
