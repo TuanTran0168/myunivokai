@@ -165,6 +165,67 @@ services:
         sync: false
 
   - type: web
+    name: myunivokai-auth
+    runtime: docker
+    dockerfilePath: ./services/auth-service/Dockerfile.prod
+    dockerContext: .
+    plan: free
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: myunivokai
+      # Ed25519 seed, base64-encoded — generate ONE PER ENVIRONMENT
+      # (`openssl rand -base64 32`), never reuse the local-dev value, never
+      # put a real value in this file. Rotation: add a second key to the
+      # gateway's accepted-public-keys list before removing the old one, so
+      # no session is force-logged-out — see
+      # notes/vision/auth-and-admin-plan.md#tokens.
+      - key: AUTH_ACCESS_PRIVATE_KEY
+        sync: false
+      - key: AUTH_ACCESS_TOKEN_TTL
+        value: 10m
+      - key: AUTH_REFRESH_TOKEN_TTL
+        value: 336h
+      - key: AUTH_TOKEN_VERSION_CACHE_TTL
+        value: 360h
+      - key: AUTH_ARGON2_MEMORY_KIB
+        value: "19456"
+      - key: AUTH_ARGON2_ITERATIONS
+        value: "2"
+      - key: AUTH_ARGON2_PARALLELISM
+        value: "1"
+      - key: AUTH_ARGON2_SALT_LENGTH
+        value: "16"
+      - key: AUTH_ARGON2_KEY_LENGTH
+        value: "32"
+      - key: AUTH_MAX_FAILED_ATTEMPTS
+        value: "5"
+      - key: AUTH_LOCKOUT_DURATION
+        value: 15m
+
+  - type: web
     name: myunivokai-nature
     runtime: docker
     dockerfilePath: ./services/nature-service/Dockerfile.prod
