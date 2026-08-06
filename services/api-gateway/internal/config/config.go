@@ -26,8 +26,12 @@ const (
 	defaultShareCacheTimeToLive            = 60 * time.Second
 	defaultShutdownTimeout                 = 15 * time.Second
 	defaultRedisKeyPrefix                  = "myunivokai"
-	defaultAdminRateLimitRequestsPerSecond = 2
-	defaultAdminRateLimitBurst             = 20
+	// A handful of staff, not the public internet, but each admin page load
+	// fans out several analytics queries at once (S4-ANALYTICS-004) rather
+	// than one request at a time, so this needs a higher ceiling than the
+	// product default it used to copy verbatim.
+	defaultAdminRateLimitRequestsPerSecond = 10
+	defaultAdminRateLimitBurst             = 50
 )
 
 type Config struct {

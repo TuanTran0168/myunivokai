@@ -71,9 +71,9 @@ services:
       - key: ADMIN_ALLOWED_ORIGIN
         sync: false
       - key: ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND
-        value: "2"
+        value: "10"
       - key: ADMIN_RATE_LIMIT_BURST
-        value: "20"
+        value: "50"
 
   - type: web
     name: myunivokai-dna
