@@ -175,6 +175,34 @@ jobs:
       - name: Build
         run: npm run build
 
+  admin-app-checks:
+    name: Admin app (typecheck + lint + boundary + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/myunivokai-admin
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/myunivokai-admin/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Check import boundary (no myunivokai-web, no three.js)
+        run: npm run check:boundary
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+
   local-compose-checks:
     name: Local Compose configuration
     runs-on: ubuntu-latest

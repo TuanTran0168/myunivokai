@@ -193,7 +193,7 @@ Source: `services/api-gateway/internal/handlers/admin_router.go`,
 
 ### S4-AUTH-004 — Admin app shell and staff login
 
-Status: Blocked on S4-AUTH-003
+Status: Implemented
 Priority: P0
 
 As a staff member,
@@ -213,14 +213,30 @@ And navigation items are hidden, not just disabled, for permissions the
 account lacks
 And a CI check proves zero imports from `apps/myunivokai-web` or `three.js`.
 
+**Session design, worked out during implementation, not in the source
+plan:** neither gateway cookie declares a `Domain` attribute (by design — see
+S4-AUTH-003), so this app's own server never sees them directly. Every
+`/api/admin/auth/*` route here is a BFF relay
+(`services/api-gateway`'s own routes, called server-to-server, with the
+gateway's Set-Cookie headers re-emitted verbatim) — re-emitting from this
+app's own response is what makes the cookies first-party to it, which is
+what "own domain" and "cookie-based auth wants a server" actually cash out
+to. A corollary the plan doesn't spell out: the refresh cookie's
+`Path=/api/admin/auth` scoping means middleware handling any OTHER route
+structurally never receives it, so a middleware-side silent refresh is not
+possible — reviving an expired session is instead the login page's job (a
+fetch that targets that exact path on mount) plus a 5-minute client-side
+keep-alive while the dashboard stays open. See
+`apps/myunivokai-admin/README.md`'s "Session model" section.
+
 Source evidence:
 - notes/vision/auth-and-admin-plan.md — §The admin app
 
 Tasks:
-- [ ] Scaffold `apps/myunivokai-admin` (Next.js 15 App Router, TypeScript strict, Tailwind v4, shadcn/ui, TanStack Query v5).
-- [ ] Implement the login page and session middleware, default-deny except login.
-- [ ] Implement RBAC-aware navigation from the caller's permission list.
-- [ ] Add the CI check for zero `apps/myunivokai-web` / `three.js` imports.
+- [x] Scaffold `apps/myunivokai-admin` (Next.js 15 App Router, TypeScript strict, Tailwind v4, shadcn/ui, TanStack Query v5).
+- [x] Implement the login page and session middleware, default-deny except login.
+- [x] Implement RBAC-aware navigation from the caller's permission list.
+- [x] Add the CI check for zero `apps/myunivokai-web` / `three.js` imports.
 
 ### S4-AUTH-005 — Auth hardening
 

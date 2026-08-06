@@ -23,3 +23,5 @@ include:
     env_file: ./.env.local
   - path: ./apps/myunivokai-web/docker-compose-local.yaml
     env_file: ./.env.local
+  - path: ./apps/myunivokai-admin/docker-compose-local.yaml
+    env_file: ./.env.local
