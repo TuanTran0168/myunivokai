@@ -76,6 +76,8 @@ flowchart TB
 | `services/dna-service` | Handles AI orchestration, root generation jobs, ProfileDNA versioning, and the transactional outbox. |
 | `services/universe-service` | Computes deterministic solar-system worlds and variants from a seed. No AI calls. |
 | `services/nature-service` | Computes deterministic forest worlds and variants from a seed. No AI calls. |
+| `services/auth-service` | Staff identity: login, refresh, roles, permissions, audit. Core NATS request-reply only. |
+| `services/analytics-service` | The admin read model. Consumes events, writes its own database, answers admin queries — it publishes nothing and calls no other service, so an admin page waits only on the gateway, auth and analytics. |
 | `contracts` | Shared OpenAPI spec, JSON Schemas, NATS subject names, and Go types used across services. |
 | `infra` | Local development infrastructure: PostgreSQL, NATS JetStream, Redis, ACL config, and bootstrap scripts. |
 
@@ -331,6 +333,8 @@ docker compose --env-file services/universe-service/.env.local `
 | `services/dna-service/.env.local` | `services/dna-service/docker-compose-local.yaml` | Database, NATS, AI provider config, API keys. |
 | `services/universe-service/.env.local` | `services/universe-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `services/nature-service/.env.local` | `services/nature-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
+| `services/auth-service/.env.local` | `services/auth-service/docker-compose-local.yaml` | Database, NATS, Redis, token and Argon2id settings. |
+| `services/analytics-service/.env.local` | `services/analytics-service/docker-compose-local.yaml` | Database, NATS, event-consumer settings. No credentials — it verifies no token and calls no provider. |
 | `apps/myunivokai-web/.env.local` | Web compose file and `npm run dev` | Just `NEXT_PUBLIC_GATEWAY_BASE_URL`. |
 
 ### How full-stack mode resolves variables

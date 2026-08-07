@@ -66,8 +66,151 @@ paths:
       responses:
         "204": { description: Session revoked; access and refresh cookies cleared }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/admin/overview:
+    get:
+      summary: Dashboard totals, job health and distributions
+      description: >-
+        Answered entirely by analytics-service from its own read model. The
+        gateway performs no summation or grouping, and no domain service
+        (universe, nature, dna) is contacted on this path.
+      operationId: adminAnalyticsOverview
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/Family" }
+        - { $ref: "#/components/parameters/Days" }
+      responses:
+        "200":
+          description: Aggregates over the requested window
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/timeseries:
+    get:
+      summary: Daily world and job counts over a range
+      description: >-
+        Days with no activity are returned as explicit zeroes rather than
+        omitted, so a chart draws a flat line instead of interpolating.
+      operationId: adminAnalyticsTimeseries
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/Family" }
+        - { $ref: "#/components/parameters/Days" }
+      responses:
+        "200":
+          description: One point per day, oldest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Timeseries" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/worlds:
+    get:
+      summary: Browse projected worlds
+      description: >-
+        Cursor paginated. Pagination is mandatory and keyset-based, never
+        OFFSET, so every page costs the same and the response stays inside the
+        gateway's request/reply deadline as the table grows.
+      operationId: adminAnalyticsListWorlds
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/Family" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: archetype
+          in: query
+          required: false
+          schema: { type: string }
+        - name: worldStyle
+          in: query
+          required: false
+          schema: { type: string, enum: [cosmic-galaxy, nebula, crystal, aurora, cyber-orbit] }
+        - name: mood
+          in: query
+          required: false
+          schema: { type: string }
+        - name: published
+          in: query
+          required: false
+          description: Omit for every world; true or false to filter.
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: One page of worlds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/jobs:
+    get:
+      summary: Browse generation jobs and their failures
+      operationId: adminAnalyticsListJobs
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/Family" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [queued, processing, completed, failed] }
+        - name: errorCode
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of jobs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 components:
+  parameters:
+    Family:
+      name: family
+      in: query
+      required: false
+      description: Omit for every family.
+      schema: { type: string, enum: [universe, nature] }
+    Days:
+      name: days
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque keyset cursor returned as nextCursor by the previous page.
+      schema: { type: string }
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
   securitySchemes:
+    accessTokenCookie:
+      type: apiKey
+      in: cookie
+      name: myunivokai_admin_access
+      description: >-
+        httpOnly, Secure, SameSite=Lax cookie holding the short-lived Ed25519
+        access token. The gateway verifies its signature locally and checks
+        its tokenVersion against the Redis revocation cache.
     refreshTokenCookie:
       type: apiKey
       in: cookie
@@ -104,6 +247,200 @@ components:
         isSuperAdmin: { type: boolean }
         disabled: { type: boolean }
         createdAt: { type: string, format: date-time }
+    TraitScores:
+      type: object
+      additionalProperties: false
+      required: [creativity, discipline, curiosity, energy, focus]
+      properties:
+        creativity: { type: integer, minimum: 0, maximum: 100 }
+        discipline: { type: integer, minimum: 0, maximum: 100 }
+        curiosity: { type: integer, minimum: 0, maximum: 100 }
+        energy: { type: integer, minimum: 0, maximum: 100 }
+        focus: { type: integer, minimum: 0, maximum: 100 }
+    DistributionSlice:
+      type: object
+      additionalProperties: false
+      required: [value, count]
+      properties:
+        value: { type: string }
+        count: { type: integer }
+    FamilyTotals:
+      type: object
+      additionalProperties: false
+      required: [family, worldCount, publishedCount, variantCount, jobCount, failedJobCount]
+      properties:
+        family: { type: string, enum: [universe, nature] }
+        worldCount: { type: integer }
+        publishedCount: { type: integer }
+        variantCount: { type: integer }
+        jobCount: { type: integer }
+        failedJobCount: { type: integer }
+    JobHealth:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          totalJobs,
+          completedJobs,
+          failedJobs,
+          inFlightJobs,
+          failureRatePercent,
+          averageDurationMs,
+          p95DurationMs,
+          slowestDurationMs,
+          measuredJobCount,
+          publishRatePercent,
+          multiVariantPercent,
+        ]
+      properties:
+        totalJobs: { type: integer }
+        completedJobs: { type: integer }
+        failedJobs: { type: integer }
+        inFlightJobs: { type: integer }
+        failureRatePercent: { type: number }
+        averageDurationMs: { type: integer }
+        p95DurationMs: { type: integer }
+        slowestDurationMs: { type: integer }
+        measuredJobCount:
+          type: integer
+          description: Jobs that reached a terminal state and therefore have a duration.
+        publishRatePercent: { type: number }
+        multiVariantPercent: { type: number }
+    Overview:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          days,
+          totalWorlds,
+          totalPublished,
+          worldsInWindow,
+          families,
+          jobHealth,
+          archetypeTop,
+          worldStyleTop,
+          moodTop,
+          errorCodeTop,
+          averageTraitScores,
+          generatedAt,
+        ]
+      properties:
+        days: { type: integer }
+        totalWorlds: { type: integer }
+        totalPublished: { type: integer }
+        worldsInWindow: { type: integer }
+        families: { type: array, items: { $ref: "#/components/schemas/FamilyTotals" } }
+        jobHealth: { $ref: "#/components/schemas/JobHealth" }
+        archetypeTop: { type: array, items: { $ref: "#/components/schemas/DistributionSlice" } }
+        worldStyleTop: { type: array, items: { $ref: "#/components/schemas/DistributionSlice" } }
+        moodTop: { type: array, items: { $ref: "#/components/schemas/DistributionSlice" } }
+        errorCodeTop: { type: array, items: { $ref: "#/components/schemas/DistributionSlice" } }
+        averageTraitScores: { $ref: "#/components/schemas/TraitScores" }
+        generatedAt: { type: string, format: date-time }
+        oldestProjectedWorld: { type: string, format: date-time }
+    TimeseriesPoint:
+      type: object
+      additionalProperties: false
+      required: [day, worldCount, publishedCount, jobCount, failedJobCount]
+      properties:
+        day: { type: string, format: date-time }
+        worldCount: { type: integer }
+        publishedCount: { type: integer }
+        jobCount: { type: integer }
+        failedJobCount: { type: integer }
+    Timeseries:
+      type: object
+      additionalProperties: false
+      required: [days, points]
+      properties:
+        days: { type: integer }
+        points: { type: array, items: { $ref: "#/components/schemas/TimeseriesPoint" } }
+    World:
+      type: object
+      additionalProperties: false
+      description: >-
+        The projected world. Every field here is on the analytics data-boundary
+        allow list; the submitted form, the generated profile, the world quote
+        and the scene config never cross into this service and can never appear
+        on this route.
+      required:
+        [
+          worldId,
+          family,
+          nickname,
+          archetype,
+          sceneName,
+          mood,
+          worldStyle,
+          favoriteColors,
+          traitScores,
+          variantCount,
+          selectedVariantNo,
+          isPublished,
+          revision,
+          sourceJobId,
+          worldCreatedAt,
+          projectedAt,
+        ]
+      properties:
+        worldId: { type: string, format: uuid }
+        family: { type: string, enum: [universe, nature] }
+        nickname: { type: string }
+        role: { type: string }
+        archetype: { type: string }
+        sceneName: { type: string }
+        mood: { type: string }
+        worldStyle: { type: string }
+        favoriteColors: { type: array, items: { type: string } }
+        traitScores: { $ref: "#/components/schemas/TraitScores" }
+        variantCount: { type: integer }
+        selectedVariantNo: { type: integer }
+        isPublished: { type: boolean }
+        publishedAt: { type: string, format: date-time }
+        revision: { type: integer }
+        sourceJobId: { type: string }
+        worldCreatedAt: { type: string, format: date-time }
+        projectedAt: { type: string, format: date-time }
+    WorldPage:
+      type: object
+      additionalProperties: false
+      required: [worlds, totalCount, pageSize]
+      properties:
+        worlds: { type: array, items: { $ref: "#/components/schemas/World" } }
+        nextCursor:
+          type: string
+          description: Absent on the last page.
+        totalCount: { type: integer }
+        pageSize: { type: integer }
+    Job:
+      type: object
+      additionalProperties: false
+      required: [jobId, status, createdAt]
+      properties:
+        jobId: { type: string }
+        family: { type: string, enum: [universe, nature] }
+        status: { type: string, enum: [queued, processing, completed, failed] }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        worldId: { type: string }
+        profileId: { type: string }
+        dnaVersionId: { type: string }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        durationMs:
+          type: integer
+          description: Absent while the job is still in flight.
+    JobPage:
+      type: object
+      additionalProperties: false
+      required: [jobs, totalCount, pageSize]
+      properties:
+        jobs: { type: array, items: { $ref: "#/components/schemas/Job" } }
+        nextCursor:
+          type: string
+          description: Absent on the last page.
+        totalCount: { type: integer }
+        pageSize: { type: integer }
     ErrorBody:
       type: object
       required: [code, message]
@@ -125,6 +462,11 @@ components:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
     Unauthorized:
       description: Missing, invalid, expired or revoked session
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: Authenticated, but the account holds none of the required permissions
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }

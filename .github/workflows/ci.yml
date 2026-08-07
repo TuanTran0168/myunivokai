@@ -128,6 +128,27 @@ jobs:
       - name: Build
         run: go build ./...
 
+  analytics-service-checks:
+    name: Analytics service (go vet + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/analytics-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/analytics-service/go.mod
+          cache-dependency-path: services/analytics-service/go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+
   api-gateway-checks:
     name: API gateway (go vet + test + build)
     runs-on: ubuntu-latest

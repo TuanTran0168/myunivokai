@@ -248,6 +248,60 @@ services:
       - key: AUTH_LOCKOUT_DURATION
         value: 15m
 
+  # The admin read model. Consumes myunivokai.events.>, writes its own Neon
+  # database, answers myunivokai.queries.analytics.>. It publishes no domain
+  # subject and calls no other service, so it has no outbox settings and no
+  # provider keys — see notes/vision/analytics-service-plan.md.
+  #
+  # BEFORE MERGING THIS TO main: create the Neon database and fill
+  # DATABASE_URL / DATABASE_DIRECT_URL / NATS_USERNAME / NATS_PASSWORD in the
+  # Render dashboard, and add the analytics user block from
+  # infra/nats/nats-server.conf to the managed NATS ACL. Without them the
+  # service crash-loops on first boot. This is also the sixth free web
+  # service on the account — verify the instance-hour budget first. The
+  # runbook is services/analytics-service/README.md.
+  - type: web
+    name: myunivokai-analytics
+    runtime: docker
+    dockerfilePath: ./services/analytics-service/Dockerfile.prod
+    dockerContext: .
+    plan: free
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: NATS_ACK_WAIT
+        value: 2m
+      # Larger than the family services' batch of 1: a projection is one small
+      # upsert rather than a long scene build, and batching keeps the read
+      # model close to real time after a restart replays a backlog.
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "25"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: SERVICE_SHUTDOWN_TIMEOUT
+        value: 15s
+
   - type: web
     name: myunivokai-nature
     runtime: docker

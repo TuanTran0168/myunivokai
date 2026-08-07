@@ -35,6 +35,9 @@ services:
       AUTH_DATABASE_NAME: ${AUTH_DATABASE_NAME:-myunivokai_auth}
       AUTH_DATABASE_USER: ${AUTH_DATABASE_USER:-myunivokai_auth_app}
       AUTH_DATABASE_PASSWORD: ${AUTH_DATABASE_PASSWORD:-myunivokai_local_auth}
+      ANALYTICS_DATABASE_NAME: ${ANALYTICS_DATABASE_NAME:-myunivokai_analytics}
+      ANALYTICS_DATABASE_USER: ${ANALYTICS_DATABASE_USER:-myunivokai_analytics_app}
+      ANALYTICS_DATABASE_PASSWORD: ${ANALYTICS_DATABASE_PASSWORD:-myunivokai_local_analytics}
     volumes:
       - ./postgres/init-databases.sh:/scripts/init-databases.sh:ro
     entrypoint: ["/bin/sh", "/scripts/init-databases.sh"]
@@ -57,6 +60,8 @@ services:
       NATS_NATURE_PASSWORD: ${NATS_NATURE_PASSWORD:-myunivokai_local_nature}
       NATS_AUTH_USERNAME: ${NATS_AUTH_USERNAME:-myunivokai_auth}
       NATS_AUTH_PASSWORD: ${NATS_AUTH_PASSWORD:-myunivokai_local_auth}
+      NATS_ANALYTICS_USERNAME: ${NATS_ANALYTICS_USERNAME:-myunivokai_analytics}
+      NATS_ANALYTICS_PASSWORD: ${NATS_ANALYTICS_PASSWORD:-myunivokai_local_analytics}
       NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
       NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
     ports:

@@ -331,7 +331,7 @@ Tasks:
 
 ### S4-ANALYTICS-001 — Freeze analytics contracts
 
-Status: Ready
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0
 
 As a service developer,
@@ -355,13 +355,13 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 0
 
 Tasks:
-- [ ] Add `WorldSnapshot` and `FamilyWorldChangedData` to `contracts/go`.
-- [ ] Define the two `world.changed` subjects and four `queries.analytics.*` subjects.
-- [ ] Add JSON fixtures for the new events under `contracts/fixtures/`.
+- [x] Add `WorldSnapshot` and `FamilyWorldChangedData` to `contracts/go`.
+- [x] Define the two `world.changed` subjects and four `queries.analytics.*` subjects.
+- [x] Add JSON fixtures for the new events under `contracts/fixtures/`.
 
 ### S4-ANALYTICS-002 — Start emitting world-change events
 
-Status: Blocked on S4-ANALYTICS-001
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0 — ordered first among implementation work; the only phase whose
 delay causes permanent data loss
 
@@ -392,14 +392,14 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 1
 
 Tasks:
-- [ ] Add `revision INTEGER NOT NULL DEFAULT 1` to `worlds` in universe and nature migrations.
-- [ ] Increment `revision` and write an outbox row inside the existing variant-create/select/publish transactions.
-- [ ] Enrich `FamilyCompletedData` with the full `WorldSnapshot` fields (additive, backward compatible).
-- [ ] Add a repository test asserting every mutating store method writes an outbox row — the drift guard the plan names as the real long-term cost.
+- [x] Add `revision INTEGER NOT NULL DEFAULT 1` to `worlds` in universe and nature migrations.
+- [x] Increment `revision` and write an outbox row inside the existing variant-create/select/publish transactions.
+- [x] Enrich `FamilyCompletedData` with the full `WorldSnapshot` fields (additive, backward compatible).
+- [x] Add a repository test asserting every mutating store method writes an outbox row — the drift guard the plan names as the real long-term cost.
 
 ### S4-ANALYTICS-003 — Stand up analytics-service's own consumer and projections
 
-Status: Blocked on S4-ANALYTICS-001 (parallel to S4-ANALYTICS-002)
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0
 
 As the admin app,
@@ -425,14 +425,14 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 2
 
 Tasks:
-- [ ] Scaffold `services/analytics-service` (config, pool, migrations, hollow health server) copied from `universe-service`.
-- [ ] Add the durable consumer modeled on `dnaResultsDurableName`, `MaxDeliver(-1)`, wildcard filter on `myunivokai.events.>`.
-- [ ] Implement inbox idempotency and the revision-guarded upsert into `world_projections`/`job_projections`.
-- [ ] Add the analytics NATS user (subscribe `events.>`, subscribe/publish `queries.analytics.>`, no domain publish permission).
+- [x] Scaffold `services/analytics-service` (config, pool, migrations, hollow health server) copied from `universe-service`.
+- [x] Add the durable consumer modeled on `dnaResultsDurableName`, `MaxDeliver(-1)`, wildcard filter on `myunivokai.events.>`.
+- [x] Implement inbox idempotency and the revision-guarded upsert into `world_projections`/`job_projections`.
+- [x] Add the analytics NATS user (subscribe `events.>`, subscribe/publish `queries.analytics.>`, no domain publish permission).
 
 ### S4-ANALYTICS-004 — Serve analytics queries
 
-Status: Blocked on S4-ANALYTICS-003
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0
 
 As the admin app,
@@ -457,13 +457,13 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 3
 
 Tasks:
-- [ ] Implement the four query subjects and their SQL aggregates.
-- [ ] Add mandatory pagination to every list/aggregate response.
-- [ ] Add the `analytics-service-v1` queue group and `QueueSubscribe` wiring.
+- [x] Implement the four query subjects and their SQL aggregates.
+- [x] Add mandatory pagination to every list/aggregate response.
+- [x] Add the `analytics-service-v1` queue group and `QueueSubscribe` wiring.
 
 ### S4-ANALYTICS-005 — Wire gateway admin routes to analytics
 
-Status: Blocked on S4-AUTH-002, S4-AUTH-003, S4-ANALYTICS-004
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0
 
 As a staff member,
@@ -488,13 +488,15 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 4
 
 Tasks:
-- [ ] Bind `/api/admin/*` read routes to the analytics query subjects.
-- [ ] Do not build the `auth-and-admin-plan.md` phase-4 domain-service aggregate subjects.
-- [ ] Add a gateway-level test proving no domain-service subject is published on this path.
+- [x] Bind `/api/admin/*` read routes to the analytics query subjects.
+- [x] Do not build the `auth-and-admin-plan.md` phase-4 domain-service aggregate subjects.
+- [x] Add a gateway-level test proving no domain-service subject is published on this path.
 
 ### S4-ANALYTICS-006 — Deploy analytics-service
 
-Status: Blocked on S4-ANALYTICS-004
+Status: Config landed on `feat/be/analytics-service`; the Neon database, the
+Render env vars and the managed-NATS ACL block are manual steps still
+outstanding — runbook in `services/analytics-service/README.md`
 Priority: P0
 
 As a platform operator,
@@ -517,13 +519,13 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §What this costs
 
 Tasks:
-- [ ] Add the analytics NATS user block to `nats-server.conf`.
-- [ ] Add the `render.yaml` service entry and Neon database — verify the account's instance-hour and project limits first.
-- [ ] Add the admin OpenAPI entries for the analytics-backed routes.
+- [x] Add the analytics NATS user block to `nats-server.conf`.
+- [x] Add the `render.yaml` service entry and Neon database — verify the account's instance-hour and project limits first.
+- [x] Add the admin OpenAPI entries for the analytics-backed routes.
 
 ### S4-ANALYTICS-007 — Ship admin analytics screens
 
-Status: Blocked on S4-AUTH-004, S4-ANALYTICS-005
+Status: Implemented — `feat/be/analytics-service`
 Priority: P0
 
 As a staff member,
@@ -548,6 +550,6 @@ Source evidence:
 - notes/vision/analytics-service-plan.md — §Phases, Phase 6
 
 Tasks:
-- [ ] Build the dashboard screen (totals, failure rate, publish rate, distributions).
-- [ ] Build the worlds table and jobs table with TanStack Table and cursor pagination.
-- [ ] Wire TanStack Query against the analytics query subjects only.
+- [x] Build the dashboard screen (totals, failure rate, publish rate, distributions).
+- [x] Build the worlds table and jobs table with TanStack Table and cursor pagination.
+- [x] Wire TanStack Query against the analytics query subjects only.
