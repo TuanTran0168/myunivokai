@@ -13,7 +13,8 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem
+  SidebarMenuItem,
+  useSidebar
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { NAV_ITEMS } from "@/components/layout/nav-config";
@@ -22,11 +23,33 @@ import { hasPermission, type AccountSummary } from "@/lib/session";
 import { useLogout } from "@/hooks/use-logout";
 import { useSessionKeepAlive } from "@/hooks/use-session-keepalive";
 
+function AccountAvatar({ email }: { email: string }) {
+  const initial = email.charAt(0).toUpperCase();
+  return (
+    <div
+      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+      aria-hidden="true"
+    >
+      {initial}
+    </div>
+  );
+}
+
 export function AppSidebar({ account }: { account: AccountSummary | null }) {
   const pathname = usePathname();
   const visibleNavItems = NAV_ITEMS.filter((item) => hasPermission(account, item.permission));
   const logout = useLogout();
+  const { isMobile, setOpenMobile } = useSidebar();
   useSessionKeepAlive();
+
+  // On mobile the sidebar is a Sheet overlay (see ui/sidebar.tsx) sitting on
+  // top of the page it navigates to — closing it here is standard behavior
+  // for that pattern (every other Sheet-based nav closes itself on select).
+  // Desktop's persistent column has no such overlay to dismiss, so it's a
+  // no-op there.
+  function handleNavigate() {
+    if (isMobile) setOpenMobile(false);
+  }
 
   return (
     <Sidebar>
@@ -51,7 +74,7 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
                       isActive={isActive}
                       className="relative overflow-hidden data-[active=true]:bg-transparent"
                       render={
-                        <Link href={item.href}>
+                        <Link href={item.href} onClick={handleNavigate}>
                           {isActive ? (
                             <motion.span
                               layoutId="nav-active-pill"
@@ -73,8 +96,9 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
       </SidebarContent>
       <SidebarFooter>
         {account ? (
-          <div className="flex items-center justify-between gap-2 px-1 py-1">
-            <span className="truncate font-mono text-xs text-muted-foreground">{account.email}</span>
+          <div className="flex items-center gap-2 px-1 py-1">
+            <AccountAvatar email={account.email} />
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{account.email}</span>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -90,3 +114,4 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
     </Sidebar>
   );
 }
+

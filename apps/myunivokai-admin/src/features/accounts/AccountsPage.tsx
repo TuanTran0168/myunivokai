@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { accountsApi } from "./api";
 import { InviteAccountDialog } from "./InviteAccountDialog";
 import { AccountRowActions } from "./AccountRowActions";
@@ -50,25 +51,68 @@ export function AccountsPage() {
       <Card>
         <CardContent className="pt-2">
           {accountsQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton columnCount={4} headers={["Email", "Roles", "Status", ""]} />
           ) : accountsQuery.isError ? (
             <p className="py-6 text-center text-sm text-destructive">{(accountsQuery.error as Error).message}</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Roles</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Desktop table — hidden on mobile */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Roles</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {accountsQuery.data?.accounts.map((account) => (
+                      <TableRow key={account.accountId}>
+                        <TableCell className="text-sm">{account.email}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {account.isSuperAdmin ? <Badge variant="outline">super admin</Badge> : null}
+                            {account.roles.map((role) => (
+                              <Badge key={role} variant="secondary">
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {account.disabled ? (
+                            <Badge variant="destructive">disabled</Badge>
+                          ) : account.forcePasswordChange ? (
+                            <Badge variant="outline">invited</Badge>
+                          ) : (
+                            <Badge>active</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <AccountRowActions
+                            account={account}
+                            onDisable={() => disableMutation.mutate(account.accountId)}
+                            onEnable={() => enableMutation.mutate(account.accountId)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card layout — visible only on small screens */}
+              <div className="flex flex-col gap-3 sm:hidden">
                 {accountsQuery.data?.accounts.map((account) => (
-                  <TableRow key={account.accountId}>
-                    <TableCell className="text-sm">{account.email}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
+                  <div
+                    key={account.accountId}
+                    className="card-interactive flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{account.email}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {account.isSuperAdmin ? <Badge variant="outline">super admin</Badge> : null}
                         {account.roles.map((role) => (
                           <Badge key={role} variant="secondary">
@@ -76,27 +120,25 @@ export function AccountsPage() {
                           </Badge>
                         ))}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {account.disabled ? (
-                        <Badge variant="destructive">disabled</Badge>
-                      ) : account.forcePasswordChange ? (
-                        <Badge variant="outline">invited</Badge>
-                      ) : (
-                        <Badge>active</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <AccountRowActions
-                        account={account}
-                        onDisable={() => disableMutation.mutate(account.accountId)}
-                        onEnable={() => enableMutation.mutate(account.accountId)}
-                      />
-                    </TableCell>
-                  </TableRow>
+                      <div className="mt-1.5">
+                        {account.disabled ? (
+                          <Badge variant="destructive">disabled</Badge>
+                        ) : account.forcePasswordChange ? (
+                          <Badge variant="outline">invited</Badge>
+                        ) : (
+                          <Badge>active</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <AccountRowActions
+                      account={account}
+                      onDisable={() => disableMutation.mutate(account.accountId)}
+                      onEnable={() => enableMutation.mutate(account.accountId)}
+                    />
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -104,3 +146,4 @@ export function AccountsPage() {
     </div>
   );
 }
+

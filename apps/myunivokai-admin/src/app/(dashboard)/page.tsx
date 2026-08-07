@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
+import { LayoutDashboard } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ADMIN_ACCOUNT_COOKIE_NAME, decodeAccountCookieValue } from "@/lib/session";
 
 // Placeholder home screen. The real dashboard (totals per family, failure
@@ -16,15 +18,32 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title={`Welcome${account ? `, ${account.email}` : ""}`}
-        description="Analytics and record screens land in S4-ANALYTICS-007, once analytics-service is serving queries."
       />
       {account ? (
-        <Card>
-          <CardContent className="pt-2 font-mono text-xs text-muted-foreground">
-            Roles: {account.roles.join(", ") || "none"}
+        <Card className="card-interactive">
+          <CardContent className="pt-2">
+            <div className="flex items-center gap-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                <LayoutDashboard className="size-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Roles</p>
+                <p className="font-mono text-xs text-muted-foreground">{account.roles.join(", ") || "none"}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       ) : null}
+      <Card className="mt-4">
+        <CardContent>
+          <EmptyState
+            icon={LayoutDashboard}
+            title="Dashboard"
+            description="Analytics and record screens land in S4-ANALYTICS-007, once analytics-service is serving queries."
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
+

@@ -14,11 +14,41 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/page-header";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { rolesApi } from "./api";
 import type { RoleSummary } from "./types";
 import { RoleFormDialog } from "./RoleFormDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { SuperAdminCard } from "./SuperAdminCard";
+
+function RoleActions({
+  role,
+  onEdit,
+  onDelete
+}: {
+  role: RoleSummary;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  if (role.isSystem) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon-sm" aria-label="Role actions">
+            <MoreHorizontal />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function RolesPage() {
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: rolesApi.list });
@@ -41,54 +71,75 @@ export function RolesPage() {
         <CardContent className="flex flex-col gap-3 pt-2">
           <SuperAdminCard />
           {rolesQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton columnCount={3} headers={["Name", "Permissions", ""]} />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Desktop table */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Permissions</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rolesQuery.data?.roles.map((role) => (
+                      <TableRow key={role.roleId}>
+                        <TableCell className="text-sm">
+                          {role.name} {role.isSystem ? <Badge variant="outline">system</Badge> : null}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {role.permissions.map((codename) => (
+                              <Badge key={codename} variant="secondary" className="font-mono text-[10px]">
+                                {codename}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <RoleActions
+                            role={role}
+                            onEdit={() => setFormTarget({ open: true, role })}
+                            onDelete={() => setDeleteTarget(role)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card layout */}
+              <div className="flex flex-col gap-3 sm:hidden">
                 {rolesQuery.data?.roles.map((role) => (
-                  <TableRow key={role.roleId}>
-                    <TableCell className="text-sm">
-                      {role.name} {role.isSystem ? <Badge variant="outline">system</Badge> : null}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
+                  <div
+                    key={role.roleId}
+                    className="card-interactive flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 text-sm font-medium">
+                        {role.name} {role.isSystem ? <Badge variant="outline">system</Badge> : null}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {role.permissions.map((codename) => (
                           <Badge key={codename} variant="secondary" className="font-mono text-[10px]">
                             {codename}
                           </Badge>
                         ))}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {role.isSystem ? null : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button variant="ghost" size="icon-sm" aria-label="Role actions">
-                                <MoreHorizontal />
-                              </Button>
-                            }
-                          />
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setFormTarget({ open: true, role })}>Edit</DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(role)}>
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                    <RoleActions
+                      role={role}
+                      onEdit={() => setFormTarget({ open: true, role })}
+                      onDelete={() => setDeleteTarget(role)}
+                    />
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -103,3 +154,4 @@ export function RolesPage() {
     </div>
   );
 }
+

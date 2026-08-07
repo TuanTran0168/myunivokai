@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { gatewayOriginUrl } from "@/lib/gateway";
 
+// Same reasoning as auth-relay.ts's GATEWAY_REQUEST_TIMEOUT_MILLISECONDS: a
+// hung gateway must not be able to hold a list/detail request open
+// indefinitely — every feature page's useQuery would otherwise sit on its
+// loading skeleton for however long the stalled socket takes to give up.
+const GATEWAY_REQUEST_TIMEOUT_MILLISECONDS = 8_000;
+
 // Generic BFF relay for every /api/admin/* management route (accounts,
 // roles, permissions, audit) EXCEPT the literal /api/admin/auth/* routes,
 // which Next.js resolves first since they're more specific — see
@@ -24,7 +30,8 @@ async function proxyToGateway(request: NextRequest, routeParams: { params: Promi
         ...(hasBody ? { "Content-Type": "application/json" } : {})
       },
       body: hasBody ? await request.text() : undefined,
-      cache: "no-store"
+      cache: "no-store",
+      signal: AbortSignal.timeout(GATEWAY_REQUEST_TIMEOUT_MILLISECONDS)
     });
   } catch {
     return NextResponse.json(

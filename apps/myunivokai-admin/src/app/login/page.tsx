@@ -3,10 +3,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandMark } from "@/components/layout/brand-mark";
 import { useLogin } from "@/hooks/use-login";
 import { attemptSilentRefresh } from "@/lib/client-session";
 
@@ -44,11 +46,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 items-center justify-center p-6">
+    <div className="login-dots flex min-h-full flex-1 flex-col items-center justify-center p-6">
+      {/* Animated brand mark above the card */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+        className="mb-6"
+      >
+        <BrandMark className="mx-auto h-12 w-12" />
+      </motion.div>
+
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+        transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}
         className="w-full max-w-sm"
       >
         <Card>
@@ -58,7 +70,10 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             {isCheckingSession ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">Checking your session…</p>
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Checking your session…</p>
+              </div>
             ) : (
               <motion.form
                 className="flex flex-col gap-4"
@@ -100,3 +115,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

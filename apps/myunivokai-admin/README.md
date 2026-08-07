@@ -83,16 +83,33 @@ represents it without reversing that design.
 
 ## Design
 
-Neutral dashboard chrome (`src/app/globals.css`), not the warm liquid-glass
-wash the first pass shipped with — reviewed live and rejected as reading like
-a copy of Claude.ai's palette rather than an admin tool. Grounded instead in
-how Linear, Vercel's dashboard, Stripe's dashboard and Notion actually look:
-mostly neutral gray/white surfaces, brass spent only as the one accent
-(primary actions, the active-nav pill, focus rings — never a background
-wash), flat bordered cards rather than blur-everywhere. Real glass survives
-in exactly one place, the sticky header (`.glass-panel`), because it's the
-one surface that's actually load-bearing over scrolling content underneath
-it. `src/components/layout/brand-mark.tsx` reuses
+Dark liquid glass (`src/app/globals.css`), v3 of this app's theme. v1 washed
+brass across a warm-cream light background and was rejected as a copy of
+Claude.ai's palette; v2 swung to a neutral light dashboard (Linear/Vercel/
+Stripe) to fix that, but a real reference review found the opposite problem —
+a translucent panel over a flat white background has nothing colorful behind
+it for the blur to reveal, so the glass itself read as invisible. This pass
+is grounded directly in `apps/myunivokai-web`'s own design system ("The
+Vitrine + Liquid Glass", that app's `globals.css`) rather than inventing a
+third palette: the same void (`#08080A`), paper foreground (`#F2EEE6`) and
+brass accent (`rgb(201 163 91)`, the middle stop of the shared `BrandMark`
+gradient) as the product app, so both apps read as one brand instead of two
+similar-but-different metallic yellows.
+
+`body` paints a static backdrop for the glass to work against — one soft
+brass glow (echoing the logo's disc) plus a faint scattered starfield, both
+fixed and non-animated (the v1 roaming blob field was itself called out as
+"too much animation"). Every floating surface — the sticky header, the
+sidebar, and now ordinary `Card` content too — shares one `.glass-panel`
+material: blur+saturate over that backdrop, a diagonal specular highlight
+top-left, a faint brass inner ring, and a soft dark lift shadow. Applying it
+to Card as well as the nav chrome is a deliberate departure from Apple's own
+WWDC25 rule that glass is nav-layer-only — this app's reference asked for
+every widget to be glass, not just the bars, so `card.tsx` carries the class
+directly rather than staying a flat surface. `prefers-contrast: more` still
+drops every glass surface back to a flat, bordered background, since blur
+reduces text contrast against whatever scrolls underneath.
+`src/components/layout/brand-mark.tsx` reuses
 `apps/myunivokai-web/public/logo.svg`'s exact mark rather than inventing a
 second symbol for this app.
 

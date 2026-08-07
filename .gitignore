@@ -33,6 +33,7 @@ go.work.sum
 !services/dna-service/.env.local
 !services/api-gateway/.env.local
 !apps/myunivokai-web/.env.local
+!apps/myunivokai-admin/.env.local
 !infra/.env.local
 !services/auth-service/.env.local
 !.env.local

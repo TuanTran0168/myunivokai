@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files: handled by the root .gitignore (.env.* blocked there, with a
+# per-app !apps/myunivokai-admin/.env.local exception), same as every other
+# app/service in the repo — no local override needed here.
 
 # vercel
 .vercel

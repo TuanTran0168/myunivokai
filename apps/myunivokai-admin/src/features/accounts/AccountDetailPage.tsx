@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { AdminApiError } from "@/lib/admin-http";
 import { rolesApi } from "@/features/roles/api";
@@ -39,27 +40,43 @@ export function AccountDetailPage({ params }: { params: Promise<{ accountId: str
       />
       <Card>
         <CardContent className="flex flex-col gap-3 pt-2">
-          {rolesQuery.data?.roles.map((role) => {
-            const isAssigned = account?.roles.includes(role.name) ?? false;
-            return (
-              <label key={role.roleId} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-                <div>
-                  <p className="text-sm font-medium">{role.name}</p>
-                  <p className="text-xs text-muted-foreground">{role.permissions.join(", ") || "no permissions"}</p>
+          {rolesQuery.isLoading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-40" />
                 </div>
-                <Checkbox
-                  checked={isAssigned}
-                  disabled={account?.isSuperAdmin}
-                  onCheckedChange={(checked) => {
-                    if (checked) assignMutation.mutate(role.roleId);
-                    else revokeMutation.mutate(role.roleId);
-                  }}
-                />
-              </label>
-            );
-          })}
+                <Skeleton className="size-4 rounded" />
+              </div>
+            ))
+          ) : (
+            rolesQuery.data?.roles.map((role) => {
+              const isAssigned = account?.roles.includes(role.name) ?? false;
+              return (
+                <label
+                  key={role.roleId}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border p-3 transition-colors duration-150 hover:border-primary/30 hover:bg-accent/50"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{role.name}</p>
+                    <p className="text-xs text-muted-foreground">{role.permissions.join(", ") || "no permissions"}</p>
+                  </div>
+                  <Checkbox
+                    checked={isAssigned}
+                    disabled={account?.isSuperAdmin}
+                    onCheckedChange={(checked) => {
+                      if (checked) assignMutation.mutate(role.roleId);
+                      else revokeMutation.mutate(role.roleId);
+                    }}
+                  />
+                </label>
+              );
+            })
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
+

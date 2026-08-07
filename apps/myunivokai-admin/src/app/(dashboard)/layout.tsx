@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { BreadcrumbHeader } from "@/components/layout/breadcrumb-header";
 import { ContentTransition } from "@/components/layout/content-transition";
 import { ADMIN_ACCOUNT_COOKIE_NAME, decodeAccountCookieValue } from "@/lib/session";
 
@@ -19,14 +20,17 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <SidebarProvider>
       <AppSidebar account={account} />
       <SidebarInset>
-        <header className="glass-panel relative sticky top-0 z-10 flex h-14 items-center gap-3 overflow-hidden border-b border-border px-4">
+        <header className="glass-panel relative sticky top-0 z-10 flex h-14 items-center gap-3 overflow-hidden px-4">
           <div className="header-glow" aria-hidden="true" />
           <SidebarTrigger />
+          <BreadcrumbHeader />
         </header>
-        <main className="flex-1 p-6">
+        <div className="scroll-edge-fade" aria-hidden="true" />
+        <main className="flex-1 p-4 sm:p-6">
           <ContentTransition>{children}</ContentTransition>
         </main>
       </SidebarInset>
     </SidebarProvider>
   );
 }
+

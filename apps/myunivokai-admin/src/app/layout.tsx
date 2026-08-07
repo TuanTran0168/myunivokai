@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import "./globals.css";
@@ -23,13 +24,16 @@ export const metadata: Metadata = {
 // that layout instead, scoped to just the content pane.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} ${jetBrainsMono.variable} h-full`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${spaceGrotesk.variable} ${jetBrainsMono.variable} h-full`}>
       <body className="flex min-h-full flex-col antialiased">
-        <QueryProvider>
-          {children}
-          <Toaster theme="light" position="top-center" />
-        </QueryProvider>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          <QueryProvider>
+            {children}
+            <Toaster theme="dark" position="top-center" />
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
 }
+

@@ -14,10 +14,22 @@ import { ADMIN_ACCOUNT_COOKIE_NAME, encodeAccountCookieValue, type SessionRespon
 // app's own middleware read them without a network hop. See
 // notes/vision/auth-and-admin-plan.md#the-admin-app, "cookie-based auth wants
 // a server".
+// Bounds how long a hung/unreachable gateway can hold this route handler
+// open. Without it, a stalled connection (gateway mid-restart, a dropped
+// packet with no RST) leaves the fetch pending far longer than a user will
+// wait — the login page's "Checking your session…" spinner has no other
+// escape hatch and would otherwise spin until the underlying socket times
+// out on its own, which is what "F5 fixes it" was actually working around.
+const GATEWAY_REQUEST_TIMEOUT_MILLISECONDS = 8_000;
+
 export async function proxyToGatewayAuth(gatewayPath: string, init: RequestInit): Promise<NextResponse> {
   let gatewayResponse: Response;
   try {
-    gatewayResponse = await fetch(`${gatewayOriginUrl()}${gatewayPath}`, { ...init, cache: "no-store" });
+    gatewayResponse = await fetch(`${gatewayOriginUrl()}${gatewayPath}`, {
+      ...init,
+      cache: "no-store",
+      signal: AbortSignal.timeout(GATEWAY_REQUEST_TIMEOUT_MILLISECONDS)
+    });
   } catch {
     return NextResponse.json(
       { error: { code: "GATEWAY_UNREACHABLE", message: "The API gateway is not reachable right now." } },
