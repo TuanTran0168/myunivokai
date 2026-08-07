@@ -1,10 +1,11 @@
 # Hướng Dẫn Triển Khai Lên Môi Trường Production (Production Deployment Guide)
 
-> **Cập nhật lần cuối:** 2026-08-06 (thêm mục 2.4, Service 5: `myunivokai-auth`)
+> **Cập nhật lần cuối:** 2026-08-07 (thêm Service 6: `myunivokai-analytics`, database thứ 5, và ghi chú về phân quyền NATS trên NGS)
 > **Trạng thái:** Active. Phần gốc (gateway/dna/universe/nature) đã Tested trên
-> Production; phần `myunivokai-auth` (mục 2.4, Service 5, 5.7) là hướng dẫn
-> mới theo `render.yaml`, **chưa có bằng chứng deploy thật** — xác nhận và xoá
-> dòng này sau lần deploy đầu tiên.
+> Production; phần `myunivokai-auth` (mục 2.4, Service 5, 5.7) và phần
+> `myunivokai-analytics` (Service 6) là hướng dẫn mới theo `render.yaml`,
+> **chưa có bằng chứng deploy thật** — xác nhận và xoá dòng này sau lần deploy
+> đầu tiên.
 
 Tài liệu này hướng dẫn chi tiết từng bước (step-by-step) cách cấu hình và triển khai (deploy) toàn bộ hệ thống Microservices của dự án MyUnivokai lên các nền tảng đám mây (Cloud).
 
@@ -15,23 +16,28 @@ Tài liệu này hướng dẫn chi tiết từng bước (step-by-step) cách c
 Dự án MyUnivokai được cấu thành từ 5 thành phần cốt lõi phân tán trên nhiều nền tảng:
 
 1. **Frontend (Vercel):** Ứng dụng Next.js.
-2. **Backend (Render):** Hệ thống gồm 5 Microservices viết bằng Go (`api-gateway`, `dna-service`, `universe-service`, `nature-service`, `auth-service`). Tất cả được deploy dưới dạng `Web Service` để tối ưu chi phí (sử dụng gói Free của Render).
-3. **Database (Neon.tech):** Cơ sở dữ liệu PostgreSQL Serverless (gồm 4 database độc lập — `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature`, `myunivokai_auth`).
+2. **Backend (Render):** Hệ thống gồm 6 Microservices viết bằng Go (`api-gateway`, `dna-service`, `universe-service`, `nature-service`, `auth-service`, `analytics-service`). Tất cả được deploy dưới dạng `Web Service` để tối ưu chi phí (sử dụng gói Free của Render). ⚠️ Giờ giới hạn instance của gói Free được tính chung cho cả tài khoản — **kiểm tra ngân sách còn lại trước khi thêm service thứ 6**.
+3. **Database (Neon.tech):** Cơ sở dữ liệu PostgreSQL Serverless (gồm 5 database độc lập — `myunivokai_dna`, `myunivokai_universe`, `myunivokai_nature`, `myunivokai_auth`, `myunivokai_analytics`).
 4. **Cache & Rate Limit (Upstash):** Dịch vụ Redis Serverless — `auth-service` cũng dùng chung instance này để ghi `tokenVersion` cho cơ chế revocation, không cần Redis riêng.
-5. **Message Broker (Synadia Cloud - NGS):** Mạng lưới NATS JetStream đảm nhiệm việc giao tiếp không đồng bộ (asynchronous messaging) giữa các Microservices. `auth-service` chỉ dùng Core NATS request-reply (không JetStream), nên dùng chung `nats.creds` như các service khác mà không cần quyền `$JS.API.>`.
+5. **Message Broker (Synadia Cloud - NGS):** Mạng lưới NATS JetStream đảm nhiệm việc giao tiếp không đồng bộ (asynchronous messaging) giữa các Microservices. `auth-service` chỉ dùng Core NATS request-reply (không JetStream), nên dùng chung `nats.creds` như các service khác mà không cần quyền `$JS.API.>`. `analytics-service` thì ngược lại: nó tạo một durable consumer riêng trên stream `MYUNIVOKAI_EVENTS`.
+
+> ℹ️ **Về phân quyền NATS:** tất cả service dùng **chung một account user** qua một file `nats.creds` duy nhất, tức trên NGS **không có allow-list publish nào** — user đó toàn quyền trong account. File `infra/nats/nats-server.conf` (phân quyền chi tiết từng service) chỉ áp dụng cho NATS chạy local. Hệ quả cần biết: luật "analytics-service không được publish subject domain nào" được **ACL bảo đảm ở local, nhưng ở production chỉ có code bảo đảm**. Nếu sau này bạn cấu hình permission riêng từng user trên Synadia, mọi user có consumer đều cần **`$JS.ACK.>`** bên cạnh `$JS.API.>` — ack một message JetStream là publish vào prefix đó, thiếu nó thì message redeliver vô hạn và chỉ hiện ra dưới dạng dòng log `permissions violation`, không bao giờ crash lúc khởi động.
 
 ---
 
 ## 2. Hướng Dẫn Chuẩn Bị Tài Nguyên Từng Bước
 
 ### Bước 2.1: Thiết lập Database trên Neon.tech
-Hệ thống sử dụng mô hình Database-per-service. Bạn cần tạo 4 database riêng biệt.
+Hệ thống sử dụng mô hình Database-per-service. Bạn cần tạo 5 database riêng biệt.
 1. Đăng nhập vào [Neon.tech](https://neon.tech/) và tạo một Project mới (Ví dụ: `myunivokai-db-prod`).
-2. Vào mục **Databases**, tạo lần lượt 4 database:
+2. Vào mục **Databases**, tạo lần lượt 5 database:
    - `myunivokai_dna`
    - `myunivokai_universe`
    - `myunivokai_nature`
    - `myunivokai_auth`
+   - `myunivokai_analytics` — read model của admin. Đây là **bản sao thứ hai của dữ liệu production**, nên phải là database riêng: không thứ gì trong luồng sản phẩm đọc nó, và chỉ event consumer của `analytics-service` ghi vào nó.
+
+   > Nếu giới hạn số Project của Neon chặn bạn, đặt `analytics` và `auth` **cùng một project** dưới dạng hai database tách biệt — đừng gộp chung một database.
 3. Vào mục **Dashboard** -> **Connection Details**:
    - Tích chọn **Pooled connection** (để dùng PGBouncer). Copy chuỗi kết nối (thường có `?sslmode=require`). Đây chính là `DATABASE_URL`.
    - Bỏ tích **Pooled connection**. Copy chuỗi kết nối trực tiếp. Đây là `DATABASE_DIRECT_URL` (dùng để chạy Migration).
@@ -71,7 +77,7 @@ openssl rand -base64 32
 
 ## 3. Cấu Hình Biến Môi Trường Dùng Chung (Environment Groups) Trên Render
 
-Vì cả 5 Go Services đều cần kết nối chung vào NATS, để tránh cấu hình lặp lại nhiều lần, chúng ta sẽ tạo một nhóm biến môi trường dùng chung.
+Vì cả 6 Go Services đều cần kết nối chung vào NATS, để tránh cấu hình lặp lại nhiều lần, chúng ta sẽ tạo một nhóm biến môi trường dùng chung.
 
 1. Đăng nhập vào [Render Dashboard](https://dashboard.render.com).
 2. Ở cột menu bên trái, chọn **Env Groups** -> Bấm **New Environment Group**.
@@ -90,10 +96,10 @@ Vì cả 5 Go Services đều cần kết nối chung vào NATS, để tránh c�
 
 ## 4. Triển Khai Backend Lên Render (Render Blueprint)
 
-Hệ thống đã được thiết kế sẵn file `render.yaml` (Infrastructure as Code). Khi bạn push code lên GitHub, Render sẽ tự động nhận diện và tạo ra 5 Web Services.
+Hệ thống đã được thiết kế sẵn file `render.yaml` (Infrastructure as Code). Khi bạn push code lên GitHub, Render sẽ tự động nhận diện và tạo ra 6 Web Services.
 
 ### Bước 4.1: Liên kết (Link) Environment Group
-1. Lần lượt bấm vào từng Service trên Render Dashboard (`myunivokai-gateway`, `myunivokai-dna`, `myunivokai-universe`, `myunivokai-nature`, `myunivokai-auth`).
+1. Lần lượt bấm vào từng Service trên Render Dashboard (`myunivokai-gateway`, `myunivokai-dna`, `myunivokai-universe`, `myunivokai-nature`, `myunivokai-auth`, `myunivokai-analytics`).
 2. Chuyển sang tab **Environment**.
 3. Ở mục **Linked Environment Groups**, bấm **Link** và chọn nhóm `myunivokai-shared-env`. Bấm Save.
 
@@ -135,6 +141,38 @@ Vẫn ở tab **Environment** của từng Service, điền các giá trị đ�
   `AUTH_TOKEN_VERSION_CACHE_TTL`, `AUTH_ARGON2_*`, `AUTH_MAX_FAILED_ATTEMPTS`,
   `AUTH_LOCKOUT_DURATION` đã có `value` mặc định ngay trong `render.yaml`
   (không phải `sync: false`) — không cần điền thêm, trừ khi muốn đổi.
+
+#### 🚀 Service 6: Analytics Service (`myunivokai-analytics`)
+- `DATABASE_URL`: Dán chuỗi kết nối Pooled của database `myunivokai_analytics`.
+- `DATABASE_DIRECT_URL`: Dán chuỗi kết nối Direct của database
+  `myunivokai_analytics`. Bắt buộc phải là host **không pooled** (không có
+  `-pooler`): goose lấy advisory lock khi migrate, mà transaction pooler không
+  giữ lock đó xuyên suốt các câu lệnh.
+- Không có biến nào khác cần điền. Service này **không xác thực token, không
+  gọi provider nào, và không publish event nào** — nên nó không có
+  `REDIS_URL`, không có khoá ký, không có API key. Nếu thấy một credential
+  xuất hiện ở đây thì đó là dấu hiệu read model đã làm việc nó không được
+  phép làm.
+
+> ⚠️ **`analytics-service` sẽ crash-loop nếu deploy trước khi tạo database.**
+> Khác với các service khác, nó là service mới hoàn toàn: `render.yaml` khai
+> báo sẵn nhưng `DATABASE_URL` là `sync: false`. Tạo database ở Bước 2.1 và
+> điền hai biến trên **trước** khi merge lên `main`.
+
+> ℹ️ **Lần khởi động đầu tiên tự backfill một phần.** Stream
+> `MYUNIVOKAI_EVENTS` giữ 7 ngày với `discard: old`, và một durable consumer
+> mới mặc định `DeliverAll` — nên analytics sẽ tự chiếu lại toàn bộ những gì
+> stream còn giữ, miễn phí. Ngoài cửa sổ 7 ngày đó thì không có backfill nào
+> khác: một sự cố dài hơn 7 ngày là mất dữ liệu vĩnh viễn, đã được chấp nhận
+> ở mức dữ liệu hiện tại. Khi thấy lỗ hổng trong read model, hãy nghĩ tới
+> retention trước, đừng nghĩ tới hỏng dữ liệu.
+
+> 🔒 **Admin routes vẫn tắt cho tới khi bạn bật.** `render.yaml` để
+> `ADMIN_ROUTES_ENABLED=false` trên gateway, nên các màn hình analytics chưa
+> truy cập được. Muốn bật thì đổi thành `true` **và** điền
+> `ADMIN_ALLOWED_ORIGIN` bằng đúng origin của admin app. Bật với origin rỗng
+> hoặc wildcard sẽ fail config validation và làm **cả gateway** không khởi
+> động được — kể cả các route sản phẩm.
 
 > 🔑 **Tạo tài khoản super-admin đầu tiên sau khi deploy xong.**
 > `auth-service` không có đường tự đăng ký (self-signup). Sau khi service
@@ -182,12 +220,19 @@ Sau khi lưu lại, Render sẽ tự động tiến hành build Docker image t�
 > nó còn tự đồng bộ (sync) bảng `permissions` và seed role `basic_user` mỗi
 > lần khởi động — xem `internal/services/permission_sync.go`. Đây không phải
 > migration SQL, không cần thao tác gì thêm từ operator.
+>
+> **Cập nhật 2026-08-07:** `analytics-service` theo đúng cùng pattern. Hai
+> migration mới cũng đi kèm bản này ở phía family service:
+> `universe-service` và `nature-service` đều thêm cột
+> `worlds.revision INTEGER NOT NULL DEFAULT 1`. Trên PostgreSQL 11+, `ADD
+> COLUMN` với DEFAULT không đổi là thao tác **chỉ sửa metadata** — không
+> rewrite bảng, nên không có downtime dù bảng đã có dữ liệu production.
 
-Điều kiện tiên quyết duy nhất: `DATABASE_DIRECT_URL` phải được điền đúng trên Render cho cả 4 service (dna, universe, nature, auth — theo Bước 4.2). Khi điều kiện đó được đáp ứng, migrate chạy tự động mỗi lần deploy. Không còn bước thủ công nào cần thực hiện.
+Điều kiện tiên quyết duy nhất: `DATABASE_DIRECT_URL` phải được điền đúng trên Render cho cả 5 service (dna, universe, nature, auth, analytics — theo Bước 4.2). Khi điều kiện đó được đáp ứng, migrate chạy tự động mỗi lần deploy. Không còn bước thủ công nào cần thực hiện.
 
 Binary `cmd/migrate/main.go` vẫn tồn tại độc lập, dùng cho debug hoặc chạy migrate ngoài luồng deploy:
 ```bash
-cd services/dna-service   # hoặc universe-service / nature-service / auth-service
+cd services/dna-service   # hoặc universe-service / nature-service / auth-service / analytics-service
 set DATABASE_DIRECT_URL="postgres://..." # (hoặc export trên Mac/Linux)
 go run cmd/migrate/main.go
 ```
