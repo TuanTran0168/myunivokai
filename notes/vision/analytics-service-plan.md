@@ -421,9 +421,19 @@ never as a startup failure.
 
 This was **a pre-existing defect**, not a new one: `myunivokai_dna`,
 `myunivokai_universe` and `myunivokai_nature` were all missing the same
-permission in `nats-server.conf`, and dna-service's family-results consumer
-was demonstrably unable to ack. All four users were corrected in the same
-change. **The managed NATS ACL needs the same correction.**
+permission, and dna-service's family-results consumer was demonstrably unable
+to ack. All four users were corrected.
+
+**It affects local development only.** Production authenticates to Synadia
+Cloud with a single `nats.creds` account user shared by every service
+(`notes/ops/production-deployment-guide.md`), with no per-user publish
+allow-list, so nothing there was ever blocked and nothing there needs fixing.
+
+That cuts both ways, and the plan's §Phases claim that the ACL "enforces the
+read-model rule rather than trusting the code to honour it" is therefore
+**true locally and not true in production**. If per-user permissions are ever
+configured in Synadia — which is the only way to make that sentence true
+everywhere — every consuming user needs `$JS.ACK.>` alongside `$JS.API.>`.
 
 **2. `FamilyCompletedData.Snapshot` is a pointer, not an embedded value.**
 §Design decision says "embed it additively". A pointer is strictly better: a

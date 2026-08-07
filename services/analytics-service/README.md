@@ -135,10 +135,25 @@ before merging to `main`**, or the service crash-loops on first boot.
    the migration runner — goose takes advisory locks, which a transaction
    pooler does not carry across statements.
 
-3. **Add the NATS user** to the managed NATS ACL. The block is already in
-   [infra/nats/nats-server.conf](../../infra/nats/nats-server.conf) for local
-   dev, but managed NATS is configured in its own dashboard, so this is a
-   manual copy:
+3. **Point it at NATS.** Nothing to configure on the broker: production uses
+   Synadia Cloud with **one account user shared by every service**, supplied
+   as a `nats.creds` secret file, so this service reuses the existing
+   Environment Group unchanged — see
+   [notes/ops/production-deployment-guide.md](../../notes/ops/production-deployment-guide.md).
+   Set `NATS_URL=tls://connect.ngs.global:4222` and
+   `NATS_CREDENTIALS=/etc/secrets/nats.creds`, and **do not** set
+   `NATS_USERNAME` / `NATS_PASSWORD`.
+
+   The per-user block in
+   [infra/nats/nats-server.conf](../../infra/nats/nats-server.conf) is
+   therefore **local-only**. That matters for how you read this service's
+   read-model guarantee: locally the ACL enforces "publishes no domain
+   subject", in production only the code does. If per-user permissions are
+   ever configured in Synadia, this is the block to copy, and `$JS.ACK.>` is
+   the line most easily missed — acknowledging a JetStream delivery publishes
+   under that prefix, not under `$JS.API.>`, and omitting it makes every
+   message redeliver until `AckWait` expires, forever, logging only a
+   `permissions violation` line and never failing at startup.
 
    ```
    {
@@ -150,16 +165,6 @@ before merging to `main`**, or the service crash-loops on first boot.
      }
    }
    ```
-
-   `$JS.ACK.>` is not optional and is easy to miss: acknowledging a JetStream
-   delivery publishes to a reply subject under that prefix, **not** under
-   `$JS.API.>`. Without it the consumer receives events, projects them, and
-   then fails to ack — so every message redelivers until `AckWait` expires,
-   forever. It surfaces as `permissions violation: Publish to
-   "$JS.ACK...."` in the logs, never as a startup failure. The same
-   permission was missing for `myunivokai_dna`, `myunivokai_universe` and
-   `myunivokai_nature` and has been added for all three in the same change —
-   **the managed NATS ACL needs the same correction.**
 
    Then set `NATS_URL`, `NATS_USERNAME=myunivokai_analytics` and
    `NATS_PASSWORD` on the Render service.
