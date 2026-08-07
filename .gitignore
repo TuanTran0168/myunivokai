@@ -36,6 +36,7 @@ go.work.sum
 !apps/myunivokai-admin/.env.local
 !infra/.env.local
 !services/auth-service/.env.local
+!services/analytics-service/.env.local
 !.env.local
 
 # Node / Next.js

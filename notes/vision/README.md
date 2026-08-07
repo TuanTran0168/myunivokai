@@ -2,7 +2,7 @@
 
 > **Document status:** Active index; V1 implemented in source and deployed to
 > production, lifecycle/failure verification pending
-> **Last source review:** 2026-07-29
+> **Last source review:** 2026-08-07 (auth-service, analytics-service and the admin app added)
 
 Myunivokai turns one person's semantic DNA into multiple deterministic 3D
 portrait families. Universe and Nature remain independent bounded contexts so
@@ -11,7 +11,7 @@ move to `dna-service`; the public gateway becomes a NATS edge; Redis supplies
 shared edge state.
 
 The target was approved and implemented in source on 2026-07-22, and deployed on
-2026-07-29 to Vercel (web) and Render (four Go services) against managed Neon,
+2026-07-29 to Vercel (web) and Render (Go services) against managed Neon,
 Upstash and Synadia. All four services and the frontend answer over HTTPS, and
 the gateway's readiness probe confirms live NATS and Redis connections — the
 evidence table is in
@@ -40,10 +40,14 @@ architecture revision.
 | [v1-2026-07-22](versions/v1-2026-07-22/README.md) | Current implemented source baseline | NATS/Redis edge, canonical DNA, independent Universe/Nature services |
 
 ```txt
-web -> api-gateway -> NATS -> dna-service      -> myunivokai_dna
-                          -> universe-service -> myunivokai_universe
-                          -> nature-service   -> myunivokai_nature
-                    Redis: distributed rate limits and safe caches
+web   -> api-gateway /api/*       -> NATS -> dna-service       -> myunivokai_dna
+                                        -> universe-service   -> myunivokai_universe
+                                        -> nature-service     -> myunivokai_nature
+
+admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_auth
+                                        -> analytics-service  -> myunivokai_analytics
+                                                 ^ consumes myunivokai.events.>
+                    Redis: distributed rate limits, safe caches, tokenVersion
 ```
 
 ## Documents
@@ -57,6 +61,9 @@ web -> api-gateway -> NATS -> dna-service      -> myunivokai_dna
 | [city-service-plan.md](city-service-plan.md) | Approved City product plan, now dependent on the platform migration/hardening |
 | [nature-service-plan.md](nature-service-plan.md) | Historical Nature implementation record |
 | [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | Implemented single-origin frontend baseline |
+| [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
+| [analytics-service-plan.md](analytics-service-plan.md) | The admin read model (CQRS). Implemented — replaced the gateway fan-out before it was written |
+| [service-wake-mechanism.md](service-wake-mechanism.md) | Confirmed production cold-start defect; deferred by the owner, not scheduled |
 
 ## Product model
 
@@ -77,8 +84,10 @@ world remains renderable even when DNA later gets a new version.
 1. **One public edge.** The browser calls only `api-gateway`.
 2. **Durable asynchronous generation.** Long-running commands use NATS
    JetStream and return `202`; fast queries use Core NATS request-reply.
-3. **Clear ownership.** DNA, Universe and Nature own separate PostgreSQL
-   databases and migrations.
+3. **Clear ownership.** Every service owns its own PostgreSQL database and
+   migrations. `myunivokai_analytics` is the single deliberate exception to
+   "a row lives in one place": it is a read model, and what may enter it is an
+   allow list, not a copy of the source row.
 4. **AI produces semantics.** Only `dna-service` calls providers. Family
    builders own seeded visual values.
 5. **Deterministic regeneration.** New variants do not call AI by default.
@@ -87,12 +96,18 @@ world remains renderable even when DNA later gets a new version.
 7. **At-least-once is explicit.** Inbox/outbox and idempotent consumers are
    required; `jobId` is the correlation/deduplication anchor.
 8. **Names express domains.** Deployments are `myunivokai-dna`,
-   `myunivokai-universe`, and `myunivokai-nature`; runtime type is not appended
-   to the name.
-9. **No placeholder auth.** User authentication stays deferred. NATS
-   credentials and subject ACLs protect internal service traffic.
-10. **Scale by measured bottleneck.** Gateway, DNA, Universe and Nature scale
-    independently; database and stream partitioning happen only on evidence.
+   `myunivokai-universe`, `myunivokai-nature`, `myunivokai-auth` and
+   `myunivokai-analytics`; runtime type is not appended to the name.
+9. **No placeholder auth for end users.** Product authentication stays
+   deferred. `auth-service` is **staff-only** identity for the admin console;
+   it does not open a signup path for visitors. NATS credentials and subject
+   ACLs still protect internal service traffic.
+10. **Admin reads never wake a domain service.** A staff page waits on the
+    gateway, auth and analytics — never on universe, nature or dna, which the
+    free tier may have put to sleep.
+11. **Scale by measured bottleneck.** Gateway, DNA, Universe, Nature, Auth and
+    Analytics scale independently; database and stream partitioning happen only
+    on evidence.
 
 ## Delivery order
 
@@ -133,3 +148,8 @@ The dated execution plans live under [../sprints/](../sprints/README.md).
 - Do not delete old databases before the new deployed smoke suite passes and
   the exact destructive targets are confirmed.
 - Do not start City implementation before the platform migration is complete.
+- Do not give `analytics-service` a write path, an outbox, or a call to another
+  service. It consumes events, writes its own database, and answers queries.
+- Do not let an admin route publish a `universe`, `nature` or `dna` subject.
+- Do not add a field to `contracts.WorldSnapshot` without adding the matching
+  line to the data boundary in `analytics-service-plan.md`.

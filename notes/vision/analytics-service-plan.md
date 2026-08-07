@@ -1,6 +1,11 @@
 # Analytics service plan — a read model for the admin app
 
-> **Document status:** Proposed; no source exists yet
+> **Document status:** Implemented as of 2026-08-07 on
+> `feat/be/analytics-service` — the source is `services/analytics-service`,
+> and its README is the operational reference. Phases 0–6 landed on **one**
+> branch rather than the seven listed below, at the owner's direction.
+> Everything here still describes the design accurately; four corrections
+> found while building are recorded in §Corrections found in implementation.
 > **Last source review:** 2026-08-05
 > **Supersedes:** the read-path decision in
 > [auth-and-admin-plan.md](auth-and-admin-plan.md) — Option B is promoted from
@@ -401,12 +406,65 @@ rather than in a later hardening pass.
 Those edits should land in the same branch as this document so the two plans are
 never inconsistent in history.
 
+## Corrections found in implementation
+
+Four things this document got wrong or left implicit, discovered by building
+and then running the service against the real local stack.
+
+**1. The NATS user needs `$JS.ACK.>`, not just `$JS.API.>`.** The ACL block in
+§Phases is incomplete. Acknowledging a JetStream delivery publishes to a reply
+subject under `$JS.ACK.>`, which `$JS.API.>` does not match. Without it the
+consumer receives events, projects them, and then silently fails to ack — so
+every message redelivers until `AckWait` expires, forever, with
+`MaxDeliver(-1)`. It surfaces only as a `permissions violation` log line,
+never as a startup failure.
+
+This was **a pre-existing defect**, not a new one: `myunivokai_dna`,
+`myunivokai_universe` and `myunivokai_nature` were all missing the same
+permission, and dna-service's family-results consumer was demonstrably unable
+to ack. All four users were corrected.
+
+**It affects local development only.** Production authenticates to Synadia
+Cloud with a single `nats.creds` account user shared by every service
+(`notes/ops/production-deployment-guide.md`), with no per-user publish
+allow-list, so nothing there was ever blocked and nothing there needs fixing.
+
+That cuts both ways, and the plan's §Phases claim that the ACL "enforces the
+read-model rule rather than trusting the code to honour it" is therefore
+**true locally and not true in production**. If per-user permissions are ever
+configured in Synadia — which is the only way to make that sentence true
+everywhere — every consuming user needs `$JS.ACK.>` alongside `$JS.API.>`.
+
+**2. `FamilyCompletedData.Snapshot` is a pointer, not an embedded value.**
+§Design decision says "embed it additively". A pointer is strictly better: a
+completed event published before this service existed decodes to `nil`, which
+a reader can distinguish from a snapshot that genuinely is all zeroes. The
+projection uses that distinction — a legacy completed event still projects its
+*job* half and simply has no world half, so no pre-analytics job is invisible.
+
+**3. `AddVariant` and `PublishWorld` had to become transactional.** §Phases
+describes writing an outbox row "inside the existing transactions", but only
+`CreateWorld` and `SelectVariant` had one. The other two were bare pool calls
+and now open their own transaction, so the mutation and its event still commit
+together.
+
+**4. Publish is idempotent and must stay silent on a repeat.** Re-publishing
+an already-published world returns the existing share unchanged. It therefore
+bumps no revision and emits no event — a snapshot describing no state change
+would show up in the read model as a real edit. `TestUnchangedMutationsEmitNothing`
+in both family services pins this.
+
 ## Open decisions for the owner
 
-1. **`nickname` in the analytics database** — recommend yes, as the only
-   personal field.
-2. **Snapshot events versus fine-grained events** — recommend snapshot.
-3. **Daily rollups now or later** — recommend later.
+1. **`nickname` in the analytics database** — **decided 2026-08-07: yes**, and
+   it remains the only personal field.
+2. **Snapshot events versus fine-grained events** — **decided: snapshot**, as
+   recommended; shipped.
+3. **Daily rollups now or later** — **decided: later**, as recommended. Not
+   built. The escalation path if aggregate latency ever bites is a rollup
+   table first, then a columnar store — not a document database, which is
+   slower at exactly the `GROUP BY` / `percentile_cont` / `date_trunc` shape
+   every query here has.
 4. **When to build [service-wake-mechanism.md](service-wake-mechanism.md)** —
    confirmed production defect; explicitly deferred by the owner behind this
    plan. Until it ships, analytics-service is subject to the same cold-start

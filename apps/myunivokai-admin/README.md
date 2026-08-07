@@ -44,7 +44,8 @@ enough.
 
 Mirrors `apps/myunivokai-web`'s split: one folder per domain under
 `src/features/`, not one folder per file *kind*. `src/features/accounts`,
-`src/features/roles` and `src/features/audit` each own their page component,
+`src/features/roles`, `src/features/audit` and `src/features/analytics` each
+own their page component,
 dialogs and `api.ts`/`types.ts` — a route file under `src/app/(dashboard)/*`
 is a one-line re-export of the feature's page component, same as
 `apps/myunivokai-web/src/app/gallery/page.tsx` stays thin over
@@ -80,6 +81,43 @@ read-only card (`src/features/roles/SuperAdminCard.tsx`) built from
 deleted like any other, which is exactly the "system becomes
 unadministerable" risk the bypass flag exists to prevent, so the UI
 represents it without reversing that design.
+
+## Dashboard, worlds and jobs (S4-ANALYTICS-007)
+
+`src/features/analytics/` owns the three screens that read business data:
+the dashboard (`/`), the worlds table (`/worlds`) and the jobs table
+(`/jobs`). All three go through the same generic BFF relay as the management
+screens, hitting `/api/admin/{overview,timeseries,worlds,jobs}`.
+
+Every number on these screens was computed in SQL by `analytics-service`.
+Nothing here sums, groups or sorts a result set — if a figure is missing, it
+belongs in that service's query, not in a `.map()` here. The data is
+**eventually consistent**: a world appears seconds after it is created, which
+the dashboard says out loud rather than leaving a reader to wonder why a
+just-created world is absent.
+
+### Pagination
+
+`src/components/ui/cursor-pagination.tsx` drives both tables. The server pages
+by keyset, not `OFFSET`, so it can hand back a cursor for the *next* page and
+nothing that would let a client jump to page 7 — page numbers do not exist by
+construction. Going back is therefore the client's job: the hook keeps the
+cursors it has already used on a stack and pops one to return. That is the
+trade for a list that costs the same at page 1000 as at page 1.
+
+Changing a filter or the page size resets that stack, because both redefine
+what row 1 is; resuming from a stale cursor would silently skip or repeat
+rows. Page size offers 25/50/100, matching `contracts.AnalyticsMaximumPageSize`
+— the server clamps to the same bound, so a mismatch degrades the picker
+rather than breaking a query.
+
+### No charting library
+
+The distributions are flex rows with a percentage width; the daily activity
+chart is hand-written SVG (`ActivityChart.tsx`). Neither has axes, zoom, or a
+tooltip that follows the cursor, and a charting library would have been the
+app's first — and its import statement alone is larger than both components.
+Reach for a real one when a screen genuinely needs axes or brushing.
 
 ## Design
 

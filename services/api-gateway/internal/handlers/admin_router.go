@@ -53,6 +53,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 	rolesHandler := NewAdminRolesHandler(transport)
 	permissionsHandler := NewAdminPermissionsHandler(transport)
 	auditHandler := NewAdminAuditHandler(transport)
+	analyticsHandler := NewAdminAnalyticsHandler(transport)
 
 	adminRouter.Group(func(managementRouter chi.Router) {
 		managementRouter.Use(requireAccessToken)
@@ -72,6 +73,15 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 
 		managementRouter.With(requirePermission(contracts.PermissionRoleRead)).Get("/permissions", permissionsHandler.List)
 		managementRouter.With(requirePermission(contracts.PermissionAuditRead)).Get("/audit", auditHandler.List)
+
+		// The analytics-backed read screens. These replace
+		// auth-and-admin-plan.md's original phase-4 domain-service aggregate
+		// subjects rather than adding to them: no route in this group may
+		// ever publish a universe/nature/dna subject.
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/overview", analyticsHandler.Overview)
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/timeseries", analyticsHandler.Timeseries)
+		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds", analyticsHandler.ListWorlds)
+		managementRouter.With(requirePermission(contracts.PermissionJobRead)).Get("/jobs", analyticsHandler.ListJobs)
 	})
 
 	adminRouter.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {

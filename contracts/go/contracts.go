@@ -337,11 +337,19 @@ type DNAFailedData struct {
 	Message string      `json:"message"`
 }
 
+// FamilyCompletedData's Snapshot field was added for analytics-service and
+// is deliberately a pointer: events already sitting in MYUNIVOKAI_EVENTS when
+// it shipped decode to nil, which a reader can tell apart from a snapshot
+// that really is all zeroes. Adding it is backward compatible in both
+// directions — encoding/json ignores unknown fields, and dna-service compiles
+// against this same package and simply does not read it. See
+// notes/vision/analytics-service-plan.md#the-event-gap.
 type FamilyCompletedData struct {
-	Family       WorldFamily `json:"family"`
-	ProfileID    string      `json:"profileId"`
-	DNAVersionID string      `json:"dnaVersionId"`
-	WorldID      string      `json:"worldId"`
+	Family       WorldFamily    `json:"family"`
+	ProfileID    string         `json:"profileId"`
+	DNAVersionID string         `json:"dnaVersionId"`
+	WorldID      string         `json:"worldId"`
+	Snapshot     *WorldSnapshot `json:"snapshot,omitempty"`
 }
 
 type FamilyFailedData struct {

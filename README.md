@@ -24,11 +24,13 @@ flowchart TB
   subgraph clientLayer ["Layer 1 - Client"]
     browser["<b>Browser</b><br/>User Interface"]:::clientStyle
     web["<b>Myunivokai Web</b><br/><i>Next.js + React Three Fiber</i>"]:::clientStyle
+    admin["<b>Myunivokai Admin</b><br/><i>Next.js, staff only</i>"]:::clientStyle
     browser --> web
+    browser --> admin
   end
 
   subgraph edgeLayer ["Layer 2 - Edge"]
-    gateway["<b>API Gateway</b><br/><i>Only Public Backend</i>"]:::edgeStyle
+    gateway["<b>API Gateway</b><br/><i>Only Public Backend</i><br/><code>/api/*</code> + <code>/api/admin/*</code>"]:::edgeStyle
   end
 
   subgraph infrastructureLayer ["Layer 3 - Shared Infrastructure"]
@@ -40,6 +42,8 @@ flowchart TB
     dna["<b>DNA Service</b><br/>AI Orchestration & Root Jobs"]:::domainStyle
     universe["<b>Universe Service</b><br/>Solar System Composition"]:::domainStyle
     nature["<b>Nature Service</b><br/>Forest Composition"]:::domainStyle
+    auth["<b>Auth Service</b><br/>Staff Identity & RBAC"]:::domainStyle
+    analytics["<b>Analytics Service</b><br/>Admin Read Model"]:::domainStyle
   end
 
   subgraph integrationLayer ["Layer 5 - AI Integration"]
@@ -50,24 +54,37 @@ flowchart TB
     dnaDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_dna</code>")]:::dbStyle
     universeDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_universe</code>")]:::dbStyle
     natureDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_nature</code>")]:::dbStyle
+    authDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_auth</code>")]:::dbStyle
+    analyticsDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
   end
 
   web -->|"HTTPS"| gateway
+  admin -->|"HTTPS, cookie session"| gateway
   gateway <-->|"Rate Limit & Cache"| redis
   gateway <-->|"Commands, Queries & Events"| nats
   nats <-->|"Generate DNA & Track Root Jobs"| dna
   nats <-->|"Compose & Manage Universe Worlds"| universe
   nats <-->|"Compose & Manage Nature Worlds"| nature
+  nats <-->|"Login, Roles & Permissions"| auth
+  nats <-->|"Admin Read Queries"| analytics
+  nats -.->|"Events: world.changed, completed, failed"| analytics
+  auth <-->|"tokenVersion Revocation Cache"| redis
   dna -->|"ai.Provider Interface"| providers
   dna -->|"Owns Schema"| dnaDatabase
   universe -->|"Owns Schema"| universeDatabase
   nature -->|"Owns Schema"| natureDatabase
+  auth -->|"Owns Schema"| authDatabase
+  analytics -->|"Owns Schema"| analyticsDatabase
 ```
 
 - The diagram shows ownership, not request sequence.
 - Each service owns its own PostgreSQL database; nothing reads another's tables.
-- Redis belongs to the gateway alone — caching and rate limits, never job queuing.
+- Redis belongs to the gateway and auth alone — caching, rate limits and the
+  `tokenVersion` revocation check, never job queuing.
 - Only the gateway is public; NATS, Redis and every domain service are private.
+- **Analytics is the one dotted edge**: it consumes events and never publishes
+  one, so an admin page waits on gateway + auth + analytics and never on a
+  domain service that the free tier may have put to sleep.
 - Domain services are NATS workers with no HTTP business API.
 
 | Service | What it does |
@@ -76,6 +93,8 @@ flowchart TB
 | `services/dna-service` | Handles AI orchestration, root generation jobs, ProfileDNA versioning, and the transactional outbox. |
 | `services/universe-service` | Computes deterministic solar-system worlds and variants from a seed. No AI calls. |
 | `services/nature-service` | Computes deterministic forest worlds and variants from a seed. No AI calls. |
+| `services/auth-service` | Staff identity: login, refresh, roles, permissions, audit. Core NATS request-reply only. |
+| `services/analytics-service` | The admin read model. Consumes events, writes its own database, answers admin queries — it publishes nothing and calls no other service, so an admin page waits only on the gateway, auth and analytics. |
 | `contracts` | Shared OpenAPI spec, JSON Schemas, NATS subject names, and Go types used across services. |
 | `infra` | Local development infrastructure: PostgreSQL, NATS JetStream, Redis, ACL config, and bootstrap scripts. |
 
@@ -112,6 +131,23 @@ flowchart TB
   returns `shareSlug` in its response and the gateway deletes `share:v1` with it.
 - Without that, selecting a variant left the share page serving the previous
   scene for a whole TTL — which looked like the share losing scene features.
+
+## Admin read path
+
+- Every world mutation above also bumps `worlds.revision` and writes a
+  `world.changed` snapshot to the outbox **inside the same transaction**.
+- `analytics-service` consumes those events into its own database:
+  `world_projections` and `job_projections`, guarded by an inbox table and an
+  upsert that only ever moves a world's `revision` forward.
+- `/api/admin/{overview,timeseries,worlds,jobs}` reads from that model alone.
+  No admin route ever publishes a `universe`, `nature` or `dna` subject, and a
+  gateway test asserts it.
+- The read model is **eventually consistent**: a new world appears in the admin
+  app seconds after it is created. That is the accepted trade for an admin page
+  that waits on two processes instead of four.
+- The cost to keep paying: a future mutation that forgets its event drifts the
+  read model silently. `world_snapshot_test.go` in both family services asserts
+  every mutating store method leaves an event behind.
 
 ---
 
@@ -331,6 +367,8 @@ docker compose --env-file services/universe-service/.env.local `
 | `services/dna-service/.env.local` | `services/dna-service/docker-compose-local.yaml` | Database, NATS, AI provider config, API keys. |
 | `services/universe-service/.env.local` | `services/universe-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `services/nature-service/.env.local` | `services/nature-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
+| `services/auth-service/.env.local` | `services/auth-service/docker-compose-local.yaml` | Database, NATS, Redis, token and Argon2id settings. |
+| `services/analytics-service/.env.local` | `services/analytics-service/docker-compose-local.yaml` | Database, NATS, event-consumer settings. No credentials — it verifies no token and calls no provider. |
 | `apps/myunivokai-web/.env.local` | Web compose file and `npm run dev` | Just `NEXT_PUBLIC_GATEWAY_BASE_URL`. |
 
 ### How full-stack mode resolves variables
@@ -372,17 +410,24 @@ environment:
 ├── docker-compose-local.yaml         # Root aggregator for local full-stack development
 ├── .env.example                      # Full-stack environment template
 ├── apps/
-│   └── myunivokai-web/               # Next.js 14 + React Three Fiber frontend
-│       ├── .env.example              # Template: NEXT_PUBLIC_GATEWAY_BASE_URL
-│       ├── Dockerfile.prod           # Production container
-│       ├── public/                   # Static assets: GLB models, textures, audio samples and scores
+│   ├── myunivokai-web/               # Next.js 14 + React Three Fiber frontend
+│   │   ├── .env.example              # Template: NEXT_PUBLIC_GATEWAY_BASE_URL
+│   │   ├── Dockerfile.prod           # Production container
+│   │   ├── public/                   # Static assets: GLB models, textures, audio samples and scores
+│   │   └── src/
+│   │       ├── app/                  # App Router pages and API route proxies
+│   │       ├── components/           # Shared UI components (Vitrine + Liquid Glass)
+│   │       ├── features/             # Feature modules and scene renderers
+│   │       │   ├── audio/            # Instrument samples, arrangements, the performing graph
+│   │       │   └── scene-renderers/  # SceneType registry (solar-system/, forest/, fallback/)
+│   │       └── lib/                  # API clients, polling hooks, state utilities
+│   └── myunivokai-admin/             # Next.js staff console; shares no code with the web app
+│       ├── .env.example              # Template: ADMIN_GATEWAY_BASE_URL
+│       ├── scripts/                  # check-import-boundary.mjs (no myunivokai-web, no three.js)
 │       └── src/
-│           ├── app/                  # App Router pages and API route proxies
-│           ├── components/           # Shared UI components (Vitrine + Liquid Glass)
-│           ├── features/             # Feature modules and scene renderers
-│           │   ├── audio/            # Instrument samples, arrangements, the performing graph
-│           │   └── scene-renderers/  # SceneType registry (solar-system/, forest/, fallback/)
-│           └── lib/                  # API clients, polling hooks, state utilities
+│           ├── app/                  # Dashboard routes + the BFF relay to /api/admin
+│           ├── components/           # Chrome, shadcn primitives, cursor pagination
+│           └── features/             # analytics/, accounts/, roles/, audit/
 ├── services/
 │   ├── api-gateway/                  # Public HTTP edge service
 │   │   ├── .env.example              # Template: NATS, Redis, rate limits, cache TTLs
@@ -397,13 +442,23 @@ environment:
 │   │   ├── .env.example              # Template: Database, NATS, outbox
 │   │   ├── Dockerfile.prod
 │   │   └── internal/                 # Seed/PRNG math, models, database
-│   └── nature-service/               # Forest world generator worker
-│       ├── .env.example              # Template: Database, NATS, outbox
-│       ├── Dockerfile.prod
-│       └── internal/                 # Seed/PRNG math, models, database
+│   ├── nature-service/               # Forest world generator worker
+│   │   ├── .env.example              # Template: Database, NATS, outbox
+│   │   ├── Dockerfile.prod
+│   │   └── internal/                 # Seed/PRNG math, models, database
+│   ├── auth-service/                 # Staff identity worker (Core NATS request-reply only)
+│   │   ├── .env.example              # Template: Database, NATS, Redis, tokens, Argon2id
+│   │   ├── cmd/bootstrap/            # One-off: create the first super-admin
+│   │   └── internal/                 # Accounts, roles, permissions, audit, security
+│   └── analytics-service/            # Admin read model; consumes events, publishes nothing
+│       ├── .env.example              # Template: Database, NATS, event consumer
+│       ├── migrations/               # world_projections, job_projections, inbox_messages
+│       └── internal/                 # Projection writer, SQL aggregates, keyset pagination
 ├── contracts/                        # Cross-service API and messaging contracts
 │   ├── go/                           # Shared Go types and NATS subject names
-│   ├── openapi.yaml                  # REST API specification
+│   ├── fixtures/                     # Executable form of each contract; validated in CI
+│   ├── openapi.yaml                  # Public REST API specification
+│   ├── openapi-admin.yaml            # Staff-only API; deliberately never merged into the public spec
 │   ├── scenes/                       # Scene configuration samples
 │   └── schemas/                      # JSON Schemas for ProfileDNA
 ├── infra/                            # Local development infrastructure
@@ -422,6 +477,10 @@ environment:
 The layout is designed for growth.
 New services like `services/city-service` or new clients like `apps/mobile-app`
 can be added without touching existing messaging contracts or database boundaries.
+`analytics-service` is the worked example: it was added as a second consumer on
+an existing stream, needed no stream or ACL change to receive the new events
+(both are already wildcards), and is invisible to `dna-service`, whose consumer
+filters on four explicit subjects.
 
 ---
 
@@ -443,9 +502,18 @@ cd ../universe-service; go test ./...; go vet ./...; go build ./...
 # Backend — nature-service
 cd ../nature-service; go test ./...; go vet ./...; go build ./...
 
-# Frontend
+# Backend — auth-service
+cd ../auth-service; go test ./...; go vet ./...; go build ./...
+
+# Backend — analytics-service
+cd ../analytics-service; go test ./...; go vet ./...; go build ./...
+
+# Frontend — product
 cd ../../apps/myunivokai-web; npm run typecheck; npm run lint; npm test; npm run build
 npm audit --omit=dev --audit-level=high
+
+# Frontend — admin (check:boundary enforces no myunivokai-web and no three.js)
+cd ../myunivokai-admin; npm run typecheck; npm run lint; npm run check:boundary; npm test; npm run build
 ```
 
 ---
@@ -460,5 +528,8 @@ Key docs:
 - [coding/coding-style.md](notes/coding/coding-style.md) — code style rules
 - [be/source-overview.md](notes/be/source-overview.md) — backend architecture
 - [fe/source-overview.md](notes/fe/source-overview.md) — frontend architecture
+- [vision/analytics-service-plan.md](notes/vision/analytics-service-plan.md) — why the admin app reads from a CQRS read model instead of a gateway fan-out
+- [vision/auth-and-admin-plan.md](notes/vision/auth-and-admin-plan.md) — staff identity, RBAC and the admin route group
+- [ops/production-deployment-guide.md](notes/ops/production-deployment-guide.md) — step-by-step production deploy runbook
 - [fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md) — how the music is made, and how to audition it
 - [contracts/openapi.yaml](contracts/openapi.yaml) — API specification

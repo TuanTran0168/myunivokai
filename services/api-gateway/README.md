@@ -32,21 +32,42 @@ exactly one origin, never a wildcard), its own Redis rate-limit bucket
 (`internal/handlers/router.go`'s `adminRateLimitRouteKey`, distinct from the
 product group's — sharing one key would let either group's limit silently
 override the other's), and default-deny by construction: every route requires
-either nothing (`/auth/login`) or a presented refresh cookie
-(`/auth/refresh`, `/auth/logout`); `internal/handlers/admin_router_test.go`
-enumerates the mounted routes and fails if a future one is added without
-either.
+either nothing (`/auth/login`, `/auth/invite/accept`), a presented refresh
+cookie (`/auth/refresh`, `/auth/logout`), or a verified access token plus one
+specific permission (every record and analytics route);
+`internal/handlers/admin_router_test.go` enumerates the mounted routes and
+fails if a future one is added without any of the three.
 
 `internal/adminauth` + `internal/middleware.RequireAdminAccessToken` implement
 local Ed25519 access-token verification plus the Redis `tokenVersion`
 cache-miss fallback (`auth-service` is called at most once per miss, never
 per request) — see
 [notes/vision/auth-and-admin-plan.md#how-b-works](../../notes/vision/auth-and-admin-plan.md#how-b-works).
-No route mounts it yet: the first permission-gated admin route is
-S4-ANALYTICS-005, which this primitive is built and unit-tested ahead of, not
-a route this phase invents on its own. Session tokens travel only as
-`httpOnly`, `Secure` (in production), `SameSite=Lax` cookies, never in a JSON
-body — see `internal/handlers/admin_auth_handler.go`.
+Session tokens travel only as `httpOnly`, `Secure` (in production),
+`SameSite=Lax` cookies, never in a JSON body — see
+`internal/handlers/admin_auth_handler.go`.
+
+### Where each admin route reads from
+
+| Routes | Backed by | Permission |
+| --- | --- | --- |
+| `/accounts*`, `/roles*`, `/permissions`, `/audit` | `auth-service` | `account:*`, `role:*`, `audit:read` |
+| `/overview`, `/timeseries` | `analytics-service` | `chart:read` |
+| `/worlds` | `analytics-service` | `world:read` |
+| `/jobs` | `analytics-service` | `job:read` |
+
+Every handler in this group is a **pure relay**: it decodes query parameters
+into a contracts type, publishes one subject, and writes the payload back
+verbatim. It sums nothing, groups nothing and merges nothing — every aggregate
+the admin dashboard shows was computed in SQL inside `analytics-service`.
+
+The rule that matters most here is what is *absent*: **no admin route may
+publish a `universe`, `nature` or `dna` subject.** An admin page must wait on
+exactly two processes — auth for the token, analytics for the data — never on
+a domain service that Render's free tier may have spun down.
+`admin_analytics_handler_test.go` asserts it by inspecting every subject the
+broker saw, so a future refactor that "helpfully" fans a world list out to the
+family services fails the build rather than shipping a 30-second admin page.
 
 ```powershell
 go test ./...
