@@ -35,6 +35,26 @@ composed interface, more mocks in tests) for an auth database with five
 tables. Reconsider if a table set here ever grows enough that one file per
 concern stops being enough on its own — that has not happened yet.
 
+## Invite flow (S4-AUTH-005)
+
+`accounts.password_hash` is nullable: an invited account exists with no
+password from the moment `AuthInviteCreateQuerySubject` creates it, guarded
+by a check constraint requiring either a password or a live invite token
+(`migrations/000002_invite_flow.sql`). No email infrastructure exists, so
+the raw invite token is returned once to the inviting staff member (the
+admin app's invite dialog surfaces it directly) to relay out of band.
+`AuthInviteAcceptQuerySubject` sets the password and logs the account in —
+the same `LoginResponseData` shape a normal login returns.
+
+## Key rotation
+
+`TokenIssuer` signs with one private key at a time; the gateway's
+`TokenVerifier` accepts a list of public keys, so a rotation adds the new
+key to the gateway before switching auth-service to sign with it, and only
+removes the old key once every session has had time to refresh. See
+[notes/ops/admin-key-rotation-drill.md](../../notes/ops/admin-key-rotation-drill.md)
+for the exact steps and a real run's observed results.
+
 ## First run
 
 Generate an Ed25519 seed for `AUTH_ACCESS_PRIVATE_KEY` (32 raw bytes,

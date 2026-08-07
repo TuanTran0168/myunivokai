@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/adminauth"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/broker"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
@@ -17,6 +18,7 @@ const corsMaximumAgeSeconds = 300
 type EdgeStore interface {
 	cacheStore
 	middleware.DistributedLimiter
+	adminauth.TokenVersionCache
 	Ping(context.Context) error
 	Close() error
 }
@@ -72,7 +74,7 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
 	if serviceConfig.AdminRoutesEnabled {
-		router.Mount("/api/admin", newAdminRouter(serviceConfig, edgeStore, rpcTransport))
+		router.Mount("/api/admin", newAdminRouter(serviceConfig, brokerClient, edgeStore, rpcTransport))
 	}
 	router.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteError(responseWriter, request, http.StatusNotFound, "ROUTE_NOT_FOUND", "The requested gateway route was not found.")

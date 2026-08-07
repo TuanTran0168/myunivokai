@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,9 +10,15 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 )
+
+// adminTestKeyPair is shared by every test in this file: a real Ed25519 key
+// pair the gateway is configured to trust, so a test can mint a token that
+// RequireAdminAccessToken genuinely verifies rather than always rejecting.
+var adminTestPublicKey, adminTestPrivateKey, _ = ed25519.GenerateKey(nil)
 
 func testAdminGatewayConfig() config.Config {
 	serviceConfig := testGatewayConfig()
@@ -19,7 +26,62 @@ func testAdminGatewayConfig() config.Config {
 	serviceConfig.AdminAllowedOrigin = "https://admin.example.com"
 	serviceConfig.AdminRateLimitRequestsPerSecond = 1000
 	serviceConfig.AdminRateLimitBurst = 1000
+	serviceConfig.AdminAccessPublicKeys = []ed25519.PublicKey{adminTestPublicKey}
+	serviceConfig.AdminTokenVersionCacheTTL = time.Minute
 	return serviceConfig
+}
+
+type testAccessClaims struct {
+	Roles        []string                  `json:"roles"`
+	Audience     contracts.AccountAudience `json:"audience"`
+	TokenVersion int                       `json:"tokenVersion"`
+	jwt.RegisteredClaims
+}
+
+// mintAdminAccessToken signs a token with adminTestPrivateKey, mirroring
+// exactly the claims shape services/auth-service/internal/security/tokens.go
+// signs — the two sides agree on wire shape without importing one another
+// (separate Go modules), so this test constructs it by hand too.
+func mintAdminAccessToken(t *testing.T, accountID string) string {
+	t.Helper()
+	claims := testAccessClaims{
+		Audience:     contracts.AccountAudienceAdmin,
+		TokenVersion: 1,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   accountID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+		},
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(adminTestPrivateKey)
+	if err != nil {
+		t.Fatalf("mint admin access token: %v", err)
+	}
+	return token
+}
+
+func accountPermissionsResponseEnvelope(t *testing.T, permissions []string, isSuperAdmin bool) contracts.Envelope[contracts.RPCResponseData] {
+	t.Helper()
+	envelope, err := contracts.SuccessRPCEnvelope("request-permissions", http.StatusOK, contracts.AccountPermissionsResponseData{
+		Permissions: permissions, IsSuperAdmin: isSuperAdmin,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return envelope
+}
+
+// tokenVersionResponseEnvelope answers RequireAdminAccessToken's Redis
+// cache-miss fallback (fakeEdgeStore starts with no cached tokenVersion in
+// every test) with a value at or below mintAdminAccessToken's claimed
+// TokenVersion (1), so the revocation check passes and the request reaches
+// RequireAdminPermission.
+func tokenVersionResponseEnvelope(t *testing.T) contracts.Envelope[contracts.RPCResponseData] {
+	t.Helper()
+	envelope, err := contracts.SuccessRPCEnvelope("request-tokenversion", http.StatusOK, contracts.TokenVersionResponseData{TokenVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return envelope
 }
 
 // Every /api/admin route must reject an unauthenticated request except
@@ -28,7 +90,7 @@ func testAdminGatewayConfig() config.Config {
 // added later without wiring RequireAdminRefreshCookie or
 // RequireAdminAccessToken fails this test instead of shipping open.
 func TestAdminRoutesDefaultDenyUnlessExplicitlyPublic(t *testing.T) {
-	publicRoutes := map[string]bool{"POST /api/admin/auth/login": true}
+	publicRoutes := map[string]bool{"POST /api/admin/auth/login": true, "POST /api/admin/auth/invite/accept": true}
 	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
 
 	walkErr := chi.Walk(router.(chi.Router), func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -161,5 +223,78 @@ func TestAdminCORSAllowsOnlyItsOwnOriginNeverTheProductOrigin(t *testing.T) {
 	router.ServeHTTP(adminOriginResponse, adminOriginRequest)
 	if adminOriginResponse.Header().Get("Access-Control-Allow-Origin") != "https://admin.example.com" {
 		t.Fatalf("admin origin preflight = %q", adminOriginResponse.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestAdminManagementRouteSucceedsWithTheRightPermission(t *testing.T) {
+	accountsResponse, err := contracts.SuccessRPCEnvelope("request-accounts", http.StatusOK, contracts.AccountListResponseData{
+		Accounts: []contracts.AccountSummary{{AccountID: "account-1", Email: "staff@example.com"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokerClient := &fakeBroker{responsesBySubject: map[string]contracts.Envelope[contracts.RPCResponseData]{
+		contracts.AuthTokenVersionQuerySubject:       tokenVersionResponseEnvelope(t),
+		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(contracts.PermissionAccountRead)}, false),
+		contracts.AuthAccountListQuerySubject:        accountsResponse,
+	}}
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
+	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "staff@example.com") {
+		t.Fatalf("expected the relayed account list, got %s", response.Body.String())
+	}
+}
+
+func TestAdminManagementRouteRejectsWithoutTheRightPermission(t *testing.T) {
+	brokerClient := &fakeBroker{responsesBySubject: map[string]contracts.Envelope[contracts.RPCResponseData]{
+		contracts.AuthTokenVersionQuerySubject:       tokenVersionResponseEnvelope(t),
+		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(contracts.PermissionChartRead)}, false),
+	}}
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
+	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminManagementRouteSuperAdminBypassesPermissionCheck(t *testing.T) {
+	rolesResponse, err := contracts.SuccessRPCEnvelope("request-roles", http.StatusOK, contracts.RoleListResponseData{
+		Roles: []contracts.RoleSummary{{RoleID: "role-1", Name: "basic_user"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokerClient := &fakeBroker{responsesBySubject: map[string]contracts.Envelope[contracts.RPCResponseData]{
+		contracts.AuthTokenVersionQuerySubject:       tokenVersionResponseEnvelope(t),
+		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, nil, true),
+		contracts.AuthRoleListQuerySubject:           rolesResponse,
+	}}
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/roles", nil)
+	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "super-admin-1")})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminManagementRouteRejectsAnUnverifiableToken(t *testing.T) {
+	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
+	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: "not-a-real-token"})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401, body=%s", response.Code, response.Body.String())
 	}
 }

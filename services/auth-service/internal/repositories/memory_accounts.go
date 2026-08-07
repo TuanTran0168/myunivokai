@@ -2,10 +2,12 @@ package repositories
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 )
 
 func (store *MemoryStore) CreateAccount(_ context.Context, params CreateAccountParams) (Account, error) {
@@ -48,6 +50,114 @@ func (store *MemoryStore) GetAccountByID(_ context.Context, accountID string) (A
 	account, found := store.accountsByID[accountID]
 	if !found {
 		return Account{}, ErrNotFound
+	}
+	return account, nil
+}
+
+// ListAccounts mirrors PostgresStore's created_at DESC, id DESC keyset order
+// (cursor.go) so tests exercise the same pagination behavior production
+// sees.
+func (store *MemoryStore) ListAccounts(_ context.Context, cursor string, pageSize int) ([]Account, string, error) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	all := make([]Account, 0, len(store.accountsByID))
+	for _, account := range store.accountsByID {
+		all = append(all, account)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].CreatedAt.After(all[j].CreatedAt)
+		}
+		return all[i].ID > all[j].ID
+	})
+
+	startIndex := 0
+	if cursor != "" {
+		cursorTime, cursorID, err := decodeCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		for index, account := range all {
+			if account.CreatedAt.Before(cursorTime) || (account.CreatedAt.Equal(cursorTime) && account.ID < cursorID) {
+				startIndex = index
+				break
+			}
+			startIndex = index + 1
+		}
+	}
+
+	remaining := all[startIndex:]
+	var nextCursor string
+	if len(remaining) > pageSize {
+		last := remaining[pageSize-1]
+		nextCursor = encodeCursor(last.CreatedAt, last.ID)
+		remaining = remaining[:pageSize]
+	}
+	return remaining, nextCursor, nil
+}
+
+// CreateInvite writes an account with no password and grants the given
+// roles, matching PostgresStore's CreateInvite.
+func (store *MemoryStore) CreateInvite(_ context.Context, params InviteAccountParams) (Account, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	email := strings.ToLower(strings.TrimSpace(params.Email))
+	if _, exists := store.accountIDByEmail[email]; exists {
+		return Account{}, ErrConflict
+	}
+	now := time.Now().UTC()
+	invitedAt := now
+	expiresAt := params.InviteExpiresAt
+	account := Account{
+		ID:              uuid.NewString(),
+		Email:           email,
+		Kind:            contracts.AccountKindStaff,
+		TokenVersion:    1,
+		InvitedAt:       &invitedAt,
+		InviteExpiresAt: &expiresAt,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	store.accountsByID[account.ID] = account
+	store.accountIDByEmail[email] = account.ID
+	store.accountIDByInviteTokenHash[params.InviteTokenHash] = account.ID
+	if store.accountRoleIDs[account.ID] == nil {
+		store.accountRoleIDs[account.ID] = map[string]struct{}{}
+	}
+	for _, roleID := range params.RoleIDs {
+		store.accountRoleIDs[account.ID][roleID] = struct{}{}
+	}
+	return account, nil
+}
+
+func (store *MemoryStore) GetAccountByInviteTokenHash(_ context.Context, tokenHash string) (Account, error) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	accountID, found := store.accountIDByInviteTokenHash[tokenHash]
+	if !found {
+		return Account{}, ErrNotFound
+	}
+	return store.accountsByID[accountID], nil
+}
+
+// AcceptInvite sets the account's first password and clears the invite
+// state, matching PostgresStore's AcceptInvite.
+func (store *MemoryStore) AcceptInvite(_ context.Context, accountID, passwordHash string) (Account, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	account, found := store.accountsByID[accountID]
+	if !found {
+		return Account{}, ErrNotFound
+	}
+	account.PasswordHash = passwordHash
+	account.InvitedAt = nil
+	account.InviteExpiresAt = nil
+	account.UpdatedAt = time.Now().UTC()
+	store.accountsByID[accountID] = account
+	for tokenHash, mappedAccountID := range store.accountIDByInviteTokenHash {
+		if mappedAccountID == accountID {
+			delete(store.accountIDByInviteTokenHash, tokenHash)
+		}
 	}
 	return account, nil
 }

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -13,25 +15,30 @@ import (
 )
 
 const (
-	defaultAPIPort                         = "8080"
-	defaultMaximumRequestBodyBytes         = 64 * 1024
-	defaultRateLimitRequestsPerSecond      = 2
-	defaultRateLimitBurst                  = 20
-	defaultNATSPublishTimeout              = 5 * time.Second
-	defaultNATSRequestTimeout              = 3 * time.Second
-	defaultNATSConnectTimeout              = 5 * time.Second
-	defaultNATSReconnectWait               = 2 * time.Second
-	defaultJobCacheTimeToLive              = 30 * time.Second
-	defaultWorldCacheTimeToLive            = 60 * time.Second
-	defaultShareCacheTimeToLive            = 60 * time.Second
-	defaultShutdownTimeout                 = 15 * time.Second
-	defaultRedisKeyPrefix                  = "myunivokai"
+	defaultAPIPort                    = "8080"
+	defaultMaximumRequestBodyBytes    = 64 * 1024
+	defaultRateLimitRequestsPerSecond = 2
+	defaultRateLimitBurst             = 20
+	defaultNATSPublishTimeout         = 5 * time.Second
+	defaultNATSRequestTimeout         = 3 * time.Second
+	defaultNATSConnectTimeout         = 5 * time.Second
+	defaultNATSReconnectWait          = 2 * time.Second
+	defaultJobCacheTimeToLive         = 30 * time.Second
+	defaultWorldCacheTimeToLive       = 60 * time.Second
+	defaultShareCacheTimeToLive       = 60 * time.Second
+	defaultShutdownTimeout            = 15 * time.Second
+	defaultRedisKeyPrefix             = "myunivokai"
 	// A handful of staff, not the public internet, but each admin page load
 	// fans out several analytics queries at once (S4-ANALYTICS-004) rather
 	// than one request at a time, so this needs a higher ceiling than the
 	// product default it used to copy verbatim.
 	defaultAdminRateLimitRequestsPerSecond = 10
 	defaultAdminRateLimitBurst             = 50
+	// Matches auth-service's own AUTH_TOKEN_VERSION_CACHE_TTL default - the
+	// two writers (auth-service on bump, the gateway on cache-miss fallback)
+	// don't need to agree exactly, but starting from the same number is the
+	// sane default until real usage says otherwise.
+	defaultAdminTokenVersionCacheTTL = 15 * 24 * time.Hour
 )
 
 type Config struct {
@@ -67,6 +74,14 @@ type Config struct {
 	AdminAllowedOrigin              string
 	AdminRateLimitRequestsPerSecond float64
 	AdminRateLimitBurst             int
+	// AdminAccessPublicKeys holds every currently-accepted Ed25519 public key
+	// for verifying the admin access token locally (RequireAdminAccessToken) -
+	// never the private key, which only auth-service ever holds. More than
+	// one during a rotation drill: add the new key before removing the old
+	// one so no session is force-logged-out - see
+	// notes/vision/auth-and-admin-plan.md#tokens.
+	AdminAccessPublicKeys     []ed25519.PublicKey
+	AdminTokenVersionCacheTTL time.Duration
 }
 
 func Load() (Config, error) {
@@ -100,11 +115,41 @@ func Load() (Config, error) {
 		AdminAllowedOrigin:              get("ADMIN_ALLOWED_ORIGIN", ""),
 		AdminRateLimitRequestsPerSecond: getFloat("ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND", defaultAdminRateLimitRequestsPerSecond),
 		AdminRateLimitBurst:             getInt("ADMIN_RATE_LIMIT_BURST", defaultAdminRateLimitBurst),
+		AdminTokenVersionCacheTTL:       getDuration("ADMIN_TOKEN_VERSION_CACHE_TTL", defaultAdminTokenVersionCacheTTL),
 	}
+	adminAccessPublicKeys, err := decodeEd25519PublicKeys(get("ADMIN_ACCESS_PUBLIC_KEYS", ""))
+	if err != nil {
+		return Config{}, err
+	}
+	loadedConfig.AdminAccessPublicKeys = adminAccessPublicKeys
 	if err := loadedConfig.Validate(); err != nil {
 		return Config{}, err
 	}
 	return loadedConfig, nil
+}
+
+// decodeEd25519PublicKeys parses a comma-separated list of base64-standard-
+// encoded 32-byte Ed25519 public keys - plural so a key-rotation drill can
+// list both the new and the outgoing key at once (TokenVerifier accepts
+// either until the old one is removed).
+func decodeEd25519PublicKeys(commaSeparated string) ([]ed25519.PublicKey, error) {
+	trimmed := strings.TrimSpace(commaSeparated)
+	if trimmed == "" {
+		return nil, nil
+	}
+	encodedKeys := strings.Split(trimmed, ",")
+	publicKeys := make([]ed25519.PublicKey, 0, len(encodedKeys))
+	for _, encodedKey := range encodedKeys {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encodedKey))
+		if err != nil {
+			return nil, errors.New("ADMIN_ACCESS_PUBLIC_KEYS must be base64-encoded")
+		}
+		if len(decoded) != ed25519.PublicKeySize {
+			return nil, errors.New("ADMIN_ACCESS_PUBLIC_KEYS must decode to 32-byte Ed25519 public keys")
+		}
+		publicKeys = append(publicKeys, ed25519.PublicKey(decoded))
+	}
+	return publicKeys, nil
 }
 
 func (loadedConfig Config) Validate() error {
@@ -146,6 +191,12 @@ func (loadedConfig Config) Validate() error {
 		}
 		if loadedConfig.AdminRateLimitRequestsPerSecond <= 0 || loadedConfig.AdminRateLimitBurst <= 0 {
 			return errors.New("admin rate limit values must be positive")
+		}
+		if len(loadedConfig.AdminAccessPublicKeys) == 0 {
+			return errors.New("ADMIN_ACCESS_PUBLIC_KEYS is required when ADMIN_ROUTES_ENABLED is true")
+		}
+		if loadedConfig.AdminTokenVersionCacheTTL <= 0 {
+			return errors.New("ADMIN_TOKEN_VERSION_CACHE_TTL must be positive")
 		}
 	}
 	return nil

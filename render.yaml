@@ -74,6 +74,14 @@ services:
         value: "10"
       - key: ADMIN_RATE_LIMIT_BURST
         value: "50"
+      # Public half of myunivokai-auth's AUTH_ACCESS_PRIVATE_KEY, never the
+      # private key itself. Comma-separated for key rotation (S4-AUTH-005):
+      # list the new key alongside the outgoing one until every session has
+      # re-authenticated, then remove the old one.
+      - key: ADMIN_ACCESS_PUBLIC_KEYS
+        sync: false
+      - key: ADMIN_TOKEN_VERSION_CACHE_TTL
+        value: 360h
 
   - type: web
     name: myunivokai-dna
@@ -223,6 +231,8 @@ services:
         value: 336h
       - key: AUTH_TOKEN_VERSION_CACHE_TTL
         value: 360h
+      - key: AUTH_INVITE_TOKEN_TTL
+        value: 168h
       - key: AUTH_ARGON2_MEMORY_KIB
         value: "19456"
       - key: AUTH_ARGON2_ITERATIONS

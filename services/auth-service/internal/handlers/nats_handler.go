@@ -24,17 +24,29 @@ type AuthService interface {
 	TokenVersion(ctx context.Context, accountID string) (int, error)
 	DisableAccount(ctx context.Context, accountID, actorAccountID, sourceAddress string) error
 	EnableAccount(ctx context.Context, accountID, actorAccountID, sourceAddress string) error
+
+	InviteAccount(ctx context.Context, data contracts.InviteCreateData) (contracts.InviteCreateResponseData, error)
+	AcceptInvite(ctx context.Context, data contracts.InviteAcceptData) (contracts.LoginResponseData, error)
+	AccountPermissions(ctx context.Context, accountID string) (contracts.AccountPermissionsResponseData, error)
+	ListAccounts(ctx context.Context, cursor string, pageSize int) (contracts.AccountListResponseData, error)
+	GetAccount(ctx context.Context, accountID string) (contracts.AccountSummary, error)
+
+	ListRoles(ctx context.Context) (contracts.RoleListResponseData, error)
+	CreateRole(ctx context.Context, data contracts.RoleCreateData) (contracts.RoleSummary, error)
+	UpdateRole(ctx context.Context, data contracts.RoleUpdateData) (contracts.RoleSummary, error)
+	DeleteRole(ctx context.Context, data contracts.RoleDeleteData) error
+	AssignRole(ctx context.Context, data contracts.RoleAssignData) error
+	RevokeRole(ctx context.Context, data contracts.RoleRevokeData) error
+
+	ListPermissions(ctx context.Context) (contracts.PermissionListResponseData, error)
+	ListAuditEvents(ctx context.Context, cursor string, pageSize int) (contracts.AuditListResponseData, error)
 }
 
 type ResponsePublisher interface {
 	Publish(string, []byte) error
 }
 
-// NATSHandler owns auth-service's transport-specific request handling. Its
-// query surface is deliberately narrower than the subjects contracts/go
-// already declares: account/role/permission/audit list and role
-// create/update/delete/assign/revoke are frozen wire format for later
-// phases (admin records, hardening), not implemented here.
+// NATSHandler owns auth-service's transport-specific request handling.
 type NATSHandler struct {
 	authService       AuthService
 	responsePublisher ResponsePublisher
@@ -112,6 +124,157 @@ func (handler *NATSHandler) HandleAccountEnableQuery(message *nats.Msg) {
 	handler.respondWithResult(message, envelope.JobID, http.StatusOK, struct{}{}, err)
 }
 
+func (handler *NATSHandler) HandleInviteCreateQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.InviteCreateData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.InviteCreateResponseData, error) {
+		return handler.authService.InviteAccount(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusCreated, response, err)
+}
+
+func (handler *NATSHandler) HandleInviteAcceptQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.InviteAcceptData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.LoginResponseData, error) {
+		return handler.authService.AcceptInvite(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleAccountPermissionsQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.AccountPermissionsQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountPermissionsResponseData, error) {
+		return handler.authService.AccountPermissions(ctx, envelope.Data.AccountID)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleAccountListQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.PageQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountListResponseData, error) {
+		return handler.authService.ListAccounts(ctx, envelope.Data.Cursor, envelope.Data.PageSize)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleAccountGetQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.AccountGetQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountSummary, error) {
+		return handler.authService.GetAccount(ctx, envelope.Data.AccountID)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleRoleListQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[struct{}]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.RoleListResponseData, error) {
+		return handler.authService.ListRoles(ctx)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleRoleCreateQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.RoleCreateData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.RoleSummary, error) {
+		return handler.authService.CreateRole(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusCreated, response, err)
+}
+
+func (handler *NATSHandler) HandleRoleUpdateQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.RoleUpdateData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.RoleSummary, error) {
+		return handler.authService.UpdateRole(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleRoleDeleteQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.RoleDeleteData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	_, err := withQueryTimeout(handler, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, handler.authService.DeleteRole(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, struct{}{}, err)
+}
+
+func (handler *NATSHandler) HandleRoleAssignQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.RoleAssignData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	_, err := withQueryTimeout(handler, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, handler.authService.AssignRole(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, struct{}{}, err)
+}
+
+func (handler *NATSHandler) HandleRoleRevokeQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.RoleRevokeData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	_, err := withQueryTimeout(handler, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, handler.authService.RevokeRole(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, struct{}{}, err)
+}
+
+func (handler *NATSHandler) HandlePermissionListQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[struct{}]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.PermissionListResponseData, error) {
+		return handler.authService.ListPermissions(ctx)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleAuditListQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.PageQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AuditListResponseData, error) {
+		return handler.authService.ListAuditEvents(ctx, envelope.Data.Cursor, envelope.Data.PageSize)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func asRoleInUseError(err error) *services.RoleInUseError {
+	var roleInUseError *services.RoleInUseError
+	if errors.As(err, &roleInUseError) {
+		return roleInUseError
+	}
+	return nil
+}
+
 func decodeEnvelope[DataType any](payload []byte, envelope *contracts.Envelope[DataType]) error {
 	if err := json.Unmarshal(payload, envelope); err != nil {
 		return err
@@ -150,6 +313,14 @@ func (handler *NATSHandler) respondWithResult(message *nats.Msg, jobID string, s
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "The session is no longer valid. Please log in again."))
 	case errors.Is(err, services.ErrLastSuperAdmin):
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusConflict, "LAST_SUPER_ADMIN", "The last super admin account cannot be disabled."))
+	case errors.Is(err, services.ErrInvalidInviteToken):
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusUnauthorized, "INVALID_INVITE_TOKEN", "This invite link is invalid or has expired."))
+	case errors.Is(err, services.ErrSystemRoleImmutable):
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusForbidden, "SYSTEM_ROLE_IMMUTABLE", "System roles cannot be edited or deleted."))
+	case errors.Is(err, services.ErrSelfRevokeForbidden):
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusConflict, "SELF_REVOKE_FORBIDDEN", "You cannot revoke your own account:manage or role:manage permission."))
+	case asRoleInUseError(err) != nil:
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusConflict, "ROLE_IN_USE", asRoleInUseError(err).Error()))
 	case err != nil:
 		log.Error().Err(err).Str("request_id", jobID).Msg("auth query failed")
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusInternalServerError, "INTERNAL_ERROR", "The request could not be completed."))

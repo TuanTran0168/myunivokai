@@ -20,7 +20,7 @@ func TestSyncPermissionsAndSeedRoles_SeedsBasicUserWithChartReadOnly(t *testing.
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	store.AssignRole(account.ID, basicUserRoleName)
+	store.AssignRoleByName(account.ID, basicUserRoleName)
 
 	roles, permissions, err := store.AccountRolesAndPermissions(context.Background(), account.ID)
 	if err != nil {

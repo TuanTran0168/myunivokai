@@ -24,8 +24,13 @@ type Account struct {
 	FailedAttempts      int
 	LockedUntil         *time.Time
 	ForcePasswordChange bool
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// InvitedAt/InviteExpiresAt are only non-nil between CreateInvite and
+	// AcceptInvite - see migrations/000002_invite_flow.sql. The invite
+	// token itself is never exposed here, only its hash inside the store.
+	InvitedAt       *time.Time
+	InviteExpiresAt *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type RefreshToken struct {
@@ -48,12 +53,16 @@ type PermissionDefinition struct {
 	Audience    contracts.AccountAudience
 }
 
+// ID and OccurredAt are populated only when reading back via ListAuditEvents
+// (the database assigns both); RecordAuditEvent leaves them zero on write.
 type AuditEvent struct {
+	ID             string
 	ActorAccountID *string
 	Action         string
 	Target         string
 	Result         string
 	SourceAddress  string
+	OccurredAt     time.Time
 }
 
 type CreateAccountParams struct {
@@ -64,12 +73,40 @@ type CreateAccountParams struct {
 	ForcePasswordChange bool
 }
 
+// InviteAccountParams creates an account with no password: PasswordHash on
+// the resulting Account is empty until AcceptInvite sets it - see
+// migrations/000002_invite_flow.sql's password-or-invite check constraint.
+type InviteAccountParams struct {
+	Email           string
+	RoleIDs         []string
+	InviteTokenHash string
+	InviteExpiresAt time.Time
+}
+
+// Role is the half staff compose freely at runtime, unlike Permission which
+// is Go-declared - see notes/vision/auth-and-admin-plan.md#amended--dynamic-modelled-on-django-auth.
+type Role struct {
+	ID                  string
+	Name                string
+	Description         string
+	Audience            contracts.AccountAudience
+	IsSystem            bool
+	PermissionCodenames []string
+}
+
+type Permission struct {
+	Codename    contracts.PermissionCode
+	Description string
+	Audience    contracts.AccountAudience
+}
+
 // Store is auth-service's persistence boundary. Every method here is the
 // only path to myunivokai_auth; nothing outside this package touches SQL.
 type Store interface {
 	CreateAccount(ctx context.Context, params CreateAccountParams) (Account, error)
 	GetAccountByEmail(ctx context.Context, email string) (Account, error)
 	GetAccountByID(ctx context.Context, accountID string) (Account, error)
+	ListAccounts(ctx context.Context, cursor string, pageSize int) (accounts []Account, nextCursor string, err error)
 	AccountRolesAndPermissions(ctx context.Context, accountID string) (roles []string, permissions []string, err error)
 	CountSuperAdmins(ctx context.Context) (int, error)
 
@@ -86,6 +123,31 @@ type Store interface {
 
 	SyncPermissions(ctx context.Context, definitions []PermissionDefinition) error
 	EnsureSystemRole(ctx context.Context, name, description string, audience contracts.AccountAudience, permissionCodenames []string) error
+
+	// CreateInvite, GetAccountByInviteTokenHash and AcceptInvite implement the
+	// invite flow: an account row exists with no password from the moment it
+	// is invited, identified only by the hash of a one-time token - see
+	// migrations/000002_invite_flow.sql.
+	CreateInvite(ctx context.Context, params InviteAccountParams) (Account, error)
+	GetAccountByInviteTokenHash(ctx context.Context, tokenHash string) (Account, error)
+	AcceptInvite(ctx context.Context, accountID, passwordHash string) (Account, error)
+
+	ListRoles(ctx context.Context) ([]Role, error)
+	GetRoleByID(ctx context.Context, roleID string) (Role, error)
+	CreateRole(ctx context.Context, name, description string, audience contracts.AccountAudience, permissionCodenames []string) (Role, error)
+	UpdateRole(ctx context.Context, roleID, description string, permissionCodenames []string) (Role, error)
+	DeleteRole(ctx context.Context, roleID string) error
+	CountAccountsWithRole(ctx context.Context, roleID string) (int, error)
+	AssignRole(ctx context.Context, accountID, roleID string) error
+	RevokeRole(ctx context.Context, accountID, roleID string) error
+	// AccountPermissionsExcludingRole computes what an account's permission
+	// set WOULD be if roleID were revoked, without revoking it - the read
+	// RevokeRole's self-revoke guard needs before deciding whether the write
+	// is allowed. See notes/vision/auth-and-admin-plan.md#lockout-guards--enforced-server-side-not-in-the-ui.
+	AccountPermissionsExcludingRole(ctx context.Context, accountID, excludeRoleID string) ([]string, error)
+
+	ListPermissions(ctx context.Context) ([]Permission, error)
+	ListAuditEvents(ctx context.Context, cursor string, pageSize int) (events []AuditEvent, nextCursor string, err error)
 
 	RecordAuditEvent(ctx context.Context, event AuditEvent) error
 }
