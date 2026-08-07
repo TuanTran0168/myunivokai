@@ -14,6 +14,7 @@ The legacy public HTTP peer fleet is no longer represented by source or
 | `myunivokai-universe` | Web Service | no |
 | `myunivokai-nature` | Web Service | no |
 | `myunivokai-auth` | Web Service | no |
+| `myunivokai-analytics` | Web Service | no |
 
 **Corrected 2026-08-06:** this table previously listed `dna`/`universe`/
 `nature` as Background Workers requiring a paid plan. `render.yaml` has
@@ -21,11 +22,15 @@ always deployed all of them as free-tier `type: web` instead — see
 [production-deployment-guide.md §5.5–5.6](./production-deployment-guide.md)
 for why (Render Free doesn't support `worker`, so each opens a minimal
 `/healthz` HTTP server instead) — and `myunivokai-auth` follows the exact
-same pattern. All five backend services run on Render's free plan; none
-require a paid instance. They communicate through operator-provisioned
+same pattern, as does `myunivokai-analytics` (added 2026-08-07). All six
+backend services run on Render's free plan; none require a paid instance.
+⚠️ Free instance hours are shared account-wide — check the remaining budget
+before deploying the sixth. They communicate through operator-provisioned
 managed NATS (Synadia Cloud NGS) and each owns its own Neon database.
 Gateway and `auth-service` also require managed Redis (Upstash) — the same
-instance, not a second one.
+instance, not a second one. `analytics-service` requires **no** Redis, no
+signing key and no provider key: it verifies no token, calls no provider and
+publishes no event.
 
 Use the complete dated runbook:
 

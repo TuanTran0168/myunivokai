@@ -1,8 +1,11 @@
 # Sprint 04 — auth-service, analytics read model, internal admin app
 
 > **Starts:** 2026-08-06
-> **Status:** Planned
-> **Last source review:** 2026-08-06
+> **Status:** Implemented — `EPIC-S4-AUTH-001` and `EPIC-S4-ANALYTICS-001`
+> both shipped. `S4-ANALYTICS-006` landed as configuration only; provisioning
+> the Neon database and the Render environment variables remain manual
+> operator steps, per `services/analytics-service/README.md`.
+> **Last source review:** 2026-08-07
 
 ## Sprint goal
 

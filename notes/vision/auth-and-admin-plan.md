@@ -1,7 +1,10 @@
 # Auth service and internal admin app — plan
 
-> **Document status:** Approved with amendments; no source exists yet
-> **Last source review:** 2026-08-05
+> **Document status:** Implemented. `services/auth-service`,
+> `apps/myunivokai-admin` and the gateway's `/api/admin` route group all exist;
+> `services/analytics-service` supplies the read path. This document remains the
+> design record for identity, RBAC and the admin route group.
+> **Last source review:** 2026-08-07
 > **Scheduled:** [Sprint 4](../sprints/sprint-04-2026-08-06/README.md), as
 > `EPIC-S4-AUTH-001` — first in the owner's priority order.
 > **Amended:** 2026-08-05 by the owner — see [Owner amendments](#owner-amendments--2026-08-05).
@@ -9,12 +12,14 @@
 > are marked **Amended** and state the current decision.
 > **Decisions:** all seven answered 2026-08-05 — see
 > [Owner decisions](#owner-decisions--answered-2026-08-05). Phase 1 is unblocked.
-> **Read path under revision:** the owner has chosen to build Option B as a real
-> service. [analytics-service-plan.md](analytics-service-plan.md) proposes it and
-> lists the sections here it replaces — the read-path table, the partial-results
-> requirement, and the aggregate work in phase 4. Nothing in this document has
-> been rewritten yet; do not implement the gateway fan-out for admin screens
-> without reading that plan first.
+> **⛔ Read path: SUPERSEDED, and the gateway fan-out was never built.** The
+> owner chose Option B, and it shipped as `services/analytics-service` — see
+> [analytics-service-plan.md](analytics-service-plan.md). Three parts of this
+> document are dead letters and are marked in place below: §Where the fan-out
+> lives, §Partial results are a normal response, and phase 4's aggregate
+> subjects. They are kept, not deleted, because the reasoning that led to
+> rejecting them is the reason the read model looks the way it does. Do not
+> implement any of the three.
 
 Two new deliverables, deliberately kept apart from the 3D product:
 
@@ -151,6 +156,11 @@ UI is built against page numbers is a rewrite of both ends.
 
 ### Where the fan-out lives, and the line it may not cross
 
+> **⛔ SUPERSEDED — not built.** The extraction trigger this section defines
+> fired before any of it was written: the gateway composes nothing for admin,
+> and `analytics-service` is the extracted aggregator. Kept as the record of
+> why a dedicated read model was worth building.
+
 Option A puts composition in the gateway rather than in a dedicated aggregator.
 That is deliberate, and it is the position the published patterns support — but
 only up to a specific line, so the line is written here rather than left to
@@ -196,6 +206,12 @@ without a name or tests of its own. This sits alongside the three triggers for
 option B above; any of the four is sufficient.
 
 ### Partial results are a normal response, not an error
+
+> **⛔ SUPERSEDED — not built.** This requirement existed because API
+> Composition makes availability multiplicative across four sleeping services.
+> A read model deletes the problem rather than handling it: an admin query now
+> touches one database, so there is no partial answer to envelope. The
+> requirement still stands for any future product-side fan-out.
 
 This is a requirement, not a refinement, and the free plan is why. Composition
 makes availability multiplicative — the
