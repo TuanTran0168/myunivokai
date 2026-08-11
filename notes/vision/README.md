@@ -70,7 +70,8 @@ admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_aut
 | [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
 | [analytics-service-plan.md](analytics-service-plan.md) | The admin read model (CQRS). Implemented — replaced the gateway fan-out before it was written |
 | [service-wake-mechanism.md](service-wake-mechanism.md) | Cold-start handling for scale-to-zero hosting: platform-adapter wake, the SERVICE_WAKING/UNAVAILABLE/TIMEOUT split, wake statistics and the give-up threshold, and what survives a move to a paid plan or to a VPS. Implemented |
-| [platform-evolution-research.md](platform-evolution-research.md) | **Research, not approved.** The four owner proposals of 2026-08-11 — end-user ownership across two databases, operational telemetry, a Rust service, WebGPU — with their schemas, blockers and dependency graph |
+| [platform-evolution-research.md](platform-evolution-research.md) | **Research, not approved.** The four owner proposals of 2026-08-11 — end-user ownership across two databases, operational telemetry, a Rust service, WebGPU — with their schemas, blockers and dependency graph. §B1 is built; §Track D is superseded by the row below |
+| [frontend-modernization-research.md](frontend-modernization-research.md) | **Research, not approved.** Next 14→15/16, React 18→19, R3F v8→v9 and WebGPU for `myunivokai-web`, verified against the npm registry and the official upgrade guides. Concludes the security advisories need only `next@15.5.23`, names the five files that break and the one that can fail silently, and records that no test in the repo can see the canvas |
 
 ## Product model
 
