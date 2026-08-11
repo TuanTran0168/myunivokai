@@ -178,7 +178,7 @@ declared `PermissionCode`, so the default-deny router test is behavioral
 permission-metadata enumeration — a generic per-route permission-declaration
 registry would have been built for no consumer yet. `RequireAdminAccessToken`
 (Ed25519 verify + Redis `tokenVersion` cache-miss fallback) is implemented
-and unit-tested in `internal/adminauth` and
+and unit-tested in `internal/admin/auth` and
 `internal/middleware/admin_auth_test.go`, but no route mounts it yet — its
 first caller is `S4-ANALYTICS-005`. The gateway's NATS user needed no config
 change: its existing `myunivokai.queries.>` publish permission already covers
@@ -189,7 +189,7 @@ change: its existing `myunivokai.queries.>` publish permission already covers
 Source: `services/api-gateway/internal/handlers/admin_router.go`,
 `admin_auth_handler.go`, `admin_router_test.go`;
 `services/api-gateway/internal/middleware/admin_auth.go`,
-`admin_auth_test.go`; `services/api-gateway/internal/adminauth/`.
+`admin_auth_test.go`; `services/api-gateway/internal/admin/auth/`.
 
 ### S4-AUTH-004 — Admin app shell and staff login
 

@@ -91,7 +91,7 @@ func tokenVersionResponseEnvelope(t *testing.T) contracts.Envelope[contracts.RPC
 // RequireAdminAccessToken fails this test instead of shipping open.
 func TestAdminRoutesDefaultDenyUnlessExplicitlyPublic(t *testing.T) {
 	publicRoutes := map[string]bool{"POST /api/admin/auth/login": true, "POST /api/admin/auth/invite/accept": true}
-	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 
 	walkErr := chi.Walk(router.(chi.Router), func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		if !strings.HasPrefix(route, "/api/admin") {
@@ -114,7 +114,7 @@ func TestAdminRoutesDefaultDenyUnlessExplicitlyPublic(t *testing.T) {
 }
 
 func TestAdminRoutesAreNotMountedWhenDisabled(t *testing.T) {
-	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/auth/login", strings.NewReader(`{"email":"a@b.com","password":"x"}`)))
 	if response.Code != http.StatusNotFound {
@@ -133,7 +133,7 @@ func TestAdminLoginSetsSessionCookiesAndOmitsTokensFromTheBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	brokerClient := &fakeBroker{response: responseEnvelope}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/auth/login", strings.NewReader(`{"email":"staff@example.com","password":"correct horse battery staple"}`)))
 
@@ -173,7 +173,7 @@ func TestAdminLoginSetsSessionCookiesAndOmitsTokensFromTheBody(t *testing.T) {
 
 func TestAdminRefreshRequiresARefreshCookieBeforeCallingAuthService(t *testing.T) {
 	brokerClient := &fakeBroker{}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/auth/refresh", nil))
 	if response.Code != http.StatusUnauthorized {
@@ -190,7 +190,7 @@ func TestAdminLogoutClearsSessionCookies(t *testing.T) {
 		t.Fatal(err)
 	}
 	brokerClient := &fakeBroker{response: responseEnvelope}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/auth/logout", nil)
 	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_refresh", Value: "raw-refresh-token"})
 	response := httptest.NewRecorder()
@@ -206,7 +206,7 @@ func TestAdminLogoutClearsSessionCookies(t *testing.T) {
 }
 
 func TestAdminCORSAllowsOnlyItsOwnOriginNeverTheProductOrigin(t *testing.T) {
-	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodOptions, "/api/admin/auth/login", nil)
 	request.Header.Set("Origin", "http://localhost:41300") // the product origin, not the admin origin
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
@@ -238,7 +238,7 @@ func TestAdminManagementRouteSucceedsWithTheRightPermission(t *testing.T) {
 		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(contracts.PermissionAccountRead)}, false),
 		contracts.AuthAccountListQuerySubject:        accountsResponse,
 	}}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
 	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
 	response := httptest.NewRecorder()
@@ -256,7 +256,7 @@ func TestAdminManagementRouteRejectsWithoutTheRightPermission(t *testing.T) {
 		contracts.AuthTokenVersionQuerySubject:       tokenVersionResponseEnvelope(t),
 		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(contracts.PermissionChartRead)}, false),
 	}}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
 	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
 	response := httptest.NewRecorder()
@@ -278,7 +278,7 @@ func TestAdminManagementRouteSuperAdminBypassesPermissionCheck(t *testing.T) {
 		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, nil, true),
 		contracts.AuthRoleListQuerySubject:           rolesResponse,
 	}}
-	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/admin/roles", nil)
 	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "super-admin-1")})
 	response := httptest.NewRecorder()
@@ -289,7 +289,7 @@ func TestAdminManagementRouteSuperAdminBypassesPermissionCheck(t *testing.T) {
 }
 
 func TestAdminManagementRouteRejectsAnUnverifiableToken(t *testing.T) {
-	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
 	request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: "not-a-real-token"})
 	response := httptest.NewRecorder()

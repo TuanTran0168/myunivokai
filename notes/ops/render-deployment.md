@@ -32,6 +32,18 @@ instance, not a second one. `analytics-service` requires **no** Redis, no
 signing key and no provider key: it verifies no token, calls no provider and
 publishes no event.
 
+No service sets `healthCheckPath`, so none is kept awake and none burns hours
+while idle — which is what makes six free services fit inside a 750-hour
+account budget that a single always-on service would nearly exhaust on its own.
+The cost is that all five NATS-only services sleep, and nothing sends them the
+inbound HTTP they need to wake. The gateway closes that gap on demand:
+`SERVICE_WAKE_PLATFORM=http` plus a `*_SERVICE_URL` per service, entered in the
+dashboard rather than committed, so moving a service to another host is a
+dashboard edit. It calls a sleeping service once per lock window, triggered by
+a real request, and never on a schedule — a keep-alive cron is what the budget
+above rules out. Set the platform to `none` on a paid plan. See
+[service-wake-mechanism.md](../vision/service-wake-mechanism.md).
+
 Use the complete dated runbook:
 
 - [Production Deployment Guide](./production-deployment-guide.md) (Hướng dẫn Step-by-Step)

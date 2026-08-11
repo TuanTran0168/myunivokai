@@ -6,7 +6,7 @@ results below are what was actually observed, not a hypothetical.
 
 ## Why this works with zero forced logouts
 
-- `services/api-gateway/internal/adminauth.TokenVerifier` holds a **list**
+- `services/api-gateway/internal/admin/auth.TokenVerifier` holds a **list**
   of accepted Ed25519 public keys (`ADMIN_ACCESS_PUBLIC_KEYS`, comma-separated)
   and accepts a token signed by any of them.
 - `auth-service` signs with exactly one private key

@@ -314,18 +314,20 @@ a timed-out request — because no consumer was listening on dna-service's query
 subject. Render free web instances spin down when idle and spin up only on an
 **HTTP** request; a NATS message cannot wake one. Full analysis, reproduction
 steps, and the fix design live in
-[service-wake-mechanism.md](service-wake-mechanism.md), which is **deferred by
-the owner behind auth-service, analytics-service and the admin app** — recorded
-as a known production defect, not scheduled work.
+[service-wake-mechanism.md](service-wake-mechanism.md), which was **deferred by
+the owner behind auth-service, analytics-service and the admin app** and then
+**built immediately after them, 2026-08-08**, on this same branch. That
+document is now Implemented.
 
 That document's design already covers the admin app's case: the gateway gets a
 reactive wake mechanism for every read path with no per-app opt-in, so
 analytics-service's admin queries are woken the same way any other sleeping
 service's queries would be. **No dedicated wake endpoint is needed here** — an
 earlier draft of this plan proposed `POST /api/admin/wake`; that is removed.
-When the mechanism in that document ships, this service is covered by it
-automatically. Until then, the admin app is subject to the same cold-start
-defect as every other client, with no special-casing.
+That prediction held: `analytics-service` needed no wake-specific code of its
+own. It appears in the mechanism only as one more name in `wake.Services` and
+one more `ANALYTICS_SERVICE_URL`, because the gateway derives which service to
+wake from the subject it was about to query.
 
 ## Retention, and the one way data can be lost
 
@@ -466,6 +468,7 @@ in both family services pins this.
    slower at exactly the `GROUP BY` / `percentile_cont` / `date_trunc` shape
    every query here has.
 4. **When to build [service-wake-mechanism.md](service-wake-mechanism.md)** —
-   confirmed production defect; explicitly deferred by the owner behind this
-   plan. Until it ships, analytics-service is subject to the same cold-start
-   defect as every other client, with no special-casing planned here.
+   **decided: immediately after this plan**, and built on the same branch on
+   2026-08-08. Confirmed production defect, deferred behind this plan, then
+   taken up as the next piece of work. As predicted, analytics-service needed
+   no special-casing: it is one name in `wake.Services` and one URL.

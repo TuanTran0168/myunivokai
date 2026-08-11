@@ -16,6 +16,7 @@ import (
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/wake"
 	"github.com/oklog/ulid/v2"
 	"github.com/rs/zerolog/log"
 )
@@ -38,8 +39,14 @@ type worldSubjects struct {
 // WorldHandler implements one fixed world-family route set. Family-to-subject
 // routing is constructor-owned, so request data can never select another service.
 type WorldHandler struct {
-	family               contracts.WorldFamily
-	subjects             worldSubjects
+	family   contracts.WorldFamily
+	subjects worldSubjects
+	// familyService names the service that answers this handler's subjects,
+	// for the proactive wake in CreateWorld. It is derived from a subject
+	// rather than from the family string so that the two never drift apart -
+	// and derived once, here, because family-to-subject routing is
+	// constructor-owned throughout this type.
+	familyService        string
 	generationPublisher  GenerationPublisher
 	transport            *RPCTransport
 	publishTimeout       time.Duration
@@ -49,7 +56,8 @@ type WorldHandler struct {
 
 func newWorldHandler(serviceConfig config.Config, family contracts.WorldFamily, subjects worldSubjects, generationPublisher GenerationPublisher, transport *RPCTransport) *WorldHandler {
 	return &WorldHandler{
-		family: family, subjects: subjects, generationPublisher: generationPublisher, transport: transport,
+		family: family, subjects: subjects, familyService: wake.ServiceForSubject(subjects.worldGet),
+		generationPublisher: generationPublisher, transport: transport,
 		publishTimeout: serviceConfig.NATSPublishTimeout, worldCacheTimeToLive: serviceConfig.WorldCacheTimeToLive,
 		shareCacheTimeToLive: serviceConfig.ShareCacheTimeToLive,
 	}
@@ -72,6 +80,19 @@ func (handler *WorldHandler) CreateWorld(responseWriter http.ResponseWriter, req
 		httpx.WriteErrorWithDetails(responseWriter, request, http.StatusBadRequest, "VALIDATION_ERROR", "Please check the highlighted fields.", details)
 		return
 	}
+	// Wake before publishing, not after a failure, because this path never
+	// produces a failure to react to: a JetStream publish succeeds whether or
+	// not any consumer is alive, so a POST against a sleeping fleet returns
+	// 202, the job sits at `queued`, and every HTTP response in the trace is a
+	// success. There is no error for reactive waking to hang off - see
+	// notes/vision/service-wake-mechanism.md#design-proactive-wake-on-write-reactive-wake-on-read.
+	//
+	// Both services are woken because this one job needs both in sequence:
+	// dna-service to generate the profile, then the family service to compose
+	// the world. Waking them together overlaps two cold starts instead of
+	// paying for them one after the other.
+	handler.transport.Wake(wake.ServiceDNA)
+	handler.transport.Wake(handler.familyService)
 	jobID := ulid.Make().String()
 	createdAt := time.Now().UTC()
 	job := contracts.Job{JobID: jobID, Family: handler.family, Status: contracts.JobStatusQueued, CreatedAt: createdAt, UpdatedAt: createdAt}

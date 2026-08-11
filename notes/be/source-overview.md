@@ -76,9 +76,27 @@ Source: `services/api-gateway`.
 - `internal/config`: NATS/Redis/cache/edge configuration and production CORS
   validation.
 
+- `internal/wake`: starts services that a scale-to-zero host has put to sleep,
+  shaped after `internal/ai` in dna-service — dumb per-platform adapters under
+  `wake/platforms`, one coordinator holding the shared policy, `wake/factory`
+  holding the switch. Deliberately one self-contained directory: it is a
+  hosting workaround, and its package doc lists every call site outside itself
+  so deleting it later is mechanical.
+
 `POST /api/{family}/worlds` returns `202` only after a JetStream `PubAck`.
 Reads/mutations have a bounded NATS request timeout. Redis does not transport
 jobs; it may be flushed without losing accepted commands or persisted worlds.
+
+Because every other service is a pure NATS consumer, nothing sends them the
+inbound HTTP a sleeping instance needs to wake. The gateway therefore splits
+`no-responders` (nobody subscribed — starts the service, answers `503
+SERVICE_WAKING` with `Retry-After`) from a deadline (`504 SERVICE_TIMEOUT`)
+from any other broker fault (`503 SERVICE_UNAVAILABLE`), where it used to
+report one code for all three. Reads wake reactively; `POST .../worlds` wakes
+proactively, since a JetStream publish succeeds with no consumer alive and so
+produces no error to react to. `SERVICE_WAKE_PLATFORM=none` is the default and
+the correct value on an always-on host. See
+`notes/vision/service-wake-mechanism.md`.
 
 ## DNA Service
 

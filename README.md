@@ -151,6 +151,34 @@ flowchart TB
 
 ---
 
+## Waking a sleeping service
+
+Every service except the gateway is a pure NATS consumer, so on a scale-to-zero
+plan nothing ever sends it the inbound HTTP it needs to wake up. A query
+against a sleeping service comes back as `no-responders` **immediately** — not
+as a timeout — and the gateway used to report that as the same
+`503 SERVICE_UNAVAILABLE` it reports for a genuinely broken broker.
+
+- `503 SERVICE_WAKING` + `Retry-After` — nobody was subscribed. The gateway has
+  started the service and the request never reached it, so any method is safe
+  to retry. Both frontends wait it out.
+- `503 SERVICE_UNAVAILABLE` — a real fault; retrying will not help.
+- `504 SERVICE_TIMEOUT` — awake, just slow.
+
+Reads wake reactively. `POST /api/{family}/worlds` cannot: a JetStream publish
+succeeds with no consumer alive, so that path returns `202` and stalls at
+`queued` with no error anywhere — it wakes dna and the family service *before*
+publishing instead.
+
+One call per sleeping service per lock window, triggered by a real request,
+never on a schedule. A keep-alive cron is exactly what the free tier's
+account-wide hour budget rules out. `SERVICE_WAKE_PLATFORM=none` is the default
+and the correct value on any always-on host, so leaving free tier is one line
+of config — see
+[notes/vision/service-wake-mechanism.md](notes/vision/service-wake-mechanism.md).
+
+---
+
 ## Key design decisions
 
 ### AI only generates the semantic profile — all 3D numbers are deterministic
@@ -433,7 +461,7 @@ environment:
 │   │   ├── .env.example              # Template: NATS, Redis, rate limits, cache TTLs
 │   │   ├── Dockerfile.prod
 │   │   ├── cmd/gateway/              # Entry point
-│   │   └── internal/                 # Routes, NATS broker, Redis rate limiter
+│   │   └── internal/                 # Routes, NATS broker, Redis rate limiter, service wake
 │   ├── dna-service/                  # AI orchestration background worker
 │   │   ├── .env.example              # Template: Database, NATS, AI provider, API keys
 │   │   ├── Dockerfile.prod

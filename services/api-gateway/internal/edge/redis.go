@@ -18,6 +18,7 @@ const (
 	rateLimitKeySegment     = "rate"
 	cacheKeySegment         = "cache"
 	authTokenVersionSegment = "auth:tokenversion"
+	wakeKeySegment          = "wake"
 	minimumRetryDelay       = time.Millisecond
 )
 
@@ -115,6 +116,18 @@ func (store *RedisStore) GetTokenVersion(ctx context.Context, accountID string) 
 
 func (store *RedisStore) SetTokenVersion(ctx context.Context, accountID string, tokenVersion int, timeToLive time.Duration) error {
 	return store.client.Set(ctx, store.key(authTokenVersionSegment, accountID), strconv.Itoa(tokenVersion), timeToLive).Err()
+}
+
+// AcquireWakeLock reports whether the caller is the one that should wake a
+// sleeping service, collapsing a burst of requests into a single outbound
+// wake (wake.SingleFlightLock).
+//
+// It is deliberately a plain SET NX EX and not a released lock: the key is
+// meant to stay held for its whole TTL, because the point is to stay quiet
+// for roughly one cold start, not to guard a critical section. Nothing here
+// is a correctness requirement - a lost lock costs one redundant call.
+func (store *RedisStore) AcquireWakeLock(ctx context.Context, service string, timeToLive time.Duration) (bool, error) {
+	return store.client.SetNX(ctx, store.key(wakeKeySegment, sanitizeKeyPart(service)), "1", timeToLive).Result()
 }
 
 func (store *RedisStore) Ping(ctx context.Context) error {

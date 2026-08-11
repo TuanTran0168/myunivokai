@@ -250,8 +250,11 @@ go run cmd/migrate/main.go
 - **Cách xử lý:** Đây là hạn chế của tài khoản Synadia Free. Code đã được vá bằng cách thêm cờ cứng `nats.MaxAckPending(1000)` vào mọi lời gọi `PullSubscribe()` (Commit `661903b`). Tuyệt đối không xóa các dòng cấu hình này trong các file `internal/messaging/runtime.go`.
 
 ### 5.3. Giới Hạn Thời Gian Miễn Phí (750 Giờ/Tháng Của Render)
-- Gateway service được thiết lập đường dẫn kiểm tra sức khỏe tại `/api/v1/healthz`. Render sẽ liên tục "ping" vào đường dẫn này 5s/lần. Điều này khiến Gateway không bao giờ "ngủ đông" (spin down) và sẽ ngốn sạch 744 giờ/tháng.
-- Hãy chú ý giám sát giới hạn Free Hours của Render nếu bạn không nâng cấp lên các gói trả phí. Do mô hình Microservices phân mảnh, tài khoản Free có thể cạn kiệt tài nguyên rất nhanh.
+- **Hiện tại `healthCheckPath` đang TẮT cho toàn bộ service trong `render.yaml`** — kể cả gateway (dòng bị comment). Không service nào bị Render ping định kỳ, nên không service nào bị giữ thức.
+  - Trước đây mục này ghi gateway bật `healthCheckPath` và ngốn 744 giờ/tháng. Điều đó không còn đúng; ghi lại đây thay vì xoá, vì con số 744 giờ vẫn là thứ sẽ xảy ra nếu ai đó bật lại.
+- 750 giờ/tháng dùng chung cho cả tài khoản, trong khi một service thức 24/7 đã tốn ~730 giờ. Nghĩa là **không đủ ngân sách để giữ thức dù chỉ một service**, chứ chưa nói tới sáu.
+- Đó chính là lý do cron/keep-alive định kỳ bị loại, và tại sao cơ chế đánh thức theo nhu cầu là phương án duy nhất vừa ngân sách: nó gọi đúng một lần cho mỗi service đang ngủ trong mỗi cửa sổ khoá, do request thật kích hoạt, rồi để service ngủ lại. Xem `notes/vision/service-wake-mechanism.md`.
+- Vẫn nên giám sát Free Hours nếu chưa nâng gói. Mô hình microservices phân mảnh khiến tài khoản Free cạn rất nhanh.
 
 ### 5.4. Lỗi `relation "outbox_messages" does not exist` + `prepared statement name is already in use` (DNA/Universe/Nature)
 - **Triệu chứng:**
@@ -298,6 +301,11 @@ go run cmd/migrate/main.go
   - Hệ quả: DNA/Universe/Nature có thể ngủ đông và tạm ngừng xử lý job NATS.
   - Đây là đánh đổi có chủ đích, ưu tiên tiết kiệm giờ Free tier hơn uptime 24/7.
   - Xử lý job real-time liên tục đòi hỏi nâng cấp plan trả phí, hoặc bật lại `healthCheckPath` kèm ngân sách giờ tương ứng.
+- **Hệ quả "ngủ đông" nói trên nay đã được xử lý ở tầng gateway**, không phải bằng cách giữ service thức.
+  - Gateway tự gọi `/healthz` của service đang ngủ khi có request cần tới nó, rồi trả `503 SERVICE_WAKING` kèm `Retry-After` để client quay lại.
+  - Đúng một lần cho mỗi service trong mỗi cửa sổ khoá (Redis `SET NX EX`), do request thật kích hoạt, không có lịch chạy nền — nên không tốn thêm giờ Free tier ngoài thời gian service thực sự làm việc.
+  - Bật bằng `SERVICE_WAKE_PLATFORM=http` cộng các biến `*_SERVICE_URL` trong khối env của gateway (`render.yaml`). Đặt `none` khi lên plan trả phí.
+  - Chi tiết: `notes/vision/service-wake-mechanism.md`.
 
 ### 5.7. Auth Service — riêng biệt so với 3 worker kia
 

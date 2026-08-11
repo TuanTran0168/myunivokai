@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"github.com/myunivokai/myunivokai/services/api-gateway/internal/adminauth"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/admin/auth"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/broker"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
@@ -18,7 +18,7 @@ const corsMaximumAgeSeconds = 300
 type EdgeStore interface {
 	cacheStore
 	middleware.DistributedLimiter
-	adminauth.TokenVersionCache
+	auth.TokenVersionCache
 	Ping(context.Context) error
 	Close() error
 }
@@ -31,14 +31,14 @@ const (
 	adminRateLimitRouteKey   = "admin"
 )
 
-func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore) http.Handler {
+func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, waker ServiceWaker) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestContext(serviceConfig.TrustProxyHeaders))
 	router.Use(middleware.Recover)
 	router.Use(middleware.Logging)
 	router.Use(middleware.SecurityHeaders)
 	healthHandler := NewHealthHandler(serviceConfig.AppName, brokerClient, edgeStore)
-	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore)
+	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore, waker)
 	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
 	universeHandler := NewUniverseHandler(serviceConfig, brokerClient, rpcTransport)
 	natureHandler := NewNatureHandler(serviceConfig, brokerClient, rpcTransport)

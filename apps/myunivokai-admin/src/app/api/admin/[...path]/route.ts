@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { gatewayOriginUrl } from "@/lib/gateway";
+import { forwardedRelayHeaders } from "@/lib/relay-headers";
 
 // Same reasoning as auth-relay.ts's GATEWAY_REQUEST_TIMEOUT_MILLISECONDS: a
 // hung gateway must not be able to hold a list/detail request open
@@ -41,10 +42,9 @@ async function proxyToGateway(request: NextRequest, routeParams: { params: Promi
   }
 
   const bodyText = await gatewayResponse.text();
-  const contentType = gatewayResponse.headers.get("Content-Type");
   return new NextResponse(bodyText.length > 0 ? bodyText : null, {
     status: gatewayResponse.status,
-    headers: contentType ? { "Content-Type": contentType } : undefined
+    headers: forwardedRelayHeaders(gatewayResponse)
   });
 }
 
