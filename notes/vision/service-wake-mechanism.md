@@ -1,11 +1,17 @@
 # Service wake mechanism — cold-start handling for free-tier domain services
 
 > **Document status:** Implemented; merged to `staging` in PR #118
-> **Last source review:** 2026-08-12 (first-deploy startup correction)
+> **Last source review:** 2026-08-12 (statistics, give-up threshold, VPS reuse)
 > **Owner's framing:** *"giống như fix bẩn cho render free tier vậy"* — a patch
 > for a hosting-tier constraint, not a product feature. Treat it as such: keep
 > it removable in one step (see §Removal when leaving free tier) — as built, that
 > step is `SERVICE_WAKE_PLATFORM=none`, and full deletion is one directory.
+>
+> **Not every destination wants that step.** Leaving free tier for a paid plan
+> or a real background worker retires this; moving to a self-hosted VPS does
+> not, and the same configuration changes job from starting services to
+> detecting dead ones. See §Reuse on a self-hosted VPS, which is the answer to
+> *"tránh để deadcode"* and states plainly which part should still die.
 
 ## What was built, and where it differs from this design
 
@@ -71,6 +77,49 @@ states on every boot which services this process can actually reach, at `warn`
 whenever that is fewer than all of them. The original fear was silent
 half-configuration; the answer to it is a line that cannot be silent, not a
 crash that cannot be avoided.
+
+**Extended 2026-08-12 — the mechanism can now be checked, and it can give up.**
+As first built the wake was unobservable and infinitely patient. Two additions,
+neither of which changes when a wake fires:
+
+*Statistics, in Redis, served by the gateway.* `wake:count:<service>:<day>`
+counts wakes actually sent (incremented at the decision to call, not after it
+returns — a host that starts an instance on connect has already started it, so
+counting successes would undercount exactly the slow starts worth knowing
+about), and `wake:seen:<service>` stamps the last moment a service answered
+anything. `GET /api/admin/wake-stats` reads them with **one `MGET`**, never a
+`SCAN`. The reason it lives in Redis rather than in analytics-service is
+§Relationship to the analytics plan taken one step further: the page that
+reports which services sleep must not itself wake one. The gateway is awake by
+definition and Redis is managed, so opening the page costs nothing.
+
+*A give-up threshold.* Asleep and dead send the identical `no-responders`
+reply, and the gateway answered both with `SERVICE_WAKING` plus a `Retry-After`
+— so a service that crash-looped on boot, whose URL was wrong, or that the host
+refused to start left the client retrying forever. `wake:failures:<service>`
+counts wakes sent with no reply since; past three (≈3 minutes against a
+one-minute lock window, comfortably beyond the slowest cold start this platform
+produces) the answer becomes `SERVICE_UNAVAILABLE` with no `Retry-After`. **The
+wake still goes out** — only the promise stops, because giving up on the wake
+would remove the one thing that could still fix this. The counter needs nobody
+to reset it: each wake refreshes a short expiry, so a recovered service loses
+its tally when wakes stop, and a reply clears it sooner. That is also what makes
+it safe across more than one gateway instance — the instance that sees the
+recovery need not be the one that saw the failure.
+
+Both are optional in the same way `SingleFlightLock` is: a nil `StatsRecorder`
+turns them off without affecting a single wake, and a store that cannot be read
+answers "not failing". Measurement must never break the thing it measures, and
+failing closed there would turn one unreachable Redis into a fleet-wide outage
+report.
+
+*Not part of this mechanism, though built alongside it:* each service announces
+its own boot on `myunivokai.events.<service>.service.started.v1`, which
+analytics-service projects into `service_starts`. That is durable
+service-lifecycle history and it survives every removal path below, because
+restarts happen on every platform. A process cannot report its own death — an
+OOM kill runs no handler — so it reports its birth, and an unscheduled start is
+the evidence a stop happened.
 
 Everything else — proactive on write, reactive on read, the Redis single-flight
 lock, the three-way status split, `/healthz` as a start signal — is as written
@@ -168,6 +217,14 @@ retrying is useful:
 | `503 SERVICE_UNAVAILABLE` | Any other transport failure (NATS disconnected, marshal error, etc.) | Real infrastructure problem | Retry is unlikely to help |
 | `504 SERVICE_TIMEOUT` | `context.DeadlineExceeded` | Service is awake but slow | Unchanged from today |
 
+As built, `SERVICE_UNAVAILABLE` covers two further cases that the design above
+folded into the first row, both because `SERVICE_WAKING` is only honest when
+something is genuinely being started: no wake platform supports this service
+(an always-on host, or a URL nobody supplied), and the wake has gone unanswered
+past the give-up threshold. Neither carries a `Retry-After`. The wire contract
+is unchanged for clients — a code they already handle, without the promise
+attached.
+
 ## Why the gateway must not wait for the wake to finish
 
 Two independent reasons rule out "ping, wait, retry internally, then answer the
@@ -263,6 +320,18 @@ specifies).
 | `SERVICE_WAKING` / `SERVICE_UNAVAILABLE` / `SERVICE_TIMEOUT` split | **Keep permanently** |
 | Frontend retry on `SERVICE_WAKING` | **Keep permanently**, though it will rarely fire |
 | Redis single-flight lock | **Keep** — reusable for any future expensive side effect triggered by a request burst |
+| Wake counts (`wake:count:*`) | **Remove.** The number is instance-hours spent; an always-on host spends none |
+| Give-up tally (`wake:failures:*`) | **Remove.** It counts unanswered wakes, and no wake is sent |
+| `last_seen` stamp (`wake:seen:*`) | **Keep** — it is written on every reply and never depends on a wake having happened |
+| `service_starts` (analytics) | **Keep permanently.** Never part of this mechanism; restarts happen on every platform |
+
+The three statistics do not share a fate, and the reason is worth stating
+because it is not obvious from the code: `RecordWakeSent` runs inside
+`wakeDetached`, so it stops when wakes stop, while `Seen` is called from the
+success path of every reply and has no dependency on the wake at all. Setting
+`SERVICE_WAKE_PLATFORM=none` therefore silences the first two and leaves the
+third working — which is the correct outcome on a host that does not sleep, and
+**not** the correct outcome on a VPS. See the next section.
 
 **As built, removal is two steps and the first one is free.** Setting
 `SERVICE_WAKE_PLATFORM=none` makes the whole thing inert with no code change —
@@ -280,6 +349,98 @@ recurring production condition even on paid plans — during a rolling deploy, a
 crash-restart, an OOM-kill, or a scale-down — and today the gateway detects it
 but discards the distinction. That part is not a free-tier workaround; it is
 missing production telemetry.
+
+## Reuse on a self-hosted VPS
+
+The section above assumes one destination: a host whose instances never sleep,
+reached by paying for them. A **self-hosted VPS is a different destination with
+a different answer**, and the difference is a single fact — on a VPS there is a
+supervisor. `systemd`, or Docker's `restart: unless-stopped`, is already
+responsible for restarting a process that died, and it is strictly better at it
+than the gateway: it sees the exit code, it does not need a request to arrive
+first, and it can back off.
+
+That fact retires the *action* and promotes everything around it. On free tier
+a `no-responders` reply is routine — it means "asleep", which is the normal
+state of an idle service and carries no information. On a VPS nothing is ever
+asleep, so the same reply means a crash, a rolling deploy, an OOM kill or a
+misconfiguration. **The signal this mechanism was built to react to becomes an
+incident report.** The detection is worth more after the migration than before
+it, which is the opposite of what "free-tier workaround" suggests.
+
+| Part | On a VPS | Why |
+| --- | --- | --- |
+| `no-responders` vs deadline vs broker fault | **Keep — worth more** | Every occurrence is now an incident rather than an idle service |
+| Give-up tally, `SERVICE_UNAVAILABLE` past the threshold | **Keep — worth more** | It is the only thing that separates "restarting" from "down", which is the question a VPS actually asks |
+| `last_seen` per service | **Keep** | A liveness view with no agent, no scrape and no schedule — a byproduct of traffic that already happens |
+| Wake counts | **Keep, relabelled** | On free tier the number is *cost* (instance-hours from a 750h budget). On a VPS hours are not metered, so the same number is *how often the fleet needed intervention*. Same data, different question — the admin page needs a different word, not different code |
+| Redis single-flight lock | **Keep** | Already generic; nothing about it is vendor-specific |
+| `service_starts` (analytics) | **Keep** | Independent of all of this, and on a VPS it is the restart log |
+| Proactive ping on `POST` | **Delete** | It exists because a JetStream publish produces no error to react to, so nothing would ever wake the consumer. On a VPS the consumer is always subscribed, and if it is not, the next query catches it reactively |
+| The wake call itself | **It stops doing anything** | Whether to keep sending it is the one real decision below |
+
+### The migration step, and the one wrinkle in it
+
+`SERVICE_WAKE_PLATFORM=none` is *not* the right setting here, and that is worth
+being precise about because it is the obvious move. `Coordinator.Wake` returns
+at `Supports` before `recordWake` runs, so `none` silences the wake counter and
+the give-up tally along with the wake — and those are the two parts a VPS wants
+most. Only `last_seen` survives, because `Seen` is called from the reply path
+and never depended on a wake. The detection is coupled to the action having a
+platform.
+
+Two ways out, and the cheap one is good enough:
+
+**(a) Keep `http`, point it inward.** `SERVICE_DNA_URL=http://dna-service:8080`
+is valid configuration today — `readServiceWakeTargets` accepts any absolute
+`http` or `https` origin with no path, query or credentials, so a compose
+service name or `127.0.0.1:port` passes. Everything keeps working with **zero
+code change**, and the Render constraint inverts in our favour: free tier
+*forced* public `.onrender.com` targets because *"free web services can't
+receive private network traffic"*, while a VPS lets the gateway use the
+internal address — no egress, no TLS, nothing newly exposed.
+
+The honest cost is one `GET /healthz` per incident that starts nothing, because
+the supervisor got there first. It is not a health check either — the adapter
+deliberately discards the status code (see §`/healthz` is a start signal, not a
+readiness signal). What actually decides the tally is the **NATS** reply: `Seen`
+clears it. The HTTP call is incidental, and it fires only on `no-responders`,
+never on a schedule, so a healthy fleet sends none at all.
+
+**(b) Decouple the tally from the platform.** Count "`no-responders` replies
+with no successful reply since" in `classifyTransportError` rather than in
+`wakeDetached`, and the detection works with `platform=none`. This is the
+cleaner design and the key would need an honest rename — it would no longer be
+about wakes. It is deliberately **not** built now: it is speculative work for a
+migration that has not been decided, and (a) is free and already proven.
+
+### If the gateway really should start things
+
+Only when there is no supervisor — containers run without a restart policy, or
+something scaled to zero on purpose to save VPS memory. Then `wake.Platform` is
+the seam it was built to be: a Docker-socket or systemd/D-Bus adapter is **one
+file in `internal/wake/platforms` plus one `case` in the factory**, and nothing
+on the request path changes.
+
+Prefer the supervisor anyway. Two components restarting the same process is two
+owners for one responsibility, and the one that loses that argument is always
+the one that has to wait for a request first.
+
+### Not dead code, and not kept out of sentiment
+
+The test for dead code is whether removing it would lose something. Removing
+this on a VPS would lose the fleet's only continuous liveness signal — and the
+replacement everyone reaches for, Prometheus, is **structurally unavailable to
+this architecture**: a scrape on a schedule keeps every instance permanently
+awake, which is exactly what the whole design exists to avoid, and would
+prevent ever moving back. See
+[platform-evolution-research.md](platform-evolution-research.md) §The
+constraint that decides everything.
+
+So: on a VPS, delete the proactive ping, keep the classification, keep the
+statistics, point the targets inward, relabel the counter on the admin page,
+and let the supervisor own restarts. What should die is the *claim* that the
+gateway starts services. What should live is everything it learned by trying.
 
 ## Tension with the documented V1 target
 

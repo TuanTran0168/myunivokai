@@ -1,10 +1,12 @@
 # Platform evolution research — end-user identity, telemetry, Rust, WebGPU
 
-> **Document status:** Research. **Nothing here is approved and nothing here is
-> built.** It exists so four owner proposals can be argued against the real
-> source before any of them becomes a sprint.
+> **Document status:** Research. **Nothing here is approved**, and only one
+> piece has been built — §B1, the wake counters, because they were cheap enough
+> to fall out of the wake mechanism itself. Everything else exists so four owner
+> proposals can be argued against the real source before any of them becomes a
+> sprint.
 > **Raised:** 2026-08-11 by the owner
-> **Last source review:** 2026-08-12
+> **Last source review:** 2026-08-12 (B1 built)
 > **Graduation path:** whichever tracks are approved get copied into
 > `versions/v2-YYYY-MM-DD/` as a frozen baseline and the pointer table in
 > [README.md](README.md) is updated. Until then this file is the only
@@ -18,7 +20,7 @@ and never revisited.
 | Track | Proposal | Verdict |
 | --- | --- | --- |
 | [A](#track-a--end-user-identity-and-world-ownership) | End-user login; worlds owned across two databases | Sound, but **blocked on a decision, not on code** |
-| [B](#track-b--operational-telemetry) | Wake counts, request counts, status codes in a dashboard | Best value per hour. **One trap: it must not go into `analytics-service`** |
+| [B](#track-b--operational-telemetry) | Wake counts, request counts, status codes in a dashboard | Best value per hour. **B1 is built**; the rest stands. **One trap: it must not go into `analytics-service`** |
 | [C](#track-c--a-service-written-in-rust) | A service in Rust, to learn Rust | Good, if it is **track B's** service and nothing else |
 | [D](#track-d--webgpu-instead-of-webgl) | WebGPU replacing WebGL | Real, cheap **after** an upgrade already required for security. Low return today |
 
@@ -455,6 +457,24 @@ This one constraint eliminates self-hosted Prometheus, Grafana Agent in pull
 mode, and every `/metrics`-endpoint design, before any of them is evaluated.
 
 ### B1 — wake counters (do this first; it is nearly free)
+
+> **Built 2026-08-12** — the only part of this document that has left research.
+> It shipped larger than sketched below and the differences are recorded in
+> [service-wake-mechanism.md](service-wake-mechanism.md) §What was built: the
+> interface is `StatsRecorder` rather than `WakeCounter` because a wake count
+> with no liveness stamp answers half a question, `RecordWakeSent` also drives
+> a consecutive-unanswered tally that lets the gateway stop promising a retry,
+> and `WakeStats` reads a whole page with one `MGET`. `GET /api/admin/wake-stats`
+> exists. B2 onwards remains research.
+>
+> A second thing was built alongside it that is **not** in this sketch and is
+> the more durable half: every service announces its own boot on
+> `myunivokai.events.<service>.service.started.v1`, and analytics-service
+> projects it into `service_starts`. Redis answers *"is it up now"*; that table
+> answers *"how often did it restart"*, survives Redis, and survives leaving
+> this hosting tier. It is also the one non-projection table in
+> `myunivokai_analytics` — a primary observation, not a replayable read model,
+> and therefore excluded from any drop-and-rebuild runbook.
 
 `Coordinator` already holds a Redis-backed lock. Counting is the same trip.
 

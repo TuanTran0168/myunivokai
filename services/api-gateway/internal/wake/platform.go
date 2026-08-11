@@ -53,6 +53,8 @@
 //     /wake-stats route from internal/handlers/admin_router.go
 //   - contracts/openapi-admin.yaml — drop /api/admin/wake-stats and WakeStats
 //   - render.yaml, .env.example — drop the wake block
+//   - apps/*/src — src/lib/wake-retry.ts and its call sites; keep
+//     src/lib/relay-headers.ts, which Retry-After needs for rate limiting too
 //
 // The statistics go with it, deliberately. They count wakes and stamp the
 // last moment a service answered, and on a host whose instances do not sleep
@@ -61,8 +63,19 @@
 // startup events emitted by each service, which survive this directory
 // because restarts happen on every platform. See
 // notes/vision/platform-evolution-research.md, Track B.
-//   - apps/*/src — src/lib/wake-retry.ts and its call sites; keep
-//     src/lib/relay-headers.ts, which Retry-After needs for rate limiting too
+//
+// # A VPS is not that host
+//
+// Self-hosting is the one destination where none of the above applies, and
+// PlatformNone is the wrong setting. A supervisor (systemd, restart:
+// unless-stopped) takes over restarting, so the wake call stops mattering —
+// but no-responders stops meaning "asleep" and starts meaning "crashed", which
+// makes the classification and the give-up tally worth more than they were
+// here, not less. The tally is the wrinkle: it is incremented inside
+// wakeDetached, which PlatformNone short-circuits, so silencing the wake also
+// silences the detection. Keeping platform=http with internal targets
+// (http://dna-service:8080) keeps everything working with no code change.
+// See notes/vision/service-wake-mechanism.md#reuse-on-a-self-hosted-vps.
 //
 // Two things are worth keeping even then, and neither depends on this package:
 // Retry-After in the admin router's exposed CORS headers, and *some*

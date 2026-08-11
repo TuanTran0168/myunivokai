@@ -180,8 +180,15 @@ One call per sleeping service per lock window, triggered by a real request,
 never on a schedule. A keep-alive cron is exactly what the free tier's
 account-wide hour budget rules out. `SERVICE_WAKE_PLATFORM=none` is the default
 and the correct value on any always-on host, so leaving free tier is one line
-of config — see
-[notes/vision/service-wake-mechanism.md](notes/vision/service-wake-mechanism.md).
+of config.
+
+Self-hosting is the exception, and it is the interesting one: a supervisor
+takes over restarting, but `no-responders` stops meaning *"asleep"* and starts
+meaning *"crashed"* — so the classification and the statistics around the wake
+become incident detection rather than a workaround. See
+[notes/vision/service-wake-mechanism.md](notes/vision/service-wake-mechanism.md),
+which records exactly which parts survive each destination and which one should
+be deleted.
 
 ---
 
