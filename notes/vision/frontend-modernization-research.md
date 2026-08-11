@@ -513,6 +513,80 @@ console error the moment three.js moves underneath it.
 
 ---
 
+## three.js 0.171.0 → 0.185.1: the guide, read against the source
+
+Fourteen minor releases, ~19 months. This was flagged as the highest silent-risk
+item in the plan, so it was closed the same way the rest was: the official
+migration guide read verbatim, then every entry checked against what this repo
+actually calls.
+
+Of roughly fifty entries across the range, **four touch this repo, and one of
+them matters a great deal.**
+
+| Release | Entry (verbatim) | Applies here |
+| --- | --- | --- |
+| **r180 → r181** | *"The way indirect specular light for PBR materials is computed has been improved."* · *"PBR materials now better conserve energy."* · *"PMREM reflections have been improved."* | **YES — the one that matters.** See below |
+| **r181 → r182** | *"`PCFSoftShadowMap` with `WebGLRenderer` is now deprecated."* | **YES.** `UniverseCanvas.tsx:168` sets `shadows={isForestFamilyScene ? "soft" : false}`, and R3F's `"soft"` *is* `PCFSoftShadowMap`. Deprecated, not removed — a console warning now, a decision later, and only the forest family |
+| **r183 → r184** | *"The background and environment map rotation has been aligned."* | **Possibly.** Both families light entirely through `<Environment>`; neither sets a rotation, so probably nothing moves — but "probably" in an environment-lit app is a screenshot question |
+| **r184 → r185** | *"`Object3D.updateWorldMatrix()` now honors the `Object3D.matrixWorldNeedsUpdate` flag."* | No — never called |
+
+### Why r181 is the whole risk
+
+Three entries in one release change how lit surfaces resolve: indirect specular,
+energy conservation, and PMREM. This repo is maximally exposed to all three:
+
+- **13 files** use `MeshStandardMaterial` / `MeshPhysicalMaterial` — the PBR
+  materials the entry names.
+- **Both families are lit by PMREM environments.**
+  `ForestRenderer.tsx:136` mounts `<Environment files={natureHdriUrl…}
+  environmentIntensity={…} />`; `SpaceEnvironment.tsx:35` mounts `<Environment
+  frames={1}>` and bakes `Lightformer` rects into a cubemap. There is no
+  fallback lighting path that avoids this.
+
+So the expected outcome of the three.js bump is not a crash. It is **every lit
+surface in the product looking slightly different** — quite possibly better,
+since the change is an improvement — with nothing in the repository able to
+tell anyone it happened. This is the concrete instance of the abstract warning
+in §The blind spot, and it is the reason step 6 of the sequence exists as its
+own PR.
+
+### The things that would have hurt, verified not to
+
+Each of these was a live worry before it was checked:
+
+- **`forestModels.ts` survives.** Its `onBeforeCompile` patch depends on the
+  chunk `#include <map_fragment>` and the internal varying `vMapUv`. The actual
+  file `src/renderers/shaders/ShaderChunk/map_fragment.glsl.js` was fetched at
+  **both `three@0.171.0` and `three@0.185.1`** and is **unchanged** — same
+  `#ifdef USE_MAP`, same `texture2D( map, vMapUv )`. The silent-no-op scenario
+  does not fire in this range. (It remains a good reason to add the
+  match-assertion anyway, for the range after this one.)
+- **`AgXToneMapping` still exists**, still value `6`, and `UniverseCanvas.tsx:173`
+  passes it in the `gl` config. `SRGBColorSpace`, `LinearSRGBColorSpace` and
+  `NoColorSpace` are unchanged — verified from `src/constants.js` at 0.185.1.
+- **r177 → r178** — *"`MultiplyBlending` and `SubtractiveBlending` now require
+  `Material.premultipliedAlpha`"* — does not apply. Verified: **zero**
+  occurrences of either. The repo uses `AdditiveBlending` (10 files) and
+  `NormalBlending` (1).
+- **r182 → r183** — *"A legacy gamma correction of `Sky` and `SkyMesh` has been
+  removed"* — does not apply. `ForestSkyDome` is this repo's own component, not
+  three's `Sky` addon. No `three/addons` import exists anywhere in `src/`.
+- **r175 → r176** `CapsuleGeometry` rename, **r176 → r177** `ColorManagement`
+  method renames, **r179 → r180** `RGBELoader` → `HDRLoader` — none used
+  directly; drei owns the HDR loader.
+
+### One correction in the other direction
+
+Track D's claim that the installed three.js already carries the WebGPU entry
+point is **right**, and an earlier draft of this document nearly "corrected" it
+into a fourth error. Verified from the package manifest: `three@0.171.0`
+declares `exports` of `./webgpu` and `./tsl`, exactly as 0.185.1 does. What
+remains unestablished is not whether the entry point exists but whether it is
+production-ready and whether its WebGL2 fallback is complete — a different
+question, still open.
+
+---
+
 ## The blind spot: nothing in CI can see the scene
 
 This is the finding that should govern the plan, and it has nothing to do with
@@ -661,11 +735,13 @@ the linter and the framework in the app nothing can visually test.
 3. The version bump, with `postprocessing` pinned to `3.0.4`.
 4. Fix the five StrictMode dispose sites.
 5. Re-shoot the screenshots. Diff. **Look at the images**, do not read the markup.
-6. Only then: three.js 0.171 → 0.185, on its own PR, re-shooting again — this
-   is the change most likely to shift colour and lighting silently, and the one
-   that can no-op `forestModels.ts` without a single error. Add the
-   match-assertion to that file *before* bumping, so it reports rather than
-   hides.
+6. Only then: three.js 0.171 → 0.185, on its own PR, re-shooting again. The
+   specific thing to look at is **lighting on every PBR surface in both
+   families**, because r181 changed indirect specular, energy conservation and
+   PMREM at once, and this app is lit entirely through PMREM environments.
+   Expect a difference; decide whether it is an improvement. Add the
+   match-assertion to `forestModels.ts` while in there — it is safe across
+   *this* range, verified, but the next range is not covered by that check.
 7. Only then, and only if there is a reason: Next 16, and after that WebGPU
    behind a `navigator.gpu` flag.
 
@@ -707,7 +783,7 @@ decision-critical parts, but leaves these open. **Do not treat their absence as
 | Open item | Why it matters | How to close it |
 | --- | --- | --- |
 | Open R3F v9 / drei v10 regressions in the wild | 19 and 33 stable releases suggest health, but issue trackers were not read | Search the pmndrs issue trackers for v9 regressions before starting |
-| three.js **r171 → r185 migration entries** | 14 minors of colour/tone-mapping/light-unit changes; the highest silent-visual-risk item in the whole plan. Specifically: whether `#include <map_fragment>` or the `vMapUv` varying changed anywhere in that range, which would silently no-op `forestModels.ts` | Read the official three.js migration guide for every release in the range — required before step 6 |
+| ~~three.js r171 → r185 migration entries~~ | — | **Closed 2026-08-12.** See §three.js 0.171.0 → 0.185.1. Four entries apply; r181's PBR/PMREM change is the real one; `forestModels.ts` verified safe by diffing the actual shader chunk at both versions |
 | `@react-three/postprocessing` under `WebGPURenderer` | If `EffectComposer`/`Bloom`/`N8AO` do not work on WebGPU, the app loses its look on that path and WebGPU is off the table entirely | Verify before any WebGPU work is scheduled |
 | `WebGPURenderer` production status and the completeness of its WebGL2 fallback | Track D's "production-ready" claim was never verified and its neighbouring facts were wrong | Read the three.js docs/release notes directly |
 | Vercel Node runtime defaults, and whether an existing project auto-upgrades | Next 16 needs Node ≥ 20.9; Vercel supports Next 16 (its docs describe 16 behaviour, updated 2026-06-26), but the runtime default was not confirmed | Check the project's runtime setting in the Vercel dashboard before Route B |
@@ -726,6 +802,14 @@ All retrieved 2026-08-12.
 - React Three Fiber v9 migration guide — https://r3f.docs.pmnd.rs/tutorials/v9-migration-guide
 - WebGPU browser support — https://caniuse.com/webgpu
 - Next.js on Vercel — https://vercel.com/docs/frameworks/full-stack/nextjs (updated 2026-06-26)
+- three.js migration guide — https://github.com/mrdoob/three.js/wiki/Migration-Guide
+  (read twice; the page is long enough that a single summarising pass
+  mis-attributed entries by one release, so entries r174–r185 were re-read
+  verbatim and the WebGPU entry-point question was settled from the package
+  manifest instead)
+- three.js source, compared at both versions —
+  `src/renderers/shaders/ShaderChunk/map_fragment.glsl.js` and `src/constants.js`
+  at `three@0.171.0` and `three@0.185.1`, via unpkg
 - npm registry: `next`, `react`, `react-dom`, `three`, `@react-three/fiber`,
   `@react-three/drei`, `@react-three/postprocessing`, `eslint-config-next`,
   `postcss` — versions, publish dates and `peerDependencies` read directly
