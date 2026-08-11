@@ -90,6 +90,14 @@ services:
       #
       # This is a hosting workaround with an explicit exit: on a paid plan or
       # a real background worker, set this to "none" and nothing else changes.
+      # Every service announces its own boot on
+      # myunivokai.events.<name>.service.started.v1 and analytics-service
+      # stores it. The version reported comes from SERVICE_VERSION when set,
+      # otherwise from Render's own RENDER_GIT_COMMIT, otherwise "unknown" -
+      # a container image carries no Go VCS stamp, and a wrong version is
+      # worse than an absent one. Set this only to override the commit.
+      # - key: SERVICE_VERSION
+      #   sync: false
       - key: SERVICE_WAKE_PLATFORM
         value: http
       # sync: false rather than hardcoded .onrender.com URLs, so moving a

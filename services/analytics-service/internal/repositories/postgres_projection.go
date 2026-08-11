@@ -55,7 +55,44 @@ func (store *PostgresStore) Apply(ctx context.Context, projection models.Project
 			return false, err
 		}
 	}
+	if projection.ServiceStart != nil {
+		if err := insertServiceStart(ctx, transaction, *projection.ServiceStart); err != nil {
+			return false, err
+		}
+	}
 	return true, transaction.Commit(ctx)
+}
+
+// insertServiceStart is an insert and never an upsert. A boot happened once
+// and its facts do not change, so a second row with the same instance id
+// could only come from a redelivery - which the inbox above has already
+// stopped. DO NOTHING is belt to that braces, not a merge.
+func insertServiceStart(ctx context.Context, transaction pgx.Tx, start models.ServiceStart) error {
+	_, err := transaction.Exec(ctx, `INSERT INTO service_starts
+		(instance_id, service, version, boot_duration_ms, started_at)
+		VALUES ($1,$2,$3,$4,$5) ON CONFLICT (instance_id) DO NOTHING`,
+		start.InstanceID, start.Service, start.Version, start.BootDurationMS, start.StartedAt)
+	return err
+}
+
+// RecordOwnStart is how analytics-service announces itself, and the one place
+// this database is written outside a projection.
+//
+// It writes directly instead of publishing, because it is the consumer: the
+// event would travel to itself and back for no gain, and sending it would
+// require an exception in the one NATS user that is permitted to publish no
+// myunivokai subject at all. Keeping that absolute intact is worth more than
+// making all six services look identical here.
+func (store *PostgresStore) RecordOwnStart(ctx context.Context, start models.ServiceStart) error {
+	transaction, err := store.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+	if err := insertServiceStart(ctx, transaction, start); err != nil {
+		return err
+	}
+	return transaction.Commit(ctx)
 }
 
 // upsertJobProjection is monotonic in two directions at once, because

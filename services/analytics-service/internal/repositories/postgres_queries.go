@@ -457,3 +457,66 @@ func roundToInt(value float64) int {
 	}
 	return int(value + 0.5)
 }
+
+// ListServiceStarts is the same keyset shape as ListJobs, over the one table
+// here that is not a projection. Newest first, because the question this
+// answers is almost always "what restarted recently".
+func (store *PostgresStore) ListServiceStarts(ctx context.Context, filter models.ServiceStartListFilter) (contracts.ServiceStartListResponseData, error) {
+	pageSize := contracts.NormalizePageSize(filter.PageSize)
+	conditions := []string{"($1 = '' OR service = $1)"}
+	arguments := []any{filter.Service}
+	countCondition := strings.Join(conditions, " AND ")
+
+	pageArguments := append([]any(nil), arguments...)
+	if filter.Cursor != "" {
+		cursorStartedAt, cursorInstanceID, err := decodeCursor(filter.Cursor)
+		if err != nil {
+			return contracts.ServiceStartListResponseData{}, err
+		}
+		pageArguments = append(pageArguments, cursorStartedAt, cursorInstanceID)
+		conditions = append(conditions, fmt.Sprintf("(started_at, instance_id) < ($%d, $%d)", len(pageArguments)-1, len(pageArguments)))
+	}
+	pageArguments = append(pageArguments, pageSize+1)
+
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT service, instance_id, version, boot_duration_ms, started_at
+		FROM service_starts
+		WHERE `+strings.Join(conditions, " AND ")+`
+		ORDER BY started_at DESC, instance_id DESC
+		LIMIT $`+fmt.Sprint(len(pageArguments)), pageArguments...)
+	batch.Queue(`SELECT COUNT(*) FROM service_starts WHERE `+countCondition, arguments...)
+
+	results := store.pool.SendBatch(ctx, batch)
+	defer results.Close()
+
+	rows, err := results.Query()
+	if err != nil {
+		return contracts.ServiceStartListResponseData{}, err
+	}
+	starts := make([]contracts.ServiceStartRecord, 0, pageSize)
+	for rows.Next() {
+		var start contracts.ServiceStartRecord
+		if scanError := rows.Scan(&start.Service, &start.InstanceID, &start.Version, &start.BootDurationMS, &start.StartedAt); scanError != nil {
+			rows.Close()
+			return contracts.ServiceStartListResponseData{}, scanError
+		}
+		starts = append(starts, start)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return contracts.ServiceStartListResponseData{}, err
+	}
+	rows.Close()
+
+	response := contracts.ServiceStartListResponseData{PageSize: pageSize}
+	if len(starts) > pageSize {
+		last := starts[pageSize-1]
+		response.NextCursor = encodeCursor(last.StartedAt, last.InstanceID)
+		starts = starts[:pageSize]
+	}
+	response.Starts = starts
+	if err := results.QueryRow().Scan(&response.TotalCount); err != nil {
+		return contracts.ServiceStartListResponseData{}, err
+	}
+	return response, nil
+}

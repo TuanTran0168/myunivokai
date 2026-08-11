@@ -2,8 +2,11 @@ package messaging
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"sync"
+	"time"
 
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/auth-service/internal/config"
@@ -104,4 +107,44 @@ func (runtime *Runtime) unsubscribeAll() {
 		_ = subscription.Unsubscribe()
 	}
 	runtime.subscriptions = nil
+}
+
+// PublishServiceStarted announces this boot, and is the one place this
+// service touches JetStream.
+//
+// The comment on Runtime above still holds: auth-service accepts no JetStream
+// command and publishes no domain event. A boot announcement is neither. It
+// is a fact about the process rather than about identity, it is published on
+// one literal subject the ACL grants explicitly, and nothing consumes it
+// except the read model - so the property worth protecting, that auth-service
+// participates in no domain flow, is intact.
+//
+// It is durable rather than Core NATS because analytics-service is usually
+// asleep, and a Core publish with no subscriber is simply lost. The JetStream
+// context is built here rather than in NewRuntime so a service that never
+// announces a start still pays nothing for it.
+func (runtime *Runtime) PublishServiceStarted(ctx context.Context, bootDuration time.Duration) error {
+	jetStream, err := runtime.connection.JetStream()
+	if err != nil {
+		return err
+	}
+	data := contracts.NewServiceStartedData(contracts.ServiceNameAuth, bootDuration)
+	subject, err := contracts.ServiceStartedEventSubject(data.Service)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(contracts.NewEnvelope(data.InstanceID, data))
+	if err != nil {
+		return err
+	}
+	message := nats.NewMsg(subject)
+	message.Header.Set(nats.MsgIdHdr, data.InstanceID)
+	message.Data = payload
+	publishContext, cancel := context.WithTimeout(ctx, runtime.config.NATSConnectTimeout)
+	defer cancel()
+	if _, err := jetStream.PublishMsg(message, nats.Context(publishContext)); err != nil {
+		return err
+	}
+	log.Info().Str("instance_id", data.InstanceID).Str("version", data.Version).Int64("boot_ms", data.BootDurationMS).Msg("service start announced")
+	return nil
 }

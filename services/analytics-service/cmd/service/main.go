@@ -7,10 +7,14 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
+
+	contracts "github.com/myunivokai/myunivokai/contracts/go"
 
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/config"
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/db"
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/messaging"
+	"github.com/myunivokai/myunivokai/services/analytics-service/internal/models"
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/repositories"
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/services"
 	"github.com/rs/zerolog/log"
@@ -45,6 +49,7 @@ func startHealthServer() *http.Server {
 }
 
 func main() {
+	processStartedAt := time.Now()
 	serviceConfig, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("load analytics service configuration")
@@ -84,7 +89,37 @@ func main() {
 	if err := messagingRuntime.Run(runtimeContext); err != nil {
 		log.Fatal().Err(err).Msg("start analytics messaging runtime")
 	}
+	recordOwnStart(runtimeContext, store, time.Since(processStartedAt))
 	log.Info().Msg("analytics service ready")
 	<-runtimeContext.Done()
 	messagingRuntime.Close()
+}
+
+// recordOwnStart writes this boot straight to the database instead of
+// publishing it.
+//
+// Every other service announces itself on myunivokai.events.<name>.service.started.v1
+// and this service projects it. analytics-service is that consumer, so the
+// event would travel to itself and back for nothing - and sending it would
+// need an exception in the one NATS user allowed to publish no myunivokai
+// subject at all (infra/nats/nats-server.conf). Keeping that absolute is
+// worth more than making all six look identical.
+//
+// A failure here is logged and not fatal. Losing one row of boot history is
+// not a reason to refuse to consume events, which is what this process exists
+// to do.
+func recordOwnStart(ctx context.Context, store *repositories.PostgresStore, bootDuration time.Duration) {
+	data := contracts.NewServiceStartedData(contracts.ServiceNameAnalytics, bootDuration)
+	start := models.ServiceStart{
+		Service:        data.Service,
+		InstanceID:     data.InstanceID,
+		Version:        data.Version,
+		BootDurationMS: data.BootDurationMS,
+		StartedAt:      time.Now().UTC(),
+	}
+	if err := store.RecordOwnStart(ctx, start); err != nil {
+		log.Error().Err(err).Msg("record analytics service start")
+		return
+	}
+	log.Info().Str("instance_id", start.InstanceID).Str("version", start.Version).Int64("boot_ms", start.BootDurationMS).Msg("analytics service start recorded")
 }

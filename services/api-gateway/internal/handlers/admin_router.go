@@ -86,6 +86,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/timeseries", analyticsHandler.Timeseries)
 		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds", analyticsHandler.ListWorlds)
 		managementRouter.With(requirePermission(contracts.PermissionJobRead)).Get("/jobs", analyticsHandler.ListJobs)
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/service-starts", analyticsHandler.ListServiceStarts)
 
 		// The one admin read that does not come from analytics-service, and
 		// the one that wakes nothing to answer - see AdminWakeHandler.

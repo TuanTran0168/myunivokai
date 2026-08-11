@@ -23,10 +23,16 @@ type Store interface {
 	// the message had already been processed and nothing was written.
 	Apply(ctx context.Context, projection models.Projection) (applied bool, err error)
 
+	// RecordOwnStart writes this service's own boot. It is separate from
+	// Apply because no event carries it: analytics-service is the consumer,
+	// so it records itself directly rather than publishing to itself.
+	RecordOwnStart(ctx context.Context, start models.ServiceStart) error
+
 	Overview(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsOverviewResponseData, error)
 	ListWorlds(ctx context.Context, filter models.WorldListFilter) (contracts.AnalyticsWorldListResponseData, error)
 	ListJobs(ctx context.Context, filter models.JobListFilter) (contracts.AnalyticsJobListResponseData, error)
 	Timeseries(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsTimeseriesResponseData, error)
+	ListServiceStarts(ctx context.Context, filter models.ServiceStartListFilter) (contracts.ServiceStartListResponseData, error)
 
 	// Ping reports whether the backing storage is reachable.
 	Ping(ctx context.Context) error

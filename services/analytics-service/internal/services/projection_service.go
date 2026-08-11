@@ -118,8 +118,45 @@ func BuildProjection(subject, messageID string, payload []byte) (models.Projecti
 		}, nil
 
 	default:
+		if serviceName := contracts.ServiceNameForStartedSubject(subject); serviceName != "" {
+			return buildServiceStartProjection(subject, serviceName, messageID, payload)
+		}
 		return models.Projection{}, ErrUnknownSubject
 	}
+}
+
+// buildServiceStartProjection is reached through the default arm rather than a
+// case list because the five announcement subjects are derived from
+// contracts.ServiceNames. Spelling them out here would let that list and this
+// switch drift apart, and the failure would be silent - a new service's
+// starts simply never appearing.
+func buildServiceStartProjection(subject, serviceName, messageID string, payload []byte) (models.Projection, error) {
+	envelope, err := decodeEnvelope[contracts.ServiceStartedData](payload)
+	if err != nil {
+		return models.Projection{}, err
+	}
+	if err := envelope.Data.Validate(); err != nil {
+		return models.Projection{}, fmt.Errorf("invalid service started event on %s: %w", subject, err)
+	}
+	// The subject wins over the body. A publisher may only send on its own
+	// subject - the broker enforces that - so a payload naming a different
+	// service is either a bug or an attempt to write another service's
+	// history, and neither should reach the table.
+	if envelope.Data.Service != serviceName {
+		return models.Projection{}, fmt.Errorf("service started event on %s claims to be %q", subject, envelope.Data.Service)
+	}
+	return models.Projection{
+		// The instance id is the natural idempotency key: one boot, one row,
+		// however many times JetStream redelivers it.
+		Message: inboxMessage(messageID, subject, envelope.Data.InstanceID),
+		ServiceStart: &models.ServiceStart{
+			Service:        serviceName,
+			InstanceID:     envelope.Data.InstanceID,
+			Version:        envelope.Data.Version,
+			BootDurationMS: envelope.Data.BootDurationMS,
+			StartedAt:      envelope.Timestamp,
+		},
+	}, nil
 }
 
 func inboxMessage(messageID, subject, jobID string) models.InboxMessage {

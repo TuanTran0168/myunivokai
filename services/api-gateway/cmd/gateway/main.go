@@ -26,6 +26,7 @@ const (
 )
 
 func main() {
+	processStartedAt := time.Now()
 	zerolog.TimeFieldFormat = time.RFC3339
 	gatewayConfig, err := config.Load()
 	if err != nil {
@@ -62,6 +63,14 @@ func main() {
 		WriteTimeout:      gatewayConfig.NATSPublishTimeout + gatewayConfig.NATSRequestTimeout + serverWriteMargin,
 		IdleTimeout:       serverIdleTimeout,
 	}
+	// Announced once the router is built and the server is about to listen,
+	// which is where this process becomes useful. Never fatal: a gateway that
+	// cannot describe its own boot is still a working gateway.
+	announceContext, cancelAnnounce := context.WithTimeout(context.Background(), gatewayConfig.NATSPublishTimeout)
+	if err := brokerClient.PublishServiceStarted(announceContext, time.Since(processStartedAt)); err != nil {
+		log.Error().Err(err).Msg("announce gateway service start")
+	}
+	cancelAnnounce()
 	go func() {
 		log.Info().Str("addr", gatewayConfig.Address()).Msg("api gateway listening")
 		if serveError := server.ListenAndServe(); serveError != nil && serveError != http.ErrServerClosed {

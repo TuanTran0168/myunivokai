@@ -88,6 +88,45 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/service-starts:
+    get:
+      summary: Every process boot, newest first
+      description: >-
+        A process cannot report its own death - an OOM kill runs no handler -
+        so each one announces its start instead, and a start nobody scheduled
+        is the evidence that a stop happened.
+
+
+        Unlike /wake-stats this outlives the hosting tier: waking is a property
+        of a scale-to-zero plan, restarting is a property of running software.
+        The two answer different halves of one question, and reading them
+        together separates "the service never came up" from "it came up and
+        then died".
+
+
+        `instanceId` is fresh per boot, which is what distinguishes one process
+        running for a week from seven crash-restarts. `version` is "unknown"
+        rather than guessed when the build supplied none.
+      operationId: adminListServiceStarts
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - name: service
+          in: query
+          required: false
+          description: Unknown names are ignored rather than rejected, returning every service.
+          schema: { type: string, enum: [gateway, dna, universe, nature, auth, analytics] }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: One page of boots, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceStartList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
   /api/admin/wake-stats:
     get:
       summary: How often each service had to be started, and when each was last seen running
@@ -348,6 +387,30 @@ components:
           description: Jobs that reached a terminal state and therefore have a duration.
         publishRatePercent: { type: number }
         multiVariantPercent: { type: number }
+    ServiceStartList:
+      type: object
+      additionalProperties: false
+      required: [starts, pageSize, totalCount]
+      properties:
+        starts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [service, instanceId, version, bootDurationMs, startedAt]
+            properties:
+              service: { type: string }
+              instanceId: { type: string }
+              version:
+                type: string
+                description: Commit the process was built from, or the literal "unknown" when the build supplied none. Never guessed.
+              bootDurationMs:
+                type: integer
+                description: Process start to ready-to-serve. On a scale-to-zero host this is what decides whether Retry-After is long enough.
+              startedAt: { type: string, format: date-time }
+        pageSize: { type: integer }
+        nextCursor: { type: string }
+        totalCount: { type: integer }
     WakeStats:
       type: object
       additionalProperties: false
