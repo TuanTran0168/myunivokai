@@ -1,19 +1,50 @@
 # Service wake mechanism — cold-start handling for free-tier domain services
 
-> **Document status:** Proposed; not scheduled
-> **Last source review:** 2026-08-05
-> **Priority:** Explicitly deferred by the owner on 2026-08-05, behind
-> auth-service, analytics-service and `apps/myunivokai-admin`. Recorded now so
-> the design is not lost, not because it is next.
+> **Document status:** Implemented on `feat/be/service-wake-mechanism`
+> **Last source review:** 2026-08-08
 > **Owner's framing:** *"giống như fix bẩn cho render free tier vậy"* — a patch
 > for a hosting-tier constraint, not a product feature. Treat it as such: keep
-> it removable in one step (see §Removal when leaving free tier).
+> it removable in one step (see §Removal when leaving free tier) — as built, that
+> step is `SERVICE_WAKE_PLATFORM=none`, and full deletion is one directory.
 
-## Why this document exists despite being deferred
+## What was built, and where it differs from this design
 
-This is a real, reproduced production defect, not a hypothetical. It is recorded
-in full so that when it is picked up — or if it causes a visible incident before
-then — nobody has to re-derive the mechanism from scratch.
+The design below was followed. Three things ended up different, each because
+the owner asked for a shape that survives leaving Render:
+
+**A platform abstraction, not a Render-specific ping.** The wake is an
+adapter behind an interface — `internal/wake.Platform`, with
+`internal/wake/platforms` holding one adapter per mechanism and
+`internal/wake/factory` holding the switch. This mirrors `ai.Provider` /
+`ai/providers` / `aifactory` in dna-service exactly, including the fail-fast on
+an unknown name. Policy that every platform shares — single-flight, the
+detached context, fire-and-forget — lives in `wake.Coordinator`, the way
+`ai.Orchestrator` owns timeout and repair while providers stay dumb. Moving to
+Koyeb, Fly.io or Railway is a URL change; moving to something that scales a
+Deployment through an API is a new file plus one `case`.
+
+**`SERVICE_WAKE_PLATFORM`, not `SERVICE_WAKE_ENABLED`.** §Removal proposed a
+boolean. A name is strictly better: `none` *is* the off switch, so there is one
+knob instead of two that can contradict each other, and `none` is an honest
+description of an always-on host rather than a disabled feature. It also
+mirrors `AI_PROVIDER=mock` — the default that reaches nobody's infrastructure.
+
+**Mutations retry too.** §Frontend change kept "mutating requests are never
+retried automatically". That rule is right for `429` but wrong here:
+`SERVICE_WAKING` is produced by exactly one condition — the broker reporting
+that no subscriber existed — so the request provably never reached a service
+and a repeat cannot publish or create anything twice. Without this, the
+Publish button on a sleeping service simply fails.
+
+Everything else — proactive on write, reactive on read, the Redis single-flight
+lock, the three-way status split, `/healthz` as a start signal — is as written
+below.
+
+The owner's constraint at the time of building: *"chỉ wake up 1 lần duy nhất
+khi cần dùng thôi, sau đó ko ai dùng nữa cứ để nó sleep cho đỡ tốn 750h"*. That
+is what this is: one call per sleeping service per lock window, triggered by
+demand, with no schedule anywhere. Nothing keeps an instance awake, and
+`render.yaml` still sets no `healthCheckPath` on any service.
 
 ## The defect, reproduced
 
@@ -197,8 +228,17 @@ specifies).
 | Frontend retry on `SERVICE_WAKING` | **Keep permanently**, though it will rarely fire |
 | Redis single-flight lock | **Keep** — reusable for any future expensive side effect triggered by a request burst |
 
-Gate the ping behavior behind a single flag, e.g. `SERVICE_WAKE_ENABLED`, so the
-removal step is a config change, not a code change. Keep the classification and
+**As built, removal is two steps and the first one is free.** Setting
+`SERVICE_WAKE_PLATFORM=none` makes the whole thing inert with no code change —
+that is the step for moving to a paid plan or a real background worker, and the
+code that stays costs one map lookup per failed request. Actually deleting it
+is `rm -r services/api-gateway/internal/wake` plus a call-site list that the
+package doc in `internal/wake/platform.go` enumerates in full. Everything the
+mechanism owns lives under that one directory precisely so the second step is a
+mechanical edit rather than a hunt.
+
+Gate the ping behavior behind a single setting — as built, `SERVICE_WAKE_PLATFORM=none`
+— so the removal step is a config change, not a code change. Keep the classification and
 retry contract regardless of the flag: `no-responders` is a legitimate,
 recurring production condition even on paid plans — during a rolling deploy, a
 crash-restart, an OOM-kill, or a scale-down — and today the gateway detects it

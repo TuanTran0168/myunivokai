@@ -63,7 +63,7 @@ admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_aut
 | [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | Implemented single-origin frontend baseline |
 | [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
 | [analytics-service-plan.md](analytics-service-plan.md) | The admin read model (CQRS). Implemented — replaced the gateway fan-out before it was written |
-| [service-wake-mechanism.md](service-wake-mechanism.md) | Confirmed production cold-start defect; deferred by the owner, not scheduled |
+| [service-wake-mechanism.md](service-wake-mechanism.md) | Cold-start handling for scale-to-zero hosting: platform-adapter wake, the SERVICE_WAKING/UNAVAILABLE/TIMEOUT split, and the one-line exit when leaving free tier. Implemented |
 
 ## Product model
 

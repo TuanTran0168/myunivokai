@@ -22,6 +22,55 @@ terminal jobs, worlds, and privacy-safe share projections use configured bounded
 TTLs. If Redis fails, cache becomes a miss and rate limiting falls back to a
 conservative process-local bucket. Readiness reports the degradation.
 
+## Service wake
+
+Every service behind this gateway is a pure NATS consumer, and an instance on a
+scale-to-zero plan wakes only on inbound HTTP. Nothing in normal operation ever
+sends one any, so a query against a sleeping service gets an immediate
+`no-responders` reply — not a timeout. The gateway starts it instead.
+
+Three failures used to collapse into one `503 SERVICE_UNAVAILABLE`. They are
+now told apart, because only one of them is worth retrying:
+
+| Code | Status | Condition | What it means |
+| --- | --- | --- | --- |
+| `SERVICE_WAKING` | 503 + `Retry-After` | `nats.ErrNoResponders`, and a wake platform covers this service | Asleep, now starting. The request never arrived, so retrying is safe for any method |
+| `SERVICE_UNAVAILABLE` | 503 | any other transport fault, or no wake platform covers this service | A real problem; retrying will not help |
+| `SERVICE_TIMEOUT` | 504 | `context.DeadlineExceeded` | Awake but slow |
+
+Reads wake reactively, on the `no-responders` reply. Writes cannot: publishing
+a command to JetStream succeeds whether or not a consumer is alive, so
+`POST /api/{family}/worlds` returns `202`, the job sits at `queued`, and every
+response in the trace is a success — there is no error for a reactive wake to
+hang off. That path therefore wakes dna and the family service **before**
+publishing.
+
+The gateway never waits for a cold start. Its `WriteTimeout` is about eight
+seconds against a 20-60 second boot, and it is itself a scale-to-zero instance,
+so holding connections open would turn one sleeping service into a second
+outage. It answers immediately and lets the client's retry land after the wake.
+
+`internal/wake` is shaped like dna-service's `internal/ai`: `Platform` adapters
+that know only their vendor's mechanism (`wake/platforms`), a `Coordinator`
+holding the policy they all share (single-flight through Redis, a detached
+context, fire-and-forget), and `wake/factory` holding the switch — which fails
+at startup on an unknown name rather than silently waking nothing.
+
+Everything lives under that one directory on purpose. This is a workaround for
+a hosting constraint, not a product feature, so it is built to be deleted:
+`internal/wake/` is the whole subsystem, and the package doc there lists every
+call site outside it. See §Removal in
+[service-wake-mechanism.md](../../notes/vision/service-wake-mechanism.md).
+
+`SERVICE_WAKE_PLATFORM` selects the adapter. `none` is the default and the
+correct value on any always-on host, so leaving free tier is one line of
+config. `http` covers Render free, Koyeb, Fly.io and Railway alike, since they
+differ only in the URL an operator pastes into `DNA_SERVICE_URL` and friends. A
+service left without a URL is simply not wakeable and keeps reporting plain
+`SERVICE_UNAVAILABLE` — the gateway never promises a wake it cannot deliver.
+
+Design and the exit plan: `notes/vision/service-wake-mechanism.md`.
+
 ## Admin route group (`/api/admin`)
 
 A second, independently configured `chi` sub-router mounted alongside the
@@ -38,7 +87,7 @@ specific permission (every record and analytics route);
 `internal/handlers/admin_router_test.go` enumerates the mounted routes and
 fails if a future one is added without any of the three.
 
-`internal/adminauth` + `internal/middleware.RequireAdminAccessToken` implement
+`internal/admin/auth` + `internal/middleware.RequireAdminAccessToken` implement
 local Ed25519 access-token verification plus the Redis `tokenVersion`
 cache-miss fallback (`auth-service` is called at most once per miss, never
 per request) — see

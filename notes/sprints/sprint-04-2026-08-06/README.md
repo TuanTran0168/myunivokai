@@ -80,7 +80,15 @@ The record lists and charts ship once, against analytics-service, in
       [analytics-service-plan.md §Data boundary](../../vision/analytics-service-plan.md#data-boundary--what-crosses-into-analytics-and-what-never-does).
 - [ ] Both new services are deployed and pass local + production smoke.
 
-## Known accepted risk
+## Known accepted risk — ✅ RESOLVED after the sprint
+
+> **Update 2026-08-08:** this risk no longer stands. The wake mechanism was
+> built immediately after the analytics work, on the same branch, once the
+> owner confirmed it was next. The gateway now answers a sleeping service with
+> `503 SERVICE_WAKING` and starts it, and both frontends wait that out — see
+> [service-wake-mechanism.md](../../vision/service-wake-mechanism.md), whose
+> status is now Implemented. The original text is kept below because it is
+> what justified shipping the sprint without it.
 
 **analytics-service inherits the same cold-start defect as dna/universe/nature,
 unmitigated for this sprint.** Its event consumer never loses data — JetStream
@@ -99,7 +107,8 @@ out of scope here.
 
 - [service-wake-mechanism.md](../../vision/service-wake-mechanism.md) —
   deliberately deferred by the owner behind this sprint; see §Known accepted
-  risk.
+  risk. **Built directly after the sprint closed**, on the same branch, so this
+  exclusion describes the sprint's scope rather than the current state.
 - End-user (3D-web visitor) login, world ownership, anonymous claim/migration —
   [`DEFERRED-AUTH-001`](../../user-stories/engineering-backlog.md#deferred-auth-001--define-identity-before-authentication)
   stays deferred and unaffected; staff identity never touches ownership.

@@ -40,6 +40,34 @@ only, never a token) since this phase ships no `/session` query endpoint —
 login and refresh already return that data, so caching their response is
 enough.
 
+## Cold starts
+
+The services behind this console sleep. Staff open the panel a few times a day,
+not continuously, so `auth-service` and `analytics-service` are idle far more
+often than the product services are — and the first thing that breaks is login
+itself, where a transport failure used to surface as "Invalid email or
+password". That message was not merely unhelpful; it was untrue.
+
+`src/lib/wake-retry.ts` waits out `503 SERVICE_WAKING` while the gateway starts
+the service, reading `Retry-After` for the delay. Both BFF relays forward that
+header (`src/lib/relay-headers.ts`) — they rebuild the gateway's response
+rather than streaming it, so any header the browser needs has to be named
+explicitly.
+
+The retry lives in the browser, not in the route handlers: a server-side wait
+would hold a Next.js handler open for a whole cold start, which is exactly what
+the gateway refuses to do, and route handlers have their own execution limits.
+It applies to every method, since `SERVICE_WAKING` means the request provably
+never reached a service.
+
+The login form says "Starting the service…" while this happens
+(`useLogin` returns `isWakingService` alongside the mutation), because a minute
+of silent spinner on the one screen with no other content reads as a hang. The
+silent refresh waits too — giving up there would show the credential form to
+somebody whose session is still valid, and with no refresh cookie the gateway
+answers 401 without consulting auth-service at all, so a logged-out visitor
+waits for nothing.
+
 ## Folder structure
 
 Mirrors `apps/myunivokai-web`'s split: one folder per domain under
