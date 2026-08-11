@@ -23,7 +23,7 @@ import (
 // operator can do makes it mean something. Missing targets are a stage: the
 // URLs are real, they are simply not known yet. The distinction is what
 // decides which of the two stops a deploy; see the http case below.
-func NewCoordinator(serviceConfig config.Config, lock wake.SingleFlightLock) (*wake.Coordinator, error) {
+func NewCoordinator(serviceConfig config.Config, lock wake.SingleFlightLock, stats wake.StatsRecorder) (*wake.Coordinator, error) {
 	platform, err := newPlatform(serviceConfig.ServiceWakePlatform, serviceConfig)
 	if err != nil {
 		return nil, err
@@ -31,6 +31,7 @@ func NewCoordinator(serviceConfig config.Config, lock wake.SingleFlightLock) (*w
 	return wake.NewCoordinator(
 		platform,
 		lock,
+		stats,
 		serviceConfig.ServiceWakeTimeout,
 		serviceConfig.ServiceWakeLockTimeToLive,
 		serviceConfig.ServiceWakeRetryAfter,

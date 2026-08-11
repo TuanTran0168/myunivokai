@@ -56,6 +56,27 @@ func (service *AnalyticsService) ListJobs(ctx context.Context, query contracts.A
 	})
 }
 
+// ListServiceStarts reads the boot history. An unknown service name is
+// dropped to "" for the same reason as normalizeFamily below: an
+// unrecognised filter returning an empty table reads as "nothing ever
+// restarted", which is the most misleading answer available.
+func (service *AnalyticsService) ListServiceStarts(ctx context.Context, query contracts.ServiceStartListQueryData) (contracts.ServiceStartListResponseData, error) {
+	return service.store.ListServiceStarts(ctx, models.ServiceStartListFilter{
+		Service:  normalizeServiceName(query.Service),
+		Cursor:   query.Cursor,
+		PageSize: contracts.NormalizePageSize(query.PageSize),
+	})
+}
+
+func normalizeServiceName(serviceName string) string {
+	for _, known := range contracts.ServiceNames {
+		if known == serviceName {
+			return serviceName
+		}
+	}
+	return ""
+}
+
 // normalizeFamily and normalizeStatus drop values outside the known set
 // rather than passing them to SQL. An unrecognised filter becomes "no
 // filter", which returns a superset — the alternative, letting it through,

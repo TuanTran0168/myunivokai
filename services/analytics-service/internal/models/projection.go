@@ -37,9 +37,29 @@ type JobEvent struct {
 // dna.generated event moves a job and touches no world; a world.changed event
 // moves a world and says nothing about the job.
 type Projection struct {
-	Message  InboxMessage
-	Job      *JobEvent
-	Snapshot *contracts.WorldSnapshot
+	Message      InboxMessage
+	Job          *JobEvent
+	Snapshot     *contracts.WorldSnapshot
+	ServiceStart *ServiceStart
+}
+
+// ServiceStart is a process announcing that it came up. Unlike every other
+// field on Projection it is not derived from anything - see
+// migrations/000002_service_starts.sql.
+type ServiceStart struct {
+	Service        string
+	InstanceID     string
+	Version        string
+	BootDurationMS int64
+	StartedAt      time.Time
+}
+
+// ServiceStartListFilter mirrors contracts.ServiceStartListQueryData with the
+// cursor already decoded.
+type ServiceStartListFilter struct {
+	Service  string
+	PageSize int
+	Cursor   string
 }
 
 // WorldListFilter mirrors contracts.AnalyticsWorldListQueryData with the

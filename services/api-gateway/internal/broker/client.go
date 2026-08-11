@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog/log"
 )
 
 const dnaGenerateMessageSuffix = ":dna-generate"
@@ -95,4 +97,37 @@ func (client *NATSClient) Ping(ctx context.Context) error {
 func (client *NATSClient) Close() {
 	_ = client.connection.Drain()
 	client.connection.Close()
+}
+
+// PublishServiceStarted announces this gateway process, the same way every
+// other service announces itself.
+//
+// Deliberately not on the Client interface. The handlers have no business
+// announcing a boot, and widening the interface would force every test double
+// in internal/handlers to grow a method none of them would ever call. Startup
+// telemetry belongs to the process, so it is reached from cmd/gateway through
+// the concrete type.
+//
+// A failure here is never fatal to the caller: the gateway serving traffic
+// matters, its own boot record does not.
+func (client *NATSClient) PublishServiceStarted(ctx context.Context, bootDuration time.Duration) error {
+	data := contracts.NewServiceStartedData(contracts.ServiceNameGateway, bootDuration)
+	subject, err := contracts.ServiceStartedEventSubject(data.Service)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(contracts.NewEnvelope(data.InstanceID, data))
+	if err != nil {
+		return err
+	}
+	message := nats.NewMsg(subject)
+	// The instance id doubles as the JetStream dedup key, so a redelivery
+	// cannot be mistaken for a second boot.
+	message.Header.Set(nats.MsgIdHdr, data.InstanceID)
+	message.Data = payload
+	if _, err := client.jetStream.PublishMsg(message, nats.Context(ctx)); err != nil {
+		return err
+	}
+	log.Info().Str("instance_id", data.InstanceID).Str("version", data.Version).Int64("boot_ms", data.BootDurationMS).Msg("service start announced")
+	return nil
 }

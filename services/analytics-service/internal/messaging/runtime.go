@@ -102,6 +102,7 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 		{subject: contracts.AnalyticsWorldListQuerySubject, handler: runtime.natsHandler.HandleWorldListQuery},
 		{subject: contracts.AnalyticsJobListQuerySubject, handler: runtime.natsHandler.HandleJobListQuery},
 		{subject: contracts.AnalyticsTimeseriesGetQuerySubject, handler: runtime.natsHandler.HandleTimeseriesQuery},
+		{subject: contracts.AnalyticsServiceStartListQuerySubject, handler: runtime.natsHandler.HandleServiceStartListQuery},
 	}
 	for _, binding := range queryBindings {
 		subscription, subscribeError := runtime.connection.QueueSubscribe(binding.subject, queryQueueName, binding.handler)

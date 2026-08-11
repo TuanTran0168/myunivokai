@@ -17,10 +17,12 @@ import (
 )
 
 type fakeWaker struct {
-	mutex      sync.Mutex
-	supported  map[string]bool
-	woken      []string
-	retryAfter time.Duration
+	mutex       sync.Mutex
+	supported   map[string]bool
+	woken       []string
+	seenCalls   []string
+	retryAfter  time.Duration
+	wakeFailing map[string]bool
 }
 
 func newFakeWaker(supported ...string) *fakeWaker {
@@ -43,12 +45,81 @@ func (waker *fakeWaker) Wake(service string) {
 	waker.woken = append(waker.woken, service)
 }
 
+func (waker *fakeWaker) Seen(service string) {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	waker.seenCalls = append(waker.seenCalls, service)
+}
+
+func (waker *fakeWaker) seenServices() []string {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	return append([]string(nil), waker.seenCalls...)
+}
+
+func (waker *fakeWaker) WakeIsFailing(_ context.Context, service string) bool {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	return waker.wakeFailing[service]
+}
+
+func (waker *fakeWaker) failWakesFor(services ...string) *fakeWaker {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	if waker.wakeFailing == nil {
+		waker.wakeFailing = make(map[string]bool)
+	}
+	for _, service := range services {
+		waker.wakeFailing[service] = true
+	}
+	return waker
+}
+
 func (waker *fakeWaker) RetryAfter() time.Duration { return waker.retryAfter }
 
 func (waker *fakeWaker) wokenServices() []string {
 	waker.mutex.Lock()
 	defer waker.mutex.Unlock()
 	return append([]string(nil), waker.woken...)
+}
+
+// A reply is the only unbiased evidence that a service was awake, and it has
+// to be recorded whatever the reply says. A service cannot announce its own
+// sleep - a spin-down signal is indistinguishable from a deploy, and an OOM
+// kill sends nothing - so this stamp plus the next wake is what bounds how
+// long each service was down.
+func TestASuccessfulReplyStampsTheServiceAsSeen(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	brokerClient := &fakeBroker{response: contracts.NewEnvelope("request-id", contracts.RPCResponseData{
+		StatusCode: http.StatusOK, Payload: []byte(`{"jobId":"01HZY000000000000000000000","status":"queued"}`),
+	})}
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if seen := waker.seenServices(); !equalStrings(seen, []string{wake.ServiceDNA}) {
+		t.Fatalf("stamped %v as seen, want [%s]", seen, wake.ServiceDNA)
+	}
+	if woken := waker.wokenServices(); len(woken) != 0 {
+		t.Fatalf("a service that answered was woken anyway: %v", woken)
+	}
+}
+
+// The opposite case, and the one that would quietly ruin the measurement:
+// nobody answered, so nothing may be stamped as having been seen. Recording a
+// liveness observation here would make a sleeping service look permanently
+// awake and every derived sleep interval zero.
+func TestNoResponderStampsNothingAsSeen(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if seen := waker.seenServices(); len(seen) != 0 {
+		t.Fatalf("stamped %v as seen although nobody replied", seen)
+	}
 }
 
 func errorCodeOf(t *testing.T, body []byte) string {
@@ -297,4 +368,70 @@ func equalStrings(actual, expected []string) bool {
 		}
 	}
 	return true
+}
+
+// The point of the whole failure tally: a service that is asleep and a
+// service that is dead send the identical no-responders reply, and the
+// gateway used to answer both with "starting up, please retry". A client
+// obeying that spins forever against something that is never coming back.
+func TestARepeatedlyFailedWakeStopsPromisingTheClientARetry(t *testing.T) {
+	waker := newFakeWaker(wake.ServiceDNA).failWakesFor(wake.ServiceDNA)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", response.Code)
+	}
+	if code := errorCodeOf(t, response.Body.Bytes()); code != "SERVICE_UNAVAILABLE" {
+		t.Fatalf("error code = %q, want SERVICE_UNAVAILABLE", code)
+	}
+	// No Retry-After: the header is what a client waits on, and there is
+	// nothing worth waiting for.
+	if retryAfter := response.Header().Get("Retry-After"); retryAfter != "" {
+		t.Fatalf("Retry-After = %q, want it absent once wakes are failing", retryAfter)
+	}
+	// Still woken. Giving up on the wake as well would remove the only thing
+	// that could bring the service back, and the call is single-flighted so
+	// it costs almost nothing to keep trying.
+	if woken := waker.wokenServices(); !equalStrings(woken, []string{wake.ServiceDNA}) {
+		t.Fatalf("woke %v, want the gateway to keep trying [%s]", woken, wake.ServiceDNA)
+	}
+}
+
+// One service failing must not change what the gateway says about another.
+// The tally is per service precisely because a dead dna says nothing about
+// nature.
+func TestAFailingServiceDoesNotCondemnItsNeighbours(t *testing.T) {
+	waker := newFakeWaker(wake.Services...).failWakesFor(wake.ServiceDNA)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/nature/worlds/9f8a1b2c-3d4e-4f50-8a1b-2c3d4e5f6071", nil))
+
+	if code := errorCodeOf(t, response.Body.Bytes()); code != "SERVICE_WAKING" {
+		t.Fatalf("error code = %q, want nature to still be reported as waking", code)
+	}
+	if retryAfter := response.Header().Get("Retry-After"); retryAfter != "15" {
+		t.Fatalf("Retry-After = %q, want 15", retryAfter)
+	}
+}
+
+// A deadline means the service answered too slowly, which is the opposite of
+// not answering at all. The failure tally must not be consulted for it, or a
+// slow service inherits a dead one's verdict.
+func TestAFailingWakeDoesNotChangeATimeout(t *testing.T) {
+	waker := newFakeWaker(wake.ServiceDNA).failWakesFor(wake.ServiceDNA)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: context.DeadlineExceeded}, newFakeEdgeStore(), waker)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if response.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want 504", response.Code)
+	}
+	if code := errorCodeOf(t, response.Body.Bytes()); code != "SERVICE_TIMEOUT" {
+		t.Fatalf("error code = %q, want SERVICE_TIMEOUT", code)
+	}
+	if woken := waker.wokenServices(); len(woken) != 0 {
+		t.Fatalf("a slow service was woken: %v", woken)
+	}
 }

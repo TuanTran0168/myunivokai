@@ -207,4 +207,73 @@ func (store *recordingStore) Timeseries(context.Context, models.OverviewFilter) 
 	panic("the projection path must never read")
 }
 
+func (store *recordingStore) ListServiceStarts(context.Context, models.ServiceStartListFilter) (contracts.ServiceStartListResponseData, error) {
+	panic("the projection path must never read")
+}
+
+// RecordOwnStart is the one write outside Apply, and it must stay outside the
+// projection path too: this service records its own boot directly, never by
+// consuming an event.
+func (store *recordingStore) RecordOwnStart(context.Context, models.ServiceStart) error {
+	panic("the projection path must never record a start")
+}
+
 func (store *recordingStore) Ping(context.Context) error { return nil }
+
+// A boot announcement becomes one row, and the subject decides whose row it
+// is. The payload's own service field is checked against it rather than
+// trusted, because the broker grants each user exactly its own literal
+// subject - so a mismatch means either a bug or an attempt to write another
+// service's history.
+func TestServiceStartedEventProjectsOneRowPerBoot(t *testing.T) {
+	subject, err := contracts.ServiceStartedEventSubject(contracts.ServiceNameUniverse)
+	if err != nil {
+		t.Fatalf("subject for universe: %v", err)
+	}
+	data := contracts.ServiceStartedData{
+		Service: contracts.ServiceNameUniverse, InstanceID: "abc123", Version: "d1de70d", BootDurationMS: 480,
+	}
+	payload, err := json.Marshal(contracts.NewEnvelope(data.InstanceID, data))
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+
+	projection, err := BuildProjection(subject, "message-1", payload)
+	if err != nil {
+		t.Fatalf("BuildProjection returned %v", err)
+	}
+	if projection.ServiceStart == nil {
+		t.Fatal("no service start was produced")
+	}
+	if projection.ServiceStart.Service != contracts.ServiceNameUniverse || projection.ServiceStart.InstanceID != "abc123" {
+		t.Fatalf("start = %+v, want universe/abc123", *projection.ServiceStart)
+	}
+	if projection.ServiceStart.Version != "d1de70d" || projection.ServiceStart.BootDurationMS != 480 {
+		t.Fatalf("start = %+v, want version d1de70d and 480ms", *projection.ServiceStart)
+	}
+	// The instance id is the inbox key, so a redelivery of the same boot is
+	// stopped before it can become a second row.
+	if projection.Message.JobID != "abc123" {
+		t.Fatalf("inbox job id = %q, want the instance id", projection.Message.JobID)
+	}
+	if projection.Job != nil || projection.Snapshot != nil {
+		t.Fatal("a boot announcement must not touch a job or a world")
+	}
+}
+
+func TestAServiceMayNotAnnounceAnotherServicesBoot(t *testing.T) {
+	subject, err := contracts.ServiceStartedEventSubject(contracts.ServiceNameUniverse)
+	if err != nil {
+		t.Fatalf("subject for universe: %v", err)
+	}
+	// Published on universe's subject - the only one it is allowed - but
+	// claiming to be dna in the body.
+	data := contracts.ServiceStartedData{Service: contracts.ServiceNameDNA, InstanceID: "abc123"}
+	payload, err := json.Marshal(contracts.NewEnvelope(data.InstanceID, data))
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	if _, err := BuildProjection(subject, "message-1", payload); err == nil {
+		t.Fatal("a payload naming another service was accepted")
+	}
+}

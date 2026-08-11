@@ -71,7 +71,7 @@ func assertNoWake(t *testing.T, platform *fakePlatform) {
 
 func TestWakeReachesTheConfiguredPlatform(t *testing.T) {
 	platform := newFakePlatform(ServiceAnalytics)
-	coordinator := NewCoordinator(platform, newFakeLock(true, nil), time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, newFakeLock(true, nil), nil, time.Second, time.Minute, time.Second)
 	coordinator.Wake(ServiceAnalytics)
 	if service := waitForWake(t, platform); service != ServiceAnalytics {
 		t.Fatalf("woke %q, want %q", service, ServiceAnalytics)
@@ -82,7 +82,7 @@ func TestWakeReachesTheConfiguredPlatform(t *testing.T) {
 // second caller must stay quiet — that is the entire purpose of the lock.
 func TestAHeldSingleFlightLockSuppressesTheWake(t *testing.T) {
 	platform := newFakePlatform(ServiceAnalytics)
-	coordinator := NewCoordinator(platform, newFakeLock(false, nil), time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, newFakeLock(false, nil), nil, time.Second, time.Minute, time.Second)
 	coordinator.Wake(ServiceAnalytics)
 	assertNoWake(t, platform)
 }
@@ -91,7 +91,7 @@ func TestAHeldSingleFlightLockSuppressesTheWake(t *testing.T) {
 // therefore cost a redundant call, never a service that stays asleep.
 func TestALockFailureStillWakes(t *testing.T) {
 	platform := newFakePlatform(ServiceAuth)
-	coordinator := NewCoordinator(platform, newFakeLock(false, errors.New("redis is down")), time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, newFakeLock(false, errors.New("redis is down")), nil, time.Second, time.Minute, time.Second)
 	coordinator.Wake(ServiceAuth)
 	if service := waitForWake(t, platform); service != ServiceAuth {
 		t.Fatalf("woke %q, want %q", service, ServiceAuth)
@@ -102,7 +102,7 @@ func TestALockFailureStillWakes(t *testing.T) {
 // Waking it anyway would be an outbound call to an address nobody configured.
 func TestAnUnsupportedServiceIsNeverWoken(t *testing.T) {
 	platform := newFakePlatform(ServiceDNA)
-	coordinator := NewCoordinator(platform, newFakeLock(true, nil), time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, newFakeLock(true, nil), nil, time.Second, time.Minute, time.Second)
 	coordinator.Wake(ServiceAnalytics)
 	assertNoWake(t, platform)
 	if coordinator.Supports(ServiceAnalytics) {
@@ -112,7 +112,7 @@ func TestAnUnsupportedServiceIsNeverWoken(t *testing.T) {
 
 func TestAnEmptyServiceNameIsNeverWoken(t *testing.T) {
 	platform := newFakePlatform(ServiceDNA)
-	coordinator := NewCoordinator(platform, newFakeLock(true, nil), time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, newFakeLock(true, nil), nil, time.Second, time.Minute, time.Second)
 	// This is what ServiceForSubject returns for a subject it cannot name, so
 	// it reaches Wake in normal operation rather than only in a test.
 	coordinator.Wake("")
@@ -139,7 +139,7 @@ func TestANilCoordinatorIsInert(t *testing.T) {
 func TestAFailedWakeIsSurvivable(t *testing.T) {
 	platform := newFakePlatform(ServiceNature)
 	platform.wakeError = errors.New("context deadline exceeded")
-	coordinator := NewCoordinator(platform, nil, time.Second, time.Minute, time.Second)
+	coordinator := NewCoordinator(platform, nil, nil, time.Second, time.Minute, time.Second)
 	coordinator.Wake(ServiceNature)
 	if service := waitForWake(t, platform); service != ServiceNature {
 		t.Fatalf("woke %q, want %q", service, ServiceNature)
@@ -147,7 +147,7 @@ func TestAFailedWakeIsSurvivable(t *testing.T) {
 }
 
 func TestRetryAfterIsReportedForClients(t *testing.T) {
-	coordinator := NewCoordinator(newFakePlatform(), nil, time.Second, time.Minute, 42*time.Second)
+	coordinator := NewCoordinator(newFakePlatform(), nil, nil, time.Second, time.Minute, 42*time.Second)
 	if retryAfter := coordinator.RetryAfter(); retryAfter != 42*time.Second {
 		t.Fatalf("RetryAfter() = %s, want 42s", retryAfter)
 	}

@@ -42,6 +42,11 @@ type RPCRequester interface {
 type ServiceWaker interface {
 	Supports(service string) bool
 	Wake(service string)
+	Seen(service string)
+	// WakeIsFailing reports that repeated wakes for this service have gone
+	// unanswered, which is what separates a service that is asleep from one
+	// that is not coming back. Both produce the same no-responders reply.
+	WakeIsFailing(ctx context.Context, service string) bool
 	RetryAfter() time.Duration
 }
 
@@ -83,10 +88,18 @@ func (transport *RPCTransport) Request(responseWriter http.ResponseWriter, reque
 	requestID := httpx.RequestID(request.Context())
 	response, err := transport.requester.Request(requestContext, subject, contracts.NewEnvelope(requestID, data))
 	if err != nil {
-		statusCode, errorCode, errorMessage := transport.classifyTransportError(responseWriter, subject, err)
+		statusCode, errorCode, errorMessage := transport.classifyTransportError(request.Context(), responseWriter, subject, err)
 		log.Error().Err(err).Str("subject", subject).Str("request_id", requestID).Str("error_code", errorCode).Msg("NATS request failed")
 		httpx.WriteError(responseWriter, request, statusCode, errorCode, errorMessage)
 		return contracts.Envelope[contracts.RPCResponseData]{}, false
+	}
+	// A reply arrived, so the service was running at this instant - which is
+	// recorded here rather than below, because a business error is still a
+	// reply. "The account was not found" proves the responder is alive just as
+	// well as a world does, and treating it as evidence of sleep would make
+	// every validation failure look like a cold start.
+	if transport.waker != nil {
+		transport.waker.Seen(wake.ServiceForSubject(subject))
 	}
 	if response.Data.Error != nil {
 		statusCode := response.Data.StatusCode
@@ -137,7 +150,7 @@ func (transport *RPCTransport) Wake(service string) {
 // crash-restart, an OOM-kill and a scale-down - so this split stays correct
 // after the ping is removed on a paid plan. See
 // notes/vision/service-wake-mechanism.md#removal-when-leaving-free-tier.
-func (transport *RPCTransport) classifyTransportError(responseWriter http.ResponseWriter, subject string, err error) (int, string, string) {
+func (transport *RPCTransport) classifyTransportError(ctx context.Context, responseWriter http.ResponseWriter, subject string, err error) (int, string, string) {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return http.StatusGatewayTimeout, "SERVICE_TIMEOUT", "The requested service took too long to respond."
@@ -151,7 +164,20 @@ func (transport *RPCTransport) classifyTransportError(responseWriter http.Respon
 		if transport.waker == nil || !transport.waker.Supports(service) {
 			return http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "The requested service is temporarily unavailable."
 		}
+		// The wake goes out either way. What changes below is only whether
+		// the client is told to come back - never whether the gateway keeps
+		// trying to bring the service up, because that is the one thing that
+		// could still fix this.
 		transport.waker.Wake(service)
+		if transport.waker.WakeIsFailing(ctx, service) {
+			// Repeated wake calls, no reply to any of them. Asleep and dead
+			// produce the same no-responders, and until now the gateway
+			// answered both with "starting up, please retry" - so a service
+			// that crash-looped on boot, was deleted, or that the host would
+			// not start left the user watching a spinner forever. Say the
+			// true thing instead and let the client stop.
+			return http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "The requested service is not responding and repeated attempts to start it have failed."
+		}
 		responseWriter.Header().Set("Retry-After", strconv.Itoa(edge.RetryAfterSeconds(transport.waker.RetryAfter())))
 		return http.StatusServiceUnavailable, "SERVICE_WAKING", "The requested service is starting up. Please retry in a moment."
 	default:

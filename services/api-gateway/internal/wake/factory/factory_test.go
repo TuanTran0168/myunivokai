@@ -19,7 +19,7 @@ func wakeConfig(platform string, targets map[string]string) config.Config {
 }
 
 func TestTheDefaultPlatformSupportsNothing(t *testing.T) {
-	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformNone), nil), nil)
+	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformNone), nil), nil, nil)
 	if err != nil {
 		t.Fatalf("the none platform should always build: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestTheHTTPPlatformSupportsOnlyTheServicesGivenAURL(t *testing.T) {
 	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), map[string]string{
 		wake.ServiceAuth:      "https://myunivokai-auth.onrender.com",
 		wake.ServiceAnalytics: "https://myunivokai-analytics.onrender.com",
-	}), nil)
+	}), nil, nil)
 	if err != nil {
 		t.Fatalf("NewCoordinator returned %v", err)
 	}
@@ -56,7 +56,7 @@ func TestTheHTTPPlatformSupportsOnlyTheServicesGivenAURL(t *testing.T) {
 // A typo must stop the deploy. Falling back to "none" would produce a gateway
 // that silently never wakes anything and reports plain 503s for months.
 func TestAnUnknownPlatformNameFails(t *testing.T) {
-	if _, err := NewCoordinator(wakeConfig("renderr", nil), nil); err == nil {
+	if _, err := NewCoordinator(wakeConfig("renderr", nil), nil, nil); err == nil {
 		t.Fatal("an unknown SERVICE_WAKE_PLATFORM was accepted")
 	}
 }
@@ -71,7 +71,7 @@ func TestAnUnknownPlatformNameFails(t *testing.T) {
 // just waking. The gateway serves traffic through the gap and says so in its
 // startup log; cmd/gateway.logServiceWake is the other half of this.
 func TestTheHTTPPlatformStartsBeforeAnyURLIsKnown(t *testing.T) {
-	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), nil), nil)
+	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), nil), nil, nil)
 	if err != nil {
 		t.Fatalf("the http platform must start before its URLs exist, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestWakeableServicesReportsOnlyWhatIsReachable(t *testing.T) {
 	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), map[string]string{
 		wake.ServiceDNA:  "https://myunivokai-dna.onrender.com",
 		wake.ServiceAuth: "https://myunivokai-auth.onrender.com",
-	}), nil)
+	}), nil, nil)
 	if err != nil {
 		t.Fatalf("NewCoordinator returned %v", err)
 	}
@@ -117,7 +117,7 @@ func TestWakeableServicesReportsOnlyWhatIsReachable(t *testing.T) {
 func TestRetryAfterComesFromConfiguration(t *testing.T) {
 	serviceConfig := wakeConfig(string(wake.PlatformNone), nil)
 	serviceConfig.ServiceWakeRetryAfter = 20 * time.Second
-	coordinator, err := NewCoordinator(serviceConfig, nil)
+	coordinator, err := NewCoordinator(serviceConfig, nil, nil)
 	if err != nil {
 		t.Fatalf("NewCoordinator returned %v", err)
 	}

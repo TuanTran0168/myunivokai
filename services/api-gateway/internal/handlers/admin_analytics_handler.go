@@ -64,6 +64,23 @@ func (handler *AdminAnalyticsHandler) ListJobs(responseWriter http.ResponseWrite
 	handler.relay(responseWriter, request, contracts.AnalyticsJobListQuerySubject, data)
 }
 
+// ListServiceStarts relays the boot history. A pure relay like its
+// neighbours: the gateway filters nothing and counts nothing, because the
+// keyset page and the total are both SQL inside analytics-service.
+//
+// It sits with the analytics routes rather than with wake-stats even though
+// both answer "what has the fleet been doing", because the two have opposite
+// lifetimes. Wake statistics describe scale-to-zero hosting and are deleted
+// with it; a restart happens on every platform, so this outlives the wake
+// mechanism entirely.
+func (handler *AdminAnalyticsHandler) ListServiceStarts(responseWriter http.ResponseWriter, request *http.Request) {
+	data := contracts.ServiceStartListQueryData{
+		PageQueryData: pageQueryFromRequest(request),
+		Service:       strings.TrimSpace(request.URL.Query().Get("service")),
+	}
+	handler.relay(responseWriter, request, contracts.AnalyticsServiceStartListQuerySubject, data)
+}
+
 func (handler *AdminAnalyticsHandler) relay(responseWriter http.ResponseWriter, request *http.Request, subject string, data any) {
 	response, ok := handler.transport.Request(responseWriter, request, subject, data)
 	if !ok {

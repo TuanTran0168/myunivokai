@@ -212,6 +212,43 @@ the same transaction, or the read model drifts silently. The guard is
 `internal/repositories/world_snapshot_test.go` in both family services, which
 asserts every mutating store method leaves an event behind.
 
+## Service start announcements
+
+Every process announces its own boot on
+`myunivokai.events.<service>.service.started.v1`, and `analytics-service`
+stores it in `service_starts`.
+
+Nothing reports a stop, because nothing can: an OOM kill or `SIGKILL` runs no
+handler, so a service that tried would record every graceful shutdown and miss
+every bad death - exactly backwards. A start is reported instead, and a start
+nobody scheduled is the evidence that a stop happened. `instanceId` is fresh
+per boot, which is what separates one process running for a week from seven
+crash-restarts.
+
+Two asymmetries are deliberate:
+
+- **`analytics-service` publishes nothing and writes its own row directly.**
+  It is the consumer, so the event would travel to itself and back, and
+  sending it would need an exception in the one NATS user permitted to publish
+  no `myunivokai` subject at all. That absolute is worth more than symmetry.
+- **`auth-service` gains `$JS.API.>` and one literal subject.** It still
+  accepts no JetStream command and publishes no domain event; a boot
+  announcement is a fact about the process, not about identity.
+
+Each service is granted its **own literal** started subject rather than a
+wildcard, so identity is enforced by the broker instead of trusted from a
+payload field - a service cannot announce a boot on another's behalf. The
+projection checks the body against the subject and rejects a mismatch.
+
+This is separate from the gateway's wake counters on purpose, and the split is
+by lifetime. Waking is a property of one hosting tier and its statistics are
+deleted with it; restarting is a property of running software. Read together
+they separate *"the service never came up"* from *"it came up and then died"*.
+
+`service_starts` is the one table in `myunivokai_analytics` that is **not** a
+projection: it is a primary observation that exists nowhere else and cannot be
+replayed. Any "drop and rebuild analytics" procedure must exclude it.
+
 ## Persistence
 
 Fresh V1 database names:

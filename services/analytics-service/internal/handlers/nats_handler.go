@@ -24,6 +24,7 @@ type AnalyticsService interface {
 	Timeseries(ctx context.Context, query contracts.AnalyticsTimeseriesQueryData) (contracts.AnalyticsTimeseriesResponseData, error)
 	ListWorlds(ctx context.Context, query contracts.AnalyticsWorldListQueryData) (contracts.AnalyticsWorldListResponseData, error)
 	ListJobs(ctx context.Context, query contracts.AnalyticsJobListQueryData) (contracts.AnalyticsJobListResponseData, error)
+	ListServiceStarts(ctx context.Context, query contracts.ServiceStartListQueryData) (contracts.ServiceStartListResponseData, error)
 }
 
 type ProjectionService interface {
@@ -119,6 +120,17 @@ func (handler *NATSHandler) HandleJobListQuery(message *nats.Msg) {
 	}
 	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AnalyticsJobListResponseData, error) {
 		return handler.analyticsService.ListJobs(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, response, err)
+}
+
+func (handler *NATSHandler) HandleServiceStartListQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.ServiceStartListQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.ServiceStartListResponseData, error) {
+		return handler.analyticsService.ListServiceStarts(ctx, envelope.Data)
 	})
 	handler.respondWithResult(message, envelope.JobID, response, err)
 }

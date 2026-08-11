@@ -90,6 +90,61 @@ distinct `warn` when none is — because a wake platform reaching nobody looks
 from the outside exactly like the defect this mechanism was built to remove,
 and that line is the only thing that tells them apart.
 
+### What gets measured, and why it lives in Redis
+
+Two numbers, both written by the gateway because it is the only process that
+observes them:
+
+| Redis key | Written when | Meaning |
+| --- | --- | --- |
+| `wake:count:<service>:<utc-day>` | a wake call is sent | wakes **actually made** — after the single-flight lock, so a burst of six requests against one sleeping service counts once |
+| `wake:seen:<service>` | a service replies | last moment it is known to have been running, throttled to one write a minute |
+| `wake:failures:<service>` | a wake is sent | wakes with no reply since. Cleared when the service answers, and expires by itself once nobody is trying |
+
+`GET /api/admin/wake-stats` reads all three back in one `MGET`.
+
+### Telling a sleeping service from a dead one
+
+Both send the identical `no-responders` reply, and the gateway used to answer
+both with `SERVICE_WAKING` — so a service that crash-looped on boot, was
+deleted, or that the host refused to start left the caller retrying something
+that was never coming back.
+
+`wake:failures` counts wakes sent with no reply since. After three, which is
+roughly three minutes against a one-minute lock window, the gateway answers
+`SERVICE_UNAVAILABLE` with no `Retry-After`.
+
+**The wake still goes out.** Only the promise stops. Giving up on the wake as
+well would remove the one thing that could bring the service back, and a
+single-flighted call costs almost nothing to keep making. A store that cannot
+be read answers "not failing" — failing closed there would turn a Redis blip
+into a fleet-wide outage report, which is a far worse error than one client
+retrying a service that is genuinely down.
+
+They are not events to `analytics-service`, and the reason is not volume.
+`analytics-service` is itself scale-to-zero, so opening a page to view wake
+statistics would wake it and produce a wake to view — the measurement would
+become its own dominant signal. The gateway is awake by definition whenever it
+records one of these, and Redis is managed, so this path stays outside what it
+measures.
+
+`wake:seen` exists because **a service cannot report its own sleep.** A host
+sends `SIGTERM` before spinning an instance down, but that same signal covers
+deploys and manual restarts, and an OOM kill or a panic sends nothing at all —
+so self-reported sleep would capture every graceful stop and miss every bad
+death. An observation from outside has no such bias: a reply proves the
+service was alive at that instant, including a reply that carries a business
+error, and the gap to the next wake bounds the sleep.
+
+**Both numbers describe scale-to-zero hosting and are meant to die with it.**
+On an always-on host there are no wakes to count and `wake:seen` is always
+now. That is not a limitation of the implementation; the phenomenon itself
+stops existing. Durable service-lifecycle history — restarts, crashes,
+versions — is a different question that outlives this subsystem, and belongs
+in service startup events rather than here. See
+[platform-evolution-research.md](../../notes/vision/platform-evolution-research.md)
+§Track B.
+
 Design and the exit plan: `notes/vision/service-wake-mechanism.md`.
 
 ## Admin route group (`/api/admin`)

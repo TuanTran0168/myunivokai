@@ -37,16 +37,45 @@
 //   - cmd/gateway/main.go — drop the factory call and the NewRouter argument
 //   - internal/handlers/router.go — drop the ServiceWaker parameter
 //   - internal/handlers/rpc_transport.go — drop ServiceWaker, the waker field,
-//     Wake, and the ErrNoResponders case in classifyTransportError
+//     Wake, Seen, and the ErrNoResponders case in classifyTransportError.
+//     Keep the three-way error split itself if anything is kept: no-responders
+//     means something different from a deadline on any host.
 //   - internal/handlers/world_handler.go — drop familyService and the two
 //     proactive Wake calls in CreateWorld
 //   - internal/config/config.go — drop the four ServiceWake* fields,
 //     serviceWakeURLKeys, readServiceWakeTargets, serviceWakeConfigured and
 //     their validation
-//   - internal/edge/redis.go — drop AcquireWakeLock and wakeKeySegment
+//   - cmd/gateway/main.go — also drop logServiceWake
+//   - internal/edge/redis.go — drop AcquireWakeLock, RecordWakeSent,
+//     RecordServiceSeen, ConsecutiveFailedWakes, WakeStats, ServiceWakeStats
+//     and the four wake key segments
+//   - internal/handlers/admin_wake_handler.go — delete the file, and drop the
+//     /wake-stats route from internal/handlers/admin_router.go
+//   - contracts/openapi-admin.yaml — drop /api/admin/wake-stats and WakeStats
 //   - render.yaml, .env.example — drop the wake block
 //   - apps/*/src — src/lib/wake-retry.ts and its call sites; keep
 //     src/lib/relay-headers.ts, which Retry-After needs for rate limiting too
+//
+// The statistics go with it, deliberately. They count wakes and stamp the
+// last moment a service answered, and on a host whose instances do not sleep
+// there are no wakes to count and the stamp is always now. Durable
+// service-lifecycle history is a different question with a different answer —
+// startup events emitted by each service, which survive this directory
+// because restarts happen on every platform. See
+// notes/vision/platform-evolution-research.md, Track B.
+//
+// # A VPS is not that host
+//
+// Self-hosting is the one destination where none of the above applies, and
+// PlatformNone is the wrong setting. A supervisor (systemd, restart:
+// unless-stopped) takes over restarting, so the wake call stops mattering —
+// but no-responders stops meaning "asleep" and starts meaning "crashed", which
+// makes the classification and the give-up tally worth more than they were
+// here, not less. The tally is the wrinkle: it is incremented inside
+// wakeDetached, which PlatformNone short-circuits, so silencing the wake also
+// silences the detection. Keeping platform=http with internal targets
+// (http://dna-service:8080) keeps everything working with no code change.
+// See notes/vision/service-wake-mechanism.md#reuse-on-a-self-hosted-vps.
 //
 // Two things are worth keeping even then, and neither depends on this package:
 // Retry-After in the admin router's exposed CORS headers, and *some*
