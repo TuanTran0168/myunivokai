@@ -12,6 +12,7 @@ import (
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/handlers"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/wake"
 	wakefactory "github.com/myunivokai/myunivokai/services/api-gateway/internal/wake/factory"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -52,6 +53,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("configure gateway service wake")
 	}
+	logServiceWake(wakeCoordinator)
 	server := &http.Server{
 		Addr:              gatewayConfig.Address(),
 		Handler:           handlers.NewRouter(gatewayConfig, brokerClient, edgeStore, wakeCoordinator),
@@ -74,4 +76,38 @@ func main() {
 	if shutdownError := server.Shutdown(shutdownContext); shutdownError != nil {
 		log.Error().Err(shutdownError).Msg("api gateway shutdown failed")
 	}
+}
+
+// logServiceWake states what this deploy can actually wake, which is not
+// always what it was configured to wake.
+//
+// The http adapter needs the target's public URL, and on a scale-to-zero host
+// that URL does not exist until the service behind it has been created - so a
+// first deploy legitimately starts with some or all of them missing. That is a
+// stage, not a failure, and the gateway must serve traffic through it. What it
+// must not do is pass through it quietly: a wake platform that reaches nobody
+// looks exactly like the defect this mechanism was built to fix, and the only
+// difference visible from outside is this line.
+func logServiceWake(coordinator *wake.Coordinator) {
+	platformName := string(coordinator.PlatformName())
+	if platformName == string(wake.PlatformNone) {
+		log.Info().Str("wake_platform", platformName).Msg("service wake disabled; a sleeping service reports SERVICE_UNAVAILABLE")
+		return
+	}
+	wakeable := coordinator.WakeableServices()
+	if len(wakeable) == 0 {
+		log.Warn().
+			Str("wake_platform", platformName).
+			Msg("service wake configured but no service URL is set, so nothing can be woken; set DNA_SERVICE_URL and the rest once the services exist")
+		return
+	}
+	logEvent := log.Info()
+	if len(wakeable) < len(wake.Services) {
+		logEvent = log.Warn()
+	}
+	logEvent.
+		Str("wake_platform", platformName).
+		Strs("wakeable_services", wakeable).
+		Int("unwakeable_services", len(wake.Services)-len(wakeable)).
+		Msg("service wake ready")
 }

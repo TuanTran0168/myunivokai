@@ -69,6 +69,27 @@ differ only in the URL an operator pastes into `DNA_SERVICE_URL` and friends. A
 service left without a URL is simply not wakeable and keeps reporting plain
 `SERVICE_UNAVAILABLE` — the gateway never promises a wake it cannot deliver.
 
+**Only an unknown platform name is fatal at startup.** Missing URLs are not,
+and the difference is deliberate: a typo can never become correct, while a
+missing URL is a stage every first deploy passes through. The targets have to
+be the services' *public* URLs, and on a scale-to-zero host those do not exist
+until the deploy that creates the services has finished — so refusing to start
+without them is a requirement the host makes impossible to satisfy, and it
+takes the entire product edge down rather than just waking.
+
+What replaces the check is a startup line naming what this process can
+actually reach, which is not always what it was configured to reach:
+
+```json
+{"level":"warn","wake_platform":"http","wakeable_services":["dna","universe"],
+ "unwakeable_services":3,"message":"service wake ready"}
+```
+
+`info` when every service has a URL, `warn` when any is missing, and a
+distinct `warn` when none is — because a wake platform reaching nobody looks
+from the outside exactly like the defect this mechanism was built to remove,
+and that line is the only thing that tells them apart.
+
 Design and the exit plan: `notes/vision/service-wake-mechanism.md`.
 
 ## Admin route group (`/api/admin`)

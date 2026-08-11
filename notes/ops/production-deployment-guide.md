@@ -305,6 +305,13 @@ go run cmd/migrate/main.go
   - Gateway tự gọi `/healthz` của service đang ngủ khi có request cần tới nó, rồi trả `503 SERVICE_WAKING` kèm `Retry-After` để client quay lại.
   - Đúng một lần cho mỗi service trong mỗi cửa sổ khoá (Redis `SET NX EX`), do request thật kích hoạt, không có lịch chạy nền — nên không tốn thêm giờ Free tier ngoài thời gian service thực sự làm việc.
   - Bật bằng `SERVICE_WAKE_PLATFORM=http` cộng các biến `*_SERVICE_URL` trong khối env của gateway (`render.yaml`). Đặt `none` khi lên plan trả phí.
+  - **Lần sync blueprint đầu tiên: để trống cả 5 biến `*_SERVICE_URL`.** Chúng phải là URL **public** `.onrender.com`, mà URL đó chỉ tồn tại sau khi chính lần sync này tạo ra service. Điền xong ở lần thứ hai rồi redeploy gateway.
+  - Không thay được bằng `fromService` + `property: host`: giá trị đó là hostname **private network**, và Render ghi rõ *"Free web services can't receive private network traffic"* — gọi vào đó không đánh thức được gì cả.
+  - Gateway **vẫn khởi động bình thường** khi thiếu URL; nó chỉ không đánh thức được ai. Mỗi lần boot nó ghi đúng một dòng cho biết nó với tới được service nào:
+    - `info … "service wake ready"` + `wakeable_services` đủ 5 → cấu hình xong.
+    - `warn … "service wake ready"` + `unwakeable_services: N` → còn thiếu N biến.
+    - `warn … "no service URL is set, so nothing can be woken"` → chưa điền biến nào.
+    - Sai tên platform (ví dụ `renderr`) thì vẫn `fatal` như cũ — lỗi đánh máy không phải một giai đoạn triển khai.
   - Chi tiết: `notes/vision/service-wake-mechanism.md`.
 
 ### 5.7. Auth Service — riêng biệt so với 3 worker kia

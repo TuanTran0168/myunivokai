@@ -1,7 +1,7 @@
 # Service wake mechanism — cold-start handling for free-tier domain services
 
-> **Document status:** Implemented on `feat/be/service-wake-mechanism`
-> **Last source review:** 2026-08-08
+> **Document status:** Implemented; merged to `staging` in PR #118
+> **Last source review:** 2026-08-12 (first-deploy startup correction)
 > **Owner's framing:** *"giống như fix bẩn cho render free tier vậy"* — a patch
 > for a hosting-tier constraint, not a product feature. Treat it as such: keep
 > it removable in one step (see §Removal when leaving free tier) — as built, that
@@ -35,6 +35,42 @@ retried automatically". That rule is right for `429` but wrong here:
 that no subscriber existed — so the request provably never reached a service
 and a repeat cannot publish or create anything twice. Without this, the
 Publish button on a sleeping service simply fails.
+
+**Corrected 2026-08-12 — missing URLs no longer stop the deploy.** As first
+built, `SERVICE_WAKE_PLATFORM=http` with zero `*_SERVICE_URL` was fatal at
+startup, on the reasoning that a deploy believing it has wake coverage and
+having none is worse than a loud failure. That reasoning was right about the
+danger and wrong about the remedy, and it would have crash-looped the gateway
+on the first sync of the blueprint — taking down the product edge, not just
+waking.
+
+The trap is structural rather than an oversight in configuration order. The
+targets must be each service's **public** URL, because
+[Render's own documentation](https://render.com/docs/free) states that *"Free
+web services can't receive private network traffic"* — so `fromService` with
+`property: host`, which is how a blueprint would normally reference a sibling
+service, yields a private hostname that could never wake anything. Public
+`.onrender.com` URLs do not exist until the sync that creates the services has
+finished, and `render.yaml` has no string composition to build one. There is
+therefore no ordering in which a first deploy can satisfy the check.
+
+It was also inconsistent with the design on either side of it. Four missing
+URLs out of five was already handled gracefully — `Supports` answers false and
+those services keep reporting plain `SERVICE_UNAVAILABLE` — so the fifth being
+fatal drew a cliff where this document describes a slope. And the same
+question had already been settled once in this codebase: `ADMIN_ROUTES_ENABLED`
+defaults to false precisely so *"a fresh deploy of this binary must not
+crash-loop the product edge over admin-only vars nobody has filled in yet"*.
+Waking is an optional capability of the edge, on exactly those terms.
+
+The distinction that survives is between a **mistake** and a **stage**. An
+unknown platform name is a mistake — no later configuration makes `renderr`
+mean anything — and stays fatal. A missing URL is a stage every first deploy
+passes through. What replaces the check is `cmd/gateway.logServiceWake`, which
+states on every boot which services this process can actually reach, at `warn`
+whenever that is fewer than all of them. The original fear was silent
+half-configuration; the answer to it is a line that cannot be silent, not a
+crash that cannot be avoided.
 
 Everything else — proactive on write, reactive on read, the Redis single-flight
 lock, the three-way status split, `/healthz` as a start signal — is as written

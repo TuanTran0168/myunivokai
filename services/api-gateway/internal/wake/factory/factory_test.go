@@ -1,7 +1,6 @@
 package factory
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -62,16 +61,56 @@ func TestAnUnknownPlatformNameFails(t *testing.T) {
 	}
 }
 
-// Selecting the HTTP platform and supplying no URL is not a working
-// configuration; it is a deploy that believes it has wake coverage and has
-// none.
-func TestTheHTTPPlatformRequiresAtLeastOneURL(t *testing.T) {
-	_, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), nil), nil)
-	if err == nil {
-		t.Fatal("the http platform was accepted with no service URLs")
+// Selecting the HTTP platform with no URL yet must start, and must wake
+// nothing.
+//
+// This is the first deploy of a blueprint: the targets have to be the public
+// URLs of services that this same deploy is creating, so they cannot be known
+// in advance. Refusing to start there is a requirement the host makes
+// impossible to meet, and it takes the whole product edge down with it - not
+// just waking. The gateway serves traffic through the gap and says so in its
+// startup log; cmd/gateway.logServiceWake is the other half of this.
+func TestTheHTTPPlatformStartsBeforeAnyURLIsKnown(t *testing.T) {
+	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), nil), nil)
+	if err != nil {
+		t.Fatalf("the http platform must start before its URLs exist, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "SERVICE_WAKE_PLATFORM") {
-		t.Fatalf("the error should name the variable an operator has to fix, got %q", err)
+	if wakeable := coordinator.WakeableServices(); len(wakeable) != 0 {
+		t.Fatalf("nothing is reachable yet, but the coordinator claims %v", wakeable)
+	}
+	// The claim matters more than the call: Supports is what makes the gateway
+	// answer SERVICE_WAKING instead of SERVICE_UNAVAILABLE, and a client
+	// retries the first one. Promising a wake it cannot deliver would send the
+	// caller round a loop that never resolves.
+	for _, service := range wake.Services {
+		if coordinator.Supports(service) {
+			t.Fatalf("%q has no URL but reported as supported", service)
+		}
+	}
+}
+
+// WakeableServices is what the startup log prints, so it has to describe the
+// deploy rather than the intent: a half-filled blueprint is the normal state
+// between the first sync and the second.
+func TestWakeableServicesReportsOnlyWhatIsReachable(t *testing.T) {
+	coordinator, err := NewCoordinator(wakeConfig(string(wake.PlatformHTTP), map[string]string{
+		wake.ServiceDNA:  "https://myunivokai-dna.onrender.com",
+		wake.ServiceAuth: "https://myunivokai-auth.onrender.com",
+	}), nil)
+	if err != nil {
+		t.Fatalf("NewCoordinator returned %v", err)
+	}
+	wakeable := coordinator.WakeableServices()
+	expected := []string{wake.ServiceDNA, wake.ServiceAuth}
+	if len(wakeable) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, wakeable)
+	}
+	// Order follows wake.Services, not map iteration, so the startup log reads
+	// the same on every boot.
+	for index, service := range expected {
+		if wakeable[index] != service {
+			t.Fatalf("expected %v in the order of wake.Services, got %v", expected, wakeable)
+		}
 	}
 }
 
