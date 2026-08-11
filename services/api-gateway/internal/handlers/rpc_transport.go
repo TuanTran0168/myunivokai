@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/wake"
+	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,6 +33,18 @@ type RPCRequester interface {
 	Request(context.Context, string, any) (contracts.Envelope[contracts.RPCResponseData], error)
 }
 
+// ServiceWaker is wake.Coordinator's request-path surface, kept as an
+// interface for the same reason EdgeStore is one: the handlers depend on the
+// behaviour, not on Redis and an outbound HTTP client, so a test can assert
+// what was woken without either. A nil value is safe - *wake.Coordinator's
+// methods tolerate a nil receiver - so the gateway may hold one
+// unconditionally instead of branching at every call site.
+type ServiceWaker interface {
+	Supports(service string) bool
+	Wake(service string)
+	RetryAfter() time.Duration
+}
+
 type cachePolicy struct {
 	namespace  string
 	identifier string
@@ -40,11 +55,12 @@ type cachePolicy struct {
 type RPCTransport struct {
 	requester RPCRequester
 	cache     cacheStore
+	waker     ServiceWaker
 	timeout   time.Duration
 }
 
-func NewRPCTransport(serviceConfig config.Config, requester RPCRequester, cache cacheStore) *RPCTransport {
-	return &RPCTransport{requester: requester, cache: cache, timeout: serviceConfig.NATSRequestTimeout}
+func NewRPCTransport(serviceConfig config.Config, requester RPCRequester, cache cacheStore, waker ServiceWaker) *RPCTransport {
+	return &RPCTransport{requester: requester, cache: cache, waker: waker, timeout: serviceConfig.NATSRequestTimeout}
 }
 
 func (transport *RPCTransport) Proxy(responseWriter http.ResponseWriter, request *http.Request, subject string, data any, policy cachePolicy) {
@@ -67,15 +83,8 @@ func (transport *RPCTransport) Request(responseWriter http.ResponseWriter, reque
 	requestID := httpx.RequestID(request.Context())
 	response, err := transport.requester.Request(requestContext, subject, contracts.NewEnvelope(requestID, data))
 	if err != nil {
-		statusCode := http.StatusServiceUnavailable
-		errorCode := "SERVICE_UNAVAILABLE"
-		errorMessage := "The requested service is temporarily unavailable."
-		if errors.Is(err, context.DeadlineExceeded) {
-			statusCode = http.StatusGatewayTimeout
-			errorCode = "SERVICE_TIMEOUT"
-			errorMessage = "The requested service took too long to respond."
-		}
-		log.Error().Err(err).Str("subject", subject).Str("request_id", requestID).Msg("NATS request failed")
+		statusCode, errorCode, errorMessage := transport.classifyTransportError(responseWriter, subject, err)
+		log.Error().Err(err).Str("subject", subject).Str("request_id", requestID).Str("error_code", errorCode).Msg("NATS request failed")
 		httpx.WriteError(responseWriter, request, statusCode, errorCode, errorMessage)
 		return contracts.Envelope[contracts.RPCResponseData]{}, false
 	}
@@ -96,6 +105,58 @@ func (transport *RPCTransport) Request(responseWriter http.ResponseWriter, reque
 		return contracts.Envelope[contracts.RPCResponseData]{}, false
 	}
 	return response, true
+}
+
+// Wake starts a service this request is about to depend on, before any
+// failure exists. It returns immediately and reports nothing; see
+// wake.Coordinator.Wake for why waiting is not an option.
+//
+// It lives on the transport so that the waker has exactly one owner, the same
+// way the cache does - a handler holding its own copy would be a second place
+// to keep in step.
+func (transport *RPCTransport) Wake(service string) {
+	if transport.waker == nil {
+		return
+	}
+	transport.waker.Wake(service)
+}
+
+// classifyTransportError turns a NATS transport failure into the status a
+// client needs in order to decide whether retrying is worth anything - the
+// distinction this gateway used to discard by collapsing everything except a
+// deadline into one SERVICE_UNAVAILABLE.
+//
+// The three cases are genuinely different events: a deadline means the
+// service is awake but slow, no-responders means nobody is subscribed at all,
+// and anything else is a broker-level fault. Only the middle one is worth
+// waking anybody over, and only the middle one is safe to tell a client to
+// retry hard on.
+//
+// The classification outlives the wake ping. no-responders is not unique to
+// scale-to-zero hosting - it also occurs during a rolling deploy, a
+// crash-restart, an OOM-kill and a scale-down - so this split stays correct
+// after the ping is removed on a paid plan. See
+// notes/vision/service-wake-mechanism.md#removal-when-leaving-free-tier.
+func (transport *RPCTransport) classifyTransportError(responseWriter http.ResponseWriter, subject string, err error) (int, string, string) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout, "SERVICE_TIMEOUT", "The requested service took too long to respond."
+	case errors.Is(err, nats.ErrNoResponders):
+		// SERVICE_WAKING is only honest when something is actually being
+		// woken. With no wake platform configured - an always-on host, or a
+		// service nobody supplied a URL for - a caller told to retry would
+		// retry forever against a responder that is never coming back, so
+		// this stays SERVICE_UNAVAILABLE.
+		service := wake.ServiceForSubject(subject)
+		if transport.waker == nil || !transport.waker.Supports(service) {
+			return http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "The requested service is temporarily unavailable."
+		}
+		transport.waker.Wake(service)
+		responseWriter.Header().Set("Retry-After", strconv.Itoa(edge.RetryAfterSeconds(transport.waker.RetryAfter())))
+		return http.StatusServiceUnavailable, "SERVICE_WAKING", "The requested service is starting up. Please retry in a moment."
+	default:
+		return http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "The requested service is temporarily unavailable."
+	}
 }
 
 func (transport *RPCTransport) WriteCacheHit(responseWriter http.ResponseWriter, request *http.Request, namespace, identifier string) bool {

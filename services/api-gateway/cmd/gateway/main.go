@@ -12,6 +12,7 @@ import (
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/handlers"
+	wakefactory "github.com/myunivokai/myunivokai/services/api-gateway/internal/wake/factory"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -43,9 +44,17 @@ func main() {
 			log.Error().Err(closeError).Msg("close gateway Redis client")
 		}
 	}()
+	// Built here, not inside the router, so an unusable SERVICE_WAKE_PLATFORM
+	// stops the deploy at startup instead of producing a gateway that silently
+	// never wakes anything - the same fail-fast dna-service gets from
+	// aifactory.NewOrchestrator.
+	wakeCoordinator, err := wakefactory.NewCoordinator(gatewayConfig, edgeStore)
+	if err != nil {
+		log.Fatal().Err(err).Msg("configure gateway service wake")
+	}
 	server := &http.Server{
 		Addr:              gatewayConfig.Address(),
-		Handler:           handlers.NewRouter(gatewayConfig, brokerClient, edgeStore),
+		Handler:           handlers.NewRouter(gatewayConfig, brokerClient, edgeStore, wakeCoordinator),
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
 		WriteTimeout:      gatewayConfig.NATSPublishTimeout + gatewayConfig.NATSRequestTimeout + serverWriteMargin,

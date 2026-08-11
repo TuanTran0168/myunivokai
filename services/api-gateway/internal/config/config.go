@@ -39,7 +39,33 @@ const (
 	// don't need to agree exactly, but starting from the same number is the
 	// sane default until real usage says otherwise.
 	defaultAdminTokenVersionCacheTTL = 15 * 24 * time.Hour
+	// Wake defaults. "none" mirrors AI_PROVIDER's "mock": the shipped
+	// configuration reaches nobody's infrastructure until an operator opts
+	// in, and it is also the permanently correct value on an always-on host.
+	defaultServiceWakePlatform = "none"
+	// Long enough to establish a connection - which is all that is needed to
+	// trigger a start - and far short of a cold start, which no request-path
+	// goroutine should wait for.
+	defaultServiceWakeTimeout = 5 * time.Second
+	// One burst of admin queries against a sleeping service should produce
+	// one wake, not one per query. Roughly a cold start long.
+	defaultServiceWakeLockTimeToLive = 60 * time.Second
+	// What Retry-After advertises. A cold-start estimate, not a promise; the
+	// client retries on a budget rather than trusting this number once.
+	defaultServiceWakeRetryAfter = 15 * time.Second
 )
+
+// serviceWakeURLKeys maps each wakeable service to the variable holding its
+// public base URL. The keys are wake.Service* values, spelled literally so
+// this stays a leaf package that imports nothing of ours; a test asserts the
+// two lists have not drifted apart.
+var serviceWakeURLKeys = map[string]string{
+	"dna":       "DNA_SERVICE_URL",
+	"universe":  "UNIVERSE_SERVICE_URL",
+	"nature":    "NATURE_SERVICE_URL",
+	"auth":      "AUTH_SERVICE_URL",
+	"analytics": "ANALYTICS_SERVICE_URL",
+}
 
 type Config struct {
 	AppEnvironment             string
@@ -82,6 +108,21 @@ type Config struct {
 	// notes/vision/auth-and-admin-plan.md#tokens.
 	AdminAccessPublicKeys     []ed25519.PublicKey
 	AdminTokenVersionCacheTTL time.Duration
+	// ServiceWakePlatform names the hosting mechanism used to start a
+	// sleeping instance - see internal/wake. "none" disables waking
+	// entirely, which is both the default and the correct setting on any
+	// host whose instances do not sleep, so leaving free tier is a config
+	// change rather than a code change.
+	ServiceWakePlatform string
+	// ServiceWakeTargets holds only the services an operator actually
+	// supplied a URL for. A missing entry is not an error: it means that
+	// service is not wakeable here, and the gateway keeps answering plain
+	// SERVICE_UNAVAILABLE for it instead of promising a wake that will not
+	// happen.
+	ServiceWakeTargets        map[string]string
+	ServiceWakeTimeout        time.Duration
+	ServiceWakeLockTimeToLive time.Duration
+	ServiceWakeRetryAfter     time.Duration
 }
 
 func Load() (Config, error) {
@@ -116,12 +157,22 @@ func Load() (Config, error) {
 		AdminRateLimitRequestsPerSecond: getFloat("ADMIN_RATE_LIMIT_REQUESTS_PER_SECOND", defaultAdminRateLimitRequestsPerSecond),
 		AdminRateLimitBurst:             getInt("ADMIN_RATE_LIMIT_BURST", defaultAdminRateLimitBurst),
 		AdminTokenVersionCacheTTL:       getDuration("ADMIN_TOKEN_VERSION_CACHE_TTL", defaultAdminTokenVersionCacheTTL),
+
+		ServiceWakePlatform:       get("SERVICE_WAKE_PLATFORM", defaultServiceWakePlatform),
+		ServiceWakeTimeout:        getDuration("SERVICE_WAKE_TIMEOUT", defaultServiceWakeTimeout),
+		ServiceWakeLockTimeToLive: getDuration("SERVICE_WAKE_LOCK_TTL", defaultServiceWakeLockTimeToLive),
+		ServiceWakeRetryAfter:     getDuration("SERVICE_WAKE_RETRY_AFTER", defaultServiceWakeRetryAfter),
 	}
 	adminAccessPublicKeys, err := decodeEd25519PublicKeys(get("ADMIN_ACCESS_PUBLIC_KEYS", ""))
 	if err != nil {
 		return Config{}, err
 	}
 	loadedConfig.AdminAccessPublicKeys = adminAccessPublicKeys
+	serviceWakeTargets, err := readServiceWakeTargets()
+	if err != nil {
+		return Config{}, err
+	}
+	loadedConfig.ServiceWakeTargets = serviceWakeTargets
 	if err := loadedConfig.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -150,6 +201,28 @@ func decodeEd25519PublicKeys(commaSeparated string) ([]ed25519.PublicKey, error)
 		publicKeys = append(publicKeys, ed25519.PublicKey(decoded))
 	}
 	return publicKeys, nil
+}
+
+// readServiceWakeTargets collects the per-service base URLs a wake platform
+// may need. Every value is validated here, at startup, for the reason the
+// wake design doc gives: these are operator-supplied and never request-
+// derived, so the only realistic failure is a typo - and a typo must stop the
+// deploy rather than become an unexplained no-op at the one moment the wake
+// was needed. Reusing validateOriginFormat also rules out a URL carrying a
+// path, query or credentials, none of which belong in a service base URL.
+func readServiceWakeTargets() (map[string]string, error) {
+	targets := make(map[string]string)
+	for service, environmentKey := range serviceWakeURLKeys {
+		rawURL := get(environmentKey, "")
+		if rawURL == "" {
+			continue
+		}
+		if err := validateOriginFormat(rawURL); err != nil {
+			return nil, fmt.Errorf("%s: %w", environmentKey, err)
+		}
+		targets[service] = rawURL
+	}
+	return targets, nil
 }
 
 func (loadedConfig Config) Validate() error {
@@ -199,7 +272,28 @@ func (loadedConfig Config) Validate() error {
 			return errors.New("ADMIN_TOKEN_VERSION_CACHE_TTL must be positive")
 		}
 	}
+	// Only meaningful once a platform is selected: with waking off these
+	// values are never read, and demanding them would make every hand-built
+	// Config carry three fields that do nothing. With waking on, a zero means
+	// an unbounded wake goroutine, a single-flight lock that never expires, or
+	// a Retry-After telling every client to come back immediately - which
+	// would turn one sleeping service into a retry storm. Which platform names
+	// are legal is internal/wake/factory's business, not this package's.
+	if loadedConfig.serviceWakeConfigured() {
+		if loadedConfig.ServiceWakeTimeout <= 0 || loadedConfig.ServiceWakeLockTimeToLive <= 0 || loadedConfig.ServiceWakeRetryAfter <= 0 {
+			return errors.New("service wake timeout, lock TTL and retry-after must be positive")
+		}
+	}
 	return nil
+}
+
+// serviceWakeConfigured reports whether an operator asked for waking at all.
+// An empty platform counts as "no" alongside the explicit "none" so that a
+// Config built in code, rather than through Load, does not have to opt out of
+// a feature it never opted into.
+func (loadedConfig Config) serviceWakeConfigured() bool {
+	platform := strings.TrimSpace(loadedConfig.ServiceWakePlatform)
+	return platform != "" && platform != defaultServiceWakePlatform
 }
 
 func (loadedConfig Config) Address() string {

@@ -124,7 +124,7 @@ func (store *fakeEdgeStore) Close() error               { return nil }
 
 func TestCreateWorldPublishesValidatedEnvelopeAndReturnsAcceptedJob(t *testing.T) {
 	brokerClient := &fakeBroker{}
-	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(validWorldInputJSON()))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -150,7 +150,7 @@ func TestCreateWorldPublishesValidatedEnvelopeAndReturnsAcceptedJob(t *testing.T
 
 func TestCreateWorldRejectsTrailingJSONBeforePublishing(t *testing.T) {
 	brokerClient := &fakeBroker{}
-	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(validWorldInputJSON()+` {}`)))
 	if response.Code != http.StatusBadRequest || brokerClient.publishedEnvelope.JobID != "" {
@@ -176,7 +176,7 @@ func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
 				t.Fatal(err)
 			}
 			brokerClient := &fakeBroker{response: responseEnvelope}
-			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore())
+			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, testCase.path, nil))
 			if response.Code != http.StatusOK || brokerClient.requestedSubject != testCase.expectedSubject {
@@ -187,7 +187,7 @@ func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
 }
 
 func TestUnsupportedFamilyKeepsGatewayErrorContract(t *testing.T) {
-	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/ocean/worlds", nil))
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"code":"WORLD_FAMILY_NOT_FOUND"`) {
@@ -205,7 +205,7 @@ func TestWorldMutationInvalidatesCacheBeforeAndAfterSuccess(t *testing.T) {
 	}
 	brokerClient := &fakeBroker{response: responseEnvelope}
 	edgeStore := newFakeEdgeStore()
-	router := NewRouter(testGatewayConfig(), brokerClient, edgeStore)
+	router := NewRouter(testGatewayConfig(), brokerClient, edgeStore, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants", strings.NewReader(`{}`)))
 	if response.Code != http.StatusCreated {
@@ -235,7 +235,7 @@ func TestSelectingAVariantInvalidatesTheCachedShareResponse(t *testing.T) {
 	edgeStore := newFakeEdgeStore()
 	shareCacheKey := shareCacheNamespace + ":" + edge.ShareCacheIdentifier(string(contracts.WorldFamilyUniverse), shareSlug)
 	edgeStore.values[shareCacheKey] = []byte(`{"world":{"nickname":"Neo"}}`)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants/"+variantID+"/select", strings.NewReader(`{}`)))
 	if response.Code != http.StatusOK {
@@ -260,7 +260,7 @@ func TestMutatingAnUnpublishedWorldTouchesNoShareCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	edgeStore := newFakeEdgeStore()
-	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/"+worldID+"/variants", strings.NewReader(`{}`)))
 	if response.Code != http.StatusCreated {
@@ -289,7 +289,7 @@ func TestPublishingInvalidatesTheCachedShareResponse(t *testing.T) {
 	edgeStore := newFakeEdgeStore()
 	shareCacheKey := shareCacheNamespace + ":" + edge.ShareCacheIdentifier(string(contracts.WorldFamilyNature), shareSlug)
 	edgeStore.values[shareCacheKey] = []byte(`{"world":{"nickname":"Neo"}}`)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, edgeStore, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/nature/worlds/"+worldID+"/publish", strings.NewReader(`{}`)))
 	if response.Code != http.StatusOK {
@@ -307,7 +307,7 @@ func TestActiveJobUsesShortCacheTTL(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeEdgeStore()
-	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, store)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{response: responseEnvelope}, store, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/job-1", nil))
 	if response.Code != http.StatusOK || store.timeToLives[jobCacheNamespace+":job-1"] != activeJobCacheTTL {
@@ -319,7 +319,7 @@ func TestReadinessReportsNATSAndRedisFailures(t *testing.T) {
 	brokerClient := &fakeBroker{pingError: errors.New("nats unavailable")}
 	store := newFakeEdgeStore()
 	store.pingError = errors.New("redis unavailable")
-	router := NewRouter(testGatewayConfig(), brokerClient, store)
+	router := NewRouter(testGatewayConfig(), brokerClient, store, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"nats":"unavailable"`) || !strings.Contains(response.Body.String(), `"redis":"unavailable"`) {
@@ -331,7 +331,7 @@ func TestGatewayRejectsOversizedBodyBeforePublishing(t *testing.T) {
 	serviceConfig := testGatewayConfig()
 	serviceConfig.MaximumRequestBodyBytes = 4
 	brokerClient := &fakeBroker{}
-	router := NewRouter(serviceConfig, brokerClient, newFakeEdgeStore())
+	router := NewRouter(serviceConfig, brokerClient, newFakeEdgeStore(), nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader("12345")))
 	if response.Code != http.StatusRequestEntityTooLarge || brokerClient.publishedEnvelope.JobID != "" {
@@ -340,7 +340,7 @@ func TestGatewayRejectsOversizedBodyBeforePublishing(t *testing.T) {
 }
 
 func TestGatewayCORSIsOwnedAtPublicEdge(t *testing.T) {
-	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore())
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil)
 	request := httptest.NewRequest(http.MethodOptions, "/api/universe/worlds", nil)
 	request.Header.Set("Origin", "http://localhost:41300")
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)

@@ -48,7 +48,7 @@ func TestAnalyticsAdminRoutesQueryAnalyticsAndNoDomainService(t *testing.T) {
 				contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(route.permission)}, false),
 				route.subject:                                payload,
 			}}
-			router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+			router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 			request := httptest.NewRequest(http.MethodGet, route.path+"?family=universe&pageSize=25&days=30", nil)
 			request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
 			response := httptest.NewRecorder()
@@ -84,7 +84,7 @@ func TestAnalyticsAdminRoutesRejectWithoutTheirPermission(t *testing.T) {
 				// to read business data or job diagnostics.
 				contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, []string{string(contracts.PermissionAccountRead)}, false),
 			}}
-			router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore())
+			router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil)
 			request := httptest.NewRequest(http.MethodGet, route.path, nil)
 			request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: mintAdminAccessToken(t, "account-1")})
 			response := httptest.NewRecorder()

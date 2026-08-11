@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
-	"github.com/myunivokai/myunivokai/services/api-gateway/internal/adminauth"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/admin/auth"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/broker"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
@@ -25,10 +25,13 @@ const adminCORSMaximumAgeSeconds = 300
 func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, transport *RPCTransport) http.Handler {
 	adminRouter := chi.NewRouter()
 	adminRouter.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{serviceConfig.AdminAllowedOrigin},
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "X-Request-Id"},
-		ExposedHeaders:   []string{"X-Request-Id"},
+		AllowedOrigins: []string{serviceConfig.AdminAllowedOrigin},
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders: []string{"Accept", "Content-Type", "X-Request-Id"},
+		// Retry-After carries the wait for both SERVICE_WAKING and RATE_LIMITED.
+		// Without it exposed, a caller reading the header sees nothing and
+		// falls back to guessing how long to wait.
+		ExposedHeaders:   []string{"Retry-After", "X-Request-Id"},
 		AllowCredentials: true,
 		MaxAge:           adminCORSMaximumAgeSeconds,
 	}))
@@ -42,8 +45,8 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 	adminRouter.With(middleware.RequireAdminRefreshCookie).Post("/auth/logout", authHandler.Logout)
 
 	requireAccessToken := middleware.RequireAdminAccessToken(
-		adminauth.NewTokenVerifier(serviceConfig.AdminAccessPublicKeys),
-		adminauth.NewRevocationChecker(edgeStore, brokerClient, serviceConfig.NATSRequestTimeout, serviceConfig.AdminTokenVersionCacheTTL),
+		auth.NewTokenVerifier(serviceConfig.AdminAccessPublicKeys),
+		auth.NewRevocationChecker(edgeStore, brokerClient, serviceConfig.NATSRequestTimeout, serviceConfig.AdminTokenVersionCacheTTL),
 	)
 	requirePermission := func(code contracts.PermissionCode) func(http.Handler) http.Handler {
 		return middleware.RequireAdminPermission(transport, code)

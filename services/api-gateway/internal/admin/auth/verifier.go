@@ -1,9 +1,9 @@
-// Package adminauth implements the gateway side of the admin access-token
+// Package auth implements the gateway side of the admin access-token
 // contract: local Ed25519 signature verification plus the Redis tokenVersion
 // revocation check, so an admin request never pays a network hop to
 // auth-service on the common path — see
 // notes/vision/auth-and-admin-plan.md#how-b-works.
-package adminauth
+package auth
 
 import (
 	"crypto/ed25519"
