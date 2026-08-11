@@ -82,6 +82,36 @@ services:
         sync: false
       - key: ADMIN_TOKEN_VERSION_CACHE_TTL
         value: 360h
+      # Every service below is a pure NATS consumer with no inbound HTTP, and
+      # a free instance wakes only on inbound HTTP — so nothing in normal
+      # operation ever wakes one, and a query against a sleeping service gets
+      # an instant no-responders reply. "http" makes the gateway start them
+      # on demand; see notes/vision/service-wake-mechanism.md.
+      #
+      # This is a hosting workaround with an explicit exit: on a paid plan or
+      # a real background worker, set this to "none" and nothing else changes.
+      - key: SERVICE_WAKE_PLATFORM
+        value: http
+      # sync: false rather than hardcoded .onrender.com URLs, so moving a
+      # service to another host is a dashboard edit instead of a repo change.
+      # A service left unset is simply not wakeable and keeps reporting plain
+      # SERVICE_UNAVAILABLE. Validated at startup: scheme + host, no path.
+      - key: DNA_SERVICE_URL
+        sync: false
+      - key: UNIVERSE_SERVICE_URL
+        sync: false
+      - key: NATURE_SERVICE_URL
+        sync: false
+      - key: AUTH_SERVICE_URL
+        sync: false
+      - key: ANALYTICS_SERVICE_URL
+        sync: false
+      - key: SERVICE_WAKE_TIMEOUT
+        value: 5s
+      - key: SERVICE_WAKE_LOCK_TTL
+        value: 60s
+      - key: SERVICE_WAKE_RETRY_AFTER
+        value: 15s
 
   - type: web
     name: myunivokai-dna

@@ -471,7 +471,18 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
     Unavailable:
-      description: auth-service or a required edge dependency is unavailable
+      description: >-
+        auth-service, analytics-service or a required edge dependency could not
+        be reached. SERVICE_WAKING means the service was asleep, the gateway has
+        started it, and the request never arrived — retry after Retry-After.
+        This is the common case on the admin surface, which is used rarely
+        enough that its services are usually idle. SERVICE_UNAVAILABLE means a
+        real fault that retrying will not fix.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying. Sent with SERVICE_WAKING only.
+          required: false
+          schema: { type: integer, minimum: 1 }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
