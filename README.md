@@ -23,12 +23,12 @@ flowchart TB
   classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
 
-  subgraph L1 ["1 · Clients — both run in the browser"]
+  subgraph L1 ["1 · Clients"]
     web["<b>Myunivokai Web</b><br/>Next.js · React Three Fiber"]:::clientStyle
     admin["<b>Myunivokai Admin</b><br/>Next.js · staff only"]:::clientStyle
   end
 
-  subgraph L2 ["2 · Public edge — the only reachable backend"]
+  subgraph L2 ["2 · Public edge"]
     gateway["<b>API Gateway</b><br/><code>/api/*</code> · <code>/api/admin/*</code>"]:::edgeStyle
   end
 
@@ -36,7 +36,7 @@ flowchart TB
     nats["<b>NATS</b><br/>JetStream commands · Core queries · events"]:::infraStyle
   end
 
-  subgraph L4 ["4 · Services — NATS workers, no HTTP business API"]
+  subgraph L4 ["4 · Services"]
     dna["<b>DNA</b><br/>AI orchestration<br/>root jobs"]:::domainStyle
     universe["<b>Universe</b><br/>solar-system<br/>composition"]:::domainStyle
     nature["<b>Nature</b><br/>forest<br/>composition"]:::domainStyle
@@ -44,7 +44,7 @@ flowchart TB
     analytics["<b>Analytics</b><br/>admin read model<br/>events in only"]:::domainStyle
   end
 
-  subgraph L5 ["5 · Owned state — no service reads another's"]
+  subgraph L5 ["5 · Owned state"]
     dnaDatabase[("<code>myunivokai_dna</code>")]:::dbStyle
     universeDatabase[("<code>myunivokai_universe</code>")]:::dbStyle
     natureDatabase[("<code>myunivokai_nature</code>")]:::dbStyle
@@ -75,7 +75,8 @@ flowchart TB
 - The diagram shows **ownership, not request sequence** — the generation flow
   is the next section.
 - Only the gateway is public. NATS, Redis and every service below them are
-  private.
+  private. Layer 4 are **NATS workers with no HTTP business API** — they bind
+  a port only so a scale-to-zero host has something to cold-start against.
 - Each service owns exactly one PostgreSQL database and nothing reads
   another's tables — which is why layers 4 and 5 line up one-to-one.
 - **Analytics has the only single-headed arrow.** Every other service both

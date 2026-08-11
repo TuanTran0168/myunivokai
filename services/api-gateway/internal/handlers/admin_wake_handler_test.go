@@ -33,7 +33,7 @@ func TestWakeStatsSeparatesNeverSleptFromNotCovered(t *testing.T) {
 		wake.ServiceAuth: {Service: wake.ServiceAuth},
 	}
 	// Only dna has a wake target; auth is deployed but unconfigured.
-	handler := NewAdminWakeHandler(store, newFakeWaker(wake.ServiceDNA))
+	handler := NewAdminWakeHandler(store, newFakeWaker(wake.ServiceDNA), "http")
 	response := httptest.NewRecorder()
 	handler.Stats(response, httptest.NewRequest(http.MethodGet, "/api/admin/wake-stats", nil))
 
@@ -73,7 +73,7 @@ func TestWakeStatsClampsTheRequestedWindow(t *testing.T) {
 	}
 	for raw, expected := range testCases {
 		t.Run("days="+raw, func(t *testing.T) {
-			handler := NewAdminWakeHandler(newFakeEdgeStore(), newFakeWaker(wake.Services...))
+			handler := NewAdminWakeHandler(newFakeEdgeStore(), newFakeWaker(wake.Services...), "http")
 			response := httptest.NewRecorder()
 			handler.Stats(response, httptest.NewRequest(http.MethodGet, "/api/admin/wake-stats?days="+raw, nil))
 			if days := decodeWakeStats(t, response.Body.Bytes()).Days; days != expected {
@@ -89,7 +89,7 @@ func TestWakeStatsClampsTheRequestedWindow(t *testing.T) {
 func TestWakeStatsReportsAnUnreadableStore(t *testing.T) {
 	store := newFakeEdgeStore()
 	store.wakeStatsError = errors.New("redis is down")
-	handler := NewAdminWakeHandler(store, newFakeWaker(wake.Services...))
+	handler := NewAdminWakeHandler(store, newFakeWaker(wake.Services...), "http")
 	response := httptest.NewRecorder()
 	handler.Stats(response, httptest.NewRequest(http.MethodGet, "/api/admin/wake-stats", nil))
 
@@ -107,7 +107,7 @@ func TestWakeStatsReportsAnUnreadableStore(t *testing.T) {
 // analytics-service.
 func TestReadingWakeStatsWakesNothing(t *testing.T) {
 	waker := newFakeWaker(wake.Services...)
-	handler := NewAdminWakeHandler(newFakeEdgeStore(), waker)
+	handler := NewAdminWakeHandler(newFakeEdgeStore(), waker, "http")
 	handler.Stats(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/admin/wake-stats", nil))
 
 	if woken := waker.wokenServices(); len(woken) != 0 {

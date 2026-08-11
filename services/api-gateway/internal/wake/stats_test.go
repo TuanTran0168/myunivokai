@@ -8,16 +8,18 @@ import (
 )
 
 type fakeStatsRecorder struct {
-	wakes      chan string
-	seen       chan string
-	recordFail error
+	wakes       chan string
+	seen        chan string
+	recordFail  error
+	failures    int
+	failuresErr error
 }
 
 func newFakeStatsRecorder() *fakeStatsRecorder {
 	return &fakeStatsRecorder{wakes: make(chan string, 8), seen: make(chan string, 8)}
 }
 
-func (recorder *fakeStatsRecorder) IncrementWakeCount(_ context.Context, service string, _ time.Time) error {
+func (recorder *fakeStatsRecorder) RecordWakeSent(_ context.Context, service string, _ time.Time) error {
 	recorder.wakes <- service
 	return recorder.recordFail
 }
@@ -25,6 +27,10 @@ func (recorder *fakeStatsRecorder) IncrementWakeCount(_ context.Context, service
 func (recorder *fakeStatsRecorder) RecordServiceSeen(_ context.Context, service string, _ time.Time) error {
 	recorder.seen <- service
 	return recorder.recordFail
+}
+
+func (recorder *fakeStatsRecorder) ConsecutiveFailedWakes(context.Context, string) (int, error) {
+	return recorder.failures, recorder.failuresErr
 }
 
 func waitForRecord(t *testing.T, channel chan string, what string) string {
@@ -133,4 +139,59 @@ func TestSeenOnANilCoordinatorDoesNothing(t *testing.T) {
 	var coordinator *Coordinator
 	coordinator.Seen(ServiceDNA)
 	coordinator.Seen("")
+}
+
+// The threshold is a floor, not an equality: a service that has failed many
+// more times than the threshold is still failing.
+func TestWakeIsFailingOnlyAfterRepeatedSilence(t *testing.T) {
+	testCases := map[string]struct {
+		failures int
+		expected bool
+	}{
+		"never woken":                {0, false},
+		"one wake, still booting":    {1, false},
+		"one short of the threshold": {consecutiveFailedWakesBeforeGivingUp - 1, false},
+		"at the threshold":           {consecutiveFailedWakesBeforeGivingUp, true},
+		"far past it":                {consecutiveFailedWakesBeforeGivingUp + 40, true},
+	}
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			recorder := newFakeStatsRecorder()
+			recorder.failures = testCase.failures
+			coordinator := NewCoordinator(newFakePlatform(ServiceDNA), nil, recorder, time.Second, time.Minute, time.Second)
+			if failing := coordinator.WakeIsFailing(context.Background(), ServiceDNA); failing != testCase.expected {
+				t.Fatalf("WakeIsFailing = %v, want %v for %d failures", failing, testCase.expected, testCase.failures)
+			}
+		})
+	}
+}
+
+// Failing closed here would turn one unreachable Redis into a report that the
+// whole fleet is dead. One client retrying a service that is genuinely down
+// is the cheaper error by a wide margin.
+func TestAnUnreadableStoreNeverDeclaresAServiceDead(t *testing.T) {
+	recorder := newFakeStatsRecorder()
+	recorder.failures = consecutiveFailedWakesBeforeGivingUp + 10
+	recorder.failuresErr = errors.New("redis is down")
+	coordinator := NewCoordinator(newFakePlatform(ServiceDNA), nil, recorder, time.Second, time.Minute, time.Second)
+	if coordinator.WakeIsFailing(context.Background(), ServiceDNA) {
+		t.Fatal("an unreadable store must not be read as a dead service")
+	}
+}
+
+// Without a recorder there is nothing to count, so nothing can be concluded.
+// A nil Coordinator has to answer too - it is inert everywhere else and this
+// runs on the request path.
+func TestWakeIsFailingIsInertWithoutState(t *testing.T) {
+	withoutRecorder := NewCoordinator(newFakePlatform(ServiceDNA), nil, nil, time.Second, time.Minute, time.Second)
+	if withoutRecorder.WakeIsFailing(context.Background(), ServiceDNA) {
+		t.Fatal("a coordinator with no recorder cannot know a wake is failing")
+	}
+	var nilCoordinator *Coordinator
+	if nilCoordinator.WakeIsFailing(context.Background(), ServiceDNA) {
+		t.Fatal("a nil coordinator must answer false rather than panic")
+	}
+	if nilCoordinator.WakeIsFailing(context.Background(), "") {
+		t.Fatal("an empty service name must answer false")
+	}
 }

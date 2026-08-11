@@ -422,7 +422,7 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [service, totalWakes, dailyWakes, lastSeenAt, wakeable]
+            required: [service, totalWakes, dailyWakes, lastSeenAt, consecutiveFailedWakes, wakeable]
             properties:
               service: { type: string }
               totalWakes: { type: integer }
@@ -437,6 +437,16 @@ components:
                   Last moment the service is known to have answered. Null means
                   never observed, which is not the same as long asleep — a
                   freshly deployed gateway has no observation yet.
+              consecutiveFailedWakes:
+                type: integer
+                description: >-
+                  Wake calls sent with no reply since. A non-zero value is a
+                  service the gateway keeps trying to start and cannot; it
+                  clears itself once the service answers. Past a small
+                  threshold the gateway stops answering SERVICE_WAKING for it
+                  and reports SERVICE_UNAVAILABLE instead, because telling a
+                  client to retry something that is not coming back is worse
+                  than saying so.
               wakeable:
                 type: boolean
                 description: Whether a wake target is configured for this service.

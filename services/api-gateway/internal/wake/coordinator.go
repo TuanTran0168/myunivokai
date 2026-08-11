@@ -15,6 +15,18 @@ import (
 // on every request.
 const seenWriteInterval = time.Minute
 
+// consecutiveFailedWakesBeforeGivingUp is how many unanswered wake calls it
+// takes before the gateway stops telling clients to come back.
+//
+// Three, against a lock window of roughly a minute, is about three minutes of
+// a service failing to answer anything - comfortably past the slowest cold
+// start this platform produces, and short enough that a user is not left
+// watching a spinner for a service that will never load. It is a constant
+// rather than a fifth SERVICE_WAKE_* variable because there is no deployment
+// in which a different number would be right for a reason an operator could
+// know in advance.
+const consecutiveFailedWakesBeforeGivingUp = 3
+
 // SingleFlightLock keeps a burst of requests against one sleeping service
 // from producing a burst of wake calls. It is noise control, not correctness:
 // a duplicate wake is harmless, so a lock backend that is down must never
@@ -34,8 +46,15 @@ type SingleFlightLock interface {
 // off without affecting a single wake. Measurement must never be able to
 // break the thing it measures.
 type StatsRecorder interface {
-	IncrementWakeCount(ctx context.Context, service string, at time.Time) error
+	// RecordWakeSent notes that a wake call went out. It also advances the
+	// consecutive-unanswered tally, because those two facts are the same
+	// event seen from two distances.
+	RecordWakeSent(ctx context.Context, service string, at time.Time) error
+	// RecordServiceSeen notes that the service answered, which clears that
+	// tally.
 	RecordServiceSeen(ctx context.Context, service string, at time.Time) error
+	// ConsecutiveFailedWakes is how many wakes have gone unanswered.
+	ConsecutiveFailedWakes(ctx context.Context, service string) (int, error)
 }
 
 // Coordinator wraps a Platform with the policy every platform needs, the way
@@ -212,9 +231,35 @@ func (coordinator *Coordinator) recordWake(ctx context.Context, service string) 
 	if coordinator.stats == nil {
 		return
 	}
-	if err := coordinator.stats.IncrementWakeCount(ctx, service, time.Now()); err != nil {
-		log.Warn().Err(err).Str("service", service).Msg("record wake count")
+	if err := coordinator.stats.RecordWakeSent(ctx, service, time.Now()); err != nil {
+		log.Warn().Err(err).Str("service", service).Msg("record wake sent")
 	}
+}
+
+// WakeIsFailing reports whether this service has stopped answering wakes.
+//
+// It exists because "asleep" and "dead" produce the identical no-responders
+// reply, and the gateway was telling a client to retry in both cases. A
+// service that crash-loops on boot, was deleted, or that the host refuses to
+// start is never coming back on its own, and SERVICE_WAKING promises it will.
+//
+// Waking does not stop when this turns true - only the promise does. Giving
+// up on the wake as well would remove the one thing that could still bring
+// the service back, and the call is cheap and single-flighted anyway.
+//
+// A store that cannot be read answers false. Failing closed here would turn
+// a Redis blip into a fleet-wide outage report, which is a far worse error
+// than one client retrying a service that is genuinely down.
+func (coordinator *Coordinator) WakeIsFailing(ctx context.Context, service string) bool {
+	if coordinator == nil || coordinator.stats == nil || service == "" {
+		return false
+	}
+	failures, err := coordinator.stats.ConsecutiveFailedWakes(ctx, service)
+	if err != nil {
+		log.Warn().Err(err).Str("service", service).Msg("read consecutive failed wakes")
+		return false
+	}
+	return failures >= consecutiveFailedWakesBeforeGivingUp
 }
 
 // claim reports whether this goroutine is the one that should wake the

@@ -57,7 +57,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 	permissionsHandler := NewAdminPermissionsHandler(transport)
 	auditHandler := NewAdminAuditHandler(transport)
 	analyticsHandler := NewAdminAnalyticsHandler(transport)
-	wakeHandler := NewAdminWakeHandler(edgeStore, waker)
+	wakeHandler := NewAdminWakeHandler(edgeStore, waker, serviceConfig.ServiceWakePlatform)
 
 	adminRouter.Group(func(managementRouter chi.Router) {
 		managementRouter.Use(requireAccessToken)

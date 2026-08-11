@@ -99,8 +99,27 @@ observes them:
 | --- | --- | --- |
 | `wake:count:<service>:<utc-day>` | a wake call is sent | wakes **actually made** — after the single-flight lock, so a burst of six requests against one sleeping service counts once |
 | `wake:seen:<service>` | a service replies | last moment it is known to have been running, throttled to one write a minute |
+| `wake:failures:<service>` | a wake is sent | wakes with no reply since. Cleared when the service answers, and expires by itself once nobody is trying |
 
-`GET /api/admin/wake-stats` reads them back in one `MGET`.
+`GET /api/admin/wake-stats` reads all three back in one `MGET`.
+
+### Telling a sleeping service from a dead one
+
+Both send the identical `no-responders` reply, and the gateway used to answer
+both with `SERVICE_WAKING` — so a service that crash-looped on boot, was
+deleted, or that the host refused to start left the caller retrying something
+that was never coming back.
+
+`wake:failures` counts wakes sent with no reply since. After three, which is
+roughly three minutes against a one-minute lock window, the gateway answers
+`SERVICE_UNAVAILABLE` with no `Retry-After`.
+
+**The wake still goes out.** Only the promise stops. Giving up on the wake as
+well would remove the one thing that could bring the service back, and a
+single-flighted call costs almost nothing to keep making. A store that cannot
+be read answers "not failing" — failing closed there would turn a Redis blip
+into a fleet-wide outage report, which is a far worse error than one client
+retrying a service that is genuinely down.
 
 They are not events to `analytics-service`, and the reason is not volume.
 `analytics-service` is itself scale-to-zero, so opening a page to view wake

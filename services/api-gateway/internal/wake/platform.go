@@ -37,16 +37,18 @@
 //   - cmd/gateway/main.go — drop the factory call and the NewRouter argument
 //   - internal/handlers/router.go — drop the ServiceWaker parameter
 //   - internal/handlers/rpc_transport.go — drop ServiceWaker, the waker field,
-//     Wake, and the ErrNoResponders case in classifyTransportError
+//     Wake, Seen, and the ErrNoResponders case in classifyTransportError.
+//     Keep the three-way error split itself if anything is kept: no-responders
+//     means something different from a deadline on any host.
 //   - internal/handlers/world_handler.go — drop familyService and the two
 //     proactive Wake calls in CreateWorld
 //   - internal/config/config.go — drop the four ServiceWake* fields,
 //     serviceWakeURLKeys, readServiceWakeTargets, serviceWakeConfigured and
 //     their validation
 //   - cmd/gateway/main.go — also drop logServiceWake
-//   - internal/edge/redis.go — drop AcquireWakeLock, IncrementWakeCount,
-//     RecordServiceSeen, WakeStats, ServiceWakeStats and the three wake key
-//     segments
+//   - internal/edge/redis.go — drop AcquireWakeLock, RecordWakeSent,
+//     RecordServiceSeen, ConsecutiveFailedWakes, WakeStats, ServiceWakeStats
+//     and the four wake key segments
 //   - internal/handlers/admin_wake_handler.go — delete the file, and drop the
 //     /wake-stats route from internal/handlers/admin_router.go
 //   - contracts/openapi-admin.yaml — drop /api/admin/wake-stats and WakeStats

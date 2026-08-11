@@ -21,9 +21,10 @@ const (
 	wakeKeySegment          = "wake"
 	// Distinct segments rather than a suffix on wakeKeySegment, so a wake
 	// lock for a service can never be mistaken for a counter or the reverse.
-	wakeCountKeySegment = "wake:count"
-	wakeSeenKeySegment  = "wake:seen"
-	minimumRetryDelay   = time.Millisecond
+	wakeCountKeySegment    = "wake:count"
+	wakeSeenKeySegment     = "wake:seen"
+	wakeFailuresKeySegment = "wake:failures"
+	minimumRetryDelay      = time.Millisecond
 
 	// wakeStatsDayFormat keys counters by UTC day. UTC and not local time
 	// because the process reading these runs in whatever region the host
@@ -37,6 +38,16 @@ const (
 	// enough that a forgotten key never becomes permanent residency in a
 	// store whose whole job is ephemeral state.
 	wakeStatsRetention = 90 * 24 * time.Hour
+
+	// wakeFailureWindow is how long an unanswered wake stays counted.
+	//
+	// It is short on purpose. The counter answers "how many wake calls in the
+	// recent past went unanswered", and once wakes stop being sent - which is
+	// what happens the moment the service starts replying - the question is
+	// moot and the count must clear itself. Each new wake refreshes the
+	// window, so a genuinely dead service keeps its tally while a recovered
+	// one loses it without anything having to remember to reset it.
+	wakeFailureWindow = 5 * time.Minute
 )
 
 var tokenBucketScript = redis.NewScript(`
@@ -157,11 +168,18 @@ func (store *RedisStore) AcquireWakeLock(ctx context.Context, service string, ti
 // to view wake statistics would wake it and produce a wake to view. The
 // gateway is awake by definition whenever it records one of these, and Redis
 // is managed, so this path measures without taking part.
-func (store *RedisStore) IncrementWakeCount(ctx context.Context, service string, at time.Time) error {
-	key := store.key(wakeCountKeySegment, sanitizeKeyPart(service), at.UTC().Format(wakeStatsDayFormat))
+func (store *RedisStore) RecordWakeSent(ctx context.Context, service string, at time.Time) error {
+	dailyKey := store.key(wakeCountKeySegment, sanitizeKeyPart(service), at.UTC().Format(wakeStatsDayFormat))
+	failuresKey := store.key(wakeFailuresKeySegment, sanitizeKeyPart(service))
 	pipeline := store.client.Pipeline()
-	pipeline.Incr(ctx, key)
-	pipeline.Expire(ctx, key, wakeStatsRetention)
+	pipeline.Incr(ctx, dailyKey)
+	pipeline.Expire(ctx, dailyKey, wakeStatsRetention)
+	// The same call bumps the consecutive-unanswered tally, because a wake is
+	// assumed failed until the service answers. Counting optimistically the
+	// other way round would need a second write on the success path, on every
+	// request, to undo it.
+	pipeline.Incr(ctx, failuresKey)
+	pipeline.Expire(ctx, failuresKey, wakeFailureWindow)
 	_, err := pipeline.Exec(ctx)
 	return err
 }
@@ -178,8 +196,32 @@ func (store *RedisStore) IncrementWakeCount(ctx context.Context, service string,
 // such bias: a successful reply proves the service was alive at that instant,
 // and the gap between this stamp and the next wake bounds the sleep.
 func (store *RedisStore) RecordServiceSeen(ctx context.Context, service string, at time.Time) error {
-	key := store.key(wakeSeenKeySegment, sanitizeKeyPart(service))
-	return store.client.Set(ctx, key, strconv.FormatInt(at.UTC().Unix(), 10), wakeStatsRetention).Err()
+	pipeline := store.client.Pipeline()
+	pipeline.Set(ctx, store.key(wakeSeenKeySegment, sanitizeKeyPart(service)), strconv.FormatInt(at.UTC().Unix(), 10), wakeStatsRetention)
+	// Clearing the failure tally rides along in the same round trip rather
+	// than costing its own. wakeFailureWindow would expire it anyway; this
+	// makes a service that recovers stop being reported as dead within one
+	// throttle interval instead of one window.
+	pipeline.Del(ctx, store.key(wakeFailuresKeySegment, sanitizeKeyPart(service)))
+	_, err := pipeline.Exec(ctx)
+	return err
+}
+
+// ConsecutiveFailedWakes is how many wake calls have been sent for a service
+// without it answering since.
+//
+// Zero is the answer for a service that is simply asleep: the count only
+// starts at the first wake, and a normal cold start answers before a second
+// one is due.
+func (store *RedisStore) ConsecutiveFailedWakes(ctx context.Context, service string) (int, error) {
+	raw, err := store.client.Get(ctx, store.key(wakeFailuresKeySegment, sanitizeKeyPart(service))).Result()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(raw)
 }
 
 // WakeStats reads back what the two writers above recorded, for the days
@@ -205,6 +247,9 @@ func (store *RedisStore) WakeStats(ctx context.Context, services []string, endDa
 	for _, service := range services {
 		keys = append(keys, store.key(wakeSeenKeySegment, sanitizeKeyPart(service)))
 	}
+	for _, service := range services {
+		keys = append(keys, store.key(wakeFailuresKeySegment, sanitizeKeyPart(service)))
+	}
 	values, err := store.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, err
@@ -223,6 +268,7 @@ func (store *RedisStore) WakeStats(ctx context.Context, services []string, endDa
 			lastSeen := time.Unix(seenUnix, 0).UTC()
 			serviceStats.LastSeenAt = &lastSeen
 		}
+		serviceStats.ConsecutiveFailedWakes = int(parseRedisInt(values[len(services)*len(dayStamps)+len(services)+serviceIndex]))
 		stats[service] = serviceStats
 	}
 	return stats, nil
@@ -237,6 +283,12 @@ type ServiceWakeStats struct {
 	TotalWakes int64            `json:"totalWakes"`
 	DailyWakes map[string]int64 `json:"dailyWakes"`
 	LastSeenAt *time.Time       `json:"lastSeenAt"`
+	// ConsecutiveFailedWakes is the live tally, not history: it counts wakes
+	// sent with no reply since, and clears itself once the service answers or
+	// once nobody has tried for a while. A non-zero value here is the signal
+	// an operator wants - a service the gateway keeps trying to start and
+	// cannot.
+	ConsecutiveFailedWakes int `json:"consecutiveFailedWakes"`
 }
 
 // parseRedisInt treats a missing key and an unparseable one alike, as zero.

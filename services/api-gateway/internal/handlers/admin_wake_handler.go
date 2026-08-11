@@ -38,12 +38,17 @@ type wakeStatsReader interface {
 // aggregates have exactly one implementation. There is no service behind this
 // data to relay from; the gateway is the only process that observes it.
 type AdminWakeHandler struct {
-	stats wakeStatsReader
-	waker ServiceWaker
+	stats        wakeStatsReader
+	waker        ServiceWaker
+	platformName string
 }
 
-func NewAdminWakeHandler(stats wakeStatsReader, waker ServiceWaker) *AdminWakeHandler {
-	return &AdminWakeHandler{stats: stats, waker: waker}
+// NewAdminWakeHandler takes the platform name as a value rather than asking
+// the waker for it. Configuration is where that name comes from, so reading
+// it from configuration keeps one source of truth - and it spares ServiceWaker
+// a method the request path would never call.
+func NewAdminWakeHandler(stats wakeStatsReader, waker ServiceWaker, platformName string) *AdminWakeHandler {
+	return &AdminWakeHandler{stats: stats, waker: waker, platformName: platformName}
 }
 
 type adminWakeStatsResponse struct {
@@ -86,12 +91,12 @@ func (handler *AdminWakeHandler) Stats(responseWriter http.ResponseWriter, reque
 		}
 		services = append(services, adminWakeServiceStats{ServiceWakeStats: stats[service], Wakeable: wakeable})
 	}
-	platform := adminWakePlatformDescription{Name: string(wake.PlatformNone), WakeableService: wakeableCount}
+	platform := adminWakePlatformDescription{Name: handler.platformName, WakeableService: wakeableCount}
+	if platform.Name == "" {
+		platform.Name = string(wake.PlatformNone)
+	}
 	if handler.waker != nil {
 		platform.RetryAfterHint = edge.RetryAfterSeconds(handler.waker.RetryAfter())
-	}
-	if named, isNamed := handler.waker.(interface{ PlatformName() wake.PlatformName }); isNamed {
-		platform.Name = string(named.PlatformName())
 	}
 	httpx.WriteJSON(responseWriter, http.StatusOK, adminWakeStatsResponse{Days: days, Services: services, Platform: platform})
 }
