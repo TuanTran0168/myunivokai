@@ -96,6 +96,15 @@ services:
       # service to another host is a dashboard edit instead of a repo change.
       # A service left unset is simply not wakeable and keeps reporting plain
       # SERVICE_UNAVAILABLE. Validated at startup: scheme + host, no path.
+      #
+      # LEAVE THESE BLANK ON THE FIRST SYNC OF THIS BLUEPRINT. They must be the
+      # services' PUBLIC URLs, which do not exist until this same sync has
+      # created the services - and fromService/property: host cannot be used
+      # instead, because that yields the private hostname and Render free web
+      # services cannot receive private network traffic at all, so a request
+      # there would never wake anything. Fill them in after the first deploy
+      # and redeploy the gateway; it starts fine without them and logs which
+      # services it can actually reach on every boot.
       - key: DNA_SERVICE_URL
         sync: false
       - key: UNIVERSE_SERVICE_URL

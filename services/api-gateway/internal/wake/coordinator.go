@@ -50,6 +50,34 @@ func (coordinator *Coordinator) Supports(service string) bool {
 	return coordinator.platform.Supports(service)
 }
 
+// PlatformName reports which adapter was selected, for startup logging. A nil
+// Coordinator answers PlatformNone, which is what it behaves as.
+func (coordinator *Coordinator) PlatformName() PlatformName {
+	if coordinator == nil || coordinator.platform == nil {
+		return PlatformNone
+	}
+	return coordinator.platform.Name()
+}
+
+// WakeableServices lists the services this process can actually start, in the
+// fixed order of Services.
+//
+// It exists because "configured" and "effective" drift apart here, and only
+// the second one matters. A deploy can name a platform, pass validation and
+// still reach nobody - the http adapter with no URLs yet is exactly that. A
+// gateway that reports what it intended rather than what it can do is how the
+// wake mechanism would fail silently, which is the failure it was written to
+// remove.
+func (coordinator *Coordinator) WakeableServices() []string {
+	wakeable := make([]string, 0, len(Services))
+	for _, service := range Services {
+		if coordinator.Supports(service) {
+			wakeable = append(wakeable, service)
+		}
+	}
+	return wakeable
+}
+
 // RetryAfter is how long a client should wait before retrying a request that
 // hit a sleeping service. It is a cold-start estimate, not a promise.
 func (coordinator *Coordinator) RetryAfter() time.Duration {

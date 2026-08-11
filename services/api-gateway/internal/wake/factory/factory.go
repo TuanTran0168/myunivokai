@@ -18,6 +18,11 @@ import (
 // "none". A typo in SERVICE_WAKE_PLATFORM should stop the deploy, not quietly
 // produce a gateway that never wakes anything and reports plain 503s months
 // later.
+//
+// That is the only fatal case. An unknown name is a mistake — nothing the
+// operator can do makes it mean something. Missing targets are a stage: the
+// URLs are real, they are simply not known yet. The distinction is what
+// decides which of the two stops a deploy; see the http case below.
 func NewCoordinator(serviceConfig config.Config, lock wake.SingleFlightLock) (*wake.Coordinator, error) {
 	platform, err := newPlatform(serviceConfig.ServiceWakePlatform, serviceConfig)
 	if err != nil {
@@ -37,13 +42,27 @@ func newPlatform(platformName string, serviceConfig config.Config) (wake.Platfor
 	case wake.PlatformNone:
 		return platforms.NewNone(), nil
 	case wake.PlatformHTTP:
-		// Which configuration a platform needs is the platform's business,
-		// which is why this check lives here and not in config.Validate: a
-		// future adapter that scales a Deployment through an orchestrator API
-		// would need credentials and no URLs at all.
-		if len(serviceConfig.ServiceWakeTargets) == 0 {
-			return nil, fmt.Errorf("SERVICE_WAKE_PLATFORM=%q requires at least one service URL (DNA_SERVICE_URL, UNIVERSE_SERVICE_URL, NATURE_SERVICE_URL, AUTH_SERVICE_URL, ANALYTICS_SERVICE_URL)", wake.PlatformHTTP)
-		}
+		// Deliberately builds with no targets at all. An earlier version made
+		// that fatal, which crash-looped the gateway on the first deploy of
+		// the blueprint: Render free instances cannot be woken over the
+		// private network, so the targets must be public .onrender.com URLs,
+		// and those do not exist until the services they name have been
+		// created by that very deploy. Fatal there is a startup ordering
+		// requirement the platform makes impossible to satisfy.
+		//
+		// It was also inconsistent with the design either side of it. Four
+		// missing URLs out of five is already handled gracefully — Supports
+		// answers false and those services keep reporting plain
+		// SERVICE_UNAVAILABLE — so making the fifth one fatal drew a cliff
+		// where the design says there is a slope. And the same question was
+		// already settled once in this codebase: ADMIN_ROUTES_ENABLED
+		// defaults false precisely so "a fresh deploy of this binary must not
+		// crash-loop the product edge over admin-only vars nobody has filled
+		// in yet" (internal/config/config.go). Waking is likewise an optional
+		// capability of the edge, not a precondition for serving traffic.
+		//
+		// The state is not silent: cmd/gateway logs at startup exactly which
+		// services this deploy can reach, and warns when the answer is none.
 		return platforms.NewHTTP(serviceConfig.ServiceWakeTargets, &http.Client{Timeout: serviceConfig.ServiceWakeTimeout}), nil
 	default:
 		return nil, fmt.Errorf("unsupported service wake platform %q", platformName)
