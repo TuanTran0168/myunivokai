@@ -38,6 +38,12 @@ architecture revision.
 | Version | Status | Summary |
 | --- | --- | --- |
 | [v1-2026-07-22](versions/v1-2026-07-22/README.md) | Current implemented source baseline | NATS/Redis edge, canonical DNA, independent Universe/Nature services |
+| v2 — candidate scope | **Not approved, not built.** Research only | End-user identity and world ownership, operational telemetry, a Rust service, WebGPU. Argued against the source in [platform-evolution-research.md](platform-evolution-research.md) |
+
+A version folder is a **frozen, approved** baseline, so unapproved work does
+not get one. `platform-evolution-research.md` holds the v2 candidates until
+the owner approves them; whatever survives is copied into
+`versions/v2-YYYY-MM-DD/` at that point and this table's pointer moves.
 
 ```txt
 web   -> api-gateway /api/*       -> NATS -> dna-service       -> myunivokai_dna
@@ -64,6 +70,7 @@ admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_aut
 | [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
 | [analytics-service-plan.md](analytics-service-plan.md) | The admin read model (CQRS). Implemented — replaced the gateway fan-out before it was written |
 | [service-wake-mechanism.md](service-wake-mechanism.md) | Cold-start handling for scale-to-zero hosting: platform-adapter wake, the SERVICE_WAKING/UNAVAILABLE/TIMEOUT split, and the one-line exit when leaving free tier. Implemented |
+| [platform-evolution-research.md](platform-evolution-research.md) | **Research, not approved.** The four owner proposals of 2026-08-11 — end-user ownership across two databases, operational telemetry, a Rust service, WebGPU — with their schemas, blockers and dependency graph |
 
 ## Product model
 
