@@ -11,81 +11,86 @@ and renders it as an interactive 3D scene right in the browser.
 
 ## Architecture
 
+Read it top to bottom. Every service sits directly above the one database it
+owns, and each band is one layer of the stack.
+
 ```mermaid
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 28, "rankSpacing": 52}}}%%
 flowchart TB
-  %% Class Definitions & Layer Colors
   classDef clientStyle fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af;
   classDef edgeStyle fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534;
   classDef infraStyle fill:#fffbe6,stroke:#d97706,stroke-width:2px,color:#92400e;
   classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
-  classDef aiStyle fill:#fdf2f8,stroke:#db2777,stroke-width:2px,color:#9d174d;
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
 
-  subgraph clientLayer ["Layer 1 - Client"]
-    browser["<b>Browser</b><br/>User Interface"]:::clientStyle
-    web["<b>Myunivokai Web</b><br/><i>Next.js + React Three Fiber</i>"]:::clientStyle
-    admin["<b>Myunivokai Admin</b><br/><i>Next.js, staff only</i>"]:::clientStyle
-    browser --> web
-    browser --> admin
+  subgraph L1 ["1 · Clients — both run in the browser"]
+    web["<b>Myunivokai Web</b><br/>Next.js · React Three Fiber"]:::clientStyle
+    admin["<b>Myunivokai Admin</b><br/>Next.js · staff only"]:::clientStyle
   end
 
-  subgraph edgeLayer ["Layer 2 - Edge"]
-    gateway["<b>API Gateway</b><br/><i>Only Public Backend</i><br/><code>/api/*</code> + <code>/api/admin/*</code>"]:::edgeStyle
+  subgraph L2 ["2 · Public edge — the only reachable backend"]
+    gateway["<b>API Gateway</b><br/><code>/api/*</code> · <code>/api/admin/*</code>"]:::edgeStyle
   end
 
-  subgraph infrastructureLayer ["Layer 3 - Shared Infrastructure"]
-    redis[("<b>Redis</b><br/>Distributed Rate Limit & Cache")]:::infraStyle
-    nats["<b>NATS</b><br/>JetStream Commands & Core NATS Queries"]:::infraStyle
+  subgraph L3 ["3 · Messaging"]
+    nats["<b>NATS</b><br/>JetStream commands · Core queries · events"]:::infraStyle
   end
 
-  subgraph domainLayer ["Layer 4 - Domain Services"]
-    dna["<b>DNA Service</b><br/>AI Orchestration & Root Jobs"]:::domainStyle
-    universe["<b>Universe Service</b><br/>Solar System Composition"]:::domainStyle
-    nature["<b>Nature Service</b><br/>Forest Composition"]:::domainStyle
-    auth["<b>Auth Service</b><br/>Staff Identity & RBAC"]:::domainStyle
-    analytics["<b>Analytics Service</b><br/>Admin Read Model"]:::domainStyle
+  subgraph L4 ["4 · Services — NATS workers, no HTTP business API"]
+    dna["<b>DNA</b><br/>AI orchestration<br/>root jobs"]:::domainStyle
+    universe["<b>Universe</b><br/>solar-system<br/>composition"]:::domainStyle
+    nature["<b>Nature</b><br/>forest<br/>composition"]:::domainStyle
+    auth["<b>Auth</b><br/>staff identity<br/>RBAC · audit"]:::domainStyle
+    analytics["<b>Analytics</b><br/>admin read model<br/>events in only"]:::domainStyle
   end
 
-  subgraph integrationLayer ["Layer 5 - AI Integration"]
-    providers["<b>AI Providers</b><br/><code>ai.Provider</code> (Mock / Gemini / OpenAI)"]:::aiStyle
+  subgraph L5 ["5 · Owned state — no service reads another's"]
+    dnaDatabase[("<code>myunivokai_dna</code>")]:::dbStyle
+    universeDatabase[("<code>myunivokai_universe</code>")]:::dbStyle
+    natureDatabase[("<code>myunivokai_nature</code>")]:::dbStyle
+    authDatabase[("<code>myunivokai_auth</code>")]:::dbStyle
+    analyticsDatabase[("<code>myunivokai_analytics</code>")]:::dbStyle
+    redis[("<b>Redis</b><br/>rate limits · caches<br/>tokenVersion")]:::infraStyle
   end
 
-  subgraph persistenceLayer ["Layer 6 - Service-Owned Persistence"]
-    dnaDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_dna</code>")]:::dbStyle
-    universeDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_universe</code>")]:::dbStyle
-    natureDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_nature</code>")]:::dbStyle
-    authDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_auth</code>")]:::dbStyle
-    analyticsDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
-  end
+  web --> gateway
+  admin --> gateway
 
-  web -->|"HTTPS"| gateway
-  admin -->|"HTTPS, cookie session"| gateway
-  gateway <-->|"Rate Limit & Cache"| redis
-  gateway <-->|"Commands, Queries & Events"| nats
-  nats <-->|"Generate DNA & Track Root Jobs"| dna
-  nats <-->|"Compose & Manage Universe Worlds"| universe
-  nats <-->|"Compose & Manage Nature Worlds"| nature
-  nats <-->|"Login, Roles & Permissions"| auth
-  nats <-->|"Admin Read Queries"| analytics
-  nats -.->|"Events: world.changed, completed, failed"| analytics
-  auth <-->|"tokenVersion Revocation Cache"| redis
-  dna -->|"ai.Provider Interface"| providers
-  dna -->|"Owns Schema"| dnaDatabase
-  universe -->|"Owns Schema"| universeDatabase
-  nature -->|"Owns Schema"| natureDatabase
-  auth -->|"Owns Schema"| authDatabase
-  analytics -->|"Owns Schema"| analyticsDatabase
+  gateway --> nats
+  gateway -.-> redis
+
+  nats <--> dna
+  nats <--> universe
+  nats <--> nature
+  nats <--> auth
+  nats --> analytics
+
+  dna --> dnaDatabase
+  universe --> universeDatabase
+  nature --> natureDatabase
+  auth --> authDatabase
+  analytics --> analyticsDatabase
 ```
 
-- The diagram shows ownership, not request sequence.
-- Each service owns its own PostgreSQL database; nothing reads another's tables.
-- Redis belongs to the gateway and auth alone — caching, rate limits and the
-  `tokenVersion` revocation check, never job queuing.
-- Only the gateway is public; NATS, Redis and every domain service are private.
-- **Analytics is the one dotted edge**: it consumes events and never publishes
-  one, so an admin page waits on gateway + auth + analytics and never on a
-  domain service that the free tier may have put to sleep.
-- Domain services are NATS workers with no HTTP business API.
+- The diagram shows **ownership, not request sequence** — the generation flow
+  is the next section.
+- Only the gateway is public. NATS, Redis and every service below them are
+  private.
+- Each service owns exactly one PostgreSQL database and nothing reads
+  another's tables — which is why layers 4 and 5 line up one-to-one.
+- **Analytics has the only single-headed arrow.** Every other service both
+  receives and publishes; analytics consumes events and answers queries but
+  publishes no domain subject, so an admin page waits on gateway + auth +
+  analytics and never on a domain service the free tier may have put to sleep.
+- **Redis sits beside the databases because that is what it is** — the
+  gateway's own store, not a step in the request path, which is why its edge is
+  dotted. It holds rate-limit counters, safe caches and `tokenVersion`, never
+  durable jobs or domain records. `auth-service` also writes `tokenVersion`
+  there, so a disabled account's still-valid access token is rejected without a
+  round trip on every request; that edge is left out of the drawing because one
+  back-arrow across four layers costs more legibility than it buys.
+- AI providers are deliberately absent here: they are not owned persistence.
+  See [interchangeable AI providers](#single-public-edge-with-interchangeable-ai-providers).
 
 | Service | What it does |
 | --- | --- |
@@ -211,6 +216,35 @@ of config — see
 - `Gemini`, `OpenAI` and `mock` sit behind one `ai.Provider` interface.
 - Switching provider is an environment variable, not a code change.
 - `mock` runs the whole flow with no API key, and is what tests use.
+- `dna-service` is the only service that holds a provider key at all.
+
+```mermaid
+%%{init: {"flowchart": {"curve": "linear", "rankSpacing": 45}}}%%
+flowchart TB
+  classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
+  classDef portStyle fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#5b21b6;
+  classDef aiStyle fill:#fdf2f8,stroke:#db2777,stroke-width:2px,color:#9d174d;
+
+  dna["<b>DNA Service</b><br/>business logic depends on the interface,<br/>never on a vendor client"]:::domainStyle
+  port["<b><code>ai.Provider</code></b><br/>selected by <code>AI_PROVIDER</code>"]:::portStyle
+
+  subgraph adapters ["internal/ai/providers — one file each"]
+    mock["<b>mock</b><br/>default · no API key<br/>what CI runs"]:::aiStyle
+    gemini["<b>Gemini</b>"]:::aiStyle
+    openai["<b>OpenAI</b>"]:::aiStyle
+  end
+
+  dna --> port
+  port --> mock
+  port --> gemini
+  port --> openai
+```
+
+`internal/wake` in the gateway is built to the same shape on purpose:
+`wake.Platform` is the interface, `wake/platforms/` holds the adapters,
+`wake.Coordinator` holds the policy they share, and `SERVICE_WAKE_PLATFORM`
+is the switch — the exact roles `ai.Provider`, `ai.Orchestrator` and
+`AI_PROVIDER` play here.
 
 ---
 
@@ -546,6 +580,30 @@ cd ../myunivokai-admin; npm run typecheck; npm run lint; npm run check:boundary;
 
 ---
 
+## Under research — not built, not approved
+
+Four proposals are being argued against the source before any becomes a
+sprint. Detail, schemas and the full blocker list are in
+[notes/vision/platform-evolution-research.md](notes/vision/platform-evolution-research.md).
+
+| Track | Proposal | State |
+| --- | --- | --- |
+| A | End-user login, and worlds owned across two databases | Blocked on a decision, not on code: `DEFERRED-AUTH-001` has seven unanswered questions |
+| B | Wake counts, request counts and status codes on a dashboard | Ready to start. Must **not** land in `myunivokai_analytics` |
+| C | One service written in Rust | Sound if it is track B's service — new, off the product path, and a contract that already exists |
+| D | WebGPU instead of WebGL | Unblocked by the Next 16 / React 19 / R3F v9 upgrade that `S1-SECURITY-001` already requires |
+
+Two findings from that research apply to the system as it runs **today**,
+independently of whether any track is approved:
+
+- A read model on a scale-to-zero plan wakes only when queried, and
+  `MYUNIVOKAI_EVENTS` retains 7 days. Leave the admin console unopened for
+  eight and the oldest events expire unconsumed — a permanent projection gap
+  with no error anywhere.
+- Prometheus cannot be used here. It scrapes on a schedule, which would keep
+  all six services permanently awake and defeat the wake mechanism outright.
+  Any observability here has to be push-based.
+
 ## Documentation
 
 Internal engineering docs live in the `notes/` folder.
@@ -558,6 +616,7 @@ Key docs:
 - [fe/source-overview.md](notes/fe/source-overview.md) — frontend architecture
 - [vision/analytics-service-plan.md](notes/vision/analytics-service-plan.md) — why the admin app reads from a CQRS read model instead of a gateway fan-out
 - [vision/auth-and-admin-plan.md](notes/vision/auth-and-admin-plan.md) — staff identity, RBAC and the admin route group
+- [vision/platform-evolution-research.md](notes/vision/platform-evolution-research.md) — end-user ownership across two databases, telemetry, Rust, WebGPU: schemas, blockers and the dependency graph
 - [ops/production-deployment-guide.md](notes/ops/production-deployment-guide.md) — step-by-step production deploy runbook
 - [fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md) — how the music is made, and how to audition it
 - [contracts/openapi.yaml](contracts/openapi.yaml) — API specification
