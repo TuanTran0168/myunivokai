@@ -19,7 +19,24 @@ const (
 	cacheKeySegment         = "cache"
 	authTokenVersionSegment = "auth:tokenversion"
 	wakeKeySegment          = "wake"
-	minimumRetryDelay       = time.Millisecond
+	// Distinct segments rather than a suffix on wakeKeySegment, so a wake
+	// lock for a service can never be mistaken for a counter or the reverse.
+	wakeCountKeySegment = "wake:count"
+	wakeSeenKeySegment  = "wake:seen"
+	minimumRetryDelay   = time.Millisecond
+
+	// wakeStatsDayFormat keys counters by UTC day. UTC and not local time
+	// because the process reading these runs in whatever region the host
+	// picked, and a chart whose buckets shift when a service is redeployed
+	// elsewhere is worse than one that never matches anybody's midnight.
+	wakeStatsDayFormat = "2006-01-02"
+
+	// wakeStatsRetention expires the counters instead of a cleanup job. These
+	// are operational history, not records: ninety days is long enough to see
+	// whether a month of traffic changed how often services sleep, and short
+	// enough that a forgotten key never becomes permanent residency in a
+	// store whose whole job is ephemeral state.
+	wakeStatsRetention = 90 * 24 * time.Hour
 )
 
 var tokenBucketScript = redis.NewScript(`
@@ -128,6 +145,114 @@ func (store *RedisStore) SetTokenVersion(ctx context.Context, accountID string, 
 // is a correctness requirement - a lost lock costs one redundant call.
 func (store *RedisStore) AcquireWakeLock(ctx context.Context, service string, timeToLive time.Duration) (bool, error) {
 	return store.client.SetNX(ctx, store.key(wakeKeySegment, sanitizeKeyPart(service)), "1", timeToLive).Result()
+}
+
+// IncrementWakeCount records that a wake call was actually sent, which is not
+// the same number as requests that found a service asleep: single-flight
+// collapses a burst into one call, and only the call costs instance-hours.
+//
+// Counters live in Redis rather than travelling to analytics-service as
+// events, and the reason is not volume - it is that reading them must not
+// perturb them. analytics-service is itself scale-to-zero, so opening a page
+// to view wake statistics would wake it and produce a wake to view. The
+// gateway is awake by definition whenever it records one of these, and Redis
+// is managed, so this path measures without taking part.
+func (store *RedisStore) IncrementWakeCount(ctx context.Context, service string, at time.Time) error {
+	key := store.key(wakeCountKeySegment, sanitizeKeyPart(service), at.UTC().Format(wakeStatsDayFormat))
+	pipeline := store.client.Pipeline()
+	pipeline.Incr(ctx, key)
+	pipeline.Expire(ctx, key, wakeStatsRetention)
+	_, err := pipeline.Exec(ctx)
+	return err
+}
+
+// RecordServiceSeen stamps the last moment a service is known to have been
+// awake, which is how a sleep interval is derived without the sleeping
+// service having to report anything.
+//
+// A service cannot reliably announce its own sleep. Render sends SIGTERM
+// before spinning an instance down, but that same signal covers deploys and
+// manual restarts, and an OOM kill or panic sends nothing at all - so
+// self-reported sleep would record every graceful stop and miss every bad
+// death, which is exactly backwards. An observation made from outside has no
+// such bias: a successful reply proves the service was alive at that instant,
+// and the gap between this stamp and the next wake bounds the sleep.
+func (store *RedisStore) RecordServiceSeen(ctx context.Context, service string, at time.Time) error {
+	key := store.key(wakeSeenKeySegment, sanitizeKeyPart(service))
+	return store.client.Set(ctx, key, strconv.FormatInt(at.UTC().Unix(), 10), wakeStatsRetention).Err()
+}
+
+// WakeStats reads back what the two writers above recorded, for the days
+// ending at endDay inclusive.
+//
+// One MGET, never SCAN or KEYS: the services are a fixed list and the days
+// are a fixed range, so every key is computable and a growing keyspace never
+// turns this into an O(database) command on a shared Redis.
+func (store *RedisStore) WakeStats(ctx context.Context, services []string, endDay time.Time, days int) (map[string]ServiceWakeStats, error) {
+	if days < 1 {
+		days = 1
+	}
+	dayStamps := make([]string, 0, days)
+	for offset := days - 1; offset >= 0; offset-- {
+		dayStamps = append(dayStamps, endDay.UTC().AddDate(0, 0, -offset).Format(wakeStatsDayFormat))
+	}
+	keys := make([]string, 0, len(services)*len(dayStamps)+len(services))
+	for _, service := range services {
+		for _, dayStamp := range dayStamps {
+			keys = append(keys, store.key(wakeCountKeySegment, sanitizeKeyPart(service), dayStamp))
+		}
+	}
+	for _, service := range services {
+		keys = append(keys, store.key(wakeSeenKeySegment, sanitizeKeyPart(service)))
+	}
+	values, err := store.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	stats := make(map[string]ServiceWakeStats, len(services))
+	for serviceIndex, service := range services {
+		daily := make(map[string]int64, len(dayStamps))
+		var total int64
+		for dayIndex, dayStamp := range dayStamps {
+			count := parseRedisInt(values[serviceIndex*len(dayStamps)+dayIndex])
+			daily[dayStamp] = count
+			total += count
+		}
+		serviceStats := ServiceWakeStats{Service: service, TotalWakes: total, DailyWakes: daily}
+		if seenUnix := parseRedisInt(values[len(services)*len(dayStamps)+serviceIndex]); seenUnix > 0 {
+			lastSeen := time.Unix(seenUnix, 0).UTC()
+			serviceStats.LastSeenAt = &lastSeen
+		}
+		stats[service] = serviceStats
+	}
+	return stats, nil
+}
+
+// ServiceWakeStats is what one service looked like over the requested window.
+// LastSeenAt is a pointer because "never observed awake" and "observed at the
+// zero time" have to stay distinguishable - a fresh deploy legitimately has
+// no observation yet, and rendering that as 1970 would be a lie.
+type ServiceWakeStats struct {
+	Service    string           `json:"service"`
+	TotalWakes int64            `json:"totalWakes"`
+	DailyWakes map[string]int64 `json:"dailyWakes"`
+	LastSeenAt *time.Time       `json:"lastSeenAt"`
+}
+
+// parseRedisInt treats a missing key and an unparseable one alike, as zero.
+// These are counters for a dashboard, not ledger entries: a value this store
+// cannot read is a gap in a chart, never a reason to fail the request that
+// was trying to display it.
+func parseRedisInt(value any) int64 {
+	raw, isString := value.(string)
+	if !isString {
+		return 0
+	}
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }
 
 func (store *RedisStore) Ping(ctx context.Context) error {

@@ -17,6 +17,7 @@ const corsMaximumAgeSeconds = 300
 
 type EdgeStore interface {
 	cacheStore
+	wakeStatsReader
 	middleware.DistributedLimiter
 	auth.TokenVersionCache
 	Ping(context.Context) error
@@ -74,7 +75,7 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
 	if serviceConfig.AdminRoutesEnabled {
-		router.Mount("/api/admin", newAdminRouter(serviceConfig, brokerClient, edgeStore, rpcTransport))
+		router.Mount("/api/admin", newAdminRouter(serviceConfig, brokerClient, edgeStore, rpcTransport, waker))
 	}
 	router.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteError(responseWriter, request, http.StatusNotFound, "ROUTE_NOT_FOUND", "The requested gateway route was not found.")

@@ -22,7 +22,7 @@ const adminCORSMaximumAgeSeconds = 300
 // accept), a presented refresh cookie (refresh, logout), or a verified
 // access token plus one specific permission (every record/management
 // route). See notes/vision/auth-and-admin-plan.md#amended--one-gateway-two-route-groups.
-func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, transport *RPCTransport) http.Handler {
+func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, transport *RPCTransport, waker ServiceWaker) http.Handler {
 	adminRouter := chi.NewRouter()
 	adminRouter.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{serviceConfig.AdminAllowedOrigin},
@@ -57,6 +57,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 	permissionsHandler := NewAdminPermissionsHandler(transport)
 	auditHandler := NewAdminAuditHandler(transport)
 	analyticsHandler := NewAdminAnalyticsHandler(transport)
+	wakeHandler := NewAdminWakeHandler(edgeStore, waker)
 
 	adminRouter.Group(func(managementRouter chi.Router) {
 		managementRouter.Use(requireAccessToken)
@@ -85,6 +86,16 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/timeseries", analyticsHandler.Timeseries)
 		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds", analyticsHandler.ListWorlds)
 		managementRouter.With(requirePermission(contracts.PermissionJobRead)).Get("/jobs", analyticsHandler.ListJobs)
+
+		// The one admin read that does not come from analytics-service, and
+		// the one that wakes nothing to answer - see AdminWakeHandler.
+		//
+		// It reuses chart:read rather than minting a system:read permission.
+		// A new code would mean a contracts change, a permission_sync run and
+		// a role update against a deployed auth-service, to gate a read that
+		// every holder of chart:read is already trusted with: a dashboard
+		// number with no personal data in it.
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/wake-stats", wakeHandler.Stats)
 	})
 
 	adminRouter.NotFound(func(responseWriter http.ResponseWriter, request *http.Request) {

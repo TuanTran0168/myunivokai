@@ -88,6 +88,48 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/wake-stats:
+    get:
+      summary: How often each service had to be started, and when each was last seen running
+      description: >-
+        The only admin read not answered by analytics-service, and the only one
+        that starts nothing to answer. These numbers describe services being
+        asleep, so fetching them from a scale-to-zero read model would wake one
+        in order to report on wakes; they are kept in the gateway's own Redis
+        instead, where reading them stays outside what they measure.
+
+
+        `totalWakes` counts wake calls actually sent, not requests that found a
+        service asleep — single-flight collapses a burst into one call, and
+        only the call costs instance-hours. `wakeable` is false for a service
+        with no URL configured, which is what separates "never slept" from "not
+        covered": both otherwise show zero. `lastSeenAt` is null until the
+        service has answered at least once since these counters existed.
+
+
+        This whole route is scoped to scale-to-zero hosting and disappears with
+        it — see notes/vision/service-wake-mechanism.md §Removal.
+      operationId: adminWakeStats
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: >-
+            Window in days, clamped to 1..90 rather than rejected: this backs a
+            dashboard control, and a range input that returns 400 teaches the
+            operator to leave it alone.
+          schema: { type: integer, default: 30, minimum: 1, maximum: 90 }
+      responses:
+        "200":
+          description: Wake counts and liveness stamps for every service
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WakeStats" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
   /api/admin/timeseries:
     get:
       summary: Daily world and job counts over a range
@@ -306,6 +348,43 @@ components:
           description: Jobs that reached a terminal state and therefore have a duration.
         publishRatePercent: { type: number }
         multiVariantPercent: { type: number }
+    WakeStats:
+      type: object
+      additionalProperties: false
+      required: [days, services, platform]
+      properties:
+        days: { type: integer }
+        services:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [service, totalWakes, dailyWakes, lastSeenAt, wakeable]
+            properties:
+              service: { type: string }
+              totalWakes: { type: integer }
+              dailyWakes:
+                type: object
+                description: UTC day (YYYY-MM-DD) to wake count, zero-filled across the window.
+                additionalProperties: { type: integer }
+              lastSeenAt:
+                type: [string, "null"]
+                format: date-time
+                description: >-
+                  Last moment the service is known to have answered. Null means
+                  never observed, which is not the same as long asleep — a
+                  freshly deployed gateway has no observation yet.
+              wakeable:
+                type: boolean
+                description: Whether a wake target is configured for this service.
+        platform:
+          type: object
+          additionalProperties: false
+          required: [name, retryAfterSeconds, wakeableServiceCount]
+          properties:
+            name: { type: string, description: The selected wake adapter; "none" on an always-on host. }
+            retryAfterSeconds: { type: integer }
+            wakeableServiceCount: { type: integer }
     Overview:
       type: object
       additionalProperties: false

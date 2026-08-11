@@ -20,6 +20,7 @@ type fakeWaker struct {
 	mutex      sync.Mutex
 	supported  map[string]bool
 	woken      []string
+	seenCalls  []string
 	retryAfter time.Duration
 }
 
@@ -43,12 +44,63 @@ func (waker *fakeWaker) Wake(service string) {
 	waker.woken = append(waker.woken, service)
 }
 
+func (waker *fakeWaker) Seen(service string) {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	waker.seenCalls = append(waker.seenCalls, service)
+}
+
+func (waker *fakeWaker) seenServices() []string {
+	waker.mutex.Lock()
+	defer waker.mutex.Unlock()
+	return append([]string(nil), waker.seenCalls...)
+}
+
 func (waker *fakeWaker) RetryAfter() time.Duration { return waker.retryAfter }
 
 func (waker *fakeWaker) wokenServices() []string {
 	waker.mutex.Lock()
 	defer waker.mutex.Unlock()
 	return append([]string(nil), waker.woken...)
+}
+
+// A reply is the only unbiased evidence that a service was awake, and it has
+// to be recorded whatever the reply says. A service cannot announce its own
+// sleep - a spin-down signal is indistinguishable from a deploy, and an OOM
+// kill sends nothing - so this stamp plus the next wake is what bounds how
+// long each service was down.
+func TestASuccessfulReplyStampsTheServiceAsSeen(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	brokerClient := &fakeBroker{response: contracts.NewEnvelope("request-id", contracts.RPCResponseData{
+		StatusCode: http.StatusOK, Payload: []byte(`{"jobId":"01HZY000000000000000000000","status":"queued"}`),
+	})}
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if seen := waker.seenServices(); !equalStrings(seen, []string{wake.ServiceDNA}) {
+		t.Fatalf("stamped %v as seen, want [%s]", seen, wake.ServiceDNA)
+	}
+	if woken := waker.wokenServices(); len(woken) != 0 {
+		t.Fatalf("a service that answered was woken anyway: %v", woken)
+	}
+}
+
+// The opposite case, and the one that would quietly ruin the measurement:
+// nobody answered, so nothing may be stamped as having been seen. Recording a
+// liveness observation here would make a sleeping service look permanently
+// awake and every derived sleep interval zero.
+func TestNoResponderStampsNothingAsSeen(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
+
+	if seen := waker.seenServices(); len(seen) != 0 {
+		t.Fatalf("stamped %v as seen although nobody replied", seen)
+	}
 }
 
 func errorCodeOf(t *testing.T, body []byte) string {

@@ -43,8 +43,22 @@
 //   - internal/config/config.go — drop the four ServiceWake* fields,
 //     serviceWakeURLKeys, readServiceWakeTargets, serviceWakeConfigured and
 //     their validation
-//   - internal/edge/redis.go — drop AcquireWakeLock and wakeKeySegment
+//   - cmd/gateway/main.go — also drop logServiceWake
+//   - internal/edge/redis.go — drop AcquireWakeLock, IncrementWakeCount,
+//     RecordServiceSeen, WakeStats, ServiceWakeStats and the three wake key
+//     segments
+//   - internal/handlers/admin_wake_handler.go — delete the file, and drop the
+//     /wake-stats route from internal/handlers/admin_router.go
+//   - contracts/openapi-admin.yaml — drop /api/admin/wake-stats and WakeStats
 //   - render.yaml, .env.example — drop the wake block
+//
+// The statistics go with it, deliberately. They count wakes and stamp the
+// last moment a service answered, and on a host whose instances do not sleep
+// there are no wakes to count and the stamp is always now. Durable
+// service-lifecycle history is a different question with a different answer —
+// startup events emitted by each service, which survive this directory
+// because restarts happen on every platform. See
+// notes/vision/platform-evolution-research.md, Track B.
 //   - apps/*/src — src/lib/wake-retry.ts and its call sites; keep
 //     src/lib/relay-headers.ts, which Retry-After needs for rate limiting too
 //

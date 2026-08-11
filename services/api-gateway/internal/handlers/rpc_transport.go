@@ -42,6 +42,7 @@ type RPCRequester interface {
 type ServiceWaker interface {
 	Supports(service string) bool
 	Wake(service string)
+	Seen(service string)
 	RetryAfter() time.Duration
 }
 
@@ -87,6 +88,14 @@ func (transport *RPCTransport) Request(responseWriter http.ResponseWriter, reque
 		log.Error().Err(err).Str("subject", subject).Str("request_id", requestID).Str("error_code", errorCode).Msg("NATS request failed")
 		httpx.WriteError(responseWriter, request, statusCode, errorCode, errorMessage)
 		return contracts.Envelope[contracts.RPCResponseData]{}, false
+	}
+	// A reply arrived, so the service was running at this instant - which is
+	// recorded here rather than below, because a business error is still a
+	// reply. "The account was not found" proves the responder is alive just as
+	// well as a world does, and treating it as evidence of sleep would make
+	// every validation failure look like a cold start.
+	if transport.waker != nil {
+		transport.waker.Seen(wake.ServiceForSubject(subject))
 	}
 	if response.Data.Error != nil {
 		statusCode := response.Data.StatusCode

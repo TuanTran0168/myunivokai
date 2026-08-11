@@ -61,6 +61,9 @@ type fakeEdgeStore struct {
 	deleteCounts  map[string]int
 	pingError     error
 	tokenVersions map[string]int
+
+	wakeStats      map[string]edge.ServiceWakeStats
+	wakeStatsError error
 }
 
 func newFakeEdgeStore() *fakeEdgeStore {
@@ -121,6 +124,17 @@ func (store *fakeEdgeStore) Delete(_ context.Context, namespace, identifier stri
 
 func (store *fakeEdgeStore) Ping(context.Context) error { return store.pingError }
 func (store *fakeEdgeStore) Close() error               { return nil }
+
+func (store *fakeEdgeStore) WakeStats(_ context.Context, services []string, _ time.Time, _ int) (map[string]edge.ServiceWakeStats, error) {
+	if store.wakeStatsError != nil {
+		return nil, store.wakeStatsError
+	}
+	stats := make(map[string]edge.ServiceWakeStats, len(services))
+	for _, service := range services {
+		stats[service] = store.wakeStats[service]
+	}
+	return stats, nil
+}
 
 func TestCreateWorldPublishesValidatedEnvelopeAndReturnsAcceptedJob(t *testing.T) {
 	brokerClient := &fakeBroker{}

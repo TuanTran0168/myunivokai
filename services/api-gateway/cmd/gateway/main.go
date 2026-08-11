@@ -49,7 +49,7 @@ func main() {
 	// stops the deploy at startup instead of producing a gateway that silently
 	// never wakes anything - the same fail-fast dna-service gets from
 	// aifactory.NewOrchestrator.
-	wakeCoordinator, err := wakefactory.NewCoordinator(gatewayConfig, edgeStore)
+	wakeCoordinator, err := wakefactory.NewCoordinator(gatewayConfig, edgeStore, edgeStore)
 	if err != nil {
 		log.Fatal().Err(err).Msg("configure gateway service wake")
 	}
