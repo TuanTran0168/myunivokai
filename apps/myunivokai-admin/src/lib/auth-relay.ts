@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { serializeCookie } from "./cookie-serialize";
 import { gatewayOriginUrl } from "./gateway";
+import { forwardedRelayHeaders } from "./relay-headers";
 import { ADMIN_ACCOUNT_COOKIE_NAME, encodeAccountCookieValue, type SessionResponse } from "./session";
 
 // proxyToGatewayAuth is the BFF relay every route under src/app/api/admin/auth
@@ -38,10 +39,9 @@ export async function proxyToGatewayAuth(gatewayPath: string, init: RequestInit)
   }
 
   const bodyText = await gatewayResponse.text();
-  const contentType = gatewayResponse.headers.get("Content-Type");
   const response = new NextResponse(bodyText.length > 0 ? bodyText : null, {
     status: gatewayResponse.status,
-    headers: contentType ? { "Content-Type": contentType } : undefined
+    headers: forwardedRelayHeaders(gatewayResponse)
   });
 
   for (const rawSetCookie of gatewayResponse.headers.getSetCookie()) {

@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const login = useLogin();
+  const { mutation: login, isWakingService } = useLogin();
   const router = useRouter();
 
   // Middleware only reaches this page when the access token is missing or
@@ -104,8 +104,16 @@ export default function LoginPage() {
                   />
                 </div>
                 {login.isError ? <p className="text-sm text-destructive">{login.error.message}</p> : null}
+                {/* A cold start takes tens of seconds. Saying so turns an
+                    apparently hung button into an explained wait — and this is
+                    the one screen with no other content to reassure anybody. */}
+                {isWakingService ? (
+                  <p className="text-sm text-muted-foreground">
+                    Starting the service — this can take up to a minute after a quiet period.
+                  </p>
+                ) : null}
                 <Button type="submit" className="mt-2" disabled={login.isPending}>
-                  {login.isPending ? "Signing in…" : "Sign in"}
+                  {login.isPending ? (isWakingService ? "Starting service…" : "Signing in…") : "Sign in"}
                 </Button>
               </motion.form>
             )}
