@@ -296,6 +296,36 @@ textarea {
   pointer-events: none;
 }
 
+/* ---------- Pending link indicator ----------
+   Rendered by ui/link-pending.tsx inside a <Link> whose navigation is still
+   in flight. The 150ms fade delay is the whole point: a navigation that
+   resolves quickly unmounts this before the opacity animation starts, so a
+   fast click shows nothing at all and only a slow one grows a spinner. */
+@keyframes link-pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes link-pending-appear {
+  to {
+    opacity: 1;
+  }
+}
+
+.link-pending {
+  opacity: 0;
+  animation:
+    link-pending-spin 1s linear infinite,
+    link-pending-appear 1ms linear 150ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-pending {
+    animation: link-pending-appear 1ms linear 150ms forwards;
+  }
+}
+
 /* ---------- Login background pattern ----------
    Subtle dot grid behind the login page. CSS-only, no extra asset. */
 .login-dots {

@@ -17,6 +17,7 @@ import {
   useSidebar
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { LinkPending } from "@/components/ui/link-pending";
 import { NAV_ITEMS } from "@/components/layout/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { hasPermission, type AccountSummary } from "@/lib/session";
@@ -84,6 +85,9 @@ export function AppSidebar({ account }: { account: AccountSummary | null }) {
                           ) : null}
                           <item.icon className="relative z-10" />
                           <span className="relative z-10">{item.label}</span>
+                          {/* Inside the Link on purpose — useLinkStatus only
+                              reports on the link it is rendered within. */}
+                          <LinkPending className="relative z-10 ml-auto" />
                         </Link>
                       }
                     />
