@@ -705,6 +705,17 @@ the 5–10 MB range. Comfortable inside a free instance's memory.
 
 ## Track D — WebGPU instead of WebGL
 
+> **Superseded 2026-08-12 by
+> [frontend-modernization-research.md](frontend-modernization-research.md).**
+> Three facts below are wrong: `three@0.171.0` was published **2024-11-29**, not
+> September 2025; Firefox has **not** shipped WebGPU by default (disabled
+> through 156); and `three` is only "already sufficient" if
+> `@react-three/postprocessing` is pinned to `3.0.4` — `latest` requires
+> `three >= 0.182.0`. The blocking chain below is also wrong in its conclusion:
+> the security advisories are cleared by **`next@15.5.23`**, not by Next 16.
+> The verdict — low return today, do it last, behind a flag — survives intact.
+> Read the newer document before planning any of this.
+
 ### Current facts, verified 2026-08-12
 
 - three.js **r171** (September 2025) ships `WebGPURenderer` as production-ready:
