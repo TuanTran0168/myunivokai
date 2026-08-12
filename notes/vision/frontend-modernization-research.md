@@ -640,23 +640,224 @@ For a public, link-shared product — and share links are a core feature here �
 "most visitors, plus a fallback path that must be exercised on the rest" is the
 accurate framing, not "supported".
 
-### The verdict is unchanged, and it is: not yet
+### The verdict, now with the evidence it was missing
 
-Nothing found this session moves the conclusion already recorded in Track D:
+Track D's verdict — low return today, do it last, behind a flag — survives. But
+it survived for weak reasons (scene complexity, bundle size), and the strong
+reason was never established. It is now, and it is much harder:
 
-- The scenes are procedural, low-poly and already instanced. They are nowhere
-  near the draw-call or compute ceilings where WebGPU wins.
-- The measured frontend bottleneck is **bundle size and cold start**, neither
-  of which WebGPU improves.
+> **three.js's own manual lists `ShaderMaterial`, `RawShaderMaterial`,
+> `onBeforeCompile` and `EffectComposer` as NOT supported under
+> `WebGPURenderer`.**
+
+That single sentence names **every custom-rendering technique this repository
+owns**: the 2 raw-GLSL `<shaderMaterial>` files, the `onBeforeCompile` patch in
+`forestModels.ts`, and all 8 post-processing effects. Verbatim from the manual:
+
+> *"`EffectComposer` with its effect passes are not supported because
+> `WebGPURenderer` comes with a new, more modern post-processing stack. Similar
+> to materials, post-processing effects are now written in TSL and the effect
+> chain is expressed as a node composition."*
+
+And the manual still labels `WebGPURenderer` itself **experimental** as of r185.
+So Track D's *"ships WebGPURenderer as production-ready"* was half wrong in the
+most dangerous way: the automatic WebGL2 fallback half is **true and
+documented**, which lends credibility to the "production-ready" half, which the
+manual contradicts.
+
+**The post-processing path is closed, not merely rough.** `@react-three/postprocessing`
+wraps pmndrs `postprocessing`, which has no WebGPU code — verified by grepping
+the *published* v7 beta bundle: zero bytes matching `webgpu`. Its maintainer's
+position (2024, re-affirmed by closing two later duplicates) is that they will
+move *"when `WebGPURenderer` officially replaces the `WebGLRenderer`"*. Passing
+a `WebGPURenderer` to `EffectComposer` **throws** rather than degrading. And
+`n8ao` — one of the 8 — states in its own README that it is not WebGPU
+compatible, a milestone its 2.0 release passed without delivering.
+
+**The R3F and drei WebGPU entry points are unreleased alphas.** `@react-three/fiber`
+`10.0.0-alpha.3` and `drei` `11.0.0-alpha.5`. drei's v11 (WebGPU) milestone sits
+at 44 open / 29 closed, **seven months past its due date**, and drei issue #2764
+is a broken import in the **CubeCamera/Environment path** of the `/webgpu` entry
+— which is precisely what both of this app's families use for lighting. R3F
+issue #3846 (a Turbopack blocker on the WebGPU entry) is open with **zero
+maintainer comments**.
+
+### What it would actually cost, priced honestly
+
+The first draft of this section was too pessimistic in one place and too
+optimistic in another. Corrected:
+
+| Surface | Cost |
+| --- | --- |
+| 2 raw-GLSL `<shaderMaterial>` files | **Not full rewrites.** three.js ships an official transpiler at `three/addons/transpiler/Transpiler.js` with a live tool. Community reports say it leaves GLSL-only names and chokes on `#define`, so budget hand cleanup — but paste them in first and get a real signal in under an hour |
+| `forestModels.ts` `onBeforeCompile` | **A genuine rewrite.** The transpiler has no model of three's chunk system; this becomes a node-material composition |
+| Bloom, ChromaticAberration | Direct TSL nodes exist |
+| HueSaturation | `hue()` / `saturation()` exist in three **core**, but as loose functions, not a drop-in effect |
+| N8AO → `GTAONode` / `SSAONode` | **A different AO algorithm.** Expect a different look; this needs an art-direction decision, not a port |
+| Vignette, BrightnessContrast, Noise | No named nodes. Hand-written TSL — trivial maths, but hand-written |
+| Container API | `PostProcessing` was **renamed to `RenderPipeline` in r183**; write against `RenderPipeline`. Neither exists in the installed `three@0.171.0` |
+
+So: **~5 drop-ins, 3 hand-written passes, 3 shader surfaces, one art-direction
+call — on top of an alpha renderer, an alpha R3F entry point, and a drei entry
+point with a live crash in the exact component this app lights through.**
+
+### The framing that should go in the roadmap
+
+Not *"WebGPU: blocked"* — that is a false technical premise, because
+`WebGPURenderer` genuinely does fall back to a WebGL2 backend, so device support
+is not the risk. The accurate framing is:
+
+> **WebGPU: requires rewriting the post-processing stack and all three custom
+> shader surfaces. Deferred on cost, not on feasibility. Re-open when drei ships
+> a stable v11 with a working `/webgpu` entry.**
+
+And the pre-existing reasons still hold and still come first:
+
+- The scenes are procedural, low-poly and already instanced — nowhere near the
+  draw-call or compute ceilings where WebGPU wins.
+- The measured bottleneck is **bundle size and cold start**, which WebGPU does
+  not improve.
 - **Seeded determinism is a product promise** — *"same seed, same scene,
-  forever"*. Every share link ever issued is a claim about pixels. A renderer
-  swap that shifts a float breaks that claim retroactively, and there is
-  currently no screenshot baseline that would even detect it.
+  forever"*. Every share link ever issued is a claim about pixels, and a
+  renderer swap that shifts a float breaks that claim retroactively.
 
-WebGPU becomes interesting when City arrives with denser geometry, or when a
-feature needs compute. Today it is a by-product of a security upgrade, not a
-reason for one — and it should be the **last** step, behind a
-`navigator.gpu` flag, after a screenshot baseline exists.
+One benchmark worth not over-reading in either direction: a team publicly
+reported moving *back* to `WebGLRenderer` over ~20 s TSL compile times, and
+three.js later landed a ~3× compile improvement in r184 — but that fix shipped
+*before* the article, so it cannot be waved away as a stale snapshot. Both are
+other people's workloads. If compile cost ever decides this, measure it on these
+two scenes.
+
+---
+
+## Vercel: the platform constraints that actually bind
+
+Researched because "we can always roll back" was doing a lot of unexamined work
+in the plan. It is true, and thinner than it sounds.
+
+### The safety net is exactly one step deep
+
+**Instant Rollback exists on Hobby**, and it is instant. It rolls back to the
+**immediately previous production deployment** — one step, not a history.
+
+The failure mode writes itself: deploy the migration, notice something wrong,
+push a fix on top, and now *"the previous deployment"* is the broken migration,
+not the known-good Next 14 build. **The rollback window can close after a single
+push**, in an app where nothing in CI can see the canvas and the defect is
+therefore likely to be found by a human some time after the deploy.
+
+Two further behaviours to know before, not during, an incident:
+
+- **After a rollback, Vercel disables auto-assign of the production domain.**
+  Pushing to `main` afterwards deploys nothing to production until someone
+  clicks Undo Rollback. A team that rolls back at night and pushes a fix in the
+  morning will watch a fix that never arrives.
+- **Environment variables are not rolled back.** They stay at their current
+  project-settings values.
+
+The discipline that follows is cheap: **one deploy, one observation.** Record
+the known-good deployment id first. After promoting, do not push again until
+both scenes have been checked by eye on the production URL. If a fix is needed,
+roll back *first*, then fix on a preview.
+
+There is also a staging workflow the repo is not using and should:
+Settings → Environments → Production → Branch Tracking → turn off *Auto-assign
+Custom Production Domains*. The build then sits **Staged** at its own URL, gets
+looked at, and is promoted deliberately. For a 3D app with no automated visual
+check, that is the closest thing to a pre-flight inspection available on this
+tier.
+
+### A deadline that is already inside the planning horizon
+
+**Vercel retires Node 20 on 2026-10-01** — about seven weeks out. And the
+repo cannot tell anyone which version it is on: there is **no `engines.node`
+and no `vercel.json`**, so the Node version lives only in a dashboard setting
+that no code review can see. CI runs Node 24; Vercel may be running whatever
+the project was created with.
+
+If it is pinned to 20.x, then after that date **every new deployment fails,
+including an emergency hotfix.**
+
+Fix it before touching Next at all: read Settings → Build and Deployment →
+Node.js Version, then add to `apps/myunivokai-web/package.json`:
+
+```json
+"engines": { "node": "24.x" }
+```
+
+That overrides the dashboard, matches CI, and turns an invisible setting into a
+reviewable line of git.
+
+### `output: "standalone"` should go, on its own commit
+
+Vercel traces files itself with `@vercel/nft` and **never reads
+`.next/standalone`**. The option makes the build copy a second traced
+`node_modules` for nothing — build time and disk, on a Hobby builder, for a
+heavy 3D app. Remove it as a **separate commit, deployed and confirmed before
+the Next upgrade starts**, so that if anything moves, it is unambiguous what
+moved. (Keep it only if something still builds a Docker image from this app;
+nothing appears to.)
+
+### Turbopack, and a Hobby-tier failure mode
+
+Hobby allows **one concurrent build** with a **45-minute hard cap** that cannot
+be raised. There is a community report (2026-07-19) matching this app's exact
+shape — Hobby, Next 16.2.x — of a build hanging silently at *"Running
+TypeScript…"* until it was killed at 45 minutes, with no Vercel response and no
+fix. This repo has many heavily-typed 3D `.tsx` files.
+
+Nothing about the repo is *technically* Turbopack-hostile: no `webpack()` config
+and GLSL lives in template literals, not loaders. But the mitigation is free, so
+take it: if Next 16 happens, set `"build": "next build --webpack"` **from the
+start**, and remove that flag later as its own independent change. Otherwise a
+bundler swap and a framework swap fail as one indistinguishable event, and a
+hung build blocks the entire deploy queue.
+
+### The real Hobby ceiling is bandwidth, and there is dead weight in it
+
+`public/` is **68 MB**. Hobby allows 100 GB Fast Data Transfer per month —
+roughly 1,470 full cold loads.
+
+Verified on disk, and actionable regardless of any upgrade:
+
+```
+14.66 MB  public/assets/nature/models/experimental/dirt-road-through-forest.glb
+ 1.73 MB  public/assets/nature/models/experimental/wetland-shoal-river.glb
+```
+
+**Neither is referenced anywhere in `src/`** — verified by grep. They are
+leftovers from the abandoned baked-scene direction. The larger one also exceeds
+the **10 MB CDN cache limit**, so any request for it goes to origin every time,
+against a Fast Origin Transfer allowance of only ~10 GB/month.
+
+Deleting that directory removes **~16 MB from every deployment** and costs
+nothing. Separately, five 8K/4K solar-system JPGs total over 15 MB and are
+obvious WebP/AVIF/KTX2 candidates — a bandwidth question, not a migration one.
+
+### There is no "supported versions" policy — there is CVE-based deploy blocking
+
+Vercel publishes no supported-Next-versions policy. The actual enforcement
+mechanism is **blocking deploys of versions with specific CVEs**, which has been
+used at least twice. Next 14.2.23 is not blocked today. But the block list only
+grows, and the 14.x line is carrying unpatched advisories with no patched
+release.
+
+So *"Next 14 keeps deploying indefinitely"* is not a safe planning assumption.
+The day a 14.x CVE is added is the day hotfixes stop shipping too. An escape
+hatch env var exists; treat it as a one-time release valve, never a plan.
+
+One more, small but sharp: **Hobby runtime logs are retained for one hour.** If
+the migration fails in a way that only real traffic reveals, the evidence
+evaporates before anyone investigates. Deploy while present, watch for the first
+hour, and copy anything odd out immediately.
+
+### And a licensing question that is not a technical one
+
+Hobby is **non-commercial only**. If myunivokai has any commercial dimension —
+sales, ads, paid hosting, even donations — Hobby is the wrong plan independent
+of this migration. Worth noting that Pro also fixes two items above: rollback to
+**any** past production deployment instead of one step, and a larger build
+machine. For the migration month alone, that is a defensible purchase.
 
 ---
 
@@ -704,6 +905,28 @@ tailwindcss             3.4.17 (unchanged)
 - Remaining work is then exactly: async `params` (3 files) + the StrictMode
   dispose pattern (5 files) + a visual verification pass.
 
+**Pin exactly; do not use carets on the 3D stack.** `fiber@9.7.0` declares
+`react: ">=19 <19.3"`, so `^19.2.8` would eventually resolve past the supported
+range on someone's `npm install` months from now. And go **straight to 9.7.0** —
+it is the first release carrying both the `act` fix from 9.1.1 and the import
+fix from PR #3807 (landed 2026-07-30, one day before 9.7.0). Never pin an
+intermediate 9.x.
+
+```
+react 19.2.8 · react-dom 19.2.8 · @react-three/fiber 9.7.0
+@react-three/drei 10.7.8 · @react-three/postprocessing 3.0.4 · three 0.171.0
+```
+
+**A tempting sequencing that should be rejected.** Both `next@15.5.23` and
+`next@16.3.0` declare `react: "^18.2.0 || ^19.0.0"`, which suggests Next could
+be upgraded on React 18 first, as an independently revertible deploy, before the
+React 19 + 3D bump. The peer range permits it; **the documentation forbids it**
+— the official Next 15 guide states *"The minimum versions of `react` and
+`react-dom` is now 19"*, and Next 16's App Router is documented as running on
+React 19.2 features. With 49 of 52 files under the App Router, that loose peer
+range is Pages-Router tolerance, not permission. Splitting this way trades one
+reviewed risk for an undocumented configuration.
+
 ### Route B — Next 16.3.0, both hops at once
 
 Everything in Route A, plus: sync `params` becomes fatal, Turbopack becomes the
@@ -728,13 +951,36 @@ the linter and the framework in the app nothing can visually test.
 
 ### Suggested order, either route
 
-1. **Playwright screenshot baseline first, on the current stack.** Both
-   families, desktop + 375 px, loading state and settled state. Without this
-   step nothing below can be verified, only hoped.
+**Step 0 — four things that are cheap, independent of the upgrade, and reduce
+its risk. Each its own commit, deployed and confirmed before the next.**
+
+- Read Vercel → Settings → Build and Deployment → **Node.js Version**, then add
+  `"engines": { "node": "24.x" }`. The 2026-10-01 Node 20 retirement is inside
+  the planning window and would block hotfixes, not just upgrades.
+- Remove **`output: "standalone"`** from `next.config.mjs` — Vercel ignores it
+  and pays for it.
+- Delete **`public/assets/nature/models/experimental/`** — ~16 MB of `.glb`
+  referenced by nothing, one file of which busts the CDN cache limit.
+- Turn off **auto-assign of the production domain** so production builds land
+  Staged and are promoted by hand. This is the only pre-flight inspection this
+  tier offers.
+
+Then:
+
+1. **Playwright screenshot baseline, on the current stack.** Both families,
+   desktop + 375 px, loading state and settled state, animation paused at fixed
+   camera positions. Without this step nothing below can be verified, only
+   hoped.
 2. Async `params` — 3 files. Safe on 14, so it can land and merge alone.
-3. The version bump, with `postprocessing` pinned to `3.0.4`.
+3. The version bump, pinned exactly as above. On Route B, set
+   `"build": "next build --webpack"` in the same commit and remove it later
+   as its own change — otherwise a bundler swap and a framework swap fail as
+   one indistinguishable event.
 4. Fix the five StrictMode dispose sites.
-5. Re-shoot the screenshots. Diff. **Look at the images**, do not read the markup.
+5. Re-shoot the screenshots. Diff. **Look at the images**, do not read the
+   markup. Promote deliberately, then **do not push again** until both scenes
+   have been checked on the production URL — the Hobby rollback window is one
+   deployment deep and a second push closes it.
 6. Only then: three.js 0.171 → 0.185, on its own PR, re-shooting again. The
    specific thing to look at is **lighting on every PBR surface in both
    families**, because r181 changed indirect specular, energy conservation and
@@ -771,24 +1017,56 @@ as the repo's own *"one concern per PR"* rule, applied to risk instead of review
 
 ---
 
-## What is still unverified
+## Research provenance, and what is still open
 
-A seven-dimension parallel research run was launched for this document and
-**all eight agents failed on an account session limit**, returning nothing. What
-is written above therefore comes from the npm registry, the official upgrade
-guides, caniuse, and direct reading of this repository — which covers the
-decision-critical parts, but leaves these open. **Do not treat their absence as
-"no problem found".**
+The first parallel research run for this document lost all eight agents to an
+account session limit and returned nothing; the sections above were written from
+the npm registry, the official upgrade guides, caniuse and this repository read
+directly. A second, narrower run then closed the four remaining gaps, each
+finding checked by an independent adversarial pass. **Those checks overturned
+several of their own researchers' claims, which is the reason to trust the
+survivors and the reason to record the corrections here.**
+
+### Closed
+
+| Was open | Outcome |
+| --- | --- |
+| three.js r171 → r185 migration entries | **Closed.** §three.js 0.171.0 → 0.185.1. Four entries apply; r181's PBR/PMREM change is the real one; `forestModels.ts` verified safe by diffing the actual shader chunk at both versions |
+| `@react-three/postprocessing` under `WebGPURenderer` | **Closed — it does not work, and cannot today.** §WebGPU |
+| `WebGPURenderer` production status and fallback completeness | **Closed.** Still labelled experimental in three.js's own manual at r185; the WebGL2 fallback is real and documented |
+| R3F v9 / drei v10 field reports | **Closed.** drei v10's entire breaking-change list is one line ("React 19 support"); go straight to `fiber@9.7.0` and pin it |
+| Vercel Node runtime, `standalone`, Hobby build limits, rollback | **Closed.** §Vercel — and the rollback finding changed the plan |
+
+### Corrections made during verification
+
+Recorded because each was believed for a while, and because they show what an
+unchecked research pass produces:
+
+- *"There is no automated GLSL → TSL path"* — **wrong.** three.js ships
+  `three/addons/transpiler/Transpiler.js` and a live tool. Only the
+  `onBeforeCompile` file is a true rewrite.
+- *"R3F v9 broke Webpack production builds through 9.1.1"* — **wrong and
+  inverted.** 9.1.1 is the *fix*, and the maintainer's note names **rsbuild**,
+  not Webpack and not Next.js. The conclusion (go to 9.7.0) survives by a
+  different route.
+- *"WebGPU should be removed from the roadmap"* — **does not follow.**
+  `WebGPURenderer` falls back to WebGL2, so device support is not the risk. It
+  is a rewrite-cost decision.
+- *"Maintainers have responded to the R3F Turbopack blocker"* — **wrong.** Zero
+  comments, which is a worse signal than reported.
+- *"three@0.171.0 predates the `three/webgpu` entry point"* — **wrong**, and
+  nearly written into this document. The package manifest declares it.
+
+### Still open
 
 | Open item | Why it matters | How to close it |
 | --- | --- | --- |
-| Open R3F v9 / drei v10 regressions in the wild | 19 and 33 stable releases suggest health, but issue trackers were not read | Search the pmndrs issue trackers for v9 regressions before starting |
-| ~~three.js r171 → r185 migration entries~~ | — | **Closed 2026-08-12.** See §three.js 0.171.0 → 0.185.1. Four entries apply; r181's PBR/PMREM change is the real one; `forestModels.ts` verified safe by diffing the actual shader chunk at both versions |
-| `@react-three/postprocessing` under `WebGPURenderer` | If `EffectComposer`/`Bloom`/`N8AO` do not work on WebGPU, the app loses its look on that path and WebGPU is off the table entirely | Verify before any WebGPU work is scheduled |
-| `WebGPURenderer` production status and the completeness of its WebGL2 fallback | Track D's "production-ready" claim was never verified and its neighbouring facts were wrong | Read the three.js docs/release notes directly |
-| Vercel Node runtime defaults, and whether an existing project auto-upgrades | Next 16 needs Node ≥ 20.9; Vercel supports Next 16 (its docs describe 16 behaviour, updated 2026-06-26), but the runtime default was not confirmed | Check the project's runtime setting in the Vercel dashboard before Route B |
-| Hobby-tier build limits for a heavy 3D bundle | Turbopack + three.js + drei + `.glb` assets is a large build | Watch the first Route B build |
-| `output: "standalone"` on Vercel | Set in `next.config.mjs`, but the web app is deployed on Vercel, where the default output is expected. Not mentioned in the 16 guide | Confirm whether to drop it |
+| Which **Node version this Vercel project is actually pinned to** | Invisible in git; the 2026-10-01 Node 20 retirement would block hotfixes | Read it in the dashboard — **step 0 of the plan**, not research |
+| Whether Vercel has added the 2026 Next CVEs to its **deploy block list** | If it has, the upgrade stops being schedulable | Attempt a deploy, or watch the changelog |
+| Vercel changelog **2026-03 → 2026-08** | Fetches returned a stale 2024 cache; entries were only reachable individually, so something may be unseen | Browse the changelog by hand before finalising |
+| Whether the three.js **transpiler handles these 2 specific shaders** | Decides whether WebGPU's shader cost is hours or days | Paste both files into the live transpiler — an hour's work, whenever WebGPU is reconsidered |
+| Whether `GTAONode` and **N8AO look meaningfully different** | An art-direction decision disguised as a dependency swap | Only matters if WebGPU is revisited |
+| ~~The 2 GLSL shader materials' textures and `colorSpace`~~ | — | **Closed while writing this.** `SizedStarPoints` takes **no texture at all** — its uniforms are `uPointScale`, `uTimeSeconds`, `uGlobalOpacity`, `uSpikeStrength`, all procedural. `NebulaCloudPoints` receives its atlas through a **custom uniform** (`uCloudMap`), and R3F's automatic conversion only ever applied to recognised material texture props (`map`, `emissiveMap`, `envMap`, …), never to arbitrary uniforms. Both are immune by construction |
 
 ---
 
@@ -810,6 +1088,21 @@ All retrieved 2026-08-12.
 - three.js source, compared at both versions —
   `src/renderers/shaders/ShaderChunk/map_fragment.glsl.js` and `src/constants.js`
   at `three@0.171.0` and `three@0.185.1`, via unpkg
+- three.js manual, WebGPURenderer — https://threejs.org/manual/en/webgpurenderer.html
+  (the unsupported list: `ShaderMaterial`, `RawShaderMaterial`,
+  `onBeforeCompile`, `EffectComposer`)
+- three.js docs, `RenderPipeline` — https://threejs.org/docs/pages/RenderPipeline.html
+  (renamed from `PostProcessing` in r183)
+- pmndrs/postprocessing issue #643 — maintainer's WebGPU position, 2024-07-25,
+  re-affirmed by closing #690 and #700 as duplicates
+- N8AO README — https://github.com/N8python/n8ao ("not yet compatible with WebGPU")
+- R3F Canvas API — https://r3f.docs.pmnd.rs/api/canvas (`shadows="soft"` →
+  `PCFSoftShadowMap`)
+- Vercel: Instant Rollback, Node.js version retirement, Hobby limits, deployment
+  promotion — vercel.com/docs
+- This repository, measured: `public/` is 68 MB;
+  `public/assets/nature/models/experimental/` holds 16.4 MB of `.glb` with no
+  reference anywhere in `src/`
 - npm registry: `next`, `react`, `react-dom`, `three`, `@react-three/fiber`,
   `@react-three/drei`, `@react-three/postprocessing`, `eslint-config-next`,
   `postcss` — versions, publish dates and `peerDependencies` read directly
