@@ -2,6 +2,9 @@
   "name": "@myunivokai/myunivokai-admin",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev -p 41900",
     "build": "next build",
