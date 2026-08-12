@@ -85,6 +85,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/overview", analyticsHandler.Overview)
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/timeseries", analyticsHandler.Timeseries)
 		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds", analyticsHandler.ListWorlds)
+		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds/{worldID}", analyticsHandler.GetWorld)
 		managementRouter.With(requirePermission(contracts.PermissionJobRead)).Get("/jobs", analyticsHandler.ListJobs)
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/service-starts", analyticsHandler.ListServiceStarts)
 

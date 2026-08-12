@@ -13,6 +13,13 @@ import (
 // re-reading rows it already showed.
 var ErrMalformedCursor = errors.New("malformed cursor")
 
+// ErrNotFound covers both "no row with that id" and "that id is not even a
+// UUID". They are deliberately the same answer: a projection is eventually
+// consistent, so a world that exists upstream but has not been projected yet
+// is also legitimately absent here, and an admin reading a 404 needs to know
+// only that this service cannot show it.
+var ErrNotFound = errors.New("not found")
+
 // Store is deliberately asymmetric: exactly one write method, and it is only
 // ever called by the event consumer. Every other method reads. That asymmetry
 // is the design rule of this service — see
@@ -30,6 +37,10 @@ type Store interface {
 
 	Overview(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsOverviewResponseData, error)
 	ListWorlds(ctx context.Context, filter models.WorldListFilter) (contracts.AnalyticsWorldListResponseData, error)
+
+	// GetWorld returns one world and its job history, or ErrNotFound.
+	GetWorld(ctx context.Context, worldID string) (contracts.AnalyticsWorldGetResponseData, error)
+
 	ListJobs(ctx context.Context, filter models.JobListFilter) (contracts.AnalyticsJobListResponseData, error)
 	Timeseries(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsTimeseriesResponseData, error)
 	ListServiceStarts(ctx context.Context, filter models.ServiceStartListFilter) (contracts.ServiceStartListResponseData, error)

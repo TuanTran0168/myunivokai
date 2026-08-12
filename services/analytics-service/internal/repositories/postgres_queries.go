@@ -3,11 +3,13 @@ package repositories
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/analytics-service/internal/models"
 )
@@ -16,6 +18,16 @@ import (
 // bars is unreadable long before it is slow, so this is a product bound that
 // happens to also be a performance one.
 const distributionLimit = 8
+
+// worldJobHistoryLimit bounds the detail page's job list. A world normally
+// accumulates a handful of jobs — one creation, one per variant, one publish —
+// so this is far above the real shape and exists only so a pathological world
+// cannot push the response past the 2500ms request/reply deadline.
+const worldJobHistoryLimit = 50
+
+// postgresInvalidTextCode is invalid_text_representation, raised when a value
+// that is not a UUID reaches a ::uuid cast.
+const postgresInvalidTextCode = "22P02"
 
 // Overview answers the whole dashboard in one round trip. Every count, rate
 // and percentile below is computed by PostgreSQL; the gateway and the admin
@@ -261,6 +273,68 @@ func (store *PostgresStore) ListWorlds(ctx context.Context, filter models.WorldL
 	return response, nil
 }
 
+// GetWorld answers the world detail page in one round trip: the projection
+// row, and every job that ever touched that world. Both halves travel together
+// because they are read together — splitting them into two queries would let
+// the page render a world beside a job list that belongs to an older read.
+func (store *PostgresStore) GetWorld(ctx context.Context, worldID string) (contracts.AnalyticsWorldGetResponseData, error) {
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT world_id::text, family, nickname, role, archetype, scene_name, mood, world_style,
+			favorite_colors, trait_creativity, trait_discipline, trait_curiosity, trait_energy, trait_focus,
+			variant_count, selected_variant_no, is_published, published_at, revision, source_job_id,
+			world_created_at, projected_at, profile_id::text, dna_version_id::text
+		FROM world_projections
+		WHERE world_id = $1::uuid`, worldID)
+	batch.Queue(`SELECT job_id, family, status, error_code, error_message,
+			COALESCE(world_id::text, ''), COALESCE(profile_id::text, ''), COALESCE(dna_version_id::text, ''),
+			created_at, completed_at, duration_ms
+		FROM job_projections
+		WHERE world_id = $1::uuid
+		ORDER BY created_at DESC, job_id DESC
+		LIMIT $2`, worldID, worldJobHistoryLimit)
+
+	results := store.pool.SendBatch(ctx, batch)
+	defer results.Close()
+
+	detail, err := scanWorldProjectionDetail(results.QueryRow())
+	if err != nil {
+		return contracts.AnalyticsWorldGetResponseData{}, mapWorldLookupError(err)
+	}
+
+	rows, err := results.Query()
+	if err != nil {
+		return contracts.AnalyticsWorldGetResponseData{}, err
+	}
+	defer rows.Close()
+	jobs := make([]contracts.JobProjectionSummary, 0, 4)
+	for rows.Next() {
+		job, scanError := scanJobProjection(rows)
+		if scanError != nil {
+			return contracts.AnalyticsWorldGetResponseData{}, scanError
+		}
+		jobs = append(jobs, job)
+	}
+	if err := rows.Err(); err != nil {
+		return contracts.AnalyticsWorldGetResponseData{}, err
+	}
+	return contracts.AnalyticsWorldGetResponseData{World: detail, Jobs: jobs}, nil
+}
+
+// mapWorldLookupError folds "no such row" and "not a UUID at all" into the
+// same ErrNotFound. 22P02 is invalid_text_representation, which is what
+// Postgres raises when a hand-typed id reaches the ::uuid cast — surfacing
+// that as a 500 would blame the service for a bad URL.
+func mapWorldLookupError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) && postgresError.Code == postgresInvalidTextCode {
+		return ErrNotFound
+	}
+	return err
+}
+
 // ListJobs is ListWorlds' twin over (created_at, job_id).
 func (store *PostgresStore) ListJobs(ctx context.Context, filter models.JobListFilter) (contracts.AnalyticsJobListResponseData, error) {
 	pageSize := contracts.NormalizePageSize(filter.PageSize)
@@ -337,6 +411,31 @@ func distributionQuery(column string) string {
 
 type rowScanner interface {
 	Scan(destinations ...any) error
+}
+
+// scanWorldProjectionDetail reads the summary columns in the same order
+// scanWorldProjection does, then the two identifiers appended for the detail
+// view. The orders must stay in step with each other and with both SELECT
+// lists — that coupling is why the extra columns go last rather than beside
+// the ids they relate to.
+func scanWorldProjectionDetail(scanner rowScanner) (contracts.WorldProjectionDetail, error) {
+	var detail contracts.WorldProjectionDetail
+	var favoriteColorsJSON []byte
+	if err := scanner.Scan(
+		&detail.WorldID, &detail.Family, &detail.Nickname, &detail.Role, &detail.Archetype, &detail.SceneName,
+		&detail.Mood, &detail.WorldStyle, &favoriteColorsJSON,
+		&detail.TraitScores.Creativity, &detail.TraitScores.Discipline, &detail.TraitScores.Curiosity,
+		&detail.TraitScores.Energy, &detail.TraitScores.Focus,
+		&detail.VariantCount, &detail.SelectedVariantNo, &detail.IsPublished, &detail.PublishedAt,
+		&detail.Revision, &detail.SourceJobID, &detail.WorldCreatedAt, &detail.ProjectedAt,
+		&detail.ProfileID, &detail.DNAVersionID,
+	); err != nil {
+		return contracts.WorldProjectionDetail{}, err
+	}
+	if err := json.Unmarshal(favoriteColorsJSON, &detail.FavoriteColors); err != nil {
+		return contracts.WorldProjectionDetail{}, fmt.Errorf("decode favorite colors for %s: %w", detail.WorldID, err)
+	}
+	return detail, nil
 }
 
 func scanWorldProjection(scanner rowScanner) (contracts.WorldProjectionSummary, error) {

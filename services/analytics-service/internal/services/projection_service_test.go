@@ -199,6 +199,10 @@ func (store *recordingStore) ListWorlds(context.Context, models.WorldListFilter)
 	panic("the projection path must never read")
 }
 
+func (store *recordingStore) GetWorld(context.Context, string) (contracts.AnalyticsWorldGetResponseData, error) {
+	panic("the projection path must never read")
+}
+
 func (store *recordingStore) ListJobs(context.Context, models.JobListFilter) (contracts.AnalyticsJobListResponseData, error) {
 	panic("the projection path must never read")
 }

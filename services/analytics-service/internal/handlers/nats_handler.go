@@ -23,6 +23,7 @@ type AnalyticsService interface {
 	Overview(ctx context.Context, query contracts.AnalyticsOverviewQueryData) (contracts.AnalyticsOverviewResponseData, error)
 	Timeseries(ctx context.Context, query contracts.AnalyticsTimeseriesQueryData) (contracts.AnalyticsTimeseriesResponseData, error)
 	ListWorlds(ctx context.Context, query contracts.AnalyticsWorldListQueryData) (contracts.AnalyticsWorldListResponseData, error)
+	GetWorld(ctx context.Context, query contracts.AnalyticsWorldGetQueryData) (contracts.AnalyticsWorldGetResponseData, error)
 	ListJobs(ctx context.Context, query contracts.AnalyticsJobListQueryData) (contracts.AnalyticsJobListResponseData, error)
 	ListServiceStarts(ctx context.Context, query contracts.ServiceStartListQueryData) (contracts.ServiceStartListResponseData, error)
 }
@@ -113,6 +114,17 @@ func (handler *NATSHandler) HandleWorldListQuery(message *nats.Msg) {
 	handler.respondWithResult(message, envelope.JobID, response, err)
 }
 
+func (handler *NATSHandler) HandleWorldGetQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.AnalyticsWorldGetQueryData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AnalyticsWorldGetResponseData, error) {
+		return handler.analyticsService.GetWorld(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, response, err)
+}
+
 func (handler *NATSHandler) HandleJobListQuery(message *nats.Msg) {
 	var envelope contracts.Envelope[contracts.AnalyticsJobListQueryData]
 	if !decodeQuery(handler, message, &envelope) {
@@ -172,7 +184,15 @@ func withQueryTimeout[ResultType any](handler *NATSHandler, run func(context.Con
 func (handler *NATSHandler) respondWithResult(message *nats.Msg, jobID string, payload any, err error) {
 	if err != nil {
 		statusCode, code, description := describeQueryError(err)
-		log.Error().Err(err).Str("subject", message.Subject).Msg("answer analytics query")
+		// A 4xx is the caller's problem, not this service's: an id that was
+		// never projected is the expected answer to a stale link. Logging
+		// those at error level would fill an hour-long log retention with
+		// events nobody can act on and bury the 5xx that matter.
+		event := log.Error()
+		if statusCode < http.StatusInternalServerError {
+			event = log.Debug()
+		}
+		event.Err(err).Str("subject", message.Subject).Msg("answer analytics query")
 		handler.respondWithError(message, jobID, statusCode, code, description)
 		return
 	}
@@ -187,6 +207,8 @@ func (handler *NATSHandler) respondWithResult(message *nats.Msg, jobID string, p
 
 func describeQueryError(err error) (int, string, string) {
 	switch {
+	case errors.Is(err, repositories.ErrNotFound):
+		return http.StatusNotFound, "NOT_FOUND", "No world with that id has been projected."
 	case errors.Is(err, repositories.ErrMalformedCursor):
 		return http.StatusBadRequest, "INVALID_CURSOR", "The pagination cursor is not valid. Start from the first page."
 	case errors.Is(err, context.DeadlineExceeded):

@@ -11,8 +11,10 @@ import (
 )
 
 // analyticsReadRoutes is every admin route that answers from the read model,
-// with the permission it requires. Adding a fifth analytics route without
-// adding it here means it is never checked against the rules below.
+// with the permission it requires. Adding another analytics route without
+// adding it here means it is never checked against the rules below — which is
+// exactly what happened to /service-starts, added with the fleet work and
+// listed here only once a later route noticed the omission.
 var analyticsReadRoutes = []struct {
 	path       string
 	permission contracts.PermissionCode
@@ -21,7 +23,9 @@ var analyticsReadRoutes = []struct {
 	{"/api/admin/overview", contracts.PermissionChartRead, contracts.AnalyticsOverviewGetQuerySubject},
 	{"/api/admin/timeseries", contracts.PermissionChartRead, contracts.AnalyticsTimeseriesGetQuerySubject},
 	{"/api/admin/worlds", contracts.PermissionWorldRead, contracts.AnalyticsWorldListQuerySubject},
+	{"/api/admin/worlds/2f1c9b2e-6d54-4a1f-9c3b-7e8a0d5f1234", contracts.PermissionWorldRead, contracts.AnalyticsWorldGetQuerySubject},
 	{"/api/admin/jobs", contracts.PermissionJobRead, contracts.AnalyticsJobListQuerySubject},
+	{"/api/admin/service-starts", contracts.PermissionChartRead, contracts.AnalyticsServiceStartListQuerySubject},
 }
 
 // domainServiceSubjectPrefixes are the subjects an admin read must never

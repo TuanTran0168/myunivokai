@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
 )
@@ -52,6 +53,18 @@ func (handler *AdminAnalyticsHandler) ListWorlds(responseWriter http.ResponseWri
 		Published:     boolFromQuery(request, "published"),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsWorldListQuerySubject, data)
+}
+
+// GetWorld relays one world by the id in the path. The id is passed through
+// without validation for the same reason the filters above are: this handler
+// is a relay, and analytics-service already has to decide what a valid world
+// id is because it owns the column. Checking here would add a second opinion
+// that can disagree with the first.
+func (handler *AdminAnalyticsHandler) GetWorld(responseWriter http.ResponseWriter, request *http.Request) {
+	data := contracts.AnalyticsWorldGetQueryData{
+		WorldID: strings.TrimSpace(chi.URLParam(request, "worldID")),
+	}
+	handler.relay(responseWriter, request, contracts.AnalyticsWorldGetQuerySubject, data)
 }
 
 func (handler *AdminAnalyticsHandler) ListJobs(responseWriter http.ResponseWriter, request *http.Request) {
