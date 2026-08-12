@@ -172,8 +172,13 @@ export interface WakeStats {
   };
 }
 
+// archetype has no picker in the toolbar — there are too many values for a
+// select, and analytics-service only returns the top eight. It is filterable
+// all the same because the dashboard's distribution chart links into this list
+// with one already chosen, and the gateway has always accepted the parameter.
 export interface WorldListFilters {
   family?: WorldFamily | "";
+  archetype?: string;
   worldStyle?: string;
   mood?: string;
   published?: "true" | "false" | "";

@@ -1,22 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Globe2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Globe2, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
-import { FilterSelect } from "./DashboardPage";
-import { formatDateTime } from "./format";
-import type { WorldListFilters, WorldProjection } from "./types";
-
-const TABLE_HEADERS = ["Nickname", "Family", "Archetype", "Scene", "Style", "Mood", "Variants", "Published", "Created"];
+import { WORLD_TABLE_HEADERS, WorldsTable } from "./components/WorldsTable";
+import type { WorldListFilters } from "./types";
 
 // The style list mirrors contracts/go's allowedWorldStyles. A style that
 // exists in data but not here is still reachable — it just is not offered as
@@ -31,7 +27,8 @@ const STYLE_OPTIONS = [
 ];
 
 export function WorldsPage() {
-  const [filters, setFilters] = useState<WorldListFilters>({ family: "", worldStyle: "", published: "" });
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<WorldListFilters>(() => filtersFromQuery(searchParams));
   const pagination = useCursorPagination();
 
   // Changing a filter changes what row 1 is, so every cursor already taken
@@ -86,6 +83,16 @@ export function WorldsPage() {
           </div>
         }
       />
+
+      {/* Archetype and mood arrive from a dashboard chart rather than a
+          picker, so they need somewhere visible to live — otherwise the list
+          is filtered by something the page never mentions, which reads as
+          missing rows. */}
+      <ActiveChips
+        filters={filters}
+        onClear={(key) => setFilters((current) => ({ ...current, [key]: "" }))}
+      />
+
       <Card>
         <CardContent className="pt-2">
           {worldsQuery.isError ? (
@@ -95,7 +102,7 @@ export function WorldsPage() {
               description="analytics-service did not answer. It may be starting up, or the gateway may be unable to reach it."
             />
           ) : worldsQuery.isLoading ? (
-            <TableSkeleton columnCount={TABLE_HEADERS.length} headers={TABLE_HEADERS} />
+            <TableSkeleton columnCount={WORLD_TABLE_HEADERS.length} headers={WORLD_TABLE_HEADERS} />
           ) : worlds.length === 0 ? (
             <EmptyState
               icon={Globe2}
@@ -104,65 +111,7 @@ export function WorldsPage() {
             />
           ) : (
             <>
-              {/* Desktop table */}
-              <div className="hidden overflow-x-auto lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {TABLE_HEADERS.map((header) => (
-                        <TableHead key={header}>{header}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {worlds.map((world) => (
-                      <TableRow key={world.worldId}>
-                        <TableCell className="text-sm font-medium">
-                          <Link
-                            href={`/worlds/${world.worldId}`}
-                            className="rounded-sm underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {world.nickname}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {world.family}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{world.archetype}</TableCell>
-                        <TableCell className="max-w-[16rem] truncate text-sm text-muted-foreground">
-                          {world.sceneName}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{world.worldStyle}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{world.mood}</TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">
-                          {world.selectedVariantNo}/{world.variantCount}
-                        </TableCell>
-                        <TableCell>
-                          {world.isPublished ? (
-                            <Badge variant="default">Public</Badge>
-                          ) : (
-                            <Badge variant="secondary">Private</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                          {formatDateTime(world.worldCreatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Narrow-viewport cards: nine columns do not fit a phone, and a
-                  horizontally scrolling table hides the columns that matter. */}
-              <div className="flex flex-col gap-3 lg:hidden">
-                {worlds.map((world) => (
-                  <WorldCard key={world.worldId} world={world} />
-                ))}
-              </div>
-
+              <WorldsTable worlds={worlds} />
               <CursorPagination
                 pagination={pagination}
                 nextCursor={worldsQuery.data?.nextCursor}
@@ -178,30 +127,53 @@ export function WorldsPage() {
   );
 }
 
-function WorldCard({ world }: { world: WorldProjection }) {
+// Read once, into state, rather than kept in the URL: the toolbar selects are
+// already local state, and driving half the filters from the URL and half from
+// state would leave the two able to disagree. The query string is an entry
+// point here, not the source of truth.
+function filtersFromQuery(searchParams: URLSearchParams | null): WorldListFilters {
+  const family = searchParams?.get("family");
+  const published = searchParams?.get("published");
+  return {
+    family: family === "universe" || family === "nature" ? family : "",
+    archetype: searchParams?.get("archetype") ?? "",
+    worldStyle: searchParams?.get("worldStyle") ?? "",
+    mood: searchParams?.get("mood") ?? "",
+    published: published === "true" || published === "false" ? published : ""
+  };
+}
+
+const CHIP_LABELS: Array<[keyof WorldListFilters, string]> = [
+  ["archetype", "Archetype"],
+  ["mood", "Mood"]
+];
+
+function ActiveChips({
+  filters,
+  onClear
+}: {
+  filters: WorldListFilters;
+  onClear: (key: keyof WorldListFilters) => void;
+}) {
+  const active = CHIP_LABELS.filter(([key]) => Boolean(filters[key]));
+  if (active.length === 0) {
+    return null;
+  }
   return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <Link href={`/worlds/${world.worldId}`} className="block truncate text-sm font-medium hover:text-primary">
-            {world.nickname}
-          </Link>
-          <p className="truncate text-xs text-muted-foreground">{world.archetype}</p>
-        </div>
-        {world.isPublished ? <Badge variant="default">Public</Badge> : <Badge variant="secondary">Private</Badge>}
-      </div>
-      <p className="mt-1.5 truncate text-xs text-muted-foreground">{world.sceneName}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="capitalize">
-          {world.family}
-        </Badge>
-        <Badge variant="ghost">{world.worldStyle}</Badge>
-        <Badge variant="ghost">{world.mood}</Badge>
-        <Badge variant="ghost">
-          {world.selectedVariantNo}/{world.variantCount} variants
-        </Badge>
-      </div>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">{formatDateTime(world.worldCreatedAt)}</p>
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      {active.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onClear(key)}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-accent/40 py-1 pl-2.5 pr-2 text-xs text-foreground transition-colors duration-150 hover:border-primary/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="text-muted-foreground">{label}</span>
+          <span className="font-medium">{filters[key]}</span>
+          <X className="size-3 text-muted-foreground" aria-hidden />
+          <span className="sr-only">Clear {label} filter</span>
+        </button>
+      ))}
     </div>
   );
 }

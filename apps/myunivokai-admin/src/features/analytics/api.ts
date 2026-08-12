@@ -40,6 +40,7 @@ export const analyticsApi = {
         pageSize,
         cursor,
         family: filters.family,
+        archetype: filters.archetype,
         worldStyle: filters.worldStyle,
         mood: filters.mood,
         published: filters.published

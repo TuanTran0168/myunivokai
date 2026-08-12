@@ -3,21 +3,20 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, MoonStar, Power, Server, TriangleAlert } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterSelect } from "@/components/ui/filter-select";
+import { SectionCard } from "@/components/ui/section-card";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
-import { FilterSelect } from "./DashboardPage";
-import { StatCard } from "./StatCard";
-import { formatCount, formatDateTime, formatDuration } from "./format";
-import type { ServiceStartRecord, ServiceWakeStats } from "./types";
-
-const TABLE_HEADERS = ["Service", "Version", "Instance", "Boot time", "Started"];
+import { StatCard } from "./components/StatCard";
+import { SERVICE_START_HEADERS, ServiceStartsTable } from "./components/ServiceStartsTable";
+import { WakeRow } from "./components/WakeRow";
+import { WakeTrendChart } from "./components/charts/WakeTrendChart";
+import { formatCount } from "./format";
 
 const WAKE_STATS_DAYS = 7;
 
@@ -60,9 +59,7 @@ export function FleetPage() {
       <PageHeader
         title="Fleet"
         description="Which services have restarted, and which ones the gateway has been unable to wake."
-        action={
-          <FilterSelect label="Service" value={service} onChange={setService} options={serviceOptions} />
-        }
+        action={<FilterSelect label="Service" value={service} onChange={setService} options={serviceOptions} />}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -93,36 +90,50 @@ export function FleetPage() {
         />
       </div>
 
-      <Card className="mt-4">
-        <CardContent className="pt-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Wake status · last {WAKE_STATS_DAYS} days
-          </p>
-          {wakeQuery.isError ? (
-            <EmptyState
-              icon={AlertTriangle}
-              title="Wake statistics are unavailable"
-              description="The gateway could not read them. They live in Redis, so this is a gateway-side dependency, not analytics-service."
+      <div className="mt-4 flex flex-col gap-4">
+        {wakeQuery.isError ? (
+          <Card>
+            <CardContent className="pt-2">
+              <EmptyState
+                icon={AlertTriangle}
+                title="Wake statistics are unavailable"
+                description="The gateway could not read them. They live in Redis, so this is a gateway-side dependency, not analytics-service."
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <WakeTrendChart
+              services={wake?.services ?? []}
+              days={WAKE_STATS_DAYS}
+              isLoading={wakeQuery.isLoading}
             />
-          ) : wakeQuery.isLoading ? (
-            <div className="mt-3 flex flex-col gap-2">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full rounded-md" />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 flex flex-col gap-2">
-              {(wake?.services ?? []).map((entry) => (
-                <WakeRow key={entry.service} stats={entry} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      <Card className="mt-4">
-        <CardContent className="pt-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Restart history</p>
+            <SectionCard
+              title={`Wake status · last ${WAKE_STATS_DAYS} days`}
+              description="One row per service the gateway knows how to start."
+            >
+              {wakeQuery.isLoading ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Skeleton key={index} className="h-12 w-full rounded-md" />
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2">
+                  {(wake?.services ?? []).map((entry) => (
+                    <WakeRow key={entry.service} stats={entry} />
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+          </>
+        )}
+
+        <SectionCard
+          title="Restart history"
+          description="Every process announces its own boot, with the build it is running and how long it took to be ready."
+        >
           {startsQuery.isError ? (
             <EmptyState
               icon={AlertTriangle}
@@ -130,7 +141,9 @@ export function FleetPage() {
               description="analytics-service did not answer. It may be starting up, or the gateway may be unable to reach it."
             />
           ) : startsQuery.isLoading ? (
-            <TableSkeleton columnCount={TABLE_HEADERS.length} headers={TABLE_HEADERS} />
+            <div className="mt-3">
+              <TableSkeleton columnCount={SERVICE_START_HEADERS.length} headers={SERVICE_START_HEADERS} />
+            </div>
           ) : starts.length === 0 ? (
             <EmptyState
               icon={Server}
@@ -139,41 +152,7 @@ export function FleetPage() {
             />
           ) : (
             <>
-              <div className="mt-3 hidden overflow-x-auto lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {TABLE_HEADERS.map((header) => (
-                        <TableHead key={header}>{header}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {starts.map((start) => (
-                      <TableRow key={`${start.instanceId}-${start.startedAt}`}>
-                        <TableCell className="text-sm font-medium">{start.service}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{start.version || "—"}</TableCell>
-                        <TableCell className="max-w-[14rem] truncate font-mono text-xs text-muted-foreground">
-                          {start.instanceId}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">
-                          {formatDuration(start.bootDurationMs)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                          {formatDateTime(start.startedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-3 lg:hidden">
-                {starts.map((start) => (
-                  <StartCard key={`${start.instanceId}-${start.startedAt}`} start={start} />
-                ))}
-              </div>
-
+              <ServiceStartsTable starts={starts} />
               <CursorPagination
                 pagination={pagination}
                 nextCursor={startsQuery.data?.nextCursor}
@@ -183,52 +162,8 @@ export function FleetPage() {
               />
             </>
           )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// A service that is not wakeable reports a flat zero for reasons that have
-// nothing to do with its health, so it is labelled rather than scored. Without
-// that distinction "0 wakes" reads as "never slept" when it means "never
-// covered".
-function WakeRow({ stats }: { stats: ServiceWakeStats }) {
-  const stranded = stats.consecutiveFailedWakes > 0;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{stats.service}</p>
-        <p className="truncate text-xs text-muted-foreground">Last seen {formatDateTime(stats.lastSeenAt ?? undefined)}</p>
+        </SectionCard>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {stats.wakeable ? (
-          <Badge variant="ghost">{formatCount(stats.totalWakes)} wakes</Badge>
-        ) : (
-          <Badge variant="secondary">not wakeable</Badge>
-        )}
-        {stranded ? (
-          <Badge variant="destructive">{stats.consecutiveFailedWakes} failed in a row</Badge>
-        ) : (
-          <Badge variant="outline">answering</Badge>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StartCard({ start }: { start: ServiceStartRecord }) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="truncate text-sm font-medium">{start.service}</p>
-        <Badge variant="ghost">{start.version || "—"}</Badge>
-      </div>
-      <p className="mt-1.5 truncate font-mono text-xs text-muted-foreground">{start.instanceId}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <Badge variant="ghost">boot {formatDuration(start.bootDurationMs)}</Badge>
-      </div>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">{formatDateTime(start.startedAt)}</p>
     </div>
   );
 }
