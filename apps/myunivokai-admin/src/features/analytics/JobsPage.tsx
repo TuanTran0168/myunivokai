@@ -159,7 +159,9 @@ export function JobsPage() {
   );
 }
 
-function JobStatusBadge({ status }: { status: JobStatus }) {
+// Exported so the world detail page's job history reads identically to this
+// table. A second copy of the status-to-colour mapping would drift.
+export function JobStatusBadge({ status }: { status: JobStatus }) {
   const variant = status === "failed" ? "destructive" : status === "completed" ? "outline" : "secondary";
   return (
     <Badge variant={variant} className="capitalize">

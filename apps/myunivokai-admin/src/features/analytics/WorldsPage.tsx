@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Globe2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +117,14 @@ export function WorldsPage() {
                   <TableBody>
                     {worlds.map((world) => (
                       <TableRow key={world.worldId}>
-                        <TableCell className="text-sm font-medium">{world.nickname}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          <Link
+                            href={`/worlds/${world.worldId}`}
+                            className="rounded-sm underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {world.nickname}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
                             {world.family}
@@ -175,7 +183,9 @@ function WorldCard({ world }: { world: WorldProjection }) {
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{world.nickname}</p>
+          <Link href={`/worlds/${world.worldId}`} className="block truncate text-sm font-medium hover:text-primary">
+            {world.nickname}
+          </Link>
           <p className="truncate text-xs text-muted-foreground">{world.archetype}</p>
         </div>
         {world.isPublished ? <Badge variant="default">Public</Badge> : <Badge variant="secondary">Private</Badge>}

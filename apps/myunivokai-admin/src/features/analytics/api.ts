@@ -1,5 +1,15 @@
 import { adminRequest } from "@/lib/admin-http";
-import type { JobListFilters, JobPage, Overview, Timeseries, WorldListFilters, WorldPage } from "./types";
+import type {
+  JobListFilters,
+  JobPage,
+  Overview,
+  ServiceStartPage,
+  Timeseries,
+  WakeStats,
+  WorldDetail,
+  WorldListFilters,
+  WorldPage
+} from "./types";
 
 // buildQuery drops empty values rather than sending `?family=`: the gateway
 // treats an empty string as "no filter" anyway, but omitting it keeps the
@@ -36,8 +46,19 @@ export const analyticsApi = {
       })}`
     ),
 
+  // encodeURIComponent guards the one segment here that is not a literal. The
+  // id comes from a URL the operator can edit, and analytics-service answers
+  // 404 for anything that is not a world — but a raw slash would change which
+  // gateway route is hit before that judgement is ever reached.
+  world: (worldId: string) => adminRequest<WorldDetail>(`/worlds/${encodeURIComponent(worldId)}`),
+
   jobs: (filters: JobListFilters, pageSize: number, cursor?: string) =>
     adminRequest<JobPage>(
       `/jobs${buildQuery({ pageSize, cursor, family: filters.family, status: filters.status })}`
-    )
+    ),
+
+  serviceStarts: (service: string, pageSize: number, cursor?: string) =>
+    adminRequest<ServiceStartPage>(`/service-starts${buildQuery({ pageSize, cursor, service })}`),
+
+  wakeStats: (days: number) => adminRequest<WakeStats>(`/wake-stats${buildQuery({ days })}`)
 };

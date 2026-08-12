@@ -104,6 +104,14 @@ export interface WorldPage {
   pageSize: number;
 }
 
+// WorldDetail is WorldProjection plus the two identifiers a table has no room
+// for, and the jobs that touched this world. Both halves arrive in one
+// response so the world and its history can never be from different reads.
+export interface WorldDetail {
+  world: WorldProjection & { profileId: string; dnaVersionId: string };
+  jobs: JobProjection[];
+}
+
 export interface JobProjection {
   jobId: string;
   family?: WorldFamily;
@@ -123,6 +131,45 @@ export interface JobPage {
   nextCursor?: string;
   totalCount: number;
   pageSize: number;
+}
+
+// ServiceStartRecord is one process announcing it came up. Mirrors
+// contracts/go/contracts_telemetry.go.
+export interface ServiceStartRecord {
+  service: string;
+  instanceId: string;
+  version: string;
+  bootDurationMs: number;
+  startedAt: string;
+}
+
+export interface ServiceStartPage {
+  starts: ServiceStartRecord[];
+  nextCursor?: string;
+  totalCount: number;
+  pageSize: number;
+}
+
+// ServiceWakeStats mirrors the gateway's adminWakeServiceStats. `wakeable`
+// exists because a flat zero is ambiguous without it: a service with no URL
+// configured is never woken, which is not the same as one that never slept.
+export interface ServiceWakeStats {
+  service: string;
+  totalWakes: number;
+  dailyWakes: Record<string, number>;
+  lastSeenAt?: string | null;
+  consecutiveFailedWakes: number;
+  wakeable: boolean;
+}
+
+export interface WakeStats {
+  days: number;
+  services: ServiceWakeStats[];
+  platform: {
+    name: string;
+    retryAfterSeconds: number;
+    wakeableServiceCount: number;
+  };
 }
 
 export interface WorldListFilters {
