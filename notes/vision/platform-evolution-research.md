@@ -21,7 +21,7 @@ and never revisited.
 | --- | --- | --- |
 | [A](#track-a--end-user-identity-and-world-ownership) | End-user login; worlds owned across two databases | Sound, but **blocked on a decision, not on code** |
 | [B](#track-b--operational-telemetry) | Wake counts, request counts, status codes in a dashboard | Best value per hour. **B1 is built**; the rest stands. **One trap: it must not go into `analytics-service`** |
-| [C](#track-c--a-service-written-in-rust) | A service in Rust, to learn Rust | Good, if it is **track B's** service and nothing else |
+| [C](#track-c--a-service-written-in-rust) | A service in Rust, to learn Rust | Good, if it is **track B's** service and nothing else — but that service is now **blocked on B2's undecided landing place**. Amended by [rust-adoption-research.md](rust-adoption-research.md) |
 | [D](#track-d--webgpu-instead-of-webgl) | WebGPU replacing WebGL | Real, cheap **after** an upgrade already required for security. Low return today |
 
 ---
@@ -627,6 +627,15 @@ Questions that cannot be answered today at all:
 ---
 
 ## Track C — a service written in Rust
+
+> **Amended 2026-08-12 by
+> [rust-adoption-research.md](rust-adoption-research.md).** Nothing below is
+> wrong; its chosen vehicle became unavailable. `telemetry-service` is still
+> the strongest candidate on merit, but the telemetry a learner would build is
+> now only B2, and B2's landing place is deliberately undecided — so this track
+> is **blocked on a decision, not on code**. The four selection criteria below
+> are adopted unchanged by that document, which scores an unblocked alternative
+> against them and states honestly what that alternative does not teach.
 
 Learning Rust is a sufficient reason on its own. The engineering question is
 only *which* service, and the answer changes the risk by an order of
