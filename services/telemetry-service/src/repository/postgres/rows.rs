@@ -11,8 +11,8 @@ use sqlx::postgres::PgRow;
 use sqlx::Row;
 
 use crate::domain::{
-    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HttpTotals, LatencySummary,
-    RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
+    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HourOfDayBucket, HttpTotals,
+    LatencySummary, RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
 };
 
 /// The eight columns `statements::histogram_sum_columns!` produces, in order.
@@ -82,6 +82,21 @@ pub fn volume_bucket(row: &PgRow) -> Result<VolumeBucket, sqlx::Error> {
     let requests: i64 = row.try_get("request_count")?;
     Ok(VolumeBucket {
         bucket_start: row.try_get("bucket_start")?,
+        requests,
+        server_errors: row.try_get("error_count")?,
+        latency: latency_without_sum(row, requests)?,
+    })
+}
+
+pub fn hour_of_day_bucket(row: &PgRow) -> Result<HourOfDayBucket, sqlx::Error> {
+    let requests: i64 = row.try_get("request_count")?;
+    let hour: i16 = row.try_get("hour_of_day")?;
+    Ok(HourOfDayBucket {
+        // EXTRACT(HOUR ...) cannot leave 0..=23, so this clamp never fires. It
+        // is here because the alternative at this boundary is `as u8`, which
+        // would turn an impossible negative into 255 silently rather than into
+        // something a reader can reason about.
+        hour: hour.clamp(0, 23) as u8,
         requests,
         server_errors: row.try_get("error_count")?,
         latency: latency_without_sum(row, requests)?,

@@ -109,6 +109,64 @@ FROM http_rollups
 WHERE bucket_start >= $1"
 );
 
+/// The same shape as [`SELECT_TOTALS`] over a half-open interval, which is what
+/// the "versus the previous window" comparison reads.
+///
+/// Half-open — `>= $1 AND < $2` — so two adjacent windows partition the
+/// timeline: a bucket exactly on the boundary belongs to one of them, never to
+/// both. A closed upper bound here would double-count one minute in sixty and
+/// make every comparison quietly optimistic.
+pub const SELECT_TOTALS_BETWEEN: &str = concat!(
+    "
+SELECT
+    COALESCE(SUM(request_count), 0)::BIGINT AS request_count,
+    COALESCE(SUM(request_count) FILTER (WHERE status_class >= $3), 0)::BIGINT AS error_count,
+    COALESCE(SUM(duration_sum_ms), 0)::BIGINT AS duration_sum_ms,
+    COALESCE(MAX(duration_max_ms), 0)::BIGINT AS duration_max_ms,",
+    histogram_sum_columns!(),
+    "
+FROM http_rollups
+WHERE bucket_start >= $1 AND bucket_start < $2"
+);
+
+/// Minute rows folded into hours by the database rather than by this process.
+///
+/// `date_trunc` on a `timestamptz` needs a zone to truncate in, and it is
+/// stated rather than inherited: without the explicit `'UTC'` the answer would
+/// depend on the session's `TimeZone` setting, so the same window would produce
+/// different hour boundaries on two connections.
+pub const SELECT_HOURLY_BUCKETS: &str = concat!(
+    "
+SELECT
+    date_trunc('hour', bucket_start AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS bucket_start,
+    COALESCE(SUM(request_count), 0)::BIGINT AS request_count,
+    COALESCE(SUM(request_count) FILTER (WHERE status_class >= $2), 0)::BIGINT AS error_count,
+    COALESCE(MAX(duration_max_ms), 0)::BIGINT AS duration_max_ms,",
+    histogram_sum_columns!(),
+    "
+FROM http_rollups
+WHERE bucket_start >= $1
+GROUP BY 1
+ORDER BY 1"
+);
+
+/// Traffic by hour of day, summed across every day in the window — "when is
+/// this platform reliably busy", which the timeline cannot answer.
+pub const SELECT_HOUR_OF_DAY: &str = concat!(
+    "
+SELECT
+    EXTRACT(HOUR FROM bucket_start AT TIME ZONE 'UTC')::SMALLINT AS hour_of_day,
+    COALESCE(SUM(request_count), 0)::BIGINT AS request_count,
+    COALESCE(SUM(request_count) FILTER (WHERE status_class >= $2), 0)::BIGINT AS error_count,
+    COALESCE(MAX(duration_max_ms), 0)::BIGINT AS duration_max_ms,",
+    histogram_sum_columns!(),
+    "
+FROM http_rollups
+WHERE bucket_start >= $1
+GROUP BY 1
+ORDER BY 1"
+);
+
 pub const SELECT_STATUS_MIX: &str = "
 SELECT status_class, COALESCE(SUM(request_count), 0)::BIGINT AS request_count
 FROM http_rollups
@@ -210,10 +268,13 @@ pub const PRUNE_STATEMENTS: [&str; 5] = [
 mod tests {
     use super::*;
 
-    const AGGREGATE_STATEMENTS: [&str; 8] = [
+    const AGGREGATE_STATEMENTS: [&str; 11] = [
         SELECT_TOTALS,
+        SELECT_TOTALS_BETWEEN,
         SELECT_STATUS_MIX,
         SELECT_VOLUME_BUCKETS,
+        SELECT_HOURLY_BUCKETS,
+        SELECT_HOUR_OF_DAY,
         SELECT_TOP_ERROR_CODES,
         SELECT_WAKE_SIGNALS,
         SELECT_BACKENDS,
@@ -247,7 +308,10 @@ mod tests {
     fn every_histogram_query_sums_all_eight_buckets() {
         for statement in [
             SELECT_TOTALS,
+            SELECT_TOTALS_BETWEEN,
             SELECT_VOLUME_BUCKETS,
+            SELECT_HOURLY_BUCKETS,
+            SELECT_HOUR_OF_DAY,
             SELECT_BACKENDS,
             SELECT_ROUTES,
         ] {
@@ -271,6 +335,27 @@ mod tests {
         assert!(UPSERT_NATS_ROLLUP.contains("pair.stored + pair.incoming"));
         assert!(UPSERT_CACHE_ROLLUP.contains("cache_rollups.hits + EXCLUDED.hits"));
         assert!(UPSERT_ERROR_CODE_ROLLUP.contains("error_code_rollups.count + EXCLUDED.count"));
+    }
+
+    // A time bucket truncated in the session's timezone puts the same minute in
+    // a different hour on two connections, which shows up as a peak hour that
+    // moves for no reason.
+    #[test]
+    fn every_hour_grouping_states_the_zone_it_truncates_in() {
+        for statement in [SELECT_HOURLY_BUCKETS, SELECT_HOUR_OF_DAY] {
+            assert!(
+                statement.contains("AT TIME ZONE 'UTC'"),
+                "an hour grouping that inherits the session zone:\n{statement}"
+            );
+        }
+    }
+
+    // Adjacent windows must partition the timeline. A closed upper bound counts
+    // the boundary minute in both, which makes every comparison optimistic by
+    // exactly one bucket.
+    #[test]
+    fn the_comparison_window_is_half_open() {
+        assert!(SELECT_TOTALS_BETWEEN.contains("bucket_start >= $1 AND bucket_start < $2"));
     }
 
     #[test]

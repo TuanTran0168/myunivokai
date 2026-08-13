@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 	"time"
@@ -231,4 +232,88 @@ func sumHistogram(histogram TelemetryHistogram) int64 {
 		total += count
 	}
 	return total
+}
+
+// telemetryOverviewFixturePath is the READ-side twin of the event fixture
+// above, and it exists for a different reason. The gateway relays telemetry
+// responses as opaque bytes, so nothing in Go decodes one in production — which
+// means the Go structs here and the Rust ones that produce them could drift for
+// months with every test still green. Decoding the same file from both
+// languages is what makes that impossible.
+//
+// It lives under fixtures/responses/ rather than beside the events because
+// schema_conformance_test.go globs ../fixtures/*.json and requires every match
+// to be a valid envelope. A response is not an envelope.
+const telemetryOverviewFixturePath = "../fixtures/responses/telemetry-overview-response.v1.json"
+
+func TestTelemetryOverviewFixtureDecodesIntoTheContract(t *testing.T) {
+	decoder := json.NewDecoder(bytes.NewReader(readFixture(t, telemetryOverviewFixturePath)))
+	// A field the Rust side sends and this side never declared is exactly the
+	// drift this fixture exists to catch, so it must fail rather than be
+	// silently discarded.
+	decoder.DisallowUnknownFields()
+	var overview TelemetryOverviewResponseData
+	if err := decoder.Decode(&overview); err != nil {
+		t.Fatalf("decode %s: %v", telemetryOverviewFixturePath, err)
+	}
+
+	if overview.Sink != TelemetrySinkPostgres || !overview.ChartsAvailable {
+		t.Errorf("sink descriptor did not flatten: %+v", overview.TelemetrySinkDescriptor)
+	}
+	if overview.P50DurationMS != 37 || overview.P95DurationMS != 910 {
+		t.Errorf("p50/p95 = %d/%d, want 37/910", overview.P50DurationMS, overview.P95DurationMS)
+	}
+	if overview.P50DurationMS >= overview.P95DurationMS {
+		t.Error("a p50 at or above the p95 means the two percentiles are swapped somewhere")
+	}
+
+	if overview.Comparison == nil {
+		t.Fatal("comparison is absent — the vs-previous-window card has nothing to render")
+	}
+	if overview.Comparison.Requests.Current != 49 || overview.Comparison.Requests.Previous != 20 {
+		t.Errorf("request delta = %+v", overview.Comparison.Requests)
+	}
+	if !overview.Comparison.Requests.HasBaseline {
+		t.Error("hasBaseline decoded false from a fixture that sets it true")
+	}
+
+	if overview.PeakHour == nil {
+		t.Fatal("peakHour is absent")
+	}
+	if overview.PeakHour.RequestCount != 49 {
+		t.Errorf("peak hour requestCount = %d, want 49", overview.PeakHour.RequestCount)
+	}
+	if len(overview.HourOfDay) != 1 || overview.HourOfDay[0].Hour != 9 {
+		t.Errorf("hourOfDay = %+v", overview.HourOfDay)
+	}
+	if len(overview.HourlyPoints) != 1 {
+		t.Errorf("hourlyPoints = %+v", overview.HourlyPoints)
+	}
+
+	// The funnel's keys are what the admin app orders and colours by. A label
+	// may be reworded; a key may not.
+	expectedStages := []string{
+		TelemetryFunnelStageReceived,
+		TelemetryFunnelStageBackendCall,
+		TelemetryFunnelStageBackendOK,
+		TelemetryFunnelStageSucceeded,
+	}
+	if len(overview.TrafficFunnel) != len(expectedStages) {
+		t.Fatalf("trafficFunnel has %d stages, want %d", len(overview.TrafficFunnel), len(expectedStages))
+	}
+	for index, expected := range expectedStages {
+		if overview.TrafficFunnel[index].Stage != expected {
+			t.Errorf("stage %d = %q, want %q", index, overview.TrafficFunnel[index].Stage, expected)
+		}
+		if overview.TrafficFunnel[index].Label == "" {
+			t.Errorf("stage %q carries no label for a chart to print", expected)
+		}
+	}
+	if overview.TrafficFunnel[0].PercentOfEntry != 100 {
+		t.Errorf("the entry stage is %.2f%% of itself, want 100", overview.TrafficFunnel[0].PercentOfEntry)
+	}
+
+	if len(overview.Backends) != 1 || overview.Backends[0].P50DurationMS != 62 {
+		t.Errorf("backend p50 did not decode: %+v", overview.Backends)
+	}
 }

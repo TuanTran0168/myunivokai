@@ -5,9 +5,11 @@
 //! maximum from the same four numbers. Before it, each of them computed its
 //! own, which is how two screens end up disagreeing about the same p95.
 
-use myunivokai_contracts::{percentile_from_histogram, TelemetryHistogram};
+use myunivokai_contracts::{
+    percentile_from_histogram, TelemetryHistogram, TELEMETRY_MEDIAN_PERCENTILE,
+};
 
-/// The percentile every telemetry read reports.
+/// The tail percentile every telemetry read reports.
 ///
 /// p95 rather than p99 because a minute-wide bucket on a low-traffic service
 /// often holds fewer than a hundred requests, and a p99 over forty
@@ -67,6 +69,17 @@ impl LatencySummary {
     pub fn p95_ms(&self) -> i64 {
         self.percentile_ms(REPORTED_PERCENTILE)
     }
+
+    /// The median, reported everywhere the p95 is.
+    ///
+    /// The two together are the finding; either alone is not. A p50 of 40ms
+    /// under a p95 of 900ms is a tail owned by a handful of requests; the same
+    /// p95 over a p50 of 700ms is everything being slow. Acting on those two
+    /// situations means doing opposite things, and one number cannot tell them
+    /// apart.
+    pub fn p50_ms(&self) -> i64 {
+        self.percentile_ms(TELEMETRY_MEDIAN_PERCENTILE)
+    }
 }
 
 #[cfg(test)]
@@ -93,6 +106,22 @@ mod tests {
     fn the_average_is_the_sum_over_the_count() {
         let summary = summary_in_the_fifty_to_hundred_bucket(10, 750, 98);
         assert_eq!(summary.average_ms(), 75);
+    }
+
+    // The pair is the finding. A median at or above the tail means the two are
+    // wired to the same percentile somewhere, which reads as plausible and is
+    // undetectable from either number on its own.
+    #[test]
+    fn the_median_sits_below_the_tail_on_a_spread_distribution() {
+        // Most requests landed in the 5-10ms bucket, a few in 250-1000ms.
+        let spread = LatencySummary::new(100, 4_000, 900, [0, 90, 0, 0, 0, 0, 10, 0]);
+        assert!(
+            spread.p50_ms() < spread.p95_ms(),
+            "p50 {} is not below p95 {}",
+            spread.p50_ms(),
+            spread.p95_ms()
+        );
+        assert!(spread.p95_ms() <= spread.slowest_ms());
     }
 
     #[test]

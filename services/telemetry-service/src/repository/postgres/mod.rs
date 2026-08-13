@@ -19,8 +19,8 @@ use time::OffsetDateTime;
 use super::RollupRepository;
 use crate::config::Config;
 use crate::domain::{
-    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HttpTotals, IngestOutcome, RollupBatch,
-    RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
+    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HourOfDayBucket, HttpTotals,
+    IngestOutcome, RollupBatch, RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
 };
 use crate::error::Result;
 
@@ -153,6 +153,20 @@ impl RollupRepository for PostgresRollupRepository {
         Ok(rows::http_totals(&row)?)
     }
 
+    async fn http_totals_between(
+        &self,
+        since: OffsetDateTime,
+        until: OffsetDateTime,
+    ) -> Result<HttpTotals> {
+        let row = sqlx::query(statements::SELECT_TOTALS_BETWEEN)
+            .bind(since)
+            .bind(until)
+            .bind(SERVER_ERROR_STATUS_CLASS)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(rows::http_totals(&row)?)
+    }
+
     async fn status_mix(&self, since: OffsetDateTime) -> Result<Vec<StatusClassCount>> {
         let fetched = sqlx::query(statements::SELECT_STATUS_MIX)
             .bind(since)
@@ -173,6 +187,30 @@ impl RollupRepository for PostgresRollupRepository {
         Ok(fetched
             .iter()
             .map(rows::volume_bucket)
+            .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?)
+    }
+
+    async fn hourly_buckets(&self, since: OffsetDateTime) -> Result<Vec<VolumeBucket>> {
+        let fetched = sqlx::query(statements::SELECT_HOURLY_BUCKETS)
+            .bind(since)
+            .bind(SERVER_ERROR_STATUS_CLASS)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(fetched
+            .iter()
+            .map(rows::volume_bucket)
+            .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?)
+    }
+
+    async fn hour_of_day(&self, since: OffsetDateTime) -> Result<Vec<HourOfDayBucket>> {
+        let fetched = sqlx::query(statements::SELECT_HOUR_OF_DAY)
+            .bind(since)
+            .bind(SERVER_ERROR_STATUS_CLASS)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(fetched
+            .iter()
+            .map(rows::hour_of_day_bucket)
             .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?)
     }
 

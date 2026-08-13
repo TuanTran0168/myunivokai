@@ -44,6 +44,18 @@ const (
 	TelemetrySinkPostgres = "postgres"
 	TelemetrySinkOTLP     = "otlp"
 
+	// The request funnel's stages, narrowest question first: of everything
+	// that arrived, how much needed a backend, how much of that came back,
+	// and how much of the whole reached the caller as a success.
+	//
+	// These are stable keys rather than the labels beside them because the
+	// admin app colours and orders by them; a renamed label must not silently
+	// become a new stage.
+	TelemetryFunnelStageReceived    = "received"
+	TelemetryFunnelStageBackendCall = "backend_call"
+	TelemetryFunnelStageBackendOK   = "backend_ok"
+	TelemetryFunnelStageSucceeded   = "succeeded"
+
 	// Windows are in hours rather than the days analytics uses: a bucket here
 	// is one minute wide and the questions are operational ("what happened
 	// this afternoon"), not historical. The maximum matches
@@ -289,6 +301,7 @@ type TelemetryBackendSummary struct {
 	RequestCount      int64  `json:"requestCount"`
 	ErrorCount        int64  `json:"errorCount"`
 	AverageDurationMS int    `json:"averageDurationMs"`
+	P50DurationMS     int    `json:"p50DurationMs"`
 	P95DurationMS     int    `json:"p95DurationMs"`
 	SlowestDurationMS int    `json:"slowestDurationMs"`
 }
@@ -301,6 +314,62 @@ type TelemetryCacheSummary struct {
 	HitRatePercent float64 `json:"hitRatePercent"`
 }
 
+// TelemetryDelta compares one measure against the window of the same width
+// immediately before it — the "vs yesterday" on every card.
+//
+// Both absolute values travel with the percentage on purpose. A change of
+// +100% is a different fact when it is 2 requests becoming 4 than when it is
+// 20,000 becoming 40,000, and a card showing only the percentage cannot tell
+// the reader which one they are looking at.
+type TelemetryDelta struct {
+	Current       int64   `json:"current"`
+	Previous      int64   `json:"previous"`
+	ChangePercent float64 `json:"changePercent"`
+	// HasBaseline is false when the previous window holds no data at all,
+	// which is not the same as a previous value of zero. A service that was
+	// asleep, or was deployed an hour ago, has no baseline — and "+100%"
+	// rendered against nothing is a fabricated comparison.
+	HasBaseline bool `json:"hasBaseline"`
+}
+
+// TelemetryComparison is the whole "vs the previous window" block. Errors is
+// deliberately the error COUNT rather than the rate: two rates subtract into a
+// percentage-point difference, and calling that a percent change is the most
+// common way this kind of card ends up lying.
+type TelemetryComparison struct {
+	PreviousWindowStart time.Time      `json:"previousWindowStart"`
+	Requests            TelemetryDelta `json:"requests"`
+	Errors              TelemetryDelta `json:"errors"`
+	P95DurationMS       TelemetryDelta `json:"p95DurationMs"`
+}
+
+// TelemetryFunnelStage is one step of the request funnel. Stage is a stable
+// machine key; Label is what a chart prints.
+//
+// PercentOfEntry is relative to the FIRST stage rather than the previous one,
+// because a funnel whose every step is a percentage of the step before it
+// cannot be read end to end without multiplying in your head.
+type TelemetryFunnelStage struct {
+	Stage          string  `json:"stage"`
+	Label          string  `json:"label"`
+	Count          int64   `json:"count"`
+	PercentOfEntry float64 `json:"percentOfEntry"`
+}
+
+// TelemetryHourBucket is one hour of the day, summed across every day in the
+// window. This answers a question the raw timeline cannot: not "when was it
+// busy once" but "when is it reliably busy" — which is the one that decides
+// when a deploy is cheap.
+type TelemetryHourBucket struct {
+	// Hour is 0-23, UTC. The admin app renders the timezone next to it
+	// rather than converting, so that two operators in two countries are
+	// always reading the same number.
+	Hour          int   `json:"hour"`
+	RequestCount  int64 `json:"requestCount"`
+	ErrorCount    int64 `json:"errorCount"`
+	P95DurationMS int   `json:"p95DurationMs"`
+}
+
 // TelemetryOverviewResponseData answers the Telemetry screen's top half.
 //
 // PercentileIsInterpolated is a field rather than a footnote in a document
@@ -309,20 +378,38 @@ type TelemetryCacheSummary struct {
 // is not is worse than no p95 at all.
 type TelemetryOverviewResponseData struct {
 	TelemetrySinkDescriptor
-	Hours                    int                         `json:"hours"`
-	GeneratedAt              time.Time                   `json:"generatedAt"`
-	TotalRequests            int64                       `json:"totalRequests"`
-	ErrorRequests            int64                       `json:"errorRequests"`
-	ErrorRatePercent         float64                     `json:"errorRatePercent"`
-	AverageDurationMS        int                         `json:"averageDurationMs"`
+	Hours             int       `json:"hours"`
+	GeneratedAt       time.Time `json:"generatedAt"`
+	TotalRequests     int64     `json:"totalRequests"`
+	ErrorRequests     int64     `json:"errorRequests"`
+	ErrorRatePercent  float64   `json:"errorRatePercent"`
+	AverageDurationMS int       `json:"averageDurationMs"`
+	// P50 travels beside P95 everywhere it appears. The gap between them is
+	// the actual finding: a p50 of 40ms under a p95 of 900ms is a tail
+	// problem, and the same p95 under a p50 of 700ms is a capacity problem.
+	// One number alone cannot tell those apart.
+	P50DurationMS            int                         `json:"p50DurationMs"`
 	P95DurationMS            int                         `json:"p95DurationMs"`
 	SlowestDurationMS        int                         `json:"slowestDurationMs"`
 	PercentileIsInterpolated bool                        `json:"percentileIsInterpolated"`
 	StatusMix                []TelemetryStatusClassCount `json:"statusMix"`
 	VolumePoints             []TelemetryVolumePoint      `json:"volumePoints"`
-	ErrorCodeTop             []TelemetryErrorCodeCount   `json:"errorCodeTop"`
-	Backends                 []TelemetryBackendSummary   `json:"backends"`
-	Cache                    []TelemetryCacheSummary     `json:"cache"`
+	// HourlyPoints is the same traffic rolled up to the hour. VolumePoints is
+	// minute-resolution and a 7-day window holds 10,080 of them, which is a
+	// chart nobody can read and a payload nobody needs; this is the series
+	// the trend line is actually drawn from.
+	HourlyPoints []TelemetryVolumePoint `json:"hourlyPoints"`
+	// PeakHour is the busiest single hour in the window, or absent when the
+	// window holds nothing at all.
+	PeakHour  *TelemetryVolumePoint `json:"peakHour,omitempty"`
+	HourOfDay []TelemetryHourBucket `json:"hourOfDay"`
+	// Comparison is absent for a window with no measurable predecessor —
+	// see TelemetryDelta.HasBaseline.
+	Comparison    *TelemetryComparison      `json:"comparison,omitempty"`
+	TrafficFunnel []TelemetryFunnelStage    `json:"trafficFunnel"`
+	ErrorCodeTop  []TelemetryErrorCodeCount `json:"errorCodeTop"`
+	Backends      []TelemetryBackendSummary `json:"backends"`
+	Cache         []TelemetryCacheSummary   `json:"cache"`
 	// WakeSignals is the SERVICE_WAKING count per time bucket — the closest
 	// this schema gets to the wake-conversion rate. It is an approximation
 	// joined on time proximity, not a per-request causal trace, and the admin
@@ -344,6 +431,7 @@ type TelemetryRouteSummary struct {
 	ErrorCount        int64   `json:"errorCount"`
 	ErrorRatePercent  float64 `json:"errorRatePercent"`
 	AverageDurationMS int     `json:"averageDurationMs"`
+	P50DurationMS     int     `json:"p50DurationMs"`
 	P95DurationMS     int     `json:"p95DurationMs"`
 	SlowestDurationMS int     `json:"slowestDurationMs"`
 }

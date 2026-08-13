@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,13 +30,28 @@ const worldJobHistoryLimit = 50
 // that is not a UUID reaches a ::uuid cast.
 const postgresInvalidTextCode = "22P02"
 
+// comparisonPeriod is how wide each half of the "vs yesterday" card is. It is
+// deliberately independent of the range picker: the distributions and the
+// funnel answer "what has this platform been doing lately", and the comparison
+// answers "is today different from yesterday". Tying the second to the first
+// would turn a 90-day view into a comparison against the 90 days before it,
+// which is a different — and much less useful — question.
+const comparisonPeriod = 24 * time.Hour
+
 // Overview answers the whole dashboard in one round trip. Every count, rate
 // and percentile below is computed by PostgreSQL; the gateway and the admin
 // app sum nothing, which is the rule this service exists to enforce.
 func (store *PostgresStore) Overview(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsOverviewResponseData, error) {
 	days := contracts.NormalizeDays(filter.Days)
-	since := time.Now().UTC().AddDate(0, 0, -days)
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -days)
 	family := string(filter.Family)
+
+	// "Today vs yesterday" is a rolling 24 hours against the 24 before it, not
+	// two calendar days. A calendar comparison at 09:00 would put nine hours
+	// against twenty-four and report a collapse every morning.
+	comparisonSince := now.Add(-comparisonPeriod)
+	comparisonPreviousSince := comparisonSince.Add(-comparisonPeriod)
 
 	batch := &pgx.Batch{}
 	batch.Queue(`SELECT
@@ -66,6 +82,7 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 			COUNT(*) FILTER (WHERE status NOT IN ('completed','failed')),
 			COUNT(*) FILTER (WHERE duration_ms IS NOT NULL),
 			COALESCE(AVG(duration_ms), 0),
+			COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms), 0),
 			COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms), 0),
 			COALESCE(MAX(duration_ms), 0)
 		FROM job_projections
@@ -84,6 +101,60 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 			COUNT(*)
 		FROM world_projections
 		WHERE ($1 = '' OR family = $1)`, family)
+
+	// The "vs yesterday" pair, on a fixed 24-hour period regardless of the
+	// range picker above. Both halves come from one scan with FILTER clauses
+	// rather than two round trips, and the previous period is half-open —
+	// [dayBefore, yesterday) — so a row exactly on the boundary belongs to one
+	// period, never to both.
+	//
+	// Published counts by published_at, not by "created in this period and now
+	// published". The question is "how many did we publish today", and a world
+	// created last week and published this morning is a yes.
+	batch.Queue(`SELECT
+			COUNT(*) FILTER (WHERE world_created_at >= $2),
+			COUNT(*) FILTER (WHERE world_created_at >= $3 AND world_created_at < $2),
+			COUNT(*) FILTER (WHERE published_at >= $2),
+			COUNT(*) FILTER (WHERE published_at >= $3 AND published_at < $2)
+		FROM world_projections
+		WHERE ($1 = '' OR family = $1)`, family, comparisonSince, comparisonPreviousSince)
+	batch.Queue(`SELECT
+			COUNT(*) FILTER (WHERE created_at >= $2),
+			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $2),
+			COUNT(*) FILTER (WHERE created_at >= $2 AND status = 'failed'),
+			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $2 AND status = 'failed')
+		FROM job_projections
+		WHERE ($1 = '' OR family = $1)`, family, comparisonSince, comparisonPreviousSince)
+
+	// The generation funnel. Every stage is measured over the SAME set of jobs
+	// — the ones submitted inside the window — which is what makes the four
+	// counts a funnel instead of four unrelated totals. Publishing is joined
+	// back through source_job_id rather than counted over world_projections
+	// directly, so a world published today from a job submitted last month
+	// cannot appear under a stage its job never entered.
+	batch.Queue(`WITH windowed AS (
+			SELECT job_id, status, world_id
+			FROM job_projections
+			WHERE ($1 = '' OR family = $1) AND created_at >= $2
+		)
+		SELECT
+			(SELECT COUNT(*) FROM windowed),
+			(SELECT COUNT(*) FROM windowed WHERE status = 'completed'),
+			(SELECT COUNT(*) FROM windowed WHERE world_id IS NOT NULL),
+			(SELECT COUNT(*) FROM world_projections w
+				JOIN windowed ON w.source_job_id = windowed.job_id
+				WHERE w.is_published)`, family, since)
+
+	// When the generator is reliably busy, which the day-by-day timeline
+	// cannot answer. The zone is stated rather than inherited: without it the
+	// same row lands in a different hour depending on the session's TimeZone.
+	batch.Queue(`SELECT
+			EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::INT AS hour_of_day,
+			COUNT(*)
+		FROM job_projections
+		WHERE ($1 = '' OR family = $1) AND created_at >= $2
+		GROUP BY 1
+		ORDER BY 1`, family, since)
 
 	results := store.pool.SendBatch(ctx, batch)
 	defer results.Close()
@@ -116,15 +187,16 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 	}
 	overview.Families = orderFamilyTotals(familyTotals)
 
-	var averageDuration, percentile95Duration, slowestDuration float64
+	var averageDuration, percentile50Duration, percentile95Duration, slowestDuration float64
 	if err := results.QueryRow().Scan(
 		&overview.JobHealth.TotalJobs, &overview.JobHealth.CompletedJobs, &overview.JobHealth.FailedJobs,
 		&overview.JobHealth.InFlightJobs, &overview.JobHealth.MeasuredJobCount,
-		&averageDuration, &percentile95Duration, &slowestDuration,
+		&averageDuration, &percentile50Duration, &percentile95Duration, &slowestDuration,
 	); err != nil {
 		return contracts.AnalyticsOverviewResponseData{}, err
 	}
 	overview.JobHealth.AverageDurationMs = roundToInt(averageDuration)
+	overview.JobHealth.P50DurationMs = roundToInt(percentile50Duration)
 	overview.JobHealth.P95DurationMs = roundToInt(percentile95Duration)
 	overview.JobHealth.SlowestDurationMs = roundToInt(slowestDuration)
 	overview.JobHealth.FailureRatePercent = percentageOf(overview.JobHealth.FailedJobs, overview.JobHealth.TotalJobs)
@@ -145,7 +217,120 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 	}
 	overview.JobHealth.MultiVariantPercent = percentageOf(multiVariantWorlds, countedWorlds)
 	overview.JobHealth.PublishRatePercent = percentageOf(overview.TotalPublished, overview.TotalWorlds)
+
+	var worldsNow, worldsBefore, publishedNow, publishedBefore int
+	if err := results.QueryRow().Scan(&worldsNow, &worldsBefore, &publishedNow, &publishedBefore); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	var jobsNow, jobsBefore, failedNow, failedBefore int
+	if err := results.QueryRow().Scan(&jobsNow, &jobsBefore, &failedNow, &failedBefore); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.Comparison = contracts.AnalyticsComparison{
+		PeriodHours:     int(comparisonPeriod / time.Hour),
+		Worlds:          newDelta(worldsNow, worldsBefore),
+		PublishedWorlds: newDelta(publishedNow, publishedBefore),
+		Jobs:            newDelta(jobsNow, jobsBefore),
+		FailedJobs:      newDelta(failedNow, failedBefore),
+	}
+
+	var submitted, completed, projected, published int
+	if err := results.QueryRow().Scan(&submitted, &completed, &projected, &published); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.GenerationFunnel = generationFunnel(submitted, completed, projected, published)
+
+	hourly, err := scanHourOfDay(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.HourOfDay = hourly
+	overview.PeakHour = peakHour(hourly)
 	return overview, nil
+}
+
+// newDelta is the one place a percentage change is computed, so that "vs
+// yesterday" cannot mean two different arithmetics on two cards.
+//
+// A previous value of zero yields 0 with HasBaseline false rather than a
+// division by it or an invented 100%: going from nothing to something is a
+// fact the screen states in words, not a percentage.
+func newDelta(current, previous int) contracts.AnalyticsDelta {
+	delta := contracts.AnalyticsDelta{
+		Current:     current,
+		Previous:    previous,
+		HasBaseline: previous != 0,
+	}
+	if previous != 0 {
+		delta.ChangePercent = math.Round(float64(current-previous)*100/float64(previous)*100) / 100
+	}
+	return delta
+}
+
+// generationFunnel labels the four counts and expresses each as a share of the
+// first, never of the one before it — so the whole funnel reads end to end
+// without multiplying percentages in your head.
+func generationFunnel(submitted, completed, projected, published int) []contracts.AnalyticsFunnelStage {
+	stages := []struct {
+		stage string
+		label string
+		count int
+	}{
+		{contracts.AnalyticsFunnelStageSubmitted, "Jobs submitted", submitted},
+		{contracts.AnalyticsFunnelStageCompleted, "Finished without failing", completed},
+		{contracts.AnalyticsFunnelStageProjected, "Produced a world", projected},
+		{contracts.AnalyticsFunnelStagePublished, "World published", published},
+	}
+	funnel := make([]contracts.AnalyticsFunnelStage, 0, len(stages))
+	for _, stage := range stages {
+		funnel = append(funnel, contracts.AnalyticsFunnelStage{
+			Stage:          stage.stage,
+			Label:          stage.label,
+			Count:          stage.count,
+			PercentOfEntry: percentageOf(stage.count, submitted),
+		})
+	}
+	return funnel
+}
+
+func scanHourOfDay(results pgx.BatchResults) ([]contracts.AnalyticsHourBucket, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	// Only hours that actually saw a job are returned. The admin app fills the
+	// other twenty-something with zeroes, because a bar chart of the day needs
+	// all 24 slots and this service has no business inventing rows.
+	buckets := make([]contracts.AnalyticsHourBucket, 0, 24)
+	for rows.Next() {
+		var bucket contracts.AnalyticsHourBucket
+		if err := rows.Scan(&bucket.Hour, &bucket.JobCount); err != nil {
+			return nil, err
+		}
+		buckets = append(buckets, bucket)
+	}
+	return buckets, rows.Err()
+}
+
+// peakHour returns the busiest hour, or nil when nothing was submitted. Nil
+// rather than hour zero: "the busiest hour was midnight with no jobs" is a
+// claim about traffic that no traffic can support.
+func peakHour(buckets []contracts.AnalyticsHourBucket) *contracts.AnalyticsHourBucket {
+	var peak *contracts.AnalyticsHourBucket
+	for index := range buckets {
+		if buckets[index].JobCount == 0 {
+			continue
+		}
+		if peak == nil || buckets[index].JobCount > peak.JobCount {
+			peak = &buckets[index]
+		}
+	}
+	if peak == nil {
+		return nil
+	}
+	found := *peak
+	return &found
 }
 
 // Timeseries fills empty days with explicit zeroes via generate_series, so a

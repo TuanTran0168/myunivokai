@@ -115,3 +115,82 @@ fn re_encoding_the_fixture_produces_the_same_document() {
         "the Rust structs did not reproduce the fixture byte-for-byte in value terms"
     );
 }
+
+/// The read-side twin, decoded by `TestTelemetryOverviewFixtureDecodesIntoTheContract`
+/// in `contracts/go/contracts_telemetry_rollup_test.go`.
+///
+/// It matters more than the event fixture, not less. The gateway relays
+/// telemetry responses as opaque bytes, so nothing in Go decodes one in
+/// production — the two response mirrors could drift for months with every
+/// other test still green. This file is the only thing that notices.
+const TELEMETRY_OVERVIEW_FIXTURE: &str =
+    include_str!("../../fixtures/responses/telemetry-overview-response.v1.json");
+
+#[test]
+fn the_overview_response_fixture_decodes_into_the_mirror() {
+    let overview: myunivokai_contracts::TelemetryOverviewResponseData =
+        serde_json::from_str(TELEMETRY_OVERVIEW_FIXTURE).expect("decode the overview fixture");
+
+    assert_eq!(
+        overview.sink.sink,
+        myunivokai_contracts::TELEMETRY_SINK_POSTGRES
+    );
+    assert!(overview.sink.charts_available);
+    assert_eq!(overview.p50_duration_ms, 37);
+    assert_eq!(overview.p95_duration_ms, 910);
+    assert!(
+        overview.p50_duration_ms < overview.p95_duration_ms,
+        "a p50 at or above the p95 means the two percentiles are swapped somewhere"
+    );
+
+    let comparison = overview
+        .comparison
+        .as_ref()
+        .expect("the vs-previous-window block");
+    assert_eq!(comparison.requests.current, 49);
+    assert_eq!(comparison.requests.previous, 20);
+    assert!(comparison.requests.has_baseline);
+    assert_eq!(
+        comparison.previous_window_start,
+        datetime!(2026-08-11 10:00:00 UTC)
+    );
+
+    let peak = overview.peak_hour.as_ref().expect("the peak hour");
+    assert_eq!(peak.request_count, 49);
+    assert_eq!(overview.hour_of_day.len(), 1);
+    assert_eq!(overview.hour_of_day[0].hour, 9);
+    assert_eq!(overview.hourly_points.len(), 1);
+
+    // The keys the admin app orders and colours by. A label may be reworded; a
+    // key may not.
+    let expected_stages = [
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_RECEIVED,
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_BACKEND_OK,
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
+    ];
+    assert_eq!(overview.traffic_funnel.len(), expected_stages.len());
+    for (stage, expected) in overview.traffic_funnel.iter().zip(expected_stages) {
+        assert_eq!(stage.stage, expected);
+        assert!(
+            !stage.label.is_empty(),
+            "stage {expected} carries no label for a chart to print"
+        );
+    }
+    assert_eq!(overview.traffic_funnel[0].percent_of_entry, 100.0);
+
+    assert_eq!(overview.backends.len(), 1);
+    assert_eq!(overview.backends[0].p50_duration_ms, 62);
+
+    // Re-encoding must reproduce the same document. This is what catches a
+    // field renamed on this side only: decode would tolerate it via serde's
+    // default, and the round trip would not.
+    let reencoded: serde_json::Value =
+        serde_json::to_value(&overview).expect("re-encode the overview");
+    let original: serde_json::Value =
+        serde_json::from_str(TELEMETRY_OVERVIEW_FIXTURE).expect("re-read the fixture");
+    assert_eq!(
+        reencoded, original,
+        "the mirror does not re-encode to the fixture it decoded"
+    );
+}

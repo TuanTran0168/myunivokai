@@ -40,7 +40,25 @@ impl QueryWindow {
     /// what makes every test below deterministic and what keeps the domain
     /// layer free of I/O. Only the outermost caller reads a clock.
     pub fn since(self, now: OffsetDateTime) -> OffsetDateTime {
-        now - time::Duration::hours(self.hours)
+        now - self.duration()
+    }
+
+    pub fn duration(self) -> time::Duration {
+        time::Duration::hours(self.hours)
+    }
+
+    /// The window of the same width immediately before this one, as the
+    /// half-open interval `[start, end)` a comparison reads.
+    ///
+    /// The end is this window's own start, not one instant before it: the two
+    /// intervals must partition the timeline so that a bucket sitting exactly
+    /// on the boundary is counted once. Returning the pair from here rather
+    /// than doing the subtraction at the call site is what keeps that rule in
+    /// one place — the repository is handed boundaries, never asked to invent
+    /// them.
+    pub fn previous(self, now: OffsetDateTime) -> (OffsetDateTime, OffsetDateTime) {
+        let start_of_this_window = self.since(now);
+        (start_of_this_window - self.duration(), start_of_this_window)
     }
 }
 
@@ -70,5 +88,18 @@ mod tests {
             QueryWindow::from_hours(6).since(now),
             datetime!(2026-08-13 06:00:00 UTC)
         );
+    }
+
+    // The two intervals have to meet exactly. A gap loses buckets from the
+    // comparison; an overlap counts them twice and makes every "vs previous"
+    // reading optimistic.
+    #[test]
+    fn the_previous_window_abuts_this_one_with_no_gap_and_no_overlap() {
+        let now = datetime!(2026-08-13 12:00:00 UTC);
+        let window = QueryWindow::from_hours(6);
+        let (previous_start, previous_end) = window.previous(now);
+        assert_eq!(previous_start, datetime!(2026-08-13 00:00:00 UTC));
+        assert_eq!(previous_end, window.since(now));
+        assert_eq!(previous_end - previous_start, window.duration());
     }
 }

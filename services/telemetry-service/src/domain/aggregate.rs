@@ -37,6 +37,22 @@ pub struct VolumeBucket {
     pub latency: LatencySummary,
 }
 
+/// One hour of the day, summed across every day in the window.
+///
+/// Deliberately not the same type as [`VolumeBucket`]. A volume bucket sits at
+/// an instant on a timeline; this sits at an hour that recurs, and the two
+/// answer different questions - "when was it busy" versus "when is it always
+/// busy". Sharing one type would let a chart plot one where the other belongs
+/// and still compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HourOfDayBucket {
+    /// 0-23, UTC.
+    pub hour: u8,
+    pub requests: i64,
+    pub server_errors: i64,
+    pub latency: LatencySummary,
+}
+
 /// One row of the per-route table, keyed on the chi TEMPLATE and the method.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteAggregate {

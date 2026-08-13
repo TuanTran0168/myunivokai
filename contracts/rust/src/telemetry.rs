@@ -20,6 +20,21 @@ pub const TELEMETRY_ROUTE_LIST_QUERY_SUBJECT: &str = "myunivokai.queries.telemet
 pub const TELEMETRY_SINK_POSTGRES: &str = "postgres";
 pub const TELEMETRY_SINK_OTLP: &str = "otlp";
 
+/// The request funnel's stages, narrowest question first: of everything that
+/// arrived, how much needed a backend, how much of that came back, and how
+/// much of the whole reached the caller as a success.
+///
+/// Stable machine keys rather than the labels beside them — the admin app
+/// colours and orders by these, so a renamed label must not become a new
+/// stage.
+pub const TELEMETRY_FUNNEL_STAGE_RECEIVED: &str = "received";
+pub const TELEMETRY_FUNNEL_STAGE_BACKEND_CALL: &str = "backend_call";
+pub const TELEMETRY_FUNNEL_STAGE_BACKEND_OK: &str = "backend_ok";
+pub const TELEMETRY_FUNNEL_STAGE_SUCCEEDED: &str = "succeeded";
+
+/// The percentile reported alongside p95 everywhere in this pipeline.
+pub const TELEMETRY_MEDIAN_PERCENTILE: f64 = 50.0;
+
 pub const TELEMETRY_DEFAULT_HOURS: i64 = 24;
 pub const TELEMETRY_MAXIMUM_HOURS: i64 = 168;
 
@@ -215,8 +230,71 @@ pub struct TelemetryBackendSummary {
     pub request_count: i64,
     pub error_count: i64,
     pub average_duration_ms: i64,
+    pub p50_duration_ms: i64,
     pub p95_duration_ms: i64,
     pub slowest_duration_ms: i64,
+}
+
+/// One measure against the window of the same width immediately before it.
+///
+/// Both absolute values travel with the percentage: +100% is a different fact
+/// when it is 2 requests becoming 4 than when it is 20,000 becoming 40,000,
+/// and a card showing only the percentage cannot tell the reader which.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryDelta {
+    pub current: i64,
+    pub previous: i64,
+    pub change_percent: f64,
+    /// False when the previous window holds no data at all, which is not the
+    /// same as a previous value of zero. A service that was asleep has no
+    /// baseline, and "+100%" rendered against nothing is a fabricated trend.
+    pub has_baseline: bool,
+}
+
+/// The whole "vs the previous window" block.
+///
+/// `errors` is deliberately the error COUNT and not the rate: two rates
+/// subtract into a percentage-POINT difference, and calling that a percent
+/// change is the most common way a card like this ends up lying.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryComparison {
+    #[serde(with = "time::serde::rfc3339")]
+    pub previous_window_start: OffsetDateTime,
+    pub requests: TelemetryDelta,
+    pub errors: TelemetryDelta,
+    pub p95_duration_ms: TelemetryDelta,
+}
+
+/// One step of the request funnel. `stage` is a stable machine key; `label` is
+/// what a chart prints.
+///
+/// `percent_of_entry` is against the FIRST stage rather than the previous one,
+/// so the funnel reads end to end without multiplying in your head.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryFunnelStage {
+    pub stage: String,
+    pub label: String,
+    pub count: i64,
+    pub percent_of_entry: f64,
+}
+
+/// One hour of the day summed across every day in the window.
+///
+/// This answers what the raw timeline cannot: not "when was it busy once" but
+/// "when is it reliably busy" — the question that decides when a deploy is
+/// cheap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryHourBucket {
+    /// 0-23, UTC. The admin app labels the timezone rather than converting,
+    /// so two operators in two countries read the same number.
+    pub hour: u8,
+    pub request_count: i64,
+    pub error_count: i64,
+    pub p95_duration_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -240,6 +318,11 @@ pub struct TelemetryOverviewResponseData {
     pub error_requests: i64,
     pub error_rate_percent: f64,
     pub average_duration_ms: i64,
+    /// P50 travels beside P95 everywhere. The gap between them is the finding:
+    /// a p50 of 40ms under a p95 of 900ms is a tail problem, and the same p95
+    /// under a p50 of 700ms is a capacity problem. Either number alone cannot
+    /// tell those two apart.
+    pub p50_duration_ms: i64,
     pub p95_duration_ms: i64,
     pub slowest_duration_ms: i64,
     /// Always true for the postgres sink, and rendered on the screen rather
@@ -248,6 +331,20 @@ pub struct TelemetryOverviewResponseData {
     pub percentile_is_interpolated: bool,
     pub status_mix: Vec<TelemetryStatusClassCount>,
     pub volume_points: Vec<TelemetryVolumePoint>,
+    /// The same traffic rolled up to the hour. `volume_points` is
+    /// minute-resolution and a 7-day window holds 10,080 of them — a chart
+    /// nobody can read and a payload nobody needs; this is what the trend line
+    /// is actually drawn from.
+    pub hourly_points: Vec<TelemetryVolumePoint>,
+    /// The busiest single hour in the window, absent when it holds nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_hour: Option<TelemetryVolumePoint>,
+    pub hour_of_day: Vec<TelemetryHourBucket>,
+    /// Absent for a window with no measurable predecessor — see
+    /// [`TelemetryDelta::has_baseline`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<TelemetryComparison>,
+    pub traffic_funnel: Vec<TelemetryFunnelStage>,
     pub error_code_top: Vec<TelemetryErrorCodeCount>,
     pub backends: Vec<TelemetryBackendSummary>,
     pub cache: Vec<TelemetryCacheSummary>,
@@ -269,6 +366,7 @@ pub struct TelemetryRouteSummary {
     pub error_count: i64,
     pub error_rate_percent: f64,
     pub average_duration_ms: i64,
+    pub p50_duration_ms: i64,
     pub p95_duration_ms: i64,
     pub slowest_duration_ms: i64,
 }

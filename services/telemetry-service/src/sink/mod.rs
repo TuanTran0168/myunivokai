@@ -71,6 +71,7 @@ pub fn charts_are_elsewhere_overview(
         error_requests: 0,
         error_rate_percent: 0.0,
         average_duration_ms: 0,
+        p50_duration_ms: 0,
         p95_duration_ms: 0,
         slowest_duration_ms: 0,
         // A percentile that was never computed must not be labelled as an
@@ -78,6 +79,16 @@ pub fn charts_are_elsewhere_overview(
         percentile_is_interpolated: false,
         status_mix: Vec::new(),
         volume_points: Vec::new(),
+        hourly_points: Vec::new(),
+        // Absent, not a zeroed bucket. "The busiest hour saw no requests" is a
+        // claim about traffic; this sink is making no claim about traffic at
+        // all.
+        peak_hour: None,
+        hour_of_day: Vec::new(),
+        comparison: None,
+        // Empty rather than four zeroed stages: a funnel drawn from a sink that
+        // measured nothing would render as total collapse at every step.
+        traffic_funnel: Vec::new(),
         error_code_top: Vec::new(),
         backends: Vec::new(),
         cache: Vec::new(),

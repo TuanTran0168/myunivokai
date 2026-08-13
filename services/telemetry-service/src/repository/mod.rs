@@ -18,8 +18,8 @@ use async_trait::async_trait;
 use time::OffsetDateTime;
 
 use crate::domain::{
-    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HttpTotals, IngestOutcome, RollupBatch,
-    RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
+    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HourOfDayBucket, HttpTotals,
+    IngestOutcome, RollupBatch, RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
 };
 use crate::error::Result;
 
@@ -38,8 +38,32 @@ pub trait RollupRepository: Send + Sync {
     async fn record_batch(&self, batch: &RollupBatch) -> Result<IngestOutcome>;
 
     async fn http_totals(&self, since: OffsetDateTime) -> Result<HttpTotals>;
+
+    /// The same totals over a half-open `[since, until)` interval, which is
+    /// what makes "versus the window before this one" answerable.
+    ///
+    /// Half-open rather than closed on both ends so that two adjacent windows
+    /// partition the timeline exactly: a bucket sitting on the boundary must
+    /// be counted once, and a closed interval would count it in both.
+    async fn http_totals_between(
+        &self,
+        since: OffsetDateTime,
+        until: OffsetDateTime,
+    ) -> Result<HttpTotals>;
+
     async fn status_mix(&self, since: OffsetDateTime) -> Result<Vec<StatusClassCount>>;
     async fn volume_buckets(&self, since: OffsetDateTime) -> Result<Vec<VolumeBucket>>;
+
+    /// The same traffic rolled up to the hour.
+    ///
+    /// A separate query rather than a fold over [`Self::volume_buckets`]
+    /// because a 7-day window is 10,080 minute rows, and summing them in this
+    /// process means transferring all of them first. The database groups where
+    /// the rows already are.
+    async fn hourly_buckets(&self, since: OffsetDateTime) -> Result<Vec<VolumeBucket>>;
+
+    /// Traffic by hour of day, summed across every day in the window.
+    async fn hour_of_day(&self, since: OffsetDateTime) -> Result<Vec<HourOfDayBucket>>;
     async fn top_error_codes(
         &self,
         since: OffsetDateTime,

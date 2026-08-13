@@ -116,17 +116,89 @@ type AnalyticsDistributionSlice struct {
 // shape. Durations come from envelope timestamps recorded at projection
 // time, never from a clock inside analytics-service.
 type AnalyticsJobHealth struct {
-	TotalJobs           int     `json:"totalJobs"`
-	CompletedJobs       int     `json:"completedJobs"`
-	FailedJobs          int     `json:"failedJobs"`
-	InFlightJobs        int     `json:"inFlightJobs"`
-	FailureRatePercent  float64 `json:"failureRatePercent"`
-	AverageDurationMs   int     `json:"averageDurationMs"`
+	TotalJobs          int     `json:"totalJobs"`
+	CompletedJobs      int     `json:"completedJobs"`
+	FailedJobs         int     `json:"failedJobs"`
+	InFlightJobs       int     `json:"inFlightJobs"`
+	FailureRatePercent float64 `json:"failureRatePercent"`
+	AverageDurationMs  int     `json:"averageDurationMs"`
+	// P50 is the duration a person actually experiences; P95 is the one that
+	// decides the timeout. Reporting only one of them has repeatedly meant
+	// tuning for a tail that a handful of jobs own, or shipping a median that
+	// hides an unusable tail — so both travel together everywhere.
+	//
+	// Unlike telemetry-service's, these two are exact: analytics-service has
+	// every job's own duration_ms and computes PERCENTILE_CONT over it,
+	// rather than interpolating across fixed histogram edges.
+	P50DurationMs       int     `json:"p50DurationMs"`
 	P95DurationMs       int     `json:"p95DurationMs"`
 	SlowestDurationMs   int     `json:"slowestDurationMs"`
 	MeasuredJobCount    int     `json:"measuredJobCount"`
 	PublishRatePercent  float64 `json:"publishRatePercent"`
 	MultiVariantPercent float64 `json:"multiVariantPercent"`
+}
+
+// AnalyticsDelta compares one measure against the equivalent window before it
+// — the "vs yesterday" the dashboard cards carry.
+//
+// The absolute values ride along with the percentage because a percentage
+// alone is unreadable at low volume: +200% is three worlds becoming nine, and
+// the reader has no way to know that from the percentage.
+type AnalyticsDelta struct {
+	Current       int     `json:"current"`
+	Previous      int     `json:"previous"`
+	ChangePercent float64 `json:"changePercent"`
+	// HasBaseline is false when the preceding window has no data at all,
+	// which is different from a previous value of zero. A platform that was
+	// deployed yesterday has no baseline, and rendering "+100%" against
+	// nothing invents a trend.
+	HasBaseline bool `json:"hasBaseline"`
+}
+
+// AnalyticsComparison is one period measured against the one before it. The
+// period is a day: "today vs yesterday" is the comparison an operator actually
+// makes, and it is the shortest one that is not mostly noise.
+type AnalyticsComparison struct {
+	// PeriodHours is how wide each side of the comparison is, stated rather
+	// than assumed so the card can label itself instead of hard-coding "24h".
+	PeriodHours     int            `json:"periodHours"`
+	Worlds          AnalyticsDelta `json:"worlds"`
+	PublishedWorlds AnalyticsDelta `json:"publishedWorlds"`
+	Jobs            AnalyticsDelta `json:"jobs"`
+	FailedJobs      AnalyticsDelta `json:"failedJobs"`
+}
+
+// The generation funnel's stages. Stable machine keys — the admin app orders
+// and colours by these, so a renamed label must not become a new stage.
+const (
+	AnalyticsFunnelStageSubmitted = "submitted"
+	AnalyticsFunnelStageCompleted = "completed"
+	AnalyticsFunnelStageProjected = "projected"
+	AnalyticsFunnelStagePublished = "published"
+)
+
+// AnalyticsFunnelStage is one step of the generation funnel: a job was
+// submitted, it finished, a world came out of it, and somebody published that
+// world. Each stage is a strict subset of the one before it, which is what
+// makes the shape a funnel rather than four unrelated counters.
+//
+// PercentOfEntry is against the FIRST stage, not the previous one, so the
+// whole funnel reads end to end without multiplying percentages in your head.
+type AnalyticsFunnelStage struct {
+	Stage          string  `json:"stage"`
+	Label          string  `json:"label"`
+	Count          int     `json:"count"`
+	PercentOfEntry float64 `json:"percentOfEntry"`
+}
+
+// AnalyticsHourBucket is one hour of the day summed across every day in the
+// window — "when is the generator reliably busy", which the day-by-day
+// timeline cannot answer.
+type AnalyticsHourBucket struct {
+	// Hour is 0-23 UTC. The admin app labels the timezone rather than
+	// converting, so two operators in two countries read the same number.
+	Hour     int `json:"hour"`
+	JobCount int `json:"jobCount"`
 }
 
 // AnalyticsOverviewQueryData scopes the dashboard. An empty Family means
@@ -151,6 +223,17 @@ type AnalyticsOverviewResponseData struct {
 	AverageTraitScores   TraitScores                  `json:"averageTraitScores"`
 	GeneratedAt          time.Time                    `json:"generatedAt"`
 	OldestProjectedWorld *time.Time                   `json:"oldestProjectedWorld,omitempty"`
+	// Comparison is always present and always spans one day on each side,
+	// independent of Days above: the range picker scopes the distributions
+	// and the funnel, while "vs yesterday" is a fixed question.
+	Comparison AnalyticsComparison `json:"comparison"`
+	// GenerationFunnel is scoped by Days, like every other windowed figure
+	// here.
+	GenerationFunnel []AnalyticsFunnelStage `json:"generationFunnel"`
+	HourOfDay        []AnalyticsHourBucket  `json:"hourOfDay"`
+	// PeakHour is the busiest hour of the day across the window, or absent
+	// when no job was submitted in it.
+	PeakHour *AnalyticsHourBucket `json:"peakHour,omitempty"`
 }
 
 // WorldProjectionSummary is one row of the admin worlds table. It is the

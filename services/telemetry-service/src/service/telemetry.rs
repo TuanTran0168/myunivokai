@@ -3,12 +3,15 @@
 use std::sync::Arc;
 
 use myunivokai_contracts::{
-    HttpRollupEnvelope, TelemetryOverviewQueryData, TelemetryOverviewResponseData,
-    TelemetryRouteListQueryData, TelemetryRouteListResponseData, TelemetrySinkDescriptor,
+    HttpRollupEnvelope, TelemetryComparison, TelemetryDelta, TelemetryFunnelStage,
+    TelemetryOverviewQueryData, TelemetryOverviewResponseData, TelemetryRouteListQueryData,
+    TelemetryRouteListResponseData, TelemetrySinkDescriptor, TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
+    TELEMETRY_FUNNEL_STAGE_BACKEND_OK, TELEMETRY_FUNNEL_STAGE_RECEIVED,
+    TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
 };
 use time::OffsetDateTime;
 
-use crate::domain::{IngestOutcome, QueryWindow, RollupBatch};
+use crate::domain::{BackendAggregate, HttpTotals, IngestOutcome, QueryWindow, RollupBatch};
 use crate::error::Result;
 use crate::repository::RollupRepository;
 use crate::service::mapping::percentage_of;
@@ -63,6 +66,8 @@ impl TelemetryService {
         let totals = self.repository.http_totals(since).await?;
         let status_mix = self.repository.status_mix(since).await?;
         let volume_buckets = self.repository.volume_buckets(since).await?;
+        let hourly_buckets = self.repository.hourly_buckets(since).await?;
+        let hour_of_day = self.repository.hour_of_day(since).await?;
         let error_codes = self
             .repository
             .top_error_codes(since, ERROR_CODE_TOP_LIMIT)
@@ -72,6 +77,21 @@ impl TelemetryService {
         let wake_signals = self.repository.wake_signals(since).await?;
         let oldest_bucket_start = self.repository.oldest_bucket_start().await?;
 
+        let (previous_start, previous_end) = window.previous(now);
+        let previous_totals = self
+            .repository
+            .http_totals_between(previous_start, previous_end)
+            .await?;
+
+        // Computed before the arrays are consumed by the mapping below.
+        let traffic_funnel = traffic_funnel(&totals, &backends);
+        let peak_hour = hourly_buckets
+            .iter()
+            .copied()
+            .max_by_key(|bucket| bucket.requests)
+            .filter(|bucket| bucket.requests > 0)
+            .map(Into::into);
+
         Ok(TelemetryOverviewResponseData {
             sink: descriptor,
             hours: window.hours(),
@@ -80,6 +100,7 @@ impl TelemetryService {
             error_requests: totals.server_errors,
             error_rate_percent: percentage_of(totals.server_errors, totals.requests),
             average_duration_ms: totals.latency.average_ms(),
+            p50_duration_ms: totals.latency.p50_ms(),
             p95_duration_ms: totals.latency.p95_ms(),
             slowest_duration_ms: totals.latency.slowest_ms(),
             // Always true when this service answered from its own storage. The
@@ -88,6 +109,11 @@ impl TelemetryService {
             percentile_is_interpolated: true,
             status_mix: status_mix.into_iter().map(Into::into).collect(),
             volume_points: volume_buckets.into_iter().map(Into::into).collect(),
+            hourly_points: hourly_buckets.into_iter().map(Into::into).collect(),
+            peak_hour,
+            hour_of_day: hour_of_day.into_iter().map(Into::into).collect(),
+            comparison: comparison(previous_start, &totals, &previous_totals),
+            traffic_funnel,
             error_code_top: error_codes.into_iter().map(Into::into).collect(),
             backends: backends.into_iter().map(Into::into).collect(),
             cache: cache.into_iter().map(Into::into).collect(),
@@ -123,11 +149,102 @@ impl TelemetryService {
     }
 }
 
+/// One measure against its predecessor, or `None` when there is no honest
+/// comparison to make.
+///
+/// The `None` is the whole point of this function. A window whose predecessor
+/// holds nothing at all — the service was asleep, or the platform was deployed
+/// this morning — has no baseline, and "+100%" rendered against nothing is a
+/// trend that never happened. Returning `Option` makes the screen say "no
+/// comparable data" instead of inventing one.
+fn comparison(
+    previous_start: OffsetDateTime,
+    current: &HttpTotals,
+    previous: &HttpTotals,
+) -> Option<TelemetryComparison> {
+    if previous.requests == 0 {
+        return None;
+    }
+    Some(TelemetryComparison {
+        previous_window_start: previous_start,
+        requests: delta(current.requests, previous.requests),
+        // The error COUNT, not the rate. Two rates subtract into a
+        // percentage-POINT difference, and reporting that as a percent change
+        // is the most common way a card like this ends up lying: 1% to 2% is
+        // "+1 point", and calling it "+100%" is true of the ratio and useless
+        // as a signal.
+        errors: delta(current.server_errors, previous.server_errors),
+        p95_duration_ms: delta(current.latency.p95_ms(), previous.latency.p95_ms()),
+    })
+}
+
+fn delta(current: i64, previous: i64) -> TelemetryDelta {
+    TelemetryDelta {
+        current,
+        previous,
+        // A previous value of zero has no percentage — the change is infinite,
+        // and 0.0 with `has_baseline: true` is the honest encoding of "it went
+        // from nothing to something", which the admin app renders as "new"
+        // rather than as a number.
+        change_percent: if previous == 0 {
+            0.0
+        } else {
+            let ratio = (current - previous) as f64 * 100.0 / previous as f64;
+            (ratio * 100.0).round() / 100.0
+        },
+        has_baseline: previous != 0,
+    }
+}
+
+/// The request funnel, built from counters this service already has.
+///
+/// It is not a strict subset chain, and that is stated rather than smoothed
+/// over: one HTTP request can call several backends, so `backend_call` can
+/// legitimately exceed `received`. The stages answer "how much work did each
+/// layer do", not "how many of the original requests survived" — which is why
+/// `percent_of_entry` is allowed above 100 and the admin app labels the axis
+/// accordingly.
+fn traffic_funnel(totals: &HttpTotals, backends: &[BackendAggregate]) -> Vec<TelemetryFunnelStage> {
+    let backend_calls: i64 = backends.iter().map(|backend| backend.requests).sum();
+    let backend_errors: i64 = backends.iter().map(|backend| backend.errors).sum();
+    let stages = [
+        (
+            TELEMETRY_FUNNEL_STAGE_RECEIVED,
+            "Requests received",
+            totals.requests,
+        ),
+        (
+            TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
+            "Reached a backend",
+            backend_calls,
+        ),
+        (
+            TELEMETRY_FUNNEL_STAGE_BACKEND_OK,
+            "Backend answered",
+            backend_calls - backend_errors,
+        ),
+        (
+            TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
+            "Answered without a server error",
+            totals.requests - totals.server_errors,
+        ),
+    ];
+    stages
+        .into_iter()
+        .map(|(stage, label, count)| TelemetryFunnelStage {
+            stage: stage.to_owned(),
+            label: label.to_owned(),
+            count: count.max(0),
+            percent_of_entry: percentage_of(count.max(0), totals.requests),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::repository::memory::InMemoryRollupRepository;
-    use crate::testing::{rollup_envelope, TestBucket};
+    use crate::testing::{backend_bucket, rollup_envelope, rollup_envelope_with, TestBucket};
     use myunivokai_contracts::TELEMETRY_SINK_POSTGRES;
     use time::macros::datetime;
 
@@ -375,6 +492,244 @@ mod tests {
             .await
             .expect("overview");
         assert_eq!(remaining.total_requests, 1);
+    }
+
+    // "+100% vs yesterday" against a window that holds nothing is a trend that
+    // never happened. Absent is the only honest answer, and it is the one the
+    // screen renders as "no comparable data".
+    #[tokio::test]
+    async fn a_window_with_no_predecessor_reports_no_comparison_rather_than_a_fabricated_one() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository);
+        let now = datetime!(2026-08-13 12:00:00 UTC);
+        service
+            .ingest(&rollup_envelope(
+                "instance-a",
+                now - time::Duration::hours(1),
+                &[TestBucket::successful("/api/universe/worlds", 10, 500, 90)],
+            ))
+            .await
+            .expect("ingest");
+
+        let overview = service
+            .overview(&TelemetryOverviewQueryData { hours: 6 }, descriptor(), now)
+            .await
+            .expect("overview");
+        assert!(
+            overview.comparison.is_none(),
+            "a comparison was invented against an empty previous window"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_comparison_measures_the_window_immediately_before_this_one() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository);
+        let now = datetime!(2026-08-13 12:00:00 UTC);
+        // This window [06:00, 12:00): 30 requests, 3 of them 5xx.
+        service
+            .ingest(&rollup_envelope(
+                "instance-a",
+                datetime!(2026-08-13 09:00:00 UTC),
+                &[
+                    TestBucket::successful("/api/universe/worlds", 27, 1350, 60),
+                    TestBucket::with_status("/api/universe/worlds", 5, 3, 150, 60),
+                ],
+            ))
+            .await
+            .expect("current");
+        // The previous window [00:00, 06:00): 20 requests, none failing.
+        service
+            .ingest(&rollup_envelope(
+                "instance-a",
+                datetime!(2026-08-13 03:00:00 UTC),
+                &[TestBucket::successful("/api/universe/worlds", 20, 1000, 60)],
+            ))
+            .await
+            .expect("previous");
+        // Older still — outside both windows, and must reach neither side.
+        service
+            .ingest(&rollup_envelope(
+                "instance-a",
+                datetime!(2026-08-12 20:00:00 UTC),
+                &[TestBucket::successful(
+                    "/api/universe/worlds",
+                    999,
+                    9990,
+                    60,
+                )],
+            ))
+            .await
+            .expect("ancient");
+
+        let overview = service
+            .overview(&TelemetryOverviewQueryData { hours: 6 }, descriptor(), now)
+            .await
+            .expect("overview");
+        let comparison = overview.comparison.expect("a comparison");
+
+        assert_eq!(
+            comparison.previous_window_start,
+            datetime!(2026-08-13 00:00:00 UTC)
+        );
+        assert_eq!(comparison.requests.current, 30);
+        assert_eq!(
+            comparison.requests.previous, 20,
+            "the previous window picked up traffic from outside itself"
+        );
+        assert_eq!(comparison.requests.change_percent, 50.0);
+        assert!(comparison.requests.has_baseline);
+
+        // Errors compare as counts. Reporting the RATE's change here would say
+        // "+infinity" for 0% becoming 10%, which is true of the ratio and
+        // useless as a signal.
+        assert_eq!(comparison.errors.current, 3);
+        assert_eq!(comparison.errors.previous, 0);
+        assert!(
+            !comparison.errors.has_baseline,
+            "a previous value of zero has no percentage to report"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_peak_hour_is_the_busiest_hour_and_is_absent_when_nothing_was_served() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository.clone());
+        let now = datetime!(2026-08-13 12:00:00 UTC);
+
+        let empty = service
+            .overview(&TelemetryOverviewQueryData { hours: 24 }, descriptor(), now)
+            .await
+            .expect("overview");
+        assert!(empty.peak_hour.is_none());
+        assert!(empty.hour_of_day.is_empty());
+
+        // Two minutes inside 09:00 outweigh one busier single minute at 10:00,
+        // which is exactly what an hourly rollup is for.
+        for (minute, count) in [(10, 20), (40, 25)] {
+            service
+                .ingest(&rollup_envelope(
+                    "instance-a",
+                    datetime!(2026-08-13 09:00:00 UTC) + time::Duration::minutes(minute),
+                    &[TestBucket::successful(
+                        "/api/universe/worlds",
+                        count,
+                        100,
+                        30,
+                    )],
+                ))
+                .await
+                .expect("ingest");
+        }
+        service
+            .ingest(&rollup_envelope(
+                "instance-a",
+                datetime!(2026-08-13 10:30:00 UTC),
+                &[TestBucket::successful("/api/universe/worlds", 30, 100, 30)],
+            ))
+            .await
+            .expect("ingest");
+
+        let overview = service
+            .overview(&TelemetryOverviewQueryData { hours: 24 }, descriptor(), now)
+            .await
+            .expect("overview");
+        let peak = overview.peak_hour.expect("a peak hour");
+        assert_eq!(peak.bucket_start, datetime!(2026-08-13 09:00:00 UTC));
+        assert_eq!(peak.request_count, 45);
+
+        assert_eq!(overview.hourly_points.len(), 2, "three minutes, two hours");
+        assert_eq!(
+            overview
+                .hour_of_day
+                .iter()
+                .map(|hour| hour.hour)
+                .collect::<Vec<_>>(),
+            vec![9, 10]
+        );
+    }
+
+    // The funnel is not a subset chain and must not be smoothed into one: a
+    // single HTTP request can call several backends. Rounding the stages down
+    // to make the shape monotonic would hide a fan-out, which is the one thing
+    // this chart can show that the counters cannot.
+    #[tokio::test]
+    async fn the_funnel_reports_backend_fan_out_rather_than_capping_it_at_the_entry_count() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository);
+        let envelope = rollup_envelope_with(
+            "instance-a",
+            datetime!(2026-08-13 09:14:00 UTC),
+            &[
+                TestBucket::successful("/api/universe/worlds", 18, 900, 60),
+                TestBucket::with_status("/api/universe/worlds", 5, 2, 100, 60),
+            ],
+            &[
+                backend_bucket("universe", 20, 600, 60, 1),
+                backend_bucket("dna", 12, 400, 60, 0),
+            ],
+            &[],
+        );
+        service.ingest(&envelope).await.expect("ingest");
+
+        let overview = service
+            .overview(
+                &TelemetryOverviewQueryData { hours: 24 },
+                descriptor(),
+                datetime!(2026-08-13 10:00:00 UTC),
+            )
+            .await
+            .expect("overview");
+
+        let counts: Vec<i64> = overview
+            .traffic_funnel
+            .iter()
+            .map(|stage| stage.count)
+            .collect();
+        assert_eq!(counts, vec![20, 32, 31, 18]);
+        assert_eq!(overview.traffic_funnel[0].percent_of_entry, 100.0);
+        assert!(
+            overview.traffic_funnel[1].percent_of_entry > 100.0,
+            "32 backend calls from 20 requests must read above 100%, not be clipped"
+        );
+        assert_eq!(overview.traffic_funnel[3].percent_of_entry, 90.0);
+    }
+
+    #[tokio::test]
+    async fn the_median_and_the_tail_are_reported_together() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository);
+        let envelope = rollup_envelope(
+            "instance-a",
+            datetime!(2026-08-13 09:14:00 UTC),
+            // 90 fast requests and 10 slow ones: the median sits in the fast
+            // bucket, the p95 in the slow one.
+            &[TestBucket::with_histogram(
+                "/api/universe/worlds",
+                2,
+                100,
+                4_000,
+                900,
+                [0, 90, 0, 0, 0, 0, 10, 0],
+            )],
+        );
+        service.ingest(&envelope).await.expect("ingest");
+
+        let overview = service
+            .overview(
+                &TelemetryOverviewQueryData { hours: 24 },
+                descriptor(),
+                datetime!(2026-08-13 10:00:00 UTC),
+            )
+            .await
+            .expect("overview");
+        assert!(
+            overview.p50_duration_ms < overview.p95_duration_ms,
+            "p50 {} is not below p95 {}",
+            overview.p50_duration_ms,
+            overview.p95_duration_ms
+        );
+        assert!(overview.p95_duration_ms <= overview.slowest_duration_ms);
     }
 
     #[tokio::test]

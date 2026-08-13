@@ -24,6 +24,7 @@ pub struct TestBucket {
     duration_sum_ms: i64,
     duration_max_ms: i64,
     error_codes: HashMap<String, i64>,
+    explicit_histogram: Option<TelemetryHistogram>,
 }
 
 impl TestBucket {
@@ -57,12 +58,40 @@ impl TestBucket {
             duration_sum_ms,
             duration_max_ms,
             error_codes: HashMap::new(),
+            explicit_histogram: None,
         }
     }
 
     pub fn with_method(mut self, method: &str) -> Self {
         self.method = method.to_owned();
         self
+    }
+
+    /// A bucket whose observations are spread across latency buckets by hand.
+    ///
+    /// [`Self::with_status`] puts every observation in the maximum's bucket,
+    /// which is what most tests want and is useless for the one thing a spread
+    /// distribution exists to show: that the median and the tail are different
+    /// numbers. The caller owns the invariant here — the histogram must sum to
+    /// `request_count`, and [`Self::histogram`]'s doc says why.
+    pub fn with_histogram(
+        route_pattern: &str,
+        status_class: u8,
+        request_count: i64,
+        duration_sum_ms: i64,
+        duration_max_ms: i64,
+        histogram: TelemetryHistogram,
+    ) -> Self {
+        Self {
+            explicit_histogram: Some(histogram),
+            ..Self::with_status(
+                route_pattern,
+                status_class,
+                request_count,
+                duration_sum_ms,
+                duration_max_ms,
+            )
+        }
     }
 
     pub fn with_error_code(mut self, error_code: &str, count: i64) -> Self {
@@ -76,6 +105,9 @@ impl TestBucket {
     /// would let a percentile assertion pass on data the gateway cannot
     /// produce.
     fn histogram(&self) -> TelemetryHistogram {
+        if let Some(explicit) = self.explicit_histogram {
+            return explicit;
+        }
         let mut histogram: TelemetryHistogram = [0; 8];
         histogram[telemetry_histogram_index_of(self.duration_max_ms)] = self.request_count;
         histogram

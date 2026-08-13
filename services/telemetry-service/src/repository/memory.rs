@@ -21,13 +21,28 @@ use time::OffsetDateTime;
 
 use super::RollupRepository;
 use crate::domain::{
-    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HttpTotals, IngestOutcome,
-    LatencySummary, RollupBatch, RouteAggregate, StatusClassCount, VolumeBucket, WakeSignalBucket,
+    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HourOfDayBucket, HttpTotals,
+    IngestOutcome, LatencySummary, RollupBatch, RouteAggregate, StatusClassCount, VolumeBucket,
+    WakeSignalBucket,
 };
 use crate::error::{Error, Result};
 
 const SERVER_ERROR_STATUS_CLASS: i16 = 5;
 const WAKE_SIGNAL_ERROR_CODE: &str = "SERVICE_WAKING";
+
+/// `date_trunc('hour', ... AT TIME ZONE 'UTC')`, in Rust.
+///
+/// The conversion to UTC is not decoration. The SQL states its zone explicitly
+/// so two connections cannot disagree about where an hour starts, and a double
+/// that truncated in whatever offset the value happened to carry would place
+/// the same minute in a different hour than the database does.
+fn truncate_to_hour(instant: OffsetDateTime) -> OffsetDateTime {
+    let utc = instant.to_offset(time::UtcOffset::UTC);
+    utc.replace_minute(0)
+        .and_then(|value| value.replace_second(0))
+        .and_then(|value| value.replace_nanosecond(0))
+        .unwrap_or(utc)
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 struct Counters {
@@ -190,6 +205,39 @@ impl RollupRepository for InMemoryRollupRepository {
         })
     }
 
+    async fn http_totals_between(
+        &self,
+        since: OffsetDateTime,
+        until: OffsetDateTime,
+    ) -> Result<HttpTotals> {
+        self.take_failure()?;
+        let state = self.state.lock().expect("repository lock");
+        let mut totals = Counters::default();
+        let mut server_errors = 0;
+        for ((bucket_start, _, _, status_class), counters) in &state.http {
+            // Half-open, matching SELECT_TOTALS_BETWEEN exactly. A double that
+            // closed the upper bound would let a comparison test pass on
+            // arithmetic the database does not perform.
+            if *bucket_start < since || *bucket_start >= until {
+                continue;
+            }
+            totals.accumulate(
+                counters.count,
+                counters.sum_ms,
+                counters.max_ms,
+                counters.histogram,
+            );
+            if *status_class >= SERVER_ERROR_STATUS_CLASS {
+                server_errors += counters.count;
+            }
+        }
+        Ok(HttpTotals {
+            requests: totals.count,
+            server_errors,
+            latency: totals.summary(),
+        })
+    }
+
     async fn status_mix(&self, since: OffsetDateTime) -> Result<Vec<StatusClassCount>> {
         self.take_failure()?;
         let state = self.state.lock().expect("repository lock");
@@ -233,6 +281,70 @@ impl RollupRepository for InMemoryRollupRepository {
             .into_iter()
             .map(|(bucket_start, (counters, server_errors))| VolumeBucket {
                 bucket_start,
+                requests: counters.count,
+                server_errors,
+                latency: counters.summary(),
+            })
+            .collect())
+    }
+
+    async fn hourly_buckets(&self, since: OffsetDateTime) -> Result<Vec<VolumeBucket>> {
+        self.take_failure()?;
+        let state = self.state.lock().expect("repository lock");
+        let mut grouped: BTreeMap<OffsetDateTime, (Counters, i64)> = BTreeMap::new();
+        for ((bucket_start, _, _, status_class), counters) in &state.http {
+            if *bucket_start < since {
+                continue;
+            }
+            let entry = grouped
+                .entry(truncate_to_hour(*bucket_start))
+                .or_insert((Counters::default(), 0));
+            entry.0.accumulate(
+                counters.count,
+                counters.sum_ms,
+                counters.max_ms,
+                counters.histogram,
+            );
+            if *status_class >= SERVER_ERROR_STATUS_CLASS {
+                entry.1 += counters.count;
+            }
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(bucket_start, (counters, server_errors))| VolumeBucket {
+                bucket_start,
+                requests: counters.count,
+                server_errors,
+                latency: counters.summary(),
+            })
+            .collect())
+    }
+
+    async fn hour_of_day(&self, since: OffsetDateTime) -> Result<Vec<HourOfDayBucket>> {
+        self.take_failure()?;
+        let state = self.state.lock().expect("repository lock");
+        let mut grouped: BTreeMap<u8, (Counters, i64)> = BTreeMap::new();
+        for ((bucket_start, _, _, status_class), counters) in &state.http {
+            if *bucket_start < since {
+                continue;
+            }
+            let entry = grouped
+                .entry(bucket_start.to_offset(time::UtcOffset::UTC).hour())
+                .or_insert((Counters::default(), 0));
+            entry.0.accumulate(
+                counters.count,
+                counters.sum_ms,
+                counters.max_ms,
+                counters.histogram,
+            );
+            if *status_class >= SERVER_ERROR_STATUS_CLASS {
+                entry.1 += counters.count;
+            }
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(hour, (counters, server_errors))| HourOfDayBucket {
+                hour,
                 requests: counters.count,
                 server_errors,
                 latency: counters.summary(),

@@ -21,13 +21,13 @@
 //! [Rust API Guidelines]: https://rust-lang.github.io/api-guidelines/interoperability.html#conversions-use-the-standard-traits-from-asref-asmut-c-conv-traits
 
 use myunivokai_contracts::{
-    TelemetryBackendSummary, TelemetryCacheSummary, TelemetryErrorCodeCount, TelemetryRouteSummary,
-    TelemetryStatusClassCount, TelemetryVolumePoint,
+    TelemetryBackendSummary, TelemetryCacheSummary, TelemetryErrorCodeCount, TelemetryHourBucket,
+    TelemetryRouteSummary, TelemetryStatusClassCount, TelemetryVolumePoint,
 };
 
 use crate::domain::{
-    BackendAggregate, CacheAggregate, ErrorCodeAggregate, RouteAggregate, StatusClassCount,
-    VolumeBucket, WakeSignalBucket,
+    BackendAggregate, CacheAggregate, ErrorCodeAggregate, HourOfDayBucket, RouteAggregate,
+    StatusClassCount, VolumeBucket, WakeSignalBucket,
 };
 
 /// Every percentage on every telemetry screen, rounded in exactly one place.
@@ -80,6 +80,17 @@ impl From<WakeSignalBucket> for TelemetryVolumePoint {
     }
 }
 
+impl From<HourOfDayBucket> for TelemetryHourBucket {
+    fn from(bucket: HourOfDayBucket) -> Self {
+        Self {
+            hour: bucket.hour,
+            request_count: bucket.requests,
+            error_count: bucket.server_errors,
+            p95_duration_ms: bucket.latency.p95_ms(),
+        }
+    }
+}
+
 impl From<ErrorCodeAggregate> for TelemetryErrorCodeCount {
     fn from(entry: ErrorCodeAggregate) -> Self {
         Self {
@@ -96,6 +107,7 @@ impl From<BackendAggregate> for TelemetryBackendSummary {
             request_count: backend.requests,
             error_count: backend.errors,
             average_duration_ms: backend.latency.average_ms(),
+            p50_duration_ms: backend.latency.p50_ms(),
             p95_duration_ms: backend.latency.p95_ms(),
             slowest_duration_ms: backend.latency.slowest_ms(),
         }
@@ -118,6 +130,7 @@ impl From<RouteAggregate> for TelemetryRouteSummary {
         Self {
             error_rate_percent: percentage_of(route.server_errors, route.requests),
             average_duration_ms: route.latency.average_ms(),
+            p50_duration_ms: route.latency.p50_ms(),
             p95_duration_ms: route.latency.p95_ms(),
             slowest_duration_ms: route.latency.slowest_ms(),
             route_pattern: route.route_pattern,
