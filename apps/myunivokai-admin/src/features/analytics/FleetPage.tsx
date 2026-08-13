@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { SectionCard } from "@/components/ui/section-card";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
@@ -59,8 +60,11 @@ export function FleetPage() {
       <PageHeader
         title="Fleet"
         description="Which services have restarted, and which ones the gateway has been unable to wake."
-        action={<FilterSelect label="Service" value={service} onChange={setService} options={serviceOptions} />}
       />
+
+      <FilterBar>
+        <FilterSelect label="Service" value={service} onChange={setService} options={serviceOptions} />
+      </FilterBar>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { PageHeader } from "@/components/layout/page-header";
 import { telemetryApi } from "../api";
@@ -54,21 +55,19 @@ export function TelemetryShell({
 
   return (
     <div>
-      <PageHeader
-        title={title}
-        description={description}
-        action={
-          <FilterSelect
-            label="Window"
-            value={String(hours)}
-            onChange={(value) => onHoursChange(Number(value) || DEFAULT_TELEMETRY_HOURS)}
-            options={TELEMETRY_WINDOW_OPTIONS.map((option) => ({
-              label: option.label,
-              value: String(option.value)
-            }))}
-          />
-        }
-      />
+      <PageHeader title={title} description={description} />
+
+      <FilterBar>
+        <FilterSelect
+          label="Window"
+          value={String(hours)}
+          onChange={(value) => onHoursChange(Number(value) || DEFAULT_TELEMETRY_HOURS)}
+          options={TELEMETRY_WINDOW_OPTIONS.map((option) => ({
+            label: option.label,
+            value: String(option.value)
+          }))}
+        />
+      </FilterBar>
 
       {overviewQuery.isError ? (
         <Card>
