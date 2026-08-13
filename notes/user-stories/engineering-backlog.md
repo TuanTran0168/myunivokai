@@ -436,6 +436,55 @@ Sprint stories: [S4-ANALYTICS-001 through S4-ANALYTICS-007](../sprints/sprint-04
 
 Source: [analytics-service-plan.md](../vision/analytics-service-plan.md)
 
+## EPIC-S5-TELEMETRY-001 — Operational telemetry and the first Rust service
+
+Status: Ready
+Priority: P1
+Sprint: [Sprint 5 — starts 2026-08-13](../sprints/sprint-05-2026-08-13/README.md)
+
+As a platform operator,
+I want the platform to measure its own request volume, latency, error mix,
+per-backend round-trip time and cache hit rate,
+so that questions this repository's own research already names as
+unanswerable — which routes are used, whether `Retry-After: 15` is long
+enough, whether the Redis cache earns its keep — stop being unanswerable.
+
+Scenario: Aggregate before the network, never after
+
+Given a gateway serving any volume of requests
+When telemetry is enabled
+Then the gateway aggregates in memory and publishes one envelope per interval
+And no design anywhere in this track puts a broker publish on the request path
+And every bucket is keyed on a route template, never a raw path.
+
+Scenario: A second language is bounded rather than accidental
+
+Given `telemetry-service` is written in Rust while every other service is Go
+When the wire contract changes in either language
+Then the shared fixture test fails in CI rather than at runtime
+And `notes/be/source-overview.md` states why one service is not Go, so the
+next reader does not read it as an accident.
+
+Scenario: One switch, two destinations
+
+Given `TELEMETRY_SINK`
+When it is set to `postgres` or `otlp`
+Then the same envelopes land in this repository's own schema or in Grafana
+Cloud, chosen once at startup
+And the admin app says which one it is looking at rather than rendering an
+empty chart when the answer lives elsewhere.
+
+Epic exit:
+
+- [ ] Every Sprint 5 `S5-TELEMETRY-*` story is Verified.
+- [ ] The gateway's telemetry path is off by default and provably inert when off.
+- [ ] `myunivokai-admin` renders request volume, status mix and per-route p95,
+      with the p95's interpolation stated on the screen.
+
+Sprint stories: [S5-TELEMETRY-001 through S5-TELEMETRY-009](../sprints/sprint-05-2026-08-13/user-stories.md#epic-s5-telemetry-001--operational-telemetry-and-the-first-rust-service)
+
+Source: [telemetry-service-plan.md](../vision/telemetry-service-plan.md)
+
 ## DEFERRED-AUTH-001 — Define identity before authentication
 
 Status: Deferred by owner decision on 2026-07-22. **Unaffected by Sprint 4** —

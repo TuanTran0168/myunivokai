@@ -18,6 +18,7 @@ acceptance evidence live beside each dated sprint in `notes/sprints/*/user-stori
 | [Sprint 2 stories](../sprints/sprint-02-2026-08-05/user-stories.md) | Resilience and scale commitments |
 | [Sprint 3 stories](../sprints/sprint-03-2026-08-19/user-stories.md) | City vertical-slice commitments |
 | [Sprint 4 stories](../sprints/sprint-04-2026-08-06/user-stories.md) | auth-service, analytics read model and admin app commitments |
+| [Sprint 5 stories](../sprints/sprint-05-2026-08-13/user-stories.md) | telemetry-service commitments — the gateway rollups, the first Rust service, the admin Telemetry screen |
 
 The dated delivery commitments live in [../sprints/](../sprints/README.md).
 Sprint 1 is the complete platform migration, including local and production
@@ -32,6 +33,8 @@ Approved architecture/feature plans referenced by this backlog:
 - [Auth-service and internal admin app plan](../vision/auth-and-admin-plan.md)
   and [Analytics-service plan](../vision/analytics-service-plan.md) — Sprint 4,
   in that priority order.
+- [Telemetry-service plan](../vision/telemetry-service-plan.md) — Sprint 5,
+  the gateway's HTTP/NATS/cache rollups and the first service written in Rust.
 
 ## Story format
 
