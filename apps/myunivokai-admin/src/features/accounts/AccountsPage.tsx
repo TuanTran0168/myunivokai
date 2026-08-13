@@ -10,14 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { SearchInput } from "@/components/ui/search-input";
 import { accountsApi } from "./api";
-import { InviteAccountDialog } from "./InviteAccountDialog";
+import { CreateAccountDialog } from "./CreateAccountDialog";
 import { AccountRowActions } from "./AccountRowActions";
 
 export function AccountsPage() {
-  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
-  const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: () => accountsApi.list() });
+  const accountsQuery = useQuery({ queryKey: ["accounts", search], queryFn: () => accountsApi.list(search) });
 
   const disableMutation = useMutation({
     mutationFn: accountsApi.disable,
@@ -42,16 +44,19 @@ export function AccountsPage() {
         title="Accounts"
         description="Staff accounts, their roles and status."
         action={
-          <Button size="sm" onClick={() => setIsInviteOpen(true)}>
-            <UserPlus />
-            Invite staff
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search email or name…" />
+            <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+              <UserPlus />
+              Create account
+            </Button>
+          </div>
         }
       />
       <Card>
         <CardContent className="pt-2">
           {accountsQuery.isLoading ? (
-            <TableSkeleton columnCount={4} headers={["Email", "Roles", "Status", ""]} />
+            <TableSkeleton columnCount={5} headers={["Name", "Email", "Roles", "Status", ""]} />
           ) : accountsQuery.isError ? (
             <p className="py-6 text-center text-sm text-destructive">{(accountsQuery.error as Error).message}</p>
           ) : (
@@ -61,6 +66,7 @@ export function AccountsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Roles</TableHead>
                       <TableHead>Status</TableHead>
@@ -70,6 +76,7 @@ export function AccountsPage() {
                   <TableBody>
                     {accountsQuery.data?.accounts.map((account) => (
                       <TableRow key={account.accountId}>
+                        <TableCell className="text-sm">{account.name || "—"}</TableCell>
                         <TableCell className="text-sm">{account.email}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -111,7 +118,8 @@ export function AccountsPage() {
                     className="card-interactive flex items-start justify-between gap-3 rounded-lg border border-border p-3"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{account.email}</p>
+                      <p className="truncate text-sm font-medium">{account.name || account.email}</p>
+                      {account.name ? <p className="truncate text-xs text-muted-foreground">{account.email}</p> : null}
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {account.isSuperAdmin ? <Badge variant="outline">super admin</Badge> : null}
                         {account.roles.map((role) => (
@@ -142,8 +150,7 @@ export function AccountsPage() {
           )}
         </CardContent>
       </Card>
-      <InviteAccountDialog open={isInviteOpen} onOpenChange={setIsInviteOpen} />
+      <CreateAccountDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </div>
   );
 }
-

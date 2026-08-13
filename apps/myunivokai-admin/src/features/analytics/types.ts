@@ -176,15 +176,25 @@ export interface WakeStats {
 // select, and analytics-service only returns the top eight. It is filterable
 // all the same because the dashboard's distribution chart links into this list
 // with one already chosen, and the gateway has always accepted the parameter.
+// since/until are "YYYY-MM-DD" (native <input type="date"> values) or ""
+// for no bound — the api layer converts them to RFC3339 instants.
+// search matches nickname, case-insensitively.
 export interface WorldListFilters {
   family?: WorldFamily | "";
   archetype?: string;
   worldStyle?: string;
   mood?: string;
   published?: "true" | "false" | "";
+  since?: string;
+  until?: string;
+  search?: string;
 }
 
+// search matches jobId or errorMessage, case-insensitively.
 export interface JobListFilters {
   family?: WorldFamily | "";
   status?: JobStatus | "";
+  since?: string;
+  until?: string;
+  search?: string;
 }

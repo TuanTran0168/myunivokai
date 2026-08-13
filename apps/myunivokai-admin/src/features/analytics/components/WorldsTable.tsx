@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { LinkPending } from "@/components/ui/link-pending";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateTime } from "../format";
 import type { WorldProjection } from "../types";
@@ -40,10 +39,9 @@ export function WorldsTable({ worlds }: { worlds: WorldProjection[] }) {
                 <TableCell className="text-sm font-medium">
                   <Link
                     href={`/worlds/${world.worldId}`}
-                    className="inline-flex items-center gap-1.5 rounded-sm underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-sm underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {world.nickname}
-                    <LinkPending />
                   </Link>
                 </TableCell>
                 <TableCell>
@@ -90,12 +88,8 @@ function WorldCard({ world }: { world: WorldProjection }) {
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link
-            href={`/worlds/${world.worldId}`}
-            className="flex items-center gap-1.5 truncate text-sm font-medium hover:text-primary"
-          >
-            <span className="truncate">{world.nickname}</span>
-            <LinkPending />
+          <Link href={`/worlds/${world.worldId}`} className="block truncate text-sm font-medium hover:text-primary">
+            {world.nickname}
           </Link>
           <p className="truncate text-xs text-muted-foreground">{world.archetype}</p>
         </div>

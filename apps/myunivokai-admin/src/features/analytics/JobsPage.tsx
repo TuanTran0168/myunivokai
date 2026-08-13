@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterSelect } from "@/components/ui/filter-select";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { SearchInput } from "@/components/ui/search-input";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
 import { JobsTable, jobTableHeaders } from "./components/JobsTable";
@@ -49,6 +51,11 @@ export function JobsPage() {
         description="Generation jobs across dna, universe and nature — what failed, why, and how long it took."
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filters.search ?? ""}
+              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+              placeholder="Search job id or error…"
+            />
             <FilterSelect
               label="Family"
               value={filters.family ?? ""}
@@ -64,6 +71,12 @@ export function JobsPage() {
               value={filters.status ?? ""}
               onChange={(value) => setFilters((current) => ({ ...current, status: value as JobListFilters["status"] }))}
               options={STATUS_OPTIONS}
+            />
+            <DateRangeFilter
+              since={filters.since ?? ""}
+              until={filters.until ?? ""}
+              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
             />
           </div>
         }

@@ -9,6 +9,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterSelect } from "@/components/ui/filter-select";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { SearchInput } from "@/components/ui/search-input";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
 import { WORLD_TABLE_HEADERS, WorldsTable } from "./components/WorldsTable";
@@ -54,6 +56,11 @@ export function WorldsPage() {
         description="Every generated world, newest first, projected from universe and nature events."
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filters.search ?? ""}
+              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+              placeholder="Search nickname…"
+            />
             <FilterSelect
               label="Family"
               value={filters.family ?? ""}
@@ -79,6 +86,12 @@ export function WorldsPage() {
                 { label: "Published", value: "true" },
                 { label: "Private", value: "false" }
               ]}
+            />
+            <DateRangeFilter
+              since={filters.since ?? ""}
+              until={filters.until ?? ""}
+              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
             />
           </div>
         }
@@ -139,7 +152,9 @@ function filtersFromQuery(searchParams: URLSearchParams | null): WorldListFilter
     archetype: searchParams?.get("archetype") ?? "",
     worldStyle: searchParams?.get("worldStyle") ?? "",
     mood: searchParams?.get("mood") ?? "",
-    published: published === "true" || published === "false" ? published : ""
+    published: published === "true" || published === "false" ? published : "",
+    since: searchParams?.get("since") ?? "",
+    until: searchParams?.get("until") ?? ""
   };
 }
 

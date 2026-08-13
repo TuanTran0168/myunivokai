@@ -11,6 +11,17 @@ import type {
   WorldPage
 } from "./types";
 
+// dayStart/dayEnd turn a "YYYY-MM-DD" filter value into the RFC3339 instant
+// bounding that whole local calendar day, so "since 2026-08-01" includes
+// everything from its first moment and "until 2026-08-01" includes its last.
+function dayStart(day?: string): string | undefined {
+  return day ? `${day}T00:00:00.000Z` : undefined;
+}
+
+function dayEnd(day?: string): string | undefined {
+  return day ? `${day}T23:59:59.999Z` : undefined;
+}
+
 // buildQuery drops empty values rather than sending `?family=`: the gateway
 // treats an empty string as "no filter" anyway, but omitting it keeps the
 // React Query cache key and the request URL in agreement, so two logically
@@ -43,7 +54,10 @@ export const analyticsApi = {
         archetype: filters.archetype,
         worldStyle: filters.worldStyle,
         mood: filters.mood,
-        published: filters.published
+        published: filters.published,
+        since: dayStart(filters.since),
+        until: dayEnd(filters.until),
+        q: filters.search
       })}`
     ),
 
@@ -55,7 +69,15 @@ export const analyticsApi = {
 
   jobs: (filters: JobListFilters, pageSize: number, cursor?: string) =>
     adminRequest<JobPage>(
-      `/jobs${buildQuery({ pageSize, cursor, family: filters.family, status: filters.status })}`
+      `/jobs${buildQuery({
+        pageSize,
+        cursor,
+        family: filters.family,
+        status: filters.status,
+        since: dayStart(filters.since),
+        until: dayEnd(filters.until),
+        q: filters.search
+      })}`
     ),
 
   serviceStarts: (service: string, pageSize: number, cursor?: string) =>
