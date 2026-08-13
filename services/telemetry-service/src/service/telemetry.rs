@@ -3,16 +3,15 @@
 use std::sync::Arc;
 
 use myunivokai_contracts::{
-    HttpRollupEnvelope, TelemetryBackendSummary, TelemetryCacheSummary, TelemetryErrorCodeCount,
-    TelemetryOverviewQueryData, TelemetryOverviewResponseData, TelemetryRouteListQueryData,
-    TelemetryRouteListResponseData, TelemetryRouteSummary, TelemetrySinkDescriptor,
-    TelemetryStatusClassCount, TelemetryVolumePoint,
+    HttpRollupEnvelope, TelemetryOverviewQueryData, TelemetryOverviewResponseData,
+    TelemetryRouteListQueryData, TelemetryRouteListResponseData, TelemetrySinkDescriptor,
 };
 use time::OffsetDateTime;
 
 use crate::domain::{IngestOutcome, QueryWindow, RollupBatch};
 use crate::error::Result;
 use crate::repository::RollupRepository;
+use crate::service::mapping::percentage_of;
 
 /// How many error codes the overview carries. The gateway declares well under
 /// a dozen; ten is enough to see every one that matters and short enough that
@@ -87,61 +86,12 @@ impl TelemetryService {
             // admin UI is required to render it next to the number: a p95 that
             // looks exact and is not is worse than no p95.
             percentile_is_interpolated: true,
-            status_mix: status_mix
-                .into_iter()
-                .map(|slice| TelemetryStatusClassCount {
-                    status_class: slice.status_class,
-                    request_count: slice.requests,
-                })
-                .collect(),
-            volume_points: volume_buckets
-                .into_iter()
-                .map(|bucket| TelemetryVolumePoint {
-                    bucket_start: bucket.bucket_start,
-                    request_count: bucket.requests,
-                    error_count: bucket.server_errors,
-                    p95_duration_ms: bucket.latency.p95_ms(),
-                })
-                .collect(),
-            error_code_top: error_codes
-                .into_iter()
-                .map(|entry| TelemetryErrorCodeCount {
-                    error_code: entry.error_code,
-                    count: entry.count,
-                })
-                .collect(),
-            backends: backends
-                .into_iter()
-                .map(|backend| TelemetryBackendSummary {
-                    service: backend.service,
-                    request_count: backend.requests,
-                    error_count: backend.errors,
-                    average_duration_ms: backend.latency.average_ms(),
-                    p95_duration_ms: backend.latency.p95_ms(),
-                    slowest_duration_ms: backend.latency.slowest_ms(),
-                })
-                .collect(),
-            cache: cache
-                .into_iter()
-                .map(|namespace| TelemetryCacheSummary {
-                    hit_rate_percent: percentage_of(
-                        namespace.hits,
-                        namespace.hits + namespace.misses,
-                    ),
-                    namespace: namespace.namespace,
-                    hits: namespace.hits,
-                    misses: namespace.misses,
-                })
-                .collect(),
-            wake_signals: wake_signals
-                .into_iter()
-                .map(|bucket| TelemetryVolumePoint {
-                    bucket_start: bucket.bucket_start,
-                    request_count: bucket.count,
-                    error_count: 0,
-                    p95_duration_ms: 0,
-                })
-                .collect(),
+            status_mix: status_mix.into_iter().map(Into::into).collect(),
+            volume_points: volume_buckets.into_iter().map(Into::into).collect(),
+            error_code_top: error_codes.into_iter().map(Into::into).collect(),
+            backends: backends.into_iter().map(Into::into).collect(),
+            cache: cache.into_iter().map(Into::into).collect(),
+            wake_signals: wake_signals.into_iter().map(Into::into).collect(),
             oldest_bucket_start,
         })
     }
@@ -160,19 +110,7 @@ impl TelemetryService {
             hours: window.hours(),
             generated_at: now,
             percentile_is_interpolated: true,
-            routes: routes
-                .into_iter()
-                .map(|route| TelemetryRouteSummary {
-                    error_rate_percent: percentage_of(route.server_errors, route.requests),
-                    average_duration_ms: route.latency.average_ms(),
-                    p95_duration_ms: route.latency.p95_ms(),
-                    slowest_duration_ms: route.latency.slowest_ms(),
-                    route_pattern: route.route_pattern,
-                    method: route.method,
-                    request_count: route.requests,
-                    error_count: route.server_errors,
-                })
-                .collect(),
+            routes: routes.into_iter().map(Into::into).collect(),
         })
     }
 
@@ -183,15 +121,6 @@ impl TelemetryService {
         let cutoff = now - time::Duration::days(self.retention_days);
         self.repository.delete_before(cutoff).await
     }
-}
-
-/// Percentages are computed in exactly one place so that "error rate" and
-/// "hit rate" cannot end up rounding differently on two screens.
-fn percentage_of(part: i64, total: i64) -> f64 {
-    if total <= 0 {
-        return 0.0;
-    }
-    (part as f64 * 100.0 / total as f64 * 100.0).round() / 100.0
 }
 
 #[cfg(test)]
@@ -212,13 +141,6 @@ mod tests {
 
     fn service_with(repository: Arc<InMemoryRollupRepository>) -> TelemetryService {
         TelemetryService::new(repository, 90)
-    }
-
-    #[test]
-    fn percentages_round_to_two_places_and_survive_an_empty_window() {
-        assert_eq!(percentage_of(0, 0), 0.0);
-        assert_eq!(percentage_of(1, 3), 33.33);
-        assert_eq!(percentage_of(50, 100), 50.0);
     }
 
     #[tokio::test]

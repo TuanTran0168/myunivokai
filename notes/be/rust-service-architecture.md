@@ -151,7 +151,8 @@ services/telemetry-service/
 │   │       ├── statements.rs       # every SQL string, one file
 │   │       └── rows.rs             # PgRow → domain
 │   ├── service/                    # ← application layer
-│   │   └── telemetry.rs            # ingest, overview, routes, prune
+│   │   ├── telemetry.rs            # ingest, overview, routes, prune
+│   │   └── mapping.rs              # From<domain aggregate> for wire type
 │   ├── sink/                       # ← destination port (postgres | otlp)
 │   ├── messaging/                  # ← transport: NATS consumer + responders
 │   ├── http/health.rs              # /healthz, the wake target
@@ -191,7 +192,7 @@ Three concrete payoffs, not style:
 
 ### Why a repository **trait** and not just the Postgres type
 
-Because of what it made possible: `service/telemetry.rs` has ten tests that
+Because of what it made possible: `service/telemetry.rs` has eight tests that
 run in microseconds against `repository::memory`, covering idempotency,
 two-instance accumulation, window clamping, error-rate arithmetic and
 retention. Before the trait existed, the only tests this service had asserted
@@ -208,6 +209,37 @@ deployment fact, switched by one environment variable. `service` is *what does
 a p95 mean, what counts as an error, how long is data kept* — business policy.
 The OTLP sink has no repository and no service at all, which is the clearest
 proof the two are not the same layer.
+
+### When a Rust file is actually too long
+
+Line count is the wrong measure here, and reaching for it is usually a Go or
+Java reflex arriving intact. **Unit tests live in the same file as the code
+they test** — `#[cfg(test)] mod tests`, the convention the Rust Book states
+outright — so a healthy Rust file is routinely half tests. In this service
+`service/telemetry.rs` is 401 lines of which 275 are its test module, and
+`repository/memory.rs` is 412 lines for the same reason.
+
+That co-location is load-bearing, not habit: a `tests/` file is a separate
+crate and sees only `pub` items, so moving those tests out would mean making
+private helpers public purely to be testable. Widening an API to satisfy a file
+size is a bad trade in both directions.
+
+The measure that does work is **what makes this code change**. `service/` was
+split on exactly that:
+
+| File | Changes when |
+| --- | --- |
+| `service/telemetry.rs` | a *rule* changes — which percentile, what counts as an error, how long data is kept |
+| `service/mapping.rs` | `myunivokai-contracts` changes — a wire field is added, renamed or retyped |
+
+Before the split, `overview()` was 93 lines in which four lines of policy sat
+among six hand-written closures copying fields one at a time. The closures were
+not merely verbose: two of them produced the same `TelemetryVolumePoint` from
+different sources, and the one that filled `p95DurationMs` with `0` because a
+wake signal *has no latency* was indistinguishable on sight from a genuinely
+quiet minute. As named `From` impls they carry doc comments saying so, and
+`overview()` reads `.map(Into::into).collect()` six times. See **C-CONV-TRAITS**
+in §8.
 
 ---
 
@@ -329,6 +361,7 @@ on, with their official codes.
 | **C-VALIDATE** | Functions validate their arguments | `LatencySummary::new` floors negatives; `Config::validate` refuses to start |
 | **C-GOOD-ERR** | Error types are meaningful and well-behaved | `Error` + `describe()` + `is_retryable()` |
 | **C-STRUCT-PRIVATE** | Structs have private fields | `LatencySummary`'s four fields are private; only its questions are public |
+| **C-CONV-TRAITS** | Conversions use `From`/`TryFrom`/`AsRef` | `service/mapping.rs` — domain aggregate → wire type, never an ad-hoc closure |
 | **C-DEBUG** | All public types implement `Debug` | Every domain type derives it |
 | **C-OBJECT** | Traits are object-safe if useful as trait objects | Why `RollupRepository` and `TelemetrySink` are usable as `dyn` |
 | **C-CRATE-DOC** | Crate-level docs are thorough | `lib.rs` carries the layering table |

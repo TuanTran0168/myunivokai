@@ -40,6 +40,7 @@ src/
 ├── domain/        models — rollup batch, aggregates, latency, query window. No I/O.
 ├── repository/    RollupRepository trait + postgres adapter + in-memory double
 ├── service/       TelemetryService: ingest, overview, routes, prune
+│                  + mapping.rs: From<domain aggregate> for the wire types
 ├── sink/          TelemetrySink trait: postgres | otlp
 ├── messaging/     NATS consumer + query responders
 └── http/          /healthz, the wake target
@@ -149,7 +150,7 @@ cargo test
 cargo build --release
 ```
 
-`cargo test` needs no database and no broker: 40 unit tests plus 5 integration
+`cargo test` needs no database and no broker: 43 unit tests plus 5 integration
 tests run against `repository::memory`, a faithful in-memory double that
 accumulates on conflict exactly as the `ON CONFLICT` clauses do. They cover
 idempotent ingest, two-instance accumulation, window clamping, error-rate

@@ -371,7 +371,7 @@ comment already describes the implicit split in prose.
 - **Every language's checks are green.** `contracts/go`,
   `services/api-gateway` and `apps/myunivokai-admin` pass `vet`/`test`/`build`,
   `typecheck`, `lint` and the import-boundary check. `contracts/rust`
-  (21 tests) and `services/telemetry-service` (45 tests) pass `cargo fmt
+  (21 tests) and `services/telemetry-service` (48 tests) pass `cargo fmt
   --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` — run
   inside the local container, which is where the Rust toolchain lives.
 - **The pipeline has been driven end to end locally.** With
