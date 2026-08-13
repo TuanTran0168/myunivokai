@@ -21,6 +21,8 @@ const (
 	AuthAuditListQuerySubject      = "myunivokai.queries.auth.audit.list.v1"
 	AuthInviteCreateQuerySubject   = "myunivokai.queries.auth.invite.create.v1"
 	AuthInviteAcceptQuerySubject   = "myunivokai.queries.auth.invite.accept.v1"
+	AuthAccountCreateQuerySubject  = "myunivokai.queries.auth.account.create.v1"
+	AuthAccountUpdateQuerySubject  = "myunivokai.queries.auth.account.update.v1"
 	// AuthAccountPermissionsQuerySubject answers the gateway's permission
 	// check for management routes (RequireAdminPermission) — a fresh lookup
 	// per request rather than a cache, since admin-management traffic is low
@@ -85,6 +87,7 @@ type AccessTokenClaims struct {
 type AccountSummary struct {
 	AccountID           string      `json:"accountId"`
 	Email               string      `json:"email"`
+	Name                string      `json:"name,omitempty"`
 	Kind                AccountKind `json:"kind"`
 	Roles               []string    `json:"roles"`
 	Permissions         []string    `json:"permissions"`
@@ -173,6 +176,14 @@ type AccountListResponseData struct {
 	NextCursor string           `json:"nextCursor,omitempty"`
 }
 
+// AccountListQueryData embeds PageQueryData for the same reason
+// AuditListQueryData does. Search matches an account's email or name — see
+// Store.ListAccounts for the exact ILIKE columns.
+type AccountListQueryData struct {
+	PageQueryData
+	Search string `json:"search,omitempty"`
+}
+
 type AccountGetQueryData struct {
 	AccountID string `json:"accountId"`
 }
@@ -243,9 +254,21 @@ type PermissionListResponseData struct {
 	Permissions []PermissionSummary `json:"permissions"`
 }
 
+// AuditListQueryData embeds PageQueryData for the same reason the analytics
+// list queries do: pagination is one shared shape, and Since/Until are
+// additive fields on this specific query. Both are pointers so "no bound"
+// stays distinguishable from a bound at the zero time.
+type AuditListQueryData struct {
+	PageQueryData
+	Since  *time.Time `json:"since,omitempty"`
+	Until  *time.Time `json:"until,omitempty"`
+	Search string     `json:"search,omitempty"`
+}
+
 type AuditListResponseData struct {
 	Events     []AuditEventSummary `json:"events"`
 	NextCursor string              `json:"nextCursor,omitempty"`
+	TotalCount int                 `json:"totalCount"`
 }
 
 // InviteCreateData creates an account with no password, identified only by
@@ -272,6 +295,33 @@ type InviteAcceptData struct {
 	InviteToken   string `json:"inviteToken"`
 	Password      string `json:"password"`
 	SourceAddress string `json:"sourceAddress"`
+}
+
+// AccountCreateData creates a staff account with a password the actor
+// chooses right away — no email infrastructure exists to relay a token (see
+// InviteCreateData), and building one is deliberately deferred; see
+// notes/vision/auth-and-admin-plan.md#account-creation-is-direct-not-invited.
+// Unlike an invite, the account is active from the moment it is created.
+type AccountCreateData struct {
+	Email          string   `json:"email"`
+	Name           string   `json:"name,omitempty"`
+	Password       string   `json:"password"`
+	RoleIDs        []string `json:"roleIds,omitempty"`
+	ActorAccountID string   `json:"actorAccountId"`
+	SourceAddress  string   `json:"sourceAddress"`
+}
+
+// AccountUpdateData changes an existing account's email and/or display name.
+// Role membership is managed separately via RoleAssignData/RoleRevokeData,
+// and there is deliberately nothing else editable through this path — kind,
+// isSuperAdmin and disabled each already have their own dedicated, audited
+// path.
+type AccountUpdateData struct {
+	AccountID      string `json:"accountId"`
+	Email          string `json:"email"`
+	Name           string `json:"name,omitempty"`
+	ActorAccountID string `json:"actorAccountId"`
+	SourceAddress  string `json:"sourceAddress"`
 }
 
 type AccountPermissionsQueryData struct {

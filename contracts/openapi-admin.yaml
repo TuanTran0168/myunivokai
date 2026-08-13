@@ -231,6 +231,35 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/worlds/{worldID}:
+    get:
+      summary: Read one projected world and its job history
+      description: >-
+        Returns the world together with every job that touched it, newest
+        first. The two travel in one response because they are read together:
+        fetching them separately would let the page show a world beside a job
+        list taken from an older read. A 404 covers both "never projected" and
+        "not a world id at all" — a projection is eventually consistent, so a
+        world that exists upstream but has not arrived here yet is legitimately
+        absent.
+      operationId: adminAnalyticsGetWorld
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - name: worldID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The world and its jobs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
   /api/admin/jobs:
     get:
       summary: Browse generation jobs and their failures
@@ -564,6 +593,30 @@ components:
           description: Absent on the last page.
         totalCount: { type: integer }
         pageSize: { type: integer }
+    WorldDetail:
+      type: object
+      additionalProperties: false
+      required: [world, jobs]
+      properties:
+        world:
+          allOf:
+            - $ref: "#/components/schemas/World"
+            - type: object
+              description: >-
+                The list row plus the two identifiers a table has no room for.
+                Both are already on the allow list — World carries sourceJobId
+                and Job carries profileId and dnaVersionId — so the detail view
+                exposes nothing new, it only shows them together.
+              properties:
+                profileId: { type: string, format: uuid }
+                dnaVersionId: { type: string, format: uuid }
+        jobs:
+          type: array
+          description: >-
+            Newest first, capped at 50. Joined on world_id rather than followed
+            from sourceJobId, because a world accumulates jobs after creation
+            and the source job is only the first of them.
+          items: { $ref: "#/components/schemas/Job" }
     Job:
       type: object
       additionalProperties: false
@@ -619,6 +672,14 @@ components:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
     Forbidden:
       description: Authenticated, but the account holds none of the required permissions
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: >-
+        No such record in the read model. On analytics routes this is not
+        necessarily a wrong id: the projection is eventually consistent, so a
+        record created moments ago may not have arrived yet.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }

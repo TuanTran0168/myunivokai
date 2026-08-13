@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
 )
@@ -50,8 +52,23 @@ func (handler *AdminAnalyticsHandler) ListWorlds(responseWriter http.ResponseWri
 		WorldStyle:    strings.TrimSpace(request.URL.Query().Get("worldStyle")),
 		Mood:          strings.TrimSpace(request.URL.Query().Get("mood")),
 		Published:     boolFromQuery(request, "published"),
+		Since:         timeFromQuery(request, "since"),
+		Until:         timeFromQuery(request, "until"),
+		Search:        searchFromQuery(request),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsWorldListQuerySubject, data)
+}
+
+// GetWorld relays one world by the id in the path. The id is passed through
+// without validation for the same reason the filters above are: this handler
+// is a relay, and analytics-service already has to decide what a valid world
+// id is because it owns the column. Checking here would add a second opinion
+// that can disagree with the first.
+func (handler *AdminAnalyticsHandler) GetWorld(responseWriter http.ResponseWriter, request *http.Request) {
+	data := contracts.AnalyticsWorldGetQueryData{
+		WorldID: strings.TrimSpace(chi.URLParam(request, "worldID")),
+	}
+	handler.relay(responseWriter, request, contracts.AnalyticsWorldGetQuerySubject, data)
 }
 
 func (handler *AdminAnalyticsHandler) ListJobs(responseWriter http.ResponseWriter, request *http.Request) {
@@ -60,6 +77,9 @@ func (handler *AdminAnalyticsHandler) ListJobs(responseWriter http.ResponseWrite
 		Family:        familyFromQuery(request),
 		Status:        contracts.JobStatus(strings.TrimSpace(request.URL.Query().Get("status"))),
 		ErrorCode:     strings.TrimSpace(request.URL.Query().Get("errorCode")),
+		Since:         timeFromQuery(request, "since"),
+		Until:         timeFromQuery(request, "until"),
+		Search:        searchFromQuery(request),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsJobListQuerySubject, data)
 }
@@ -107,6 +127,21 @@ func boolFromQuery(request *http.Request, name string) *bool {
 		return nil
 	}
 	parsed, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+// timeFromQuery returns nil for an absent or unparseable value, so "no
+// bound" stays distinguishable from a bound at the zero time — the same
+// reasoning as boolFromQuery above. Callers send RFC3339.
+func timeFromQuery(request *http.Request, name string) *time.Time {
+	rawValue := strings.TrimSpace(request.URL.Query().Get(name))
+	if rawValue == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, rawValue)
 	if err != nil {
 		return nil
 	}

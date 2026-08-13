@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -19,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { NAV_ITEMS } from "@/components/layout/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
-import { hasPermission, type AccountSummary } from "@/lib/session";
+import { hasPermission, readAccountCookie } from "@/lib/session";
 import { useLogout } from "@/hooks/use-logout";
 import { useSessionKeepAlive } from "@/hooks/use-session-keepalive";
 
@@ -35,8 +36,21 @@ function AccountAvatar({ email }: { email: string }) {
   );
 }
 
-export function AppSidebar({ account }: { account: AccountSummary | null }) {
+// Reads the account itself from the (non-httpOnly) account cookie rather
+// than receiving it as a prop from a server-rendered layout. The layout used
+// to do that with cookies(), but reading cookies() there marked the entire
+// dashboard route subtree dynamic, which defeated Link's static prefetch of
+// each route's loading.tsx — every navigation then waited on a live server
+// round trip before even the loading skeleton could appear. Deferring this
+// to a client effect means the very first render has no account (same as
+// what the server would have rendered anyway), and it fills in a moment
+// later — imperceptible next to the network round trip it replaces.
+export function AppSidebar() {
   const pathname = usePathname();
+  const [account, setAccount] = useState<ReturnType<typeof readAccountCookie>>(null);
+  useEffect(() => {
+    setAccount(readAccountCookie());
+  }, []);
   const visibleNavItems = NAV_ITEMS.filter((item) => hasPermission(account, item.permission));
   const logout = useLogout();
   const { isMobile, setOpenMobile } = useSidebar();

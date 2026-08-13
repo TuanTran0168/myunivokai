@@ -19,10 +19,11 @@ const (
 	UniverseWorldChangedEventSubject = "myunivokai.events.universe.world.changed.v1"
 	NatureWorldChangedEventSubject   = "myunivokai.events.nature.world.changed.v1"
 
-	// The four analytics query subjects need no gateway ACL change either —
+	// The analytics query subjects need no gateway ACL change either —
 	// the gateway may already publish "myunivokai.queries.>".
 	AnalyticsOverviewGetQuerySubject   = "myunivokai.queries.analytics.overview.get.v1"
 	AnalyticsWorldListQuerySubject     = "myunivokai.queries.analytics.world.list.v1"
+	AnalyticsWorldGetQuerySubject      = "myunivokai.queries.analytics.world.get.v1"
 	AnalyticsJobListQuerySubject       = "myunivokai.queries.analytics.job.list.v1"
 	AnalyticsTimeseriesGetQuerySubject = "myunivokai.queries.analytics.timeseries.get.v1"
 
@@ -179,7 +180,9 @@ type WorldProjectionSummary struct {
 // AnalyticsWorldListQueryData embeds PageQueryData for the same reason the
 // auth queries do: pagination is one shared shape and filters are additive
 // fields on the specific query. Published is a pointer so "any" (nil) stays
-// distinguishable from "explicitly unpublished" (false).
+// distinguishable from "explicitly unpublished" (false). Since/Until bound
+// WorldCreatedAt and are pointers for the same "no bound" reason. Search
+// matches Nickname — the one free-text field on the data boundary.
 type AnalyticsWorldListQueryData struct {
 	PageQueryData
 	Family     WorldFamily `json:"family,omitempty"`
@@ -187,6 +190,9 @@ type AnalyticsWorldListQueryData struct {
 	WorldStyle string      `json:"worldStyle,omitempty"`
 	Mood       string      `json:"mood,omitempty"`
 	Published  *bool       `json:"published,omitempty"`
+	Since      *time.Time  `json:"since,omitempty"`
+	Until      *time.Time  `json:"until,omitempty"`
+	Search     string      `json:"search,omitempty"`
 }
 
 type AnalyticsWorldListResponseData struct {
@@ -194,6 +200,34 @@ type AnalyticsWorldListResponseData struct {
 	NextCursor string                   `json:"nextCursor,omitempty"`
 	TotalCount int                      `json:"totalCount"`
 	PageSize   int                      `json:"pageSize"`
+}
+
+// AnalyticsWorldGetQueryData asks for one world. There is no family field
+// because WorldID is already unique across families — world_projections keys
+// on it alone, so asking for a family too would let a caller construct a
+// mismatched pair that can only ever answer "not found".
+type AnalyticsWorldGetQueryData struct {
+	WorldID string `json:"worldId"`
+}
+
+// WorldProjectionDetail is WorldProjectionSummary plus the two identifiers a
+// list has no room for. Both already cross the data boundary — the summary
+// carries SourceJobID and JobProjectionSummary carries ProfileID and
+// DNAVersionID — so this exposes nothing new, it only puts them where an
+// operator tracing one world can see them together.
+type WorldProjectionDetail struct {
+	WorldProjectionSummary
+	ProfileID    string `json:"profileId"`
+	DNAVersionID string `json:"dnaVersionId"`
+}
+
+// AnalyticsWorldGetResponseData answers with the world and every job that
+// produced or changed it, newest first. Jobs are joined on world_id rather
+// than followed from SourceJobID because a world accumulates jobs after
+// creation, and the source job is only the first of them.
+type AnalyticsWorldGetResponseData struct {
+	World WorldProjectionDetail  `json:"world"`
+	Jobs  []JobProjectionSummary `json:"jobs"`
 }
 
 // JobProjectionSummary is one row of the admin jobs table. DurationMs is nil
@@ -213,11 +247,17 @@ type JobProjectionSummary struct {
 	DurationMs   *int        `json:"durationMs,omitempty"`
 }
 
+// Since/Until bound CreatedAt for the same "no bound" reason Published is a
+// pointer on the world list query above. Search matches JobID or
+// ErrorMessage — there is no other free-text column on job_projections.
 type AnalyticsJobListQueryData struct {
 	PageQueryData
 	Family    WorldFamily `json:"family,omitempty"`
 	Status    JobStatus   `json:"status,omitempty"`
 	ErrorCode string      `json:"errorCode,omitempty"`
+	Since     *time.Time  `json:"since,omitempty"`
+	Until     *time.Time  `json:"until,omitempty"`
+	Search    string      `json:"search,omitempty"`
 }
 
 type AnalyticsJobListResponseData struct {

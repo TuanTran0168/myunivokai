@@ -100,6 +100,7 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 	queryBindings := []queryBinding{
 		{subject: contracts.AnalyticsOverviewGetQuerySubject, handler: runtime.natsHandler.HandleOverviewQuery},
 		{subject: contracts.AnalyticsWorldListQuerySubject, handler: runtime.natsHandler.HandleWorldListQuery},
+		{subject: contracts.AnalyticsWorldGetQuerySubject, handler: runtime.natsHandler.HandleWorldGetQuery},
 		{subject: contracts.AnalyticsJobListQuerySubject, handler: runtime.natsHandler.HandleJobListQuery},
 		{subject: contracts.AnalyticsTimeseriesGetQuerySubject, handler: runtime.natsHandler.HandleTimeseriesQuery},
 		{subject: contracts.AnalyticsServiceStartListQuerySubject, handler: runtime.natsHandler.HandleServiceStartListQuery},

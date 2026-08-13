@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,24 +19,38 @@ func (store *MemoryStore) RecordAuditEvent(_ context.Context, event AuditEvent) 
 }
 
 // ListAuditEvents mirrors PostgresStore's occurred_at DESC, id DESC keyset
-// order (cursor.go).
-func (store *MemoryStore) ListAuditEvents(_ context.Context, cursor string, pageSize int) ([]AuditEvent, string, error) {
+// order (cursor.go). Since/Until/Search are applied before the cursor walk,
+// so TotalCount reflects the filtered set, not every event ever recorded.
+func (store *MemoryStore) ListAuditEvents(_ context.Context, cursor string, pageSize int, since, until *time.Time, search string) ([]AuditEvent, string, int, error) {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	all := make([]AuditEvent, len(store.auditEvents))
-	copy(all, store.auditEvents)
+	needle := strings.ToLower(strings.TrimSpace(search))
+	all := make([]AuditEvent, 0, len(store.auditEvents))
+	for _, event := range store.auditEvents {
+		if since != nil && event.OccurredAt.Before(*since) {
+			continue
+		}
+		if until != nil && event.OccurredAt.After(*until) {
+			continue
+		}
+		if needle != "" && !strings.Contains(strings.ToLower(event.Action), needle) && !strings.Contains(strings.ToLower(event.Target), needle) {
+			continue
+		}
+		all = append(all, event)
+	}
 	sort.Slice(all, func(i, j int) bool {
 		if !all[i].OccurredAt.Equal(all[j].OccurredAt) {
 			return all[i].OccurredAt.After(all[j].OccurredAt)
 		}
 		return all[i].ID > all[j].ID
 	})
+	totalCount := len(all)
 
 	startIndex := 0
 	if cursor != "" {
 		cursorTime, cursorID, err := decodeCursor(cursor)
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 		for index, event := range all {
 			if event.OccurredAt.Before(cursorTime) || (event.OccurredAt.Equal(cursorTime) && event.ID < cursorID) {
@@ -53,7 +68,7 @@ func (store *MemoryStore) ListAuditEvents(_ context.Context, cursor string, page
 		nextCursor = encodeCursor(last.OccurredAt, last.ID)
 		remaining = remaining[:pageSize]
 	}
-	return remaining, nextCursor, nil
+	return remaining, nextCursor, totalCount, nil
 }
 
 // AuditEvents returns a snapshot of every recorded event, for tests that

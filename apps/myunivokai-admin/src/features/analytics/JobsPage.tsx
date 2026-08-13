@@ -3,19 +3,17 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ListChecks } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterSelect } from "@/components/ui/filter-select";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { SearchInput } from "@/components/ui/search-input";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
-import { FilterSelect } from "./DashboardPage";
-import { formatDateTime, formatDuration } from "./format";
-import type { JobListFilters, JobProjection, JobStatus } from "./types";
-
-const TABLE_HEADERS = ["Job", "Family", "Status", "Duration", "Error", "Started", "Finished"];
+import { JobsTable, jobTableHeaders } from "./components/JobsTable";
+import type { JobListFilters } from "./types";
 
 const STATUS_OPTIONS = [
   { label: "Any status", value: "" },
@@ -24,6 +22,8 @@ const STATUS_OPTIONS = [
   { label: "Completed", value: "completed" },
   { label: "Failed", value: "failed" }
 ];
+
+const TABLE_HEADERS = jobTableHeaders(true);
 
 export function JobsPage() {
   const [filters, setFilters] = useState<JobListFilters>({ family: "", status: "" });
@@ -51,6 +51,11 @@ export function JobsPage() {
         description="Generation jobs across dna, universe and nature — what failed, why, and how long it took."
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filters.search ?? ""}
+              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+              placeholder="Search job id or error…"
+            />
             <FilterSelect
               label="Family"
               value={filters.family ?? ""}
@@ -66,6 +71,12 @@ export function JobsPage() {
               value={filters.status ?? ""}
               onChange={(value) => setFilters((current) => ({ ...current, status: value as JobListFilters["status"] }))}
               options={STATUS_OPTIONS}
+            />
+            <DateRangeFilter
+              since={filters.since ?? ""}
+              until={filters.until ?? ""}
+              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
             />
           </div>
         }
@@ -88,62 +99,7 @@ export function JobsPage() {
             />
           ) : (
             <>
-              <div className="hidden overflow-x-auto lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {TABLE_HEADERS.map((header) => (
-                        <TableHead key={header}>{header}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {jobs.map((job) => (
-                      <TableRow key={job.jobId}>
-                        <TableCell className="font-mono text-xs">{job.jobId}</TableCell>
-                        <TableCell>
-                          {job.family ? (
-                            <Badge variant="outline" className="capitalize">
-                              {job.family}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <JobStatusBadge status={job.status} />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">{formatDuration(job.durationMs)}</TableCell>
-                        <TableCell className="max-w-[18rem]">
-                          {job.errorCode ? (
-                            <div className="min-w-0">
-                              <p className="font-mono text-xs text-destructive">{job.errorCode}</p>
-                              {job.errorMessage ? (
-                                <p className="truncate text-xs text-muted-foreground">{job.errorMessage}</p>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                          {formatDateTime(job.createdAt)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                          {formatDateTime(job.completedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex flex-col gap-3 lg:hidden">
-                {jobs.map((job) => (
-                  <JobCard key={job.jobId} job={job} />
-                ))}
-              </div>
-
+              <JobsTable jobs={jobs} />
               <CursorPagination
                 pagination={pagination}
                 nextCursor={jobsQuery.data?.nextCursor}
@@ -155,41 +111,6 @@ export function JobsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function JobStatusBadge({ status }: { status: JobStatus }) {
-  const variant = status === "failed" ? "destructive" : status === "completed" ? "outline" : "secondary";
-  return (
-    <Badge variant={variant} className="capitalize">
-      {status}
-    </Badge>
-  );
-}
-
-function JobCard({ job }: { job: JobProjection }) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-mono text-xs">{job.jobId}</p>
-        <JobStatusBadge status={job.status} />
-      </div>
-      {job.errorCode ? (
-        <p className="mt-1.5 font-mono text-xs text-destructive">
-          {job.errorCode}
-          {job.errorMessage ? <span className="ml-1 text-muted-foreground">{job.errorMessage}</span> : null}
-        </p>
-      ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {job.family ? (
-          <Badge variant="outline" className="capitalize">
-            {job.family}
-          </Badge>
-        ) : null}
-        <Badge variant="ghost">{formatDuration(job.durationMs)}</Badge>
-      </div>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">{formatDateTime(job.createdAt)}</p>
     </div>
   );
 }

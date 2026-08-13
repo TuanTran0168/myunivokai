@@ -19,6 +19,7 @@ export type AccountKind = "staff" | "end_user";
 export interface AccountSummary {
   accountId: string;
   email: string;
+  name?: string;
   kind: AccountKind;
   roles: string[];
   permissions: string[];
@@ -71,6 +72,19 @@ export function decodeAccountCookieValue(rawValue: string): AccountSummary | nul
   } catch {
     return null;
   }
+}
+
+// Reads the account-summary cookie straight from document.cookie, for client
+// components that need it without a server component reading cookies() on
+// their behalf — see (dashboard)/layout.tsx's comment on why that layout
+// deliberately stopped doing that. Safe to call during SSR (returns null,
+// same as "not logged in yet") since `document` does not exist there.
+export function readAccountCookie(): AccountSummary | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const match = document.cookie.match(new RegExp(`(?:^|; )${ADMIN_ACCOUNT_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeAccountCookieValue(match[1]) : null;
 }
 
 export function hasPermission(account: AccountSummary | null, code: PermissionCode): boolean {

@@ -42,6 +42,67 @@ func TestAuthService_InviteAccount_CreatesAccountWithRolesAndReturnsToken(t *tes
 	}
 }
 
+func TestAuthService_CreateAccount_CreatesAnActiveAccountWithRoles(t *testing.T) {
+	authService, store, _ := newTestAuthService(t)
+	role, err := store.CreateRole(context.Background(), "analyst", "reads charts", contracts.AccountAudienceAdmin, []string{string(contracts.PermissionChartRead)})
+	if err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+	summary, err := authService.CreateAccount(context.Background(), contracts.AccountCreateData{
+		Email: "direct-staff@example.com", Password: "a-strong-new-password-1", RoleIDs: []string{role.ID}, ActorAccountID: "actor-1", SourceAddress: "203.0.113.1",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	if summary.AccountID == "" || summary.Disabled || summary.ForcePasswordChange {
+		t.Fatalf("expected a newly created, active, non-force-change account: %+v", summary)
+	}
+	if len(summary.Roles) != 1 || summary.Roles[0] != "analyst" {
+		t.Fatalf("expected the created account to already hold the analyst role, got %v", summary.Roles)
+	}
+	// It must be usable immediately, with no accept-invite step.
+	if _, err := authService.Login(context.Background(), contracts.LoginData{Email: "direct-staff@example.com", Password: "a-strong-new-password-1"}, "203.0.113.1"); err != nil {
+		t.Fatalf("expected the created account to log in immediately: %v", err)
+	}
+}
+
+func TestAuthService_CreateAccount_RejectsAShortPassword(t *testing.T) {
+	authService, _, _ := newTestAuthService(t)
+	if _, err := authService.CreateAccount(context.Background(), contracts.AccountCreateData{
+		Email: "direct-staff@example.com", Password: "too-short",
+	}); !errors.Is(err, ErrPasswordTooShort) {
+		t.Fatalf("expected ErrPasswordTooShort, got %v", err)
+	}
+}
+
+func TestAuthService_CreateAccount_RejectsADuplicateEmail(t *testing.T) {
+	authService, _, _ := newTestAuthService(t)
+	if _, err := authService.CreateAccount(context.Background(), contracts.AccountCreateData{
+		Email: "direct-staff@example.com", Password: "a-strong-new-password-1",
+	}); err != nil {
+		t.Fatalf("create first account: %v", err)
+	}
+	if _, err := authService.CreateAccount(context.Background(), contracts.AccountCreateData{
+		Email: "direct-staff@example.com", Password: "a-different-password-2",
+	}); !errors.Is(err, repositories.ErrConflict) {
+		t.Fatalf("expected ErrConflict for a duplicate email, got %v", err)
+	}
+}
+
+func TestAuthService_UpdateAccount_ChangesEmail(t *testing.T) {
+	authService, store, _ := newTestAuthService(t)
+	account := createTestAccount(t, authService, store, "old-email@example.com", "a-strong-new-password-1")
+	summary, err := authService.UpdateAccount(context.Background(), contracts.AccountUpdateData{
+		AccountID: account.ID, Email: "new-email@example.com", ActorAccountID: "actor-1", SourceAddress: "203.0.113.1",
+	})
+	if err != nil {
+		t.Fatalf("update account: %v", err)
+	}
+	if summary.Email != "new-email@example.com" {
+		t.Fatalf("expected the email to change, got %q", summary.Email)
+	}
+}
+
 func TestAuthService_AcceptInvite_SetsPasswordAndLogsIn(t *testing.T) {
 	authService, _, _ := newTestAuthService(t)
 	invite, err := authService.InviteAccount(context.Background(), contracts.InviteCreateData{Email: "new-staff@example.com", ActorAccountID: "actor-1", SourceAddress: "203.0.113.1"})

@@ -71,6 +71,8 @@ func (runtime *Runtime) Run(_ context.Context) error {
 		{subject: contracts.AuthAccountPermissionsQuerySubject, handler: runtime.natsHandler.HandleAccountPermissionsQuery},
 		{subject: contracts.AuthAccountListQuerySubject, handler: runtime.natsHandler.HandleAccountListQuery},
 		{subject: contracts.AuthAccountGetQuerySubject, handler: runtime.natsHandler.HandleAccountGetQuery},
+		{subject: contracts.AuthAccountCreateQuerySubject, handler: runtime.natsHandler.HandleAccountCreateQuery},
+		{subject: contracts.AuthAccountUpdateQuerySubject, handler: runtime.natsHandler.HandleAccountUpdateQuery},
 		{subject: contracts.AuthRoleListQuerySubject, handler: runtime.natsHandler.HandleRoleListQuery},
 		{subject: contracts.AuthRoleCreateQuerySubject, handler: runtime.natsHandler.HandleRoleCreateQuery},
 		{subject: contracts.AuthRoleUpdateQuerySubject, handler: runtime.natsHandler.HandleRoleUpdateQuery},

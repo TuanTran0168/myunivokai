@@ -32,7 +32,13 @@ func NewAdminAuditHandler(transport *RPCTransport) *AdminAuditHandler {
 }
 
 func (handler *AdminAuditHandler) List(responseWriter http.ResponseWriter, request *http.Request) {
-	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAuditListQuerySubject, pageQueryFromRequest(request))
+	data := contracts.AuditListQueryData{
+		PageQueryData: pageQueryFromRequest(request),
+		Since:         timeFromQuery(request, "since"),
+		Until:         timeFromQuery(request, "until"),
+		Search:        searchFromQuery(request),
+	}
+	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAuditListQuerySubject, data)
 	if !ok {
 		return
 	}

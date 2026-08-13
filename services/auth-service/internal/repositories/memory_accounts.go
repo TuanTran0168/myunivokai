@@ -21,6 +21,7 @@ func (store *MemoryStore) CreateAccount(_ context.Context, params CreateAccountP
 	account := Account{
 		ID:                  uuid.NewString(),
 		Email:               email,
+		Name:                params.Name,
 		PasswordHash:        params.PasswordHash,
 		Kind:                params.Kind,
 		IsSuperAdmin:        params.IsSuperAdmin,
@@ -31,6 +32,29 @@ func (store *MemoryStore) CreateAccount(_ context.Context, params CreateAccountP
 	}
 	store.accountsByID[account.ID] = account
 	store.accountIDByEmail[email] = account.ID
+	return account, nil
+}
+
+// UpdateAccount mirrors PostgresStore's UpdateAccount, including the
+// unique-email conflict PostgresStore gets for free from its column
+// constraint.
+func (store *MemoryStore) UpdateAccount(_ context.Context, accountID, email, name string) (Account, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	account, found := store.accountsByID[accountID]
+	if !found {
+		return Account{}, ErrNotFound
+	}
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if existingID, exists := store.accountIDByEmail[normalized]; exists && existingID != accountID {
+		return Account{}, ErrConflict
+	}
+	delete(store.accountIDByEmail, account.Email)
+	account.Email = normalized
+	account.Name = name
+	account.UpdatedAt = time.Now().UTC()
+	store.accountsByID[accountID] = account
+	store.accountIDByEmail[normalized] = accountID
 	return account, nil
 }
 
@@ -56,12 +80,17 @@ func (store *MemoryStore) GetAccountByID(_ context.Context, accountID string) (A
 
 // ListAccounts mirrors PostgresStore's created_at DESC, id DESC keyset order
 // (cursor.go) so tests exercise the same pagination behavior production
-// sees.
-func (store *MemoryStore) ListAccounts(_ context.Context, cursor string, pageSize int) ([]Account, string, error) {
+// sees. Search mirrors PostgresStore's case-insensitive email-or-name
+// substring match.
+func (store *MemoryStore) ListAccounts(_ context.Context, cursor string, pageSize int, search string) ([]Account, string, error) {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
+	needle := strings.ToLower(strings.TrimSpace(search))
 	all := make([]Account, 0, len(store.accountsByID))
 	for _, account := range store.accountsByID {
+		if needle != "" && !strings.Contains(strings.ToLower(account.Email), needle) && !strings.Contains(strings.ToLower(account.Name), needle) {
+			continue
+		}
 		all = append(all, account)
 	}
 	sort.Slice(all, func(i, j int) bool {

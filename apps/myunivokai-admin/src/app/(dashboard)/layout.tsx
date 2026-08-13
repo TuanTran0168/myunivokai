@@ -1,24 +1,22 @@
 import type { ReactNode } from "react";
-import { cookies } from "next/headers";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { BreadcrumbHeader } from "@/components/layout/breadcrumb-header";
 import { ContentTransition } from "@/components/layout/content-transition";
-import { ADMIN_ACCOUNT_COOKIE_NAME, decodeAccountCookieValue } from "@/lib/session";
 
-export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const cookieStore = await cookies();
-  const accountCookie = cookieStore.get(ADMIN_ACCOUNT_COOKIE_NAME)?.value;
-  // A missing/undecodable account cookie here means middleware let the
-  // request through on a fresh access token whose account cache has not
-  // been populated yet (e.g. immediately post-login, before this app ever
-  // called refresh) — the nav simply renders with nothing visible rather
-  // than this layout re-deciding auth, which is middleware's job alone.
-  const account = accountCookie ? decodeAccountCookieValue(accountCookie) : null;
-
+// Deliberately reads no cookies()/headers() here (it used to, for the
+// account summary — AppSidebar now reads that cookie itself, client-side).
+// Any dynamic API call in a layout marks its whole route subtree dynamic,
+// which stops Next from prefetching a route's loading.tsx shell ahead of a
+// click — every navigation then has to wait on a live server round trip
+// before even the loading skeleton can appear, which read as the page
+// waiting on its data fetch before it would move at all. Keeping this
+// layout static is what lets that prefetch, and therefore an instant-feeling
+// click, actually happen.
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
-      <AppSidebar account={account} />
+      <AppSidebar />
       <SidebarInset>
         <header className="glass-panel relative sticky top-0 z-10 flex h-14 items-center gap-3 overflow-hidden px-4">
           <div className="header-glow" aria-hidden="true" />
@@ -33,4 +31,3 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     </SidebarProvider>
   );
 }
-

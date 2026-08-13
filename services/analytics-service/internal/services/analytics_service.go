@@ -41,9 +41,19 @@ func (service *AnalyticsService) ListWorlds(ctx context.Context, query contracts
 		WorldStyle: query.WorldStyle,
 		Mood:       query.Mood,
 		Published:  query.Published,
+		Since:      query.Since,
+		Until:      query.Until,
+		Search:     query.Search,
 		Cursor:     query.Cursor,
 		PageSize:   contracts.NormalizePageSize(query.PageSize),
 	})
+}
+
+// GetWorld reads one world. The id is passed through untouched: validating it
+// here would duplicate a check the store already has to make, and the store's
+// version is the one that cannot drift from the column type.
+func (service *AnalyticsService) GetWorld(ctx context.Context, query contracts.AnalyticsWorldGetQueryData) (contracts.AnalyticsWorldGetResponseData, error) {
+	return service.store.GetWorld(ctx, query.WorldID)
 }
 
 func (service *AnalyticsService) ListJobs(ctx context.Context, query contracts.AnalyticsJobListQueryData) (contracts.AnalyticsJobListResponseData, error) {
@@ -51,6 +61,9 @@ func (service *AnalyticsService) ListJobs(ctx context.Context, query contracts.A
 		Family:    normalizeFamily(query.Family),
 		Status:    normalizeStatus(query.Status),
 		ErrorCode: query.ErrorCode,
+		Since:     query.Since,
+		Until:     query.Until,
+		Search:    query.Search,
 		Cursor:    query.Cursor,
 		PageSize:  contracts.NormalizePageSize(query.PageSize),
 	})

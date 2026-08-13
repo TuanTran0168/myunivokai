@@ -1,19 +1,23 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { AdminApiError } from "@/lib/admin-http";
 import { rolesApi } from "@/features/roles/api";
 import { accountsApi } from "./api";
+import { AccountIdentityCard } from "./AccountIdentityCard";
+import { EditAccountDialog } from "./EditAccountDialog";
 
 export function AccountDetailPage({ params }: { params: Promise<{ accountId: string }> }) {
   const { accountId } = use(params);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const queryClient = useQueryClient();
   const accountQuery = useQuery({ queryKey: ["accounts", accountId], queryFn: () => accountsApi.get(accountId) });
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: rolesApi.list });
@@ -32,12 +36,22 @@ export function AccountDetailPage({ params }: { params: Promise<{ accountId: str
   const account = accountQuery.data;
 
   return (
-    <div>
+    <div className="flex flex-col gap-4">
       <PageHeader
-        title={account?.email ?? "…"}
-        description={account?.isSuperAdmin ? undefined : "Manage this account's roles."}
-        action={account?.isSuperAdmin ? <Badge variant="outline">super admin</Badge> : undefined}
+        title={account?.name || account?.email || "…"}
+        description="Account details and role assignment."
+        action={
+          account ? (
+            <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
+              <Pencil />
+              Edit account
+            </Button>
+          ) : undefined
+        }
       />
+      {account ? <AccountIdentityCard account={account} /> : null}
+      {account ? <EditAccountDialog account={account} open={isEditOpen} onOpenChange={setIsEditOpen} /> : null}
+      <h2 className="text-sm font-medium text-muted-foreground">Roles</h2>
       <Card>
         <CardContent className="flex flex-col gap-3 pt-2">
           {rolesQuery.isLoading ? (

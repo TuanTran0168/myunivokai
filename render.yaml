@@ -301,10 +301,14 @@ services:
   # provider keys — see notes/vision/analytics-service-plan.md.
   #
   # BEFORE MERGING THIS TO main: create the Neon database and fill
-  # DATABASE_URL / DATABASE_DIRECT_URL / NATS_USERNAME / NATS_PASSWORD in the
-  # Render dashboard, and add the analytics user block from
-  # infra/nats/nats-server.conf to the managed NATS ACL. Without them the
-  # service crash-loops on first boot. This is also the sixth free web
+  # DATABASE_URL / DATABASE_DIRECT_URL in the Render dashboard, and link this
+  # service to the myunivokai-shared-env group (NATS_URL + the nats.creds
+  # secret file) the same way every other service already is. NATS_USERNAME /
+  # NATS_PASSWORD stay unset — production is one shared Synadia user with no
+  # per-service allow-list; infra/nats/nats-server.conf's per-user ACL blocks
+  # are LOCAL ONLY (see that file's own top comment and
+  # notes/ops/production-deployment-guide.md §1). Without the database vars
+  # the service crash-loops on first boot. This is also the sixth free web
   # service on the account — verify the instance-hour budget first. The
   # runbook is services/analytics-service/README.md.
   - type: web

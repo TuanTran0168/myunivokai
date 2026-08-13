@@ -1,34 +1,71 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Loader2, ScrollText } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ScrollText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { SearchInput } from "@/components/ui/search-input";
+import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { auditApi } from "./api";
+import type { AuditListFilters } from "./types";
+
+const TABLE_HEADERS = ["When", "Actor", "Action", "Target", "Result"];
 
 export function AuditPage() {
-  const auditQuery = useInfiniteQuery({
-    queryKey: ["audit"],
-    queryFn: ({ pageParam }: { pageParam?: string }) => auditApi.list(pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor
+  const [filters, setFilters] = useState<AuditListFilters>({});
+  const pagination = useCursorPagination();
+
+  // Same reason as the jobs/worlds tables: a filter change redefines row 1,
+  // so an already-taken cursor points into a different result set.
+  const { reset } = pagination;
+  useEffect(() => {
+    reset();
+  }, [filters, reset]);
+
+  const auditQuery = useQuery({
+    queryKey: ["audit", filters, pagination.pageSize, pagination.cursor],
+    queryFn: () => auditApi.list(filters, pagination.pageSize, pagination.cursor),
+    placeholderData: keepPreviousData
   });
 
-  const events = auditQuery.data?.pages.flatMap((page) => page.events) ?? [];
+  const events = auditQuery.data?.events ?? [];
 
   return (
     <div>
-      <PageHeader title="Audit log" description="Every login, failed login, role change and admin mutation, newest first." />
+      <PageHeader
+        title="Audit log"
+        description="Every login, failed login, role change and admin mutation, newest first."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filters.search ?? ""}
+              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+              placeholder="Search action or target…"
+            />
+            <DateRangeFilter
+              since={filters.since ?? ""}
+              until={filters.until ?? ""}
+              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
+            />
+          </div>
+        }
+      />
       <Card>
         <CardContent className="pt-2">
           {auditQuery.isLoading ? (
-            <TableSkeleton columnCount={5} headers={["When", "Actor", "Action", "Target", "Result"]} />
+            <TableSkeleton columnCount={5} headers={TABLE_HEADERS} />
           ) : events.length === 0 ? (
-            <EmptyState icon={ScrollText} title="No events yet" description="Audit events will appear here as they occur." />
+            <EmptyState
+              icon={ScrollText}
+              title="No events match"
+              description="Audit events appear here as they occur. Try clearing the date filter."
+            />
           ) : (
             <>
               {/* Desktop table */}
@@ -80,25 +117,13 @@ export function AuditPage() {
                 ))}
               </div>
 
-              {auditQuery.hasNextPage ? (
-                <div className="flex justify-center pt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => auditQuery.fetchNextPage()}
-                    disabled={auditQuery.isFetchingNextPage}
-                  >
-                    {auditQuery.isFetchingNextPage ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" />
-                        Loading…
-                      </>
-                    ) : (
-                      "Load more"
-                    )}
-                  </Button>
-                </div>
-              ) : null}
+              <CursorPagination
+                pagination={pagination}
+                nextCursor={auditQuery.data?.nextCursor}
+                loadedCount={events.length}
+                totalCount={auditQuery.data?.totalCount ?? 0}
+                isFetching={auditQuery.isFetching}
+              />
             </>
           )}
         </CardContent>
@@ -106,4 +131,3 @@ export function AuditPage() {
     </div>
   );
 }
-
