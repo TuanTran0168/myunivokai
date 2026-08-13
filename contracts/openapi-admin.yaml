@@ -221,6 +221,25 @@ paths:
           required: false
           description: Omit for every world; true or false to filter.
           schema: { type: boolean }
+        - name: rareFeature
+          in: query
+          required: false
+          description: >-
+            Selects the worlds whose stored rarity draw came in under this
+            feature's CURRENT probability — the same predicate the overview's
+            rarity panel counts with, so a count and the list behind it can
+            never disagree. An unrecognised key matches nothing rather than
+            being ignored.
+          schema:
+            type: string
+            enum:
+              [
+                meteor-shower,
+                binary-sun,
+                black-hole,
+                forest-special-bird,
+                forest-special-animal,
+              ]
       responses:
         "200":
           description: One page of worlds
@@ -875,6 +894,7 @@ components:
           comparison,
           generationFunnel,
           hourOfDay,
+          rarity,
         ]
       properties:
         days: { type: integer }
@@ -929,6 +949,70 @@ components:
           properties:
             hour: { type: integer, minimum: 0, maximum: 23 }
             jobCount: { type: integer }
+        rarity: { $ref: "#/components/schemas/RarityReport" }
+    RarityReport:
+      type: object
+      additionalProperties: false
+      description: >-
+        How often each rare feature ACTUALLY came up, measured by replaying the
+        renderer's own seeded lottery over the seeds of real worlds. A rare
+        feature is never stored — it is re-derived on every render from the
+        selected variant's seed — so this is the only way the question has an
+        answer at all, and it is deliberately not a read of the configured
+        probability.
+      required: [features, unmeasuredWorlds]
+      properties:
+        unmeasuredWorlds:
+          type: integer
+          description: >-
+            Worlds in the window carrying no variant seed, and so in no
+            denominator below. Stated rather than hidden: these are not
+            evidence of a low rate, they are worlds the lottery cannot be
+            replayed for.
+        features:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              [
+                key,
+                label,
+                family,
+                configuredPercent,
+                eligibleWorlds,
+                observedCount,
+                observedPercent,
+              ]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              family: { type: string, enum: [universe, nature] }
+              configuredPercent:
+                type: number
+                description: What the generator is tuned to produce.
+              eligibleWorlds:
+                type: integer
+                description: >-
+                  The denominator — worlds of this feature's family, in the
+                  window, that carry a seed. Per-feature rather than global
+                  because a forest cannot roll a black hole.
+              observedCount: { type: integer }
+              observedPercent: { type: number }
+              species:
+                type: array
+                description: >-
+                  Absent for features with no varieties. Shares are against this
+                  feature's own hits, so they sum to 100%.
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [key, label, count, percentOfHits]
+                  properties:
+                    key: { type: string }
+                    label: { type: string }
+                    count: { type: integer }
+                    percentOfHits: { type: number }
     TimeseriesPoint:
       type: object
       additionalProperties: false

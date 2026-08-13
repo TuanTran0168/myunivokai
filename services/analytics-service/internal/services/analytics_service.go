@@ -36,16 +36,17 @@ func (service *AnalyticsService) Timeseries(ctx context.Context, query contracts
 
 func (service *AnalyticsService) ListWorlds(ctx context.Context, query contracts.AnalyticsWorldListQueryData) (contracts.AnalyticsWorldListResponseData, error) {
 	return service.store.ListWorlds(ctx, models.WorldListFilter{
-		Family:     normalizeFamily(query.Family),
-		Archetype:  query.Archetype,
-		WorldStyle: query.WorldStyle,
-		Mood:       query.Mood,
-		Published:  query.Published,
-		Since:      query.Since,
-		Until:      query.Until,
-		Search:     query.Search,
-		Cursor:     query.Cursor,
-		PageSize:   contracts.NormalizePageSize(query.PageSize),
+		Family:      normalizeFamily(query.Family),
+		Archetype:   query.Archetype,
+		WorldStyle:  query.WorldStyle,
+		Mood:        query.Mood,
+		Published:   query.Published,
+		Since:       query.Since,
+		Until:       query.Until,
+		Search:      query.Search,
+		RareFeature: query.RareFeature,
+		Cursor:      query.Cursor,
+		PageSize:    contracts.NormalizePageSize(query.PageSize),
 	})
 }
 

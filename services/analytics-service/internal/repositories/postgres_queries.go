@@ -60,7 +60,8 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 			COUNT(*) FILTER (WHERE world_created_at >= $2),
 			COALESCE(AVG(trait_creativity), 0), COALESCE(AVG(trait_discipline), 0),
 			COALESCE(AVG(trait_curiosity), 0), COALESCE(AVG(trait_energy), 0), COALESCE(AVG(trait_focus), 0),
-			MIN(world_created_at)
+			MIN(world_created_at),
+			COUNT(*) FILTER (WHERE world_created_at >= $2 AND variant_seed = '')
 		FROM world_projections
 		WHERE ($1 = '' OR family = $1)`, family, since)
 	batch.Queue(`SELECT w.family,
@@ -156,16 +157,52 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 		GROUP BY 1
 		ORDER BY 1`, family, since)
 
+	// The rare-feature lottery, measured. The catalogue travels in as two
+	// parallel arrays and is unnested into a join table rather than being
+	// interpolated into the SQL, so the probabilities are bound parameters and
+	// adding a feature never changes the statement text.
+	//
+	// The comparison is `roll < probability`, evaluated HERE against the
+	// catalogue's current value rather than baked in when the row was written.
+	// Re-tuning the black hole from 40% to 20% therefore re-derives the whole
+	// history on the next request instead of stranding every row.
+	featureKeys, featureProbabilities, featureSpeciesCounts := rarityCatalogueArrays()
+	batch.Queue(`SELECT r.feature_key,
+			COUNT(*),
+			COUNT(*) FILTER (WHERE r.roll < p.probability)
+		FROM world_rare_rolls r
+		JOIN world_projections w ON w.world_id = r.world_id
+		JOIN unnest($3::text[], $4::float8[]) AS p(feature_key, probability) ON p.feature_key = r.feature_key
+		WHERE ($1 = '' OR w.family = $1) AND w.world_created_at >= $2
+		GROUP BY r.feature_key`, family, since, featureKeys, featureProbabilities)
+
+	// Which variety the worlds that DID hit ended up with. Restricted to the
+	// hits for the same reason the share is expressed against them: a species
+	// breakdown over every world would report that 96% of forests got "no
+	// firebird", which is a fact about the first draw, not about the second.
+	batch.Queue(`SELECT r.feature_key,
+			FLOOR(r.species_roll * p.species_count)::INT,
+			COUNT(*)
+		FROM world_rare_rolls r
+		JOIN world_projections w ON w.world_id = r.world_id
+		JOIN unnest($3::text[], $4::float8[], $5::int[]) AS p(feature_key, probability, species_count)
+			ON p.feature_key = r.feature_key
+		WHERE ($1 = '' OR w.family = $1) AND w.world_created_at >= $2
+			AND r.species_roll IS NOT NULL AND p.species_count > 0 AND r.roll < p.probability
+		GROUP BY 1, 2
+		ORDER BY 1, 2`, family, since, featureKeys, featureProbabilities, featureSpeciesCounts)
+
 	results := store.pool.SendBatch(ctx, batch)
 	defer results.Close()
 
 	overview := contracts.AnalyticsOverviewResponseData{Days: days, GeneratedAt: time.Now().UTC()}
 	var averageCreativity, averageDiscipline, averageCuriosity, averageEnergy, averageFocus float64
 	var oldestWorld *time.Time
+	var unmeasuredWorlds int
 	if err := results.QueryRow().Scan(
 		&overview.TotalWorlds, &overview.TotalPublished, &overview.WorldsInWindow,
 		&averageCreativity, &averageDiscipline, &averageCuriosity, &averageEnergy, &averageFocus,
-		&oldestWorld,
+		&oldestWorld, &unmeasuredWorlds,
 	); err != nil {
 		return contracts.AnalyticsOverviewResponseData{}, err
 	}
@@ -246,7 +283,121 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 	}
 	overview.HourOfDay = hourly
 	overview.PeakHour = peakHour(hourly)
+
+	featureCounts, err := scanRarityFeatureCounts(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	speciesCounts, err := scanRaritySpeciesCounts(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.Rarity = rarityReport(filter.Family, unmeasuredWorlds, featureCounts, speciesCounts)
 	return overview, nil
+}
+
+// rarityCatalogueArrays flattens the catalogue into the parallel arrays the two
+// rarity queries unnest. Built from contracts.RarityCatalogue on every call so
+// a feature added there needs no change here at all.
+func rarityCatalogueArrays() (keys []string, probabilities []float64, speciesCounts []int32) {
+	for _, feature := range contracts.RarityCatalogue {
+		keys = append(keys, feature.Key)
+		probabilities = append(probabilities, feature.Probability)
+		speciesCounts = append(speciesCounts, int32(len(feature.Species)))
+	}
+	return keys, probabilities, speciesCounts
+}
+
+type rarityFeatureCount struct {
+	eligible int
+	observed int
+}
+
+func scanRarityFeatureCounts(results pgx.BatchResults) (map[string]rarityFeatureCount, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]rarityFeatureCount{}
+	for rows.Next() {
+		var key string
+		var count rarityFeatureCount
+		if err := rows.Scan(&key, &count.eligible, &count.observed); err != nil {
+			return nil, err
+		}
+		counts[key] = count
+	}
+	return counts, rows.Err()
+}
+
+// scanRaritySpeciesCounts keys on the feature and the species INDEX rather than
+// a species key, because the index is what the draw selects — resolving it to a
+// name is the catalogue's job, and doing it here would put the ordered list in
+// two places.
+func scanRaritySpeciesCounts(results pgx.BatchResults) (map[string]map[int]int, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]map[int]int{}
+	for rows.Next() {
+		var featureKey string
+		var speciesIndex, count int
+		if err := rows.Scan(&featureKey, &speciesIndex, &count); err != nil {
+			return nil, err
+		}
+		if counts[featureKey] == nil {
+			counts[featureKey] = map[int]int{}
+		}
+		counts[featureKey][speciesIndex] += count
+	}
+	return counts, rows.Err()
+}
+
+// rarityReport assembles the panel from the catalogue outwards rather than from
+// the query results inwards: a feature nothing has rolled yet must still appear,
+// with a zero and its denominator, or a reader would take its absence for a
+// feature that does not exist.
+func rarityReport(
+	family contracts.WorldFamily,
+	unmeasuredWorlds int,
+	featureCounts map[string]rarityFeatureCount,
+	speciesCounts map[string]map[int]int,
+) contracts.AnalyticsRarityReport {
+	report := contracts.AnalyticsRarityReport{
+		Features:         make([]contracts.AnalyticsRarityFeatureRate, 0, len(contracts.RarityCatalogue)),
+		UnmeasuredWorlds: unmeasuredWorlds,
+	}
+	for _, feature := range contracts.RarityCatalogue {
+		// A universe feature under a nature filter is not a zero — it is not
+		// applicable, and a row of zeroes reads as "we tried and found none".
+		if family != "" && feature.Family != family {
+			continue
+		}
+		counts := featureCounts[feature.Key]
+		rate := contracts.AnalyticsRarityFeatureRate{
+			Key:               feature.Key,
+			Label:             feature.Label,
+			Family:            feature.Family,
+			ConfiguredPercent: math.Round(feature.Probability*10000) / 100,
+			EligibleWorlds:    counts.eligible,
+			ObservedCount:     counts.observed,
+			ObservedPercent:   percentageOf(counts.observed, counts.eligible),
+		}
+		for index, species := range feature.Species {
+			count := speciesCounts[feature.Key][index]
+			rate.Species = append(rate.Species, contracts.AnalyticsRaritySpeciesShare{
+				Key:           species.Key,
+				Label:         species.Label,
+				Count:         count,
+				PercentOfHits: percentageOf(count, counts.observed),
+			})
+		}
+		report.Features = append(report.Features, rate)
+	}
+	return report
 }
 
 // newDelta is the one place a percentage change is computed, so that "vs
@@ -410,6 +561,24 @@ func (store *PostgresStore) ListWorlds(ctx context.Context, filter models.WorldL
 	if strings.TrimSpace(filter.Search) != "" {
 		arguments = append(arguments, "%"+strings.TrimSpace(filter.Search)+"%")
 		conditions = append(conditions, fmt.Sprintf("nickname ILIKE $%d", len(arguments)))
+	}
+	// "Show me the worlds behind that number." The predicate is the same
+	// `roll < probability` the rarity panel counts with, evaluated against the
+	// same catalogue value, so the list and the count can never disagree —
+	// which they would the moment one of them cached a resolved boolean.
+	//
+	// An unknown key matches nothing rather than being ignored. A filter the
+	// service silently drops returns a full, plausible list for a question
+	// nobody asked, and that is worse than an empty one.
+	if filter.RareFeature != "" {
+		feature, found := contracts.RarityFeatureByKey(filter.RareFeature)
+		if !found {
+			return contracts.AnalyticsWorldListResponseData{PageSize: pageSize, Worlds: []contracts.WorldProjectionSummary{}}, nil
+		}
+		arguments = append(arguments, feature.Key, feature.Probability)
+		conditions = append(conditions, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM world_rare_rolls r WHERE r.world_id = world_projections.world_id AND r.feature_key = $%d AND r.roll < $%d)`,
+			len(arguments)-1, len(arguments)))
 	}
 	countCondition := strings.Join(conditions, " AND ")
 

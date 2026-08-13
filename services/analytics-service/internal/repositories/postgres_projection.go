@@ -147,12 +147,12 @@ func upsertWorldProjection(ctx context.Context, transaction pgx.Tx, snapshot con
 	if err != nil {
 		return err
 	}
-	_, err = transaction.Exec(ctx, `INSERT INTO world_projections
+	commandTag, err := transaction.Exec(ctx, `INSERT INTO world_projections
 			(world_id, family, profile_id, dna_version_id, source_job_id, revision, nickname, role,
 			 archetype, scene_name, mood, world_style, favorite_colors,
 			 trait_creativity, trait_discipline, trait_curiosity, trait_energy, trait_focus,
-			 variant_count, selected_variant_no, is_published, published_at, world_created_at)
-		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+			 variant_count, selected_variant_no, variant_seed, is_published, published_at, world_created_at)
+		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 		ON CONFLICT (world_id) DO UPDATE SET
 			family = EXCLUDED.family,
 			profile_id = EXCLUDED.profile_id,
@@ -173,6 +173,7 @@ func upsertWorldProjection(ctx context.Context, transaction pgx.Tx, snapshot con
 			trait_focus = EXCLUDED.trait_focus,
 			variant_count = EXCLUDED.variant_count,
 			selected_variant_no = EXCLUDED.selected_variant_no,
+			variant_seed = EXCLUDED.variant_seed,
 			is_published = EXCLUDED.is_published,
 			published_at = EXCLUDED.published_at,
 			world_created_at = EXCLUDED.world_created_at,
@@ -183,8 +184,48 @@ func upsertWorldProjection(ctx context.Context, transaction pgx.Tx, snapshot con
 		snapshot.Mood, snapshot.WorldStyle, favoriteColors,
 		snapshot.TraitScores.Creativity, snapshot.TraitScores.Discipline, snapshot.TraitScores.Curiosity,
 		snapshot.TraitScores.Energy, snapshot.TraitScores.Focus,
-		snapshot.VariantCount, snapshot.SelectedVariantNo, snapshot.PublishedAt != nil, snapshot.PublishedAt,
+		snapshot.VariantCount, snapshot.SelectedVariantNo, snapshot.VariantSeed,
+		snapshot.PublishedAt != nil, snapshot.PublishedAt,
 		snapshot.WorldCreatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		// The stored projection is at the same revision or newer, so its rolls
+		// were derived from a seed at least as current as this one's. Rewriting
+		// them from an older snapshot would move a world's lottery backwards —
+		// the exact thing the revision guard above exists to prevent.
+		return nil
+	}
+	return replaceRareRolls(ctx, transaction, snapshot)
+}
+
+// replaceRareRolls stores what every lottery this world entered actually drew.
+//
+// Delete-then-insert rather than an upsert: selecting a different variant
+// changes the seed and therefore every draw, and a feature can leave the
+// catalogue. A row surviving from a previous seed would keep being counted as
+// this world's draw, and nothing would ever notice — it would simply be a
+// plausible number.
+//
+// The draws are computed here, at projection time, rather than at query time,
+// because the query needs to FILTER on them: the rarity panel's counts are
+// clickable, and "the worlds behind this number" has to be a keyset-paged SQL
+// predicate, not a slice of rows re-derived in Go after the fact.
+func replaceRareRolls(ctx context.Context, transaction pgx.Tx, snapshot contracts.WorldSnapshot) error {
+	if _, err := transaction.Exec(ctx, `DELETE FROM world_rare_rolls WHERE world_id = $1::uuid`, snapshot.WorldID); err != nil {
+		return err
+	}
+	// Empty for a world with no seed, which is every world projected before the
+	// seed crossed the data boundary. Those stay absent from this table rather
+	// than being written as zero draws, so the panel can count them as
+	// unmeasured instead of reporting them as misses.
+	for _, roll := range contracts.RarityRollsFor(snapshot.Family, snapshot.VariantSeed) {
+		if _, err := transaction.Exec(ctx, `INSERT INTO world_rare_rolls (world_id, feature_key, roll, species_roll)
+			VALUES ($1::uuid,$2,$3,$4)`, snapshot.WorldID, roll.Feature, roll.Roll, roll.SpeciesRoll); err != nil {
+			return err
+		}
+	}
+	return nil
 }

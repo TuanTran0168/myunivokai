@@ -124,5 +124,15 @@ func TestWorldChangedFixturesDecodeIntoTheSnapshotContract(t *testing.T) {
 		if snapshot.SelectedVariantNo < 1 || snapshot.SelectedVariantNo > snapshot.VariantCount {
 			t.Fatalf("%s: selectedVariantNo %d is outside 1..%d", fixturePath, snapshot.SelectedVariantNo, snapshot.VariantCount)
 		}
+		// The seed is what makes the rare-feature panel possible at all. A
+		// snapshot that carries one must produce a replayable lottery for its
+		// own family — the gap this catches is a producer that starts sending
+		// the field but sends the WORLD's seed, or a variant number, or an id.
+		if snapshot.VariantSeed == "" {
+			t.Fatalf("%s: no variantSeed — the rare-feature lottery cannot be replayed for this world", fixturePath)
+		}
+		if rolls := RarityRollsFor(snapshot.Family, snapshot.VariantSeed); len(rolls) == 0 {
+			t.Fatalf("%s: family %q has no lotteries to replay", fixturePath, snapshot.Family)
+		}
 	}
 }

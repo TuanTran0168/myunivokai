@@ -55,6 +55,10 @@ func (handler *AdminAnalyticsHandler) ListWorlds(responseWriter http.ResponseWri
 		Since:         timeFromQuery(request, "since"),
 		Until:         timeFromQuery(request, "until"),
 		Search:        searchFromQuery(request),
+		// Relayed unvalidated, like every other filter here: the gateway does
+		// not hold the rarity catalogue, and analytics-service already has to
+		// decide what an unknown key means (nothing matches).
+		RareFeature: strings.TrimSpace(request.URL.Query().Get("rareFeature")),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsWorldListQuerySubject, data)
 }

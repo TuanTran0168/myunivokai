@@ -120,3 +120,123 @@ func TestThePeakHourIsAbsentRatherThanMidnightWhenNothingWasSubmitted(t *testing
 		t.Errorf("peak hour = %+v, want hour 14 with 31 jobs", *peak)
 	}
 }
+
+// The rarity panel's arithmetic. Everything below is about the SHAPE of the
+// answer rather than the lottery itself — that the denominators are the right
+// ones, that a feature nobody has rolled still appears, and that a percentage
+// against nothing stays absent instead of becoming zero.
+
+func TestRarityReportKeepsAFeatureNobodyHasRolledYet(t *testing.T) {
+	// A feature missing from the query result is a feature no world has
+	// entered — a brand-new species, or an empty window. Dropping it would
+	// read as "this feature does not exist", which is a different claim from
+	// "nothing has rolled it".
+	report := rarityReport("", 0, map[string]rarityFeatureCount{}, map[string]map[int]int{})
+	if len(report.Features) != len(contracts.RarityCatalogue) {
+		t.Fatalf("report carries %d features, the catalogue has %d", len(report.Features), len(contracts.RarityCatalogue))
+	}
+	for _, feature := range report.Features {
+		if feature.EligibleWorlds != 0 || feature.ObservedCount != 0 {
+			t.Errorf("%s invented counts out of an empty result: %+v", feature.Key, feature)
+		}
+		if feature.ObservedPercent != 0 {
+			t.Errorf("%s reported %v%% against a denominator of zero", feature.Key, feature.ObservedPercent)
+		}
+		if feature.ConfiguredPercent <= 0 {
+			t.Errorf("%s lost its configured rate: %v", feature.Key, feature.ConfiguredPercent)
+		}
+	}
+}
+
+// 0.05 * 100 is 5.000000000000001 in float64. A card that renders the
+// configured rate straight from the wire would print that.
+func TestConfiguredPercentDoesNotLeakFloatNoise(t *testing.T) {
+	report := rarityReport("", 0, map[string]rarityFeatureCount{}, map[string]map[int]int{})
+	expected := map[string]float64{
+		"meteor-shower":         5,
+		"binary-sun":            3,
+		"black-hole":            40,
+		"forest-special-bird":   35,
+		"forest-special-animal": 40,
+	}
+	for _, feature := range report.Features {
+		if want, known := expected[feature.Key]; known && feature.ConfiguredPercent != want {
+			t.Errorf("%s configured percent = %v, want exactly %v", feature.Key, feature.ConfiguredPercent, want)
+		}
+	}
+}
+
+// A forest cannot roll a black hole. Listing it under a nature filter with a
+// zero would read as "we looked and found none", which is a measurement; the
+// truth is that the question does not apply.
+func TestRarityReportDropsFeaturesTheFilteredFamilyCannotRoll(t *testing.T) {
+	report := rarityReport(contracts.WorldFamilyNature, 0, map[string]rarityFeatureCount{}, map[string]map[int]int{})
+	for _, feature := range report.Features {
+		if feature.Family != contracts.WorldFamilyNature {
+			t.Errorf("a nature-filtered report carries %s, which belongs to %s", feature.Key, feature.Family)
+		}
+	}
+	if len(report.Features) == 0 {
+		t.Error("filtering to nature removed every feature")
+	}
+}
+
+// The species share is against the feature's HITS, not against every eligible
+// world. Dividing by the population would make three species that must account
+// for all of one lottery's hits sum to that lottery's own rate instead of 100%.
+func TestSpeciesSharesAreAgainstTheFeaturesOwnHits(t *testing.T) {
+	report := rarityReport(
+		contracts.WorldFamilyNature,
+		0,
+		map[string]rarityFeatureCount{"forest-special-bird": {eligible: 200, observed: 70}},
+		map[string]map[int]int{"forest-special-bird": {0: 35, 1: 21, 2: 14}},
+	)
+	var bird contracts.AnalyticsRarityFeatureRate
+	for _, feature := range report.Features {
+		if feature.Key == "forest-special-bird" {
+			bird = feature
+		}
+	}
+	if bird.ObservedPercent != 35 {
+		t.Fatalf("observed percent = %v, want 35 (70 of 200)", bird.ObservedPercent)
+	}
+	if len(bird.Species) != 3 {
+		t.Fatalf("species breakdown has %d entries, want 3", len(bird.Species))
+	}
+	var total float64
+	for _, species := range bird.Species {
+		total += species.PercentOfHits
+	}
+	if total != 100 {
+		t.Fatalf("species shares sum to %v%%, want 100 — they are shares of the hits, not of the population", total)
+	}
+	if bird.Species[0].Key != "firebird" || bird.Species[0].Count != 35 || bird.Species[0].PercentOfHits != 50 {
+		t.Fatalf("first species resolved wrong: %+v", bird.Species[0])
+	}
+}
+
+// Worlds with no seed are not misses. They are worlds whose lottery cannot be
+// replayed at all, and folding them into a denominator would report a rate that
+// falls as history grows.
+func TestUnmeasuredWorldsAreCountedSeparatelyFromMisses(t *testing.T) {
+	report := rarityReport(
+		contracts.WorldFamilyUniverse,
+		17,
+		map[string]rarityFeatureCount{"black-hole": {eligible: 40, observed: 16}},
+		map[string]map[int]int{},
+	)
+	if report.UnmeasuredWorlds != 17 {
+		t.Fatalf("unmeasuredWorlds = %d, want 17", report.UnmeasuredWorlds)
+	}
+	for _, feature := range report.Features {
+		if feature.Key != "black-hole" {
+			continue
+		}
+		if feature.EligibleWorlds != 40 {
+			t.Fatalf("eligible worlds = %d — the seedless worlds leaked into the denominator", feature.EligibleWorlds)
+		}
+		if feature.ObservedPercent != 40 {
+			t.Fatalf("observed percent = %v, want 40 (16 of 40)", feature.ObservedPercent)
+		}
+	}
+}

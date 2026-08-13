@@ -37,22 +37,22 @@ type worldSnapshotQuerier interface {
 // a projection of the row: quote, dna_snapshot, visual variant config and
 // share slugs are absent on purpose and must stay absent — see
 // notes/vision/analytics-service-plan.md#data-boundary.
-func newWorldSnapshot(world models.World, variantCount, selectedVariantNo int, publishedAt *time.Time) contracts.WorldSnapshot {
+func newWorldSnapshot(world models.World, variantCount, selectedVariantNo int, selectedVariantSeed string, publishedAt *time.Time) contracts.WorldSnapshot {
 	favoriteColors := world.VisualIntent.FavoriteColors
 	if favoriteColors == nil {
 		favoriteColors = []string{}
 	}
 	return contracts.WorldSnapshot{
-		WorldID:      world.ID,
-		Family:       snapshotFamily,
-		ProfileID:    world.ProfileID,
-		DNAVersionID: world.DNAVersionID,
-		SourceJobID:  world.SourceJobID,
-		Revision:     world.Revision,
-		Nickname:     world.Nickname,
-		Role:         world.Role,
-		Archetype:    world.Archetype,
-		SceneName:    world.SceneName,
+		WorldID:        world.ID,
+		Family:         snapshotFamily,
+		ProfileID:      world.ProfileID,
+		DNAVersionID:   world.DNAVersionID,
+		SourceJobID:    world.SourceJobID,
+		Revision:       world.Revision,
+		Nickname:       world.Nickname,
+		Role:           world.Role,
+		Archetype:      world.Archetype,
+		SceneName:      world.SceneName,
 		Mood:           world.VisualIntent.Mood,
 		WorldStyle:     world.VisualIntent.PreferredWorldStyle,
 		FavoriteColors: favoriteColors,
@@ -65,8 +65,12 @@ func newWorldSnapshot(world models.World, variantCount, selectedVariantNo int, p
 		},
 		VariantCount:      variantCount,
 		SelectedVariantNo: selectedVariantNo,
-		PublishedAt:       publishedAt,
-		WorldCreatedAt:    world.CreatedAt,
+		// The SELECTED variant's seed, not the world's first: it is what the
+		// renderer draws from, so it is what the rare-feature lottery has to be
+		// replayed against.
+		VariantSeed:    selectedVariantSeed,
+		PublishedAt:    publishedAt,
+		WorldCreatedAt: world.CreatedAt,
 	}
 }
 
@@ -91,10 +95,15 @@ func loadWorldSnapshot(ctx context.Context, querier worldSnapshotQuerier, worldI
 	var world models.World
 	var visualIntentJSON, dnaJSON []byte
 	var variantCount, selectedVariantNo int
+	var selectedVariantSeed string
 	var publishedAt *time.Time
+	// selected.seed rides along on the join that already resolves the selected
+	// variant. It is COALESCEd because the join is a LEFT one: a world whose
+	// selected_variant_id is somehow unset yields no row on that side, and a
+	// NULL here would fail the scan rather than produce a world with no seed.
 	err := querier.QueryRow(ctx, `SELECT w.id::text, w.source_job_id, w.profile_id::text, w.dna_version_id::text,
 			w.revision, w.nickname, COALESCE(w.role,''), w.archetype, w.scene_name, w.visual_intent, w.dna_snapshot,
-			COALESCE(counted.variant_count, 0), COALESCE(selected.variant_no, 0), shared.created_at, w.created_at
+			COALESCE(counted.variant_count, 0), COALESCE(selected.variant_no, 0), COALESCE(selected.seed, ''), shared.created_at, w.created_at
 		FROM worlds w
 		LEFT JOIN (SELECT world_id, COUNT(*) AS variant_count FROM world_variants GROUP BY world_id) counted ON counted.world_id = w.id
 		LEFT JOIN world_variants selected ON selected.id = w.selected_variant_id
@@ -102,7 +111,7 @@ func loadWorldSnapshot(ctx context.Context, querier worldSnapshotQuerier, worldI
 		WHERE w.id = $1`, worldID).Scan(
 		&world.ID, &world.SourceJobID, &world.ProfileID, &world.DNAVersionID,
 		&world.Revision, &world.Nickname, &world.Role, &world.Archetype, &world.SceneName, &visualIntentJSON, &dnaJSON,
-		&variantCount, &selectedVariantNo, &publishedAt, &world.CreatedAt,
+		&variantCount, &selectedVariantNo, &selectedVariantSeed, &publishedAt, &world.CreatedAt,
 	)
 	if err != nil {
 		return contracts.WorldSnapshot{}, mapNotFound(err)
@@ -113,7 +122,7 @@ func loadWorldSnapshot(ctx context.Context, querier worldSnapshotQuerier, worldI
 	if err := json.Unmarshal(dnaJSON, &world.PersonalityDNA); err != nil {
 		return contracts.WorldSnapshot{}, fmt.Errorf("decode dna snapshot for %s: %w", worldID, err)
 	}
-	return newWorldSnapshot(world, variantCount, selectedVariantNo, publishedAt), nil
+	return newWorldSnapshot(world, variantCount, selectedVariantNo, selectedVariantSeed, publishedAt), nil
 }
 
 // writeWorldChangedOutbox stages the event in the same transaction as the

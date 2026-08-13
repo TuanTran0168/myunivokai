@@ -82,8 +82,22 @@ type WorldSnapshot struct {
 	TraitScores       TraitScores `json:"traitScores"`
 	VariantCount      int         `json:"variantCount"`
 	SelectedVariantNo int         `json:"selectedVariantNo"`
-	PublishedAt       *time.Time  `json:"publishedAt,omitempty"`
-	WorldCreatedAt    time.Time   `json:"worldCreatedAt"`
+	// VariantSeed is the SELECTED variant's seed — the input the renderer
+	// re-derives every rare feature from, and therefore the only thing that
+	// makes "how often does a black hole actually come up" answerable
+	// (contracts_rarity.go replays the lottery from it).
+	//
+	// It is a generated identifier, not user data: a base32 string this
+	// platform minted, carrying nothing a person typed. It is also the
+	// SELECTED variant's, not the world's, because switching variants changes
+	// the scene the world shows — and with it, which lottery it rolled.
+	//
+	// Omitempty and tolerated as empty on the way in: events published before
+	// this field existed carry no seed, and a projection that refused them
+	// would drop history to gain a metric.
+	VariantSeed    string     `json:"variantSeed,omitempty"`
+	PublishedAt    *time.Time `json:"publishedAt,omitempty"`
+	WorldCreatedAt time.Time  `json:"worldCreatedAt"`
 }
 
 // FamilyWorldChangedData carries a snapshot and nothing else. Every later
@@ -201,6 +215,60 @@ type AnalyticsHourBucket struct {
 	JobCount int `json:"jobCount"`
 }
 
+// AnalyticsRaritySpeciesShare is one variety of a rare feature and how often
+// it came up among the worlds that rolled that feature at all.
+//
+// PercentOfHits is against the feature's own hits, not against every world:
+// "of the forests that got a rare bird, 34% got a firebird" is the question a
+// species breakdown answers, and dividing by the whole population instead would
+// make three species that must sum to 100% sum to 35%.
+type AnalyticsRaritySpeciesShare struct {
+	Key           string  `json:"key"`
+	Label         string  `json:"label"`
+	Count         int     `json:"count"`
+	PercentOfHits float64 `json:"percentOfHits"`
+}
+
+// AnalyticsRarityFeatureRate is one lottery's configured rate beside the rate
+// it actually produced.
+//
+// The two are separate fields rather than one "drift" number because they
+// answer different questions and fail differently. ConfiguredPercent comes from
+// the catalogue — it is what the generator was AIMED at. ObservedPercent is
+// counted from real worlds, and at small EligibleWorlds it is mostly sampling
+// noise: forty worlds at a 5% rate are expected to produce two, and producing
+// none is not a bug. The admin app shows the denominator for exactly that
+// reason.
+type AnalyticsRarityFeatureRate struct {
+	Key    string      `json:"key"`
+	Label  string      `json:"label"`
+	Family WorldFamily `json:"family"`
+	// ConfiguredPercent is RarityFeature.Probability as a percentage, carried
+	// on the wire so the admin app never has to hold a second copy of the
+	// catalogue to compare against.
+	ConfiguredPercent float64 `json:"configuredPercent"`
+	// EligibleWorlds is the denominator: worlds of this feature's family, in
+	// the window, that carry a seed. It is per-feature rather than global
+	// because a forest cannot roll a black hole, and counting it in that
+	// denominator would halve every universe rate.
+	EligibleWorlds int     `json:"eligibleWorlds"`
+	ObservedCount  int     `json:"observedCount"`
+	ObservedPercent float64 `json:"observedPercent"`
+	// Species is empty for features that have no varieties.
+	Species []AnalyticsRaritySpeciesShare `json:"species,omitempty"`
+}
+
+// AnalyticsRarityReport is the whole rare-feature panel.
+type AnalyticsRarityReport struct {
+	Features []AnalyticsRarityFeatureRate `json:"features"`
+	// UnmeasuredWorlds is how many worlds in the window carry no variant seed
+	// and so are in no denominator above. It is stated rather than hidden
+	// because those worlds are not evidence of a low rate — they are worlds the
+	// lottery cannot be replayed for at all, and a panel that quietly dropped
+	// them would read as a measurement instead of a gap.
+	UnmeasuredWorlds int `json:"unmeasuredWorlds"`
+}
+
 // AnalyticsOverviewQueryData scopes the dashboard. An empty Family means
 // every family; Days bounds the job-health and distribution windows and is
 // clamped to AnalyticsMaximumDays by the service.
@@ -234,6 +302,8 @@ type AnalyticsOverviewResponseData struct {
 	// PeakHour is the busiest hour of the day across the window, or absent
 	// when no job was submitted in it.
 	PeakHour *AnalyticsHourBucket `json:"peakHour,omitempty"`
+	// Rarity is scoped by Days and Family like the distributions above.
+	Rarity AnalyticsRarityReport `json:"rarity"`
 }
 
 // WorldProjectionSummary is one row of the admin worlds table. It is the
@@ -276,6 +346,11 @@ type AnalyticsWorldListQueryData struct {
 	Since      *time.Time  `json:"since,omitempty"`
 	Until      *time.Time  `json:"until,omitempty"`
 	Search     string      `json:"search,omitempty"`
+	// RareFeature is a key from RarityCatalogue. It selects the worlds whose
+	// stored draw came in under that feature's CURRENT probability, which is
+	// what makes the rarity panel's counts clickable: the number and the list
+	// behind it are the same predicate, evaluated in the same place.
+	RareFeature string `json:"rareFeature,omitempty"`
 }
 
 type AnalyticsWorldListResponseData struct {
