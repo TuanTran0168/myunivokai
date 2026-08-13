@@ -18,62 +18,35 @@ families) and **admin** (staff tooling) — that share nothing further down.
 Inside each path, every service sits directly above the one database it owns.
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 45, "rankSpacing": 65, "padding": 16}}}%%
+%%{init: {"flowchart": {"nodeSpacing": 45, "rankSpacing": 60, "padding": 16}}}%%
 flowchart TB
   classDef clientStyle fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af;
   classDef edgeStyle fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534;
   classDef infraStyle fill:#fffbe6,stroke:#d97706,stroke-width:2px,color:#92400e;
   classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
-  classDef laneStyle fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#475569;
 
   subgraph CLIENTS ["Clients"]
     direction LR
-    web(["Myunivokai Web\nNext.js · React Three Fiber"]):::clientStyle
-    admin(["Myunivokai Admin\nNext.js · staff only"]):::clientStyle
+    web(["Myunivokai Web<br/>Next.js · React Three Fiber"]):::clientStyle
+    admin(["Myunivokai Admin<br/>Next.js · staff only"]):::clientStyle
   end
 
-  gateway["API Gateway\n/api/* · /api/admin/*"]:::edgeStyle
-  redis[("Redis\nrate limits · caches · tokenVersion")]:::infraStyle
-  nats{{"NATS\nJetStream commands · Core NATS queries · events"}}:::infraStyle
+  gateway["API Gateway<br/>/api/* · /api/admin/*"]:::edgeStyle
+  redis[("Redis<br/>rate limits · caches · tokenVersion")]:::infraStyle
+  nats{{"NATS<br/>JetStream commands · Core NATS queries · events"}}:::infraStyle
 
-  subgraph FORK [" "]
+  subgraph PRODUCT ["Product path · /api/*"]
     direction LR
+    dna["DNA<br/>AI orchestration · root jobs"]:::domainStyle --> dnaDatabase[("myunivokai_dna")]:::dbStyle
+    universe["Universe<br/>solar-system composition"]:::domainStyle --> universeDatabase[("myunivokai_universe")]:::dbStyle
+    nature["Nature<br/>forest composition"]:::domainStyle --> natureDatabase[("myunivokai_nature")]:::dbStyle
+  end
 
-    subgraph PRODUCT ["Product path · /api/*"]
-      direction TB
-      subgraph PSVC ["services — NATS workers, no public API"]
-        direction LR
-        dna["DNA\nAI orchestration · root jobs"]:::domainStyle
-        universe["Universe\nsolar-system composition"]:::domainStyle
-        nature["Nature\nforest composition"]:::domainStyle
-      end
-      subgraph PDB ["owned databases"]
-        direction LR
-        dnaDatabase[("myunivokai_dna")]:::dbStyle
-        universeDatabase[("myunivokai_universe")]:::dbStyle
-        natureDatabase[("myunivokai_nature")]:::dbStyle
-      end
-      dna --> dnaDatabase
-      universe --> universeDatabase
-      nature --> natureDatabase
-    end
-
-    subgraph ADMINPATH ["Admin path · /api/admin/*"]
-      direction TB
-      subgraph ASVC ["services — NATS workers, no public API"]
-        direction LR
-        auth["Auth\nstaff identity · RBAC · audit"]:::domainStyle
-        analytics["Analytics\nadmin read model · events in only"]:::domainStyle
-      end
-      subgraph ADB ["owned databases"]
-        direction LR
-        authDatabase[("myunivokai_auth")]:::dbStyle
-        analyticsDatabase[("myunivokai_analytics")]:::dbStyle
-      end
-      auth --> authDatabase
-      analytics --> analyticsDatabase
-    end
+  subgraph ADMINPATH ["Admin path · /api/admin/*"]
+    direction LR
+    auth["Auth<br/>staff identity · RBAC · audit"]:::domainStyle --> authDatabase[("myunivokai_auth")]:::dbStyle
+    analytics["Analytics<br/>admin read model · events in only"]:::domainStyle --> analyticsDatabase[("myunivokai_analytics")]:::dbStyle
   end
 
   web --> gateway
@@ -86,8 +59,6 @@ flowchart TB
   nats <--> nature
   nats <--> auth
   nats --> analytics
-
-  class FORK laneStyle
 ```
 
 - The diagram shows **ownership, not request sequence** — the generation flow
