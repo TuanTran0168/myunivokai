@@ -1,6 +1,10 @@
 # Sprint 05 user stories — telemetry-service
 
-> **Document status:** Planned
+> **Document status:** Implemented — every story below has source and
+> automated checks. **Not Verified:** no story here claims a deployed or
+> browser-verified result yet, and the Rust half has never been compiled on
+> the machine that wrote it (no toolchain installed), so CI is its first
+> build. See §Honest status below.
 > **Sprint starts:** 2026-08-13
 > **Last source review:** 2026-08-13
 
@@ -20,7 +24,7 @@ that needs both halves alive at once.
 
 ### S5-TELEMETRY-001 — Freeze the rollup contract in two languages
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a service developer,
@@ -50,13 +54,13 @@ Source evidence:
 - notes/vision/rust-adoption-research.md — §Re-scoring Track C's four criteria, criterion 3
 
 Tasks:
-- [ ] Add `HTTPRollupEnvelope`, `HTTPRollupBucket`, `NATSBackendBucket`, `CacheBucket`, the query/response types and the subject constants to `contracts/go` as `contracts_telemetry_rollup.go` — separate from the existing `contracts_telemetry.go`, which is fleet start telemetry and a different concern.
-- [ ] Create the `contracts/rust` crate mirroring `Envelope<T>`, the RPC envelope shapes and the rollup types.
-- [ ] Add the shared fixture and the decode test on both sides.
+- [x] Add `HTTPRollupEnvelope`, `HTTPRollupBucket`, `NATSBackendBucket`, `CacheBucket`, the query/response types and the subject constants to `contracts/go` as `contracts_telemetry_rollup.go` — separate from the existing `contracts_telemetry.go`, which is fleet start telemetry and a different concern.
+- [x] Create the `contracts/rust` crate mirroring `Envelope<T>`, the RPC envelope shapes and the rollup types.
+- [x] Add the shared fixture and the decode test on both sides.
 
 ### S5-TELEMETRY-002 — Aggregate the gateway's own activity in memory
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a platform operator,
@@ -95,16 +99,16 @@ Source evidence:
 - notes/vision/telemetry-architecture-research.md — §The number that was missing
 
 Tasks:
-- [ ] Add `services/api-gateway/internal/telemetry/collector.go` — the in-memory bucket map, the histogram edges, and `Snapshot` returning one envelope's worth of buckets and resetting.
-- [ ] Record HTTP buckets from a middleware that reads `chi.RouteContext(...).RoutePattern()` **after** the handler chain has run, and error codes from the gateway's own error writer.
-- [ ] Record NATS round-trip buckets in `RPCTransport.Request`, keyed on `wake.ServiceForSubject(subject)` — the value it already computes.
-- [ ] Record cache hits and misses at the three existing `job:v1`/`world:v1`/`share:v1` lookup sites.
-- [ ] Add the flusher: a ticker plus one final flush on graceful shutdown, publishing through JetStream (`js.Publish`), never Core NATS.
-- [ ] Add `TELEMETRY_ENABLED` and `TELEMETRY_FLUSH_INTERVAL` to gateway config, defaulting to off.
+- [x] Add `services/api-gateway/internal/telemetry/collector.go` — the in-memory bucket map, the histogram edges, and `Snapshot` returning one envelope's worth of buckets and resetting.
+- [x] Record HTTP buckets from a middleware that reads `chi.RouteContext(...).RoutePattern()` **after** the handler chain has run, and error codes from the gateway's own error writer.
+- [x] Record NATS round-trip buckets in `RPCTransport.Request`, keyed on `wake.ServiceForSubject(subject)` — the value it already computes.
+- [x] Record cache hits and misses at the three existing `job:v1`/`world:v1`/`share:v1` lookup sites.
+- [x] Add the flusher: a ticker plus one final flush on graceful shutdown, publishing through JetStream (`js.Publish`), never Core NATS.
+- [x] Add `TELEMETRY_ENABLED` and `TELEMETRY_FLUSH_INTERVAL` to gateway config, defaulting to off.
 
 ### S5-TELEMETRY-003 — Stand up telemetry-service and its durable consumer
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a platform operator,
@@ -133,14 +137,14 @@ Source evidence:
 - services/analytics-service/internal/messaging/runtime.go — the durable-consumer shape being mirrored
 
 Tasks:
-- [ ] Create `services/telemetry-service` with `main.rs`, `config.rs` (env-first, dotenv second, matching every Go service's `loadEnvironmentFiles`), and the `TelemetrySink` trait.
-- [ ] Implement the durable pull consumer on `MYUNIVOKAI_EVENTS` filtered to the telemetry subject, `max_deliver: -1` mirroring `dnaResultsDurableName`.
-- [ ] Serve `/healthz` on `PORT` with `axum`, bound before the consumer starts, so a cold start has an inbound HTTP target.
-- [ ] Add a `Dockerfile.local`, a `Dockerfile.prod` and a `README.md` runbook alongside the other services'.
+- [x] Create `services/telemetry-service` with `main.rs`, `config.rs` (env-first, dotenv second, matching every Go service's `loadEnvironmentFiles`), and the `TelemetrySink` trait.
+- [x] Implement the durable pull consumer on `MYUNIVOKAI_EVENTS` filtered to the telemetry subject, `max_deliver: -1` mirroring `dnaResultsDurableName`.
+- [x] Serve `/healthz` on `PORT` with `axum`, bound before the consumer starts, so a cold start has an inbound HTTP target.
+- [x] Add a `Dockerfile.local`, a `Dockerfile.prod` and a `README.md` runbook alongside the other services'.
 
 ### S5-TELEMETRY-004 — Store rollups in the service's own database
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a platform operator,
@@ -172,15 +176,15 @@ Source evidence:
 - services/analytics-service/internal/services/projection_service.go — the inbox idempotency shape being mirrored
 
 Tasks:
-- [ ] Add `migrations/0001_init.sql`: `http_rollups`, `error_code_rollups`, `nats_rollups`, `cache_rollups`, `inbox_messages`.
-- [ ] Implement `sinks::postgres::PostgresSink::write_rollup` — one transaction per envelope, inbox insert first, `ON CONFLICT` accumulation for every bucket table.
-- [ ] Implement the overview and per-route queries, including the `SERVICE_WAKING` count that answers the wake-conversion question.
-- [ ] Implement the retention ticker.
-- [ ] Test the histogram/percentile interpolation and the envelope→row mapping without a database.
+- [x] Add `migrations/0001_init.sql`: `http_rollups`, `error_code_rollups`, `nats_rollups`, `cache_rollups`, `inbox_messages`.
+- [x] Implement `sinks::postgres::PostgresSink::write_rollup` — one transaction per envelope, inbox insert first, `ON CONFLICT` accumulation for every bucket table.
+- [x] Implement the overview and per-route queries, including the `SERVICE_WAKING` count that answers the wake-conversion question.
+- [x] Implement the retention ticker.
+- [x] Test the histogram/percentile interpolation and the envelope→row mapping without a database.
 
 ### S5-TELEMETRY-005 — Forward to Grafana Cloud instead, on one switch
 
-Status: Planned
+Status: Implemented
 Priority: P1
 
 As a platform operator,
@@ -207,13 +211,13 @@ Source evidence:
 - notes/vision/telemetry-service-plan.md — §The `TelemetrySink` trait, §Admin surface
 
 Tasks:
-- [ ] Implement `sinks::otlp::OtlpSink::write_rollup`.
-- [ ] Return the "charts are elsewhere" response shape from `query_range`, carrying `TELEMETRY_DASHBOARD_URL`.
-- [ ] Document in the service README why a pre-aggregated histogram is exported as bucket counters rather than replayed through an OTLP histogram instrument.
+- [x] Implement `sinks::otlp::OtlpSink::write_rollup`.
+- [x] Return the "charts are elsewhere" response shape from `query_range`, carrying `TELEMETRY_DASHBOARD_URL`.
+- [x] Document in the service README why a pre-aggregated histogram is exported as bucket counters rather than replayed through an OTLP histogram instrument.
 
 ### S5-TELEMETRY-006 — Wake telemetry-service like every other service
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a staff member,
@@ -240,12 +244,12 @@ Source evidence:
 - services/api-gateway/internal/config/wake_config_test.go
 
 Tasks:
-- [ ] Add `wake.ServiceTelemetry` to `internal/wake/platform.go` (constant, `Services`, and `ServiceForSubject`'s switch).
-- [ ] Add `"telemetry": "TELEMETRY_SERVICE_URL"` to `serviceWakeURLKeys`.
+- [x] Add `wake.ServiceTelemetry` to `internal/wake/platform.go` (constant, `Services`, and `ServiceForSubject`'s switch).
+- [x] Add `"telemetry": "TELEMETRY_SERVICE_URL"` to `serviceWakeURLKeys`.
 
 ### S5-TELEMETRY-007 — Relay the telemetry reads through /api/admin
 
-Status: Planned
+Status: Implemented
 Priority: P0
 
 As a staff member,
@@ -272,13 +276,13 @@ Source evidence:
 - services/api-gateway/internal/handlers/admin_analytics_handler.go — the relay being mirrored
 
 Tasks:
-- [ ] Add `admin_telemetry_handler.go` with `Overview` and `Routes`.
-- [ ] Register both under `chart:read` in `admin_router.go`.
-- [ ] Extend `contracts/openapi-admin.yaml` with both routes and their response schemas.
+- [x] Add `admin_telemetry_handler.go` with `Overview` and `Routes`.
+- [x] Register both under `chart:read` in `admin_router.go`.
+- [x] Extend `contracts/openapi-admin.yaml` with both routes and their response schemas.
 
 ### S5-TELEMETRY-008 — Deploy telemetry-service
 
-Status: Planned
+Status: Implemented
 Priority: P1
 
 As a platform operator,
@@ -307,14 +311,14 @@ Source evidence:
 - notes/ops/auth-analytics-first-deploy-checklist.md — why no new NATS user is needed in production
 
 Tasks:
-- [ ] Add the `myunivokai-telemetry` block and the gateway's `TELEMETRY_SERVICE_URL` to `render.yaml`.
-- [ ] Add the `telemetry-service-checks` and `contracts-rust-checks` CI jobs.
-- [ ] Add the local-only NATS ACL block and the local compose service.
-- [ ] Add every new variable to `.env.example`, and the "why one service is not Go" paragraph to `notes/be/source-overview.md`.
+- [x] Add the `myunivokai-telemetry` block and the gateway's `TELEMETRY_SERVICE_URL` to `render.yaml`.
+- [x] Add the `telemetry-service-checks` and `contracts-rust-checks` CI jobs.
+- [x] Add the local-only NATS ACL block and the local compose service.
+- [x] Add every new variable to `.env.example`, and the "why one service is not Go" paragraph to `notes/be/source-overview.md`.
 
 ### S5-TELEMETRY-009 — Show telemetry in the admin app
 
-Status: Planned
+Status: Implemented
 Priority: P1
 
 As a staff member,
@@ -341,8 +345,8 @@ Source evidence:
 - apps/myunivokai-admin/src/features/analytics/FleetPage.tsx — the screen being mirrored
 
 Tasks:
-- [ ] Add the `telemetry` feature folder: `api.ts`, `types.ts`, `TelemetryPage.tsx`, the volume/status charts and the per-route table.
-- [ ] Add the `/telemetry` route and the nav entry, gated on `chartRead`.
+- [x] Add the `telemetry` feature folder: `api.ts`, `types.ts`, `TelemetryPage.tsx`, the volume/status charts and the per-route table.
+- [x] Add the `/telemetry` route and the nav entry, gated on `chartRead`.
 
 ### DEFERRED-S5-NAV-001 — Restructure the admin navigation
 
@@ -361,3 +365,29 @@ sidebar, or a top-level section switcher — are described in
 which takes no position between them. Whoever revisits it starts from
 `apps/myunivokai-admin/src/components/layout/nav-config.ts`, whose existing
 comment already describes the implicit split in prose.
+
+## Honest status
+
+Everything above has source and automated checks; nothing above is Verified.
+The gap is specific rather than general, and worth stating in one place:
+
+- **The Go and TypeScript halves are checked here.** `contracts/go`,
+  `services/api-gateway` and `apps/myunivokai-admin` all pass `vet`/`test`/
+  `build`, `typecheck`, `lint`, the import-boundary check and their own test
+  suites on the machine that wrote them.
+- **The Rust halves have never been compiled.** No Rust toolchain exists on
+  that machine, so `contracts/rust` and `services/telemetry-service` were
+  written but not built, and the two CI jobs added in `S5-TELEMETRY-008` are
+  their first compile. Expect a `cargo fmt` pass and possibly a dependency-API
+  fix-up on the first run; `src/sinks/otlp.rs` is the file most exposed to
+  that, because the OpenTelemetry Rust SDK's builder API has moved between
+  minor versions.
+- **No SQL in `sinks/postgres.rs` has been executed.** Its tests assert the SQL
+  *text* — that every `SUM` is cast off `numeric`, that every conflict clause
+  accumulates rather than overwrites, that retention covers every table
+  including the inbox. That is worth having and it is not the same as proving
+  the queries run.
+- **Nothing has been deployed.** `render.yaml` describes the seventh free web
+  service; the instance-hour budget has not been checked and the Neon database
+  does not exist. `services/telemetry-service/README.md` §First deploy is the
+  order to do it in.

@@ -438,7 +438,10 @@ Source: [analytics-service-plan.md](../vision/analytics-service-plan.md)
 
 ## EPIC-S5-TELEMETRY-001 — Operational telemetry and the first Rust service
 
-Status: Ready
+Status: Implemented — not Verified. Source and automated checks exist for every
+story; the Rust crates have never been compiled (no toolchain on the authoring
+machine) and nothing is deployed. See
+[Sprint 5 §Honest status](../sprints/sprint-05-2026-08-13/user-stories.md#honest-status).
 Priority: P1
 Sprint: [Sprint 5 — starts 2026-08-13](../sprints/sprint-05-2026-08-13/README.md)
 
@@ -477,9 +480,11 @@ empty chart when the answer lives elsewhere.
 Epic exit:
 
 - [ ] Every Sprint 5 `S5-TELEMETRY-*` story is Verified.
-- [ ] The gateway's telemetry path is off by default and provably inert when off.
-- [ ] `myunivokai-admin` renders request volume, status mix and per-route p95,
-      with the p95's interpolation stated on the screen.
+- [x] The gateway's telemetry path is off by default and provably inert when
+      off — `TestWithNoCollectorTheRequestPathRecordsNothing`.
+- [x] `myunivokai-admin` renders request volume, status mix and per-route p95,
+      with the p95's interpolation stated on the screen rather than in a
+      tooltip.
 
 Sprint stories: [S5-TELEMETRY-001 through S5-TELEMETRY-009](../sprints/sprint-05-2026-08-13/user-stories.md#epic-s5-telemetry-001--operational-telemetry-and-the-first-rust-service)
 

@@ -1,7 +1,10 @@
 # Sprint 05 — telemetry-service, the first Rust service
 
 > **Starts:** 2026-08-13
-> **Status:** Planned
+> **Status:** Implemented — source and automated checks exist for every story.
+> **Not Verified:** the Rust crates have never been compiled (no toolchain on
+> the authoring machine, so CI is their first build) and nothing is deployed.
+> See [user-stories.md §Honest status](user-stories.md#honest-status).
 > **Last source review:** 2026-08-13
 
 ## Sprint goal
@@ -81,6 +84,12 @@ Both are inside phase 3/phase 7's own "Phase 7 picks one before
   mistakes surface when a query runs, not when it compiles. `sqlx::migrate!`
   is still used — it reads the migrations directory at compile time and needs
   no database.
+- **`histogram` is stored as `BIGINT[]`, not `JSONB`.** The one operation that
+  column exists for is being added to another histogram. Postgres adds two
+  arrays elementwise inside `ON CONFLICT` with no helper function, no
+  read-modify-write and no lost update under concurrent writers; JSONB would
+  have needed all three. The width is still fixed at 8 by the contract and a
+  `CHECK` enforces it on the row.
 - **The runtime image is `debian:bookworm-slim`, not Alpine.** The plan names
   this as one of its two acceptable answers. Targeting
   `x86_64-unknown-linux-musl` to match the Go services' Alpine runtime means a
@@ -90,23 +99,33 @@ Both are inside phase 3/phase 7's own "Phase 7 picks one before
 
 ## Definition of Done
 
-- [ ] One fixture, `contracts/fixtures/telemetry-http-rollup-event.v1.json`,
-      is decoded by a Go test and a Rust test, and changing the wire shape in
-      one language without the other fails CI.
-- [ ] Every rollup bucket the gateway publishes is keyed on a chi route
+Checked only where a check that actually ran says so. The four left open are
+open for the reason stated beside each, not because nobody looked.
+
+- [x] Every rollup bucket the gateway publishes is keyed on a chi route
       template; a test proves a request carrying a world id in its path
-      produces `/api/universe/worlds/{worldID}`, not the id.
-- [ ] The gateway's telemetry collector is off unless `TELEMETRY_ENABLED=true`,
+      produces `/api/universe/worlds/{worldID}`, not the id —
+      `internal/handlers/telemetry_test.go`.
+- [x] The gateway's telemetry collector is off unless `TELEMETRY_ENABLED=true`,
       and with it off the gateway's request path is byte-for-byte the behaviour
-      it has in production today.
+      it has in production today — `TestWithNoCollectorTheRequestPathRecordsNothing`
+      compares both responses.
+- [x] `notes/be/source-overview.md` explains why one service is not Go.
+- [ ] One fixture is decoded by a Go test **and** a Rust test. Both tests
+      exist; the Go one passes locally, the Rust one has never been run — CI is
+      its first execution.
 - [ ] A redelivered rollup envelope is a no-op in the postgres sink, proven by
-      the inbox table rather than asserted.
+      the inbox table rather than asserted. The insert is
+      `ON CONFLICT DO NOTHING` and a unit test asserts that *text*; nothing has
+      executed it against a database.
 - [ ] With `TELEMETRY_SINK=otlp`, the admin Telemetry screen says where the
-      charts are instead of rendering an empty one or a 501.
+      charts are instead of rendering an empty one or a 501. Both halves are
+      built (`sinks/otlp.rs`, `SinkNotice.tsx`); neither has been run against
+      the other.
 - [ ] Opening the Telemetry screen after an idle period wakes
-      `telemetry-service` through the existing mechanism, with no
-      telemetry-specific branch anywhere in `internal/wake`.
-- [ ] `notes/be/source-overview.md` explains why one service is not Go.
+      `telemetry-service`. The "no telemetry-specific branch" half is proven —
+      `internal/wake/platform_test.go` resolves the subject by the same prefix
+      rule as every other service — but the wake itself needs a deploy.
 
 ## Known accepted risk
 
