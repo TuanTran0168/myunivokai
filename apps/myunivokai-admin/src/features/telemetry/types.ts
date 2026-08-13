@@ -54,8 +54,53 @@ export interface TelemetryBackendSummary {
   requestCount: number;
   errorCount: number;
   averageDurationMs: number;
+  p50DurationMs: number;
   p95DurationMs: number;
   slowestDurationMs: number;
+}
+
+// One measure against the window of the same width immediately before it.
+//
+// Both absolute values travel with the percentage because a percentage alone
+// is unreadable at low volume: +100% is two requests becoming four, and the
+// card has no way to say which without them.
+export interface TelemetryDelta {
+  current: number;
+  previous: number;
+  changePercent: number;
+  // False when the previous window holds no data at all — a service that was
+  // asleep, or a deploy from an hour ago. Different from a previous value of
+  // zero, and the screen must say "no baseline" rather than draw an arrow.
+  hasBaseline: boolean;
+}
+
+export interface TelemetryComparison {
+  previousWindowStart: string;
+  requests: TelemetryDelta;
+  // The error COUNT, not the rate: two rates subtract into a percentage-POINT
+  // difference, and reporting that as a percent change is how a card like this
+  // ends up lying.
+  errors: TelemetryDelta;
+  p95DurationMs: TelemetryDelta;
+}
+
+export interface TelemetryFunnelStage {
+  stage: "received" | "backend_call" | "backend_ok" | "succeeded";
+  label: string;
+  count: number;
+  // Against the FIRST stage, not the previous one. It may legitimately exceed
+  // 100: one HTTP request can call several backends, and clipping it would
+  // hide the fan-out this chart exists to show.
+  percentOfEntry: number;
+}
+
+export interface TelemetryHourBucket {
+  // 0-23, UTC. Rendered with the zone beside it rather than converted, so two
+  // operators in two countries read the same number.
+  hour: number;
+  requestCount: number;
+  errorCount: number;
+  p95DurationMs: number;
 }
 
 export interface TelemetryCacheSummary {
@@ -75,6 +120,11 @@ export interface TelemetryOverview extends TelemetrySink {
   errorRequests: number;
   errorRatePercent: number;
   averageDurationMs: number;
+  // The median beside the tail. The gap between them is the finding: a low p50
+  // under a high p95 is a tail a few requests own, and two high numbers are
+  // everything being slow — opposite fixes, indistinguishable from either
+  // number alone.
+  p50DurationMs: number;
   p95DurationMs: number;
   slowestDurationMs: number;
   // Always true when charts are available. The screen is required to render
@@ -82,7 +132,18 @@ export interface TelemetryOverview extends TelemetrySink {
   // is worse than no p95.
   percentileIsInterpolated: boolean;
   statusMix: TelemetryStatusClassCount[];
+  // Minute resolution. A 7-day window holds 10,080 of these — kept for the
+  // fine-grained chart, never for the trend line.
   volumePoints: TelemetryVolumePoint[];
+  // The same traffic rolled up to the hour. This is what the trend is drawn
+  // from.
+  hourlyPoints: TelemetryVolumePoint[];
+  // Absent when the window holds nothing at all.
+  peakHour?: TelemetryVolumePoint;
+  hourOfDay: TelemetryHourBucket[];
+  // Absent when the previous window has no data to compare against.
+  comparison?: TelemetryComparison;
+  trafficFunnel: TelemetryFunnelStage[];
   errorCodeTop: TelemetryErrorCodeCount[];
   backends: TelemetryBackendSummary[];
   cache: TelemetryCacheSummary[];
@@ -100,6 +161,7 @@ export interface TelemetryRouteSummary {
   errorCount: number;
   errorRatePercent: number;
   averageDurationMs: number;
+  p50DurationMs: number;
   p95DurationMs: number;
   slowestDurationMs: number;
 }

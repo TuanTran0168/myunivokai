@@ -1,1 +1,1 @@
-export { DashboardPage as default } from "@/features/analytics/DashboardPage";
+export { OverviewPage as default } from "@/features/analytics/OverviewPage";

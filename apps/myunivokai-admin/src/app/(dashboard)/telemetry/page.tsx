@@ -1,1 +1,1 @@
-export { TelemetryPage as default } from "@/features/telemetry/TelemetryPage";
+export { TrafficPage as default } from "@/features/telemetry/TrafficPage";

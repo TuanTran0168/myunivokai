@@ -12,7 +12,7 @@ import { FilterSelect } from "@/components/ui/filter-select";
 import { SectionCard } from "@/components/ui/section-card";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { analyticsApi } from "./api";
-import { StatCard } from "./components/StatCard";
+import { StatCard } from "@/components/ui/stat-card";
 import { SERVICE_START_HEADERS, ServiceStartsTable } from "./components/ServiceStartsTable";
 import { WakeRow } from "./components/WakeRow";
 import { WakeTrendChart } from "./components/charts/WakeTrendChart";

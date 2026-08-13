@@ -40,11 +40,58 @@ export interface JobHealth {
   inFlightJobs: number;
   failureRatePercent: number;
   averageDurationMs: number;
+  // The median beside the tail. Unlike telemetry-service's interpolated pair,
+  // both of these are exact — analytics-service has every job's own duration
+  // and computes PERCENTILE_CONT over it.
+  p50DurationMs: number;
   p95DurationMs: number;
   slowestDurationMs: number;
   measuredJobCount: number;
   publishRatePercent: number;
   multiVariantPercent: number;
+}
+
+// One measure against the equivalent period before it. The absolute values
+// ride with the percentage because +200% is unreadable at low volume — three
+// worlds becoming nine, and the card cannot say which without them.
+export interface AnalyticsDelta {
+  current: number;
+  previous: number;
+  changePercent: number;
+  // False when the preceding period has no data at all, which is not a
+  // previous value of zero. A platform deployed yesterday has no baseline, and
+  // an arrow drawn against nothing invents a trend.
+  hasBaseline: boolean;
+}
+
+export interface AnalyticsComparison {
+  // How wide each half is, stated rather than assumed, so the card labels
+  // itself instead of hard-coding "24h".
+  periodHours: number;
+  worlds: AnalyticsDelta;
+  publishedWorlds: AnalyticsDelta;
+  jobs: AnalyticsDelta;
+  failedJobs: AnalyticsDelta;
+}
+
+// Each stage is a strict subset of the one before it, which is what makes the
+// shape a funnel rather than four unrelated counters.
+export interface AnalyticsFunnelStage {
+  stage: "submitted" | "completed" | "projected" | "published";
+  label: string;
+  count: number;
+  // Against the FIRST stage, never the previous one — otherwise the funnel
+  // cannot be read end to end without multiplying in your head.
+  percentOfEntry: number;
+}
+
+// Only hours that actually saw a job are returned; the chart fills the rest
+// with zeroes, because a 24-slot axis is a rendering concern and
+// analytics-service has no business inventing rows.
+export interface AnalyticsHourBucket {
+  // 0-23, UTC.
+  hour: number;
+  jobCount: number;
 }
 
 export interface Overview {
@@ -61,6 +108,14 @@ export interface Overview {
   averageTraitScores: TraitScores;
   generatedAt: string;
   oldestProjectedWorld?: string;
+  // Always a fixed 24 hours on each side, independent of `days` above: the
+  // range picker scopes the distributions and the funnel, while "vs yesterday"
+  // is a fixed question.
+  comparison: AnalyticsComparison;
+  generationFunnel: AnalyticsFunnelStage[];
+  hourOfDay: AnalyticsHourBucket[];
+  // Absent when no job was submitted in the window.
+  peakHour?: AnalyticsHourBucket;
 }
 
 export interface TimeseriesPoint {

@@ -458,6 +458,58 @@ components:
         variantCount: { type: integer }
         jobCount: { type: integer }
         failedJobCount: { type: integer }
+    Delta:
+      type: object
+      additionalProperties: false
+      description: >-
+        One measure against the equivalent period before it. The absolute
+        values travel with the percentage because a percentage alone is
+        unreadable at low volume — +100% is two becoming four, and the card
+        cannot say which without them.
+      required: [current, previous, changePercent, hasBaseline]
+      properties:
+        current: { type: integer }
+        previous: { type: integer }
+        changePercent: { type: number }
+        hasBaseline:
+          type: boolean
+          description: >-
+            False when the preceding period holds no data at all, which is not
+            the same as a previous value of zero. A client MUST render "no
+            baseline" rather than a percentage when this is false.
+    TelemetryComparison:
+      type: object
+      additionalProperties: false
+      description: >-
+        The window measured against the one of the same width immediately
+        before it. Absent from the response entirely when that window holds
+        nothing.
+      required: [previousWindowStart, requests, errors, p95DurationMs]
+      properties:
+        previousWindowStart: { type: string, format: date-time }
+        requests: { $ref: "#/components/schemas/Delta" }
+        errors:
+          allOf: [{ $ref: "#/components/schemas/Delta" }]
+          description: >-
+            The error COUNT, not the rate. Two rates subtract into a
+            percentage-POINT difference, and reporting that as a percent change
+            is the most common way a card like this ends up lying.
+        p95DurationMs: { $ref: "#/components/schemas/Delta" }
+    AnalyticsComparison:
+      type: object
+      additionalProperties: false
+      description: >-
+        A rolling period against the one before it. Always present, and always
+        the same width regardless of the `days` parameter: the range picker
+        scopes the distributions and the funnel, while "vs yesterday" is a
+        fixed question.
+      required: [periodHours, worlds, publishedWorlds, jobs, failedJobs]
+      properties:
+        periodHours: { type: integer }
+        worlds: { $ref: "#/components/schemas/Delta" }
+        publishedWorlds: { $ref: "#/components/schemas/Delta" }
+        jobs: { $ref: "#/components/schemas/Delta" }
+        failedJobs: { $ref: "#/components/schemas/Delta" }
     JobHealth:
       type: object
       additionalProperties: false
@@ -469,6 +521,7 @@ components:
           inFlightJobs,
           failureRatePercent,
           averageDurationMs,
+          p50DurationMs,
           p95DurationMs,
           slowestDurationMs,
           measuredJobCount,
@@ -482,6 +535,12 @@ components:
         inFlightJobs: { type: integer }
         failureRatePercent: { type: number }
         averageDurationMs: { type: integer }
+        p50DurationMs:
+          type: integer
+          description: >-
+            Exact, unlike telemetry-service's interpolated pair —
+            analytics-service has every job's own duration and computes
+            PERCENTILE_CONT over it.
         p95DurationMs: { type: integer }
         slowestDurationMs: { type: integer }
         measuredJobCount:
@@ -552,11 +611,15 @@ components:
               errorRequests,
               errorRatePercent,
               averageDurationMs,
+              p50DurationMs,
               p95DurationMs,
               slowestDurationMs,
               percentileIsInterpolated,
               statusMix,
               volumePoints,
+              hourlyPoints,
+              hourOfDay,
+              trafficFunnel,
               errorCodeTop,
               backends,
               cache,
@@ -569,6 +632,13 @@ components:
             errorRequests: { type: integer, description: 5xx only. }
             errorRatePercent: { type: number }
             averageDurationMs: { type: integer }
+            p50DurationMs:
+              type: integer
+              description: >-
+                The median, always reported beside the p95. The gap between the
+                two is the finding: a low median under a high tail is a slow
+                minority, and two high numbers are a slow platform. Either
+                number alone cannot tell those apart.
             p95DurationMs: { type: integer }
             slowestDurationMs: { type: integer }
             percentileIsInterpolated:
@@ -588,7 +658,56 @@ components:
                   requestCount: { type: integer }
             volumePoints:
               type: array
+              description: >-
+                Minute resolution — a 7-day window holds 10,080 of these.
               items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            hourlyPoints:
+              type: array
+              description: >-
+                The same traffic rolled up to the hour, which is what a trend
+                line should be drawn from.
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            peakHour:
+              allOf: [{ $ref: "#/components/schemas/TelemetryVolumePoint" }]
+              description: >-
+                The busiest single hour in the window. Absent when the window
+                holds nothing at all.
+            hourOfDay:
+              type: array
+              description: >-
+                Traffic by hour of day, summed across every day in the window —
+                "when is this platform reliably busy", which the timeline
+                cannot answer. Only hours that saw traffic are returned.
+              items:
+                type: object
+                additionalProperties: false
+                required: [hour, requestCount, errorCount, p95DurationMs]
+                properties:
+                  hour: { type: integer, minimum: 0, maximum: 23, description: UTC. }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer }
+                  p95DurationMs: { type: integer }
+            comparison:
+              $ref: "#/components/schemas/TelemetryComparison"
+            trafficFunnel:
+              type: array
+              description: >-
+                How far the traffic got. NOT a subset chain: one HTTP request
+                can call several backends, so backend_call may legitimately
+                exceed received and percentOfEntry may exceed 100.
+              items:
+                type: object
+                additionalProperties: false
+                required: [stage, label, count, percentOfEntry]
+                properties:
+                  stage:
+                    type: string
+                    enum: [received, backend_call, backend_ok, succeeded]
+                  label: { type: string }
+                  count: { type: integer }
+                  percentOfEntry:
+                    type: number
+                    description: Against the FIRST stage, never the previous one.
             errorCodeTop:
               type: array
               items:
@@ -749,6 +868,9 @@ components:
           errorCodeTop,
           averageTraitScores,
           generatedAt,
+          comparison,
+          generationFunnel,
+          hourOfDay,
         ]
       properties:
         days: { type: integer }
@@ -764,6 +886,45 @@ components:
         averageTraitScores: { $ref: "#/components/schemas/TraitScores" }
         generatedAt: { type: string, format: date-time }
         oldestProjectedWorld: { type: string, format: date-time }
+        comparison: { $ref: "#/components/schemas/AnalyticsComparison" }
+        generationFunnel:
+          type: array
+          description: >-
+            Every stage measured over the SAME set of jobs — the ones submitted
+            inside the window — which is what makes the four counts a funnel
+            rather than four unrelated totals.
+          items:
+            type: object
+            additionalProperties: false
+            required: [stage, label, count, percentOfEntry]
+            properties:
+              stage: { type: string, enum: [submitted, completed, projected, published] }
+              label: { type: string }
+              count: { type: integer }
+              percentOfEntry:
+                type: number
+                description: Against the FIRST stage, never the previous one.
+        hourOfDay:
+          type: array
+          description: >-
+            Job submissions by hour of day, summed across every day in the
+            window. Only hours that saw a job are returned; a client fills the
+            rest with zeroes, because a 24-slot axis is a rendering concern.
+          items:
+            type: object
+            additionalProperties: false
+            required: [hour, jobCount]
+            properties:
+              hour: { type: integer, minimum: 0, maximum: 23, description: UTC. }
+              jobCount: { type: integer }
+        peakHour:
+          type: object
+          additionalProperties: false
+          description: Absent when no job was submitted in the window.
+          required: [hour, jobCount]
+          properties:
+            hour: { type: integer, minimum: 0, maximum: 23 }
+            jobCount: { type: integer }
     TimeseriesPoint:
       type: object
       additionalProperties: false

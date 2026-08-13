@@ -21,27 +21,40 @@ const VOLUME_CHART_CONFIG: ChartConfig = {
   errorCount: { label: "5xx", color: "var(--chart-5)" }
 };
 
-// Requests per minute, with server errors stacked underneath.
+// Request volume over time, with server errors drawn underneath.
 //
-// Buckets are one minute wide, which is why the axis shows clock time rather
-// than a date: a 24-hour window is 1440 points, and a date on every tick is
-// unreadable. The tooltip carries the full instant.
+// `resolution` names which series was handed in, because the two are the same
+// SHAPE and a different FACT. The minute series is the raw rollup interval —
+// complete, and 10,080 points over a week. The hourly series is the same
+// traffic grouped by telemetry-service, which is what a trend line should be
+// drawn from. Labelling the axis "per minute" while plotting hours is the kind
+// of error a reader cannot catch from the picture.
+//
+// The axis shows clock time rather than a date either way: a 24-hour window at
+// minute resolution is 1440 points and a date on every tick is unreadable. The
+// tooltip carries the full instant.
 export function RequestVolumeChart({
   points,
   hours,
-  isLoading = false
+  isLoading = false,
+  resolution = "minute"
 }: {
   points: TelemetryVolumePoint[];
   hours: number;
   isLoading?: boolean;
+  resolution?: "minute" | "hour";
 }) {
   const { hiddenSeries, toggleSeries } = useChartSeriesToggle();
   const hasTraffic = points.some((point) => point.requestCount > 0);
 
   return (
     <SectionCard
-      title={`Requests per minute · ${formatWindow(hours)}`}
-      description="One point per rollup interval. The gateway aggregates in memory and publishes one summary per minute, so this is a complete count rather than a sample."
+      title={`Requests per ${resolution} · ${formatWindow(hours)}`}
+      description={
+        resolution === "hour"
+          ? "One point per hour, grouped by telemetry-service from the minute-wide rollups underneath. A complete count, not a sample."
+          : "One point per rollup interval. The gateway aggregates in memory and publishes one summary per minute, so this is a complete count rather than a sample."
+      }
       action={<ChartLegend config={VOLUME_CHART_CONFIG} hiddenSeries={hiddenSeries} onToggle={toggleSeries} />}
     >
       {isLoading ? (
