@@ -41,6 +41,7 @@ flowchart TB
     nature["<b>Nature Service</b><br/><i>[Go]</i> · Forest Composition"]:::domainStyle
     auth["<b>Auth Service</b><br/><i>[Go]</i> · Staff Identity & RBAC"]:::domainStyle
     analytics["<b>Analytics Service</b><br/><i>[Go]</i> · Admin Read Model"]:::domainStyle
+    telemetry["<b>Telemetry Service</b><br/><i>[Rust]</i> · Platform Read Model"]:::domainStyle
   end
 
   subgraph integrationLayer ["Layer 5 - AI Integration"]
@@ -53,6 +54,8 @@ flowchart TB
     natureDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_nature</code>")]:::dbStyle
     authDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_auth</code>")]:::dbStyle
     analyticsDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
+    telemetryDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_telemetry</code>")]:::dbStyle
+    grafana["<b>[Grafana Cloud]</b><br/>OTLP · the other sink"]:::dbStyle
   end
 
   web -->|"HTTPS"| gateway
@@ -65,6 +68,7 @@ flowchart TB
   nats <-->|"Compose & Manage Nature Worlds"| nature
   nats <-->|"Staff Identity, Roles & Audit"| auth
   nats -->|"Events In, Admin Queries Answered"| analytics
+  nats -->|"Rollups In, Telemetry Queries Answered"| telemetry
 
   dna -->|"ai.Provider Interface"| providers
   dna -->|"Owns Schema"| dnaDatabase
@@ -72,6 +76,8 @@ flowchart TB
   nature -->|"Owns Schema"| natureDatabase
   auth -->|"Owns Schema"| authDatabase
   analytics -->|"Owns Schema"| analyticsDatabase
+  telemetry -->|"TELEMETRY_SINK=postgres"| telemetryDatabase
+  telemetry -.->|"TELEMETRY_SINK=otlp"| grafana
 ```
 
 - The diagram shows ownership, not request sequence.
@@ -80,10 +86,16 @@ flowchart TB
 - Only the gateway is public; NATS, Redis and every service in Layer 4 are private.
 - Layer 4 are NATS workers with no HTTP business API — each binds a port only
   so a scale-to-zero host has something to cold-start against.
-- **Analytics is the only single-headed arrow.** Every other service both
-  receives commands and publishes back; Analytics consumes events and answers
-  admin queries but publishes no domain subject, so an admin page never waits
-  on, or wakes, a domain service the free tier may have put to sleep.
+- **Analytics and Telemetry are the only single-headed arrows.** Every other
+  service both receives commands and publishes back; these two consume events
+  and answer admin queries but publish no domain subject, so an admin page
+  never waits on, or wakes, a domain service the free tier may have put to
+  sleep.
+- **Telemetry is the only service not written in Go, and the only one with two
+  possible destinations.** `TELEMETRY_SINK` picks its own PostgreSQL schema or
+  Grafana Cloud at startup — one `match`, not a fork. Why Rust, and why this
+  service, is answered in
+  [notes/vision/rust-adoption-research.md](notes/vision/rust-adoption-research.md).
 - AI providers sit behind `dna-service` alone — no other service calls one.
 
 | Service | What it does |
@@ -94,6 +106,7 @@ flowchart TB
 | `services/nature-service` | Computes deterministic forest worlds and variants from a seed. No AI calls. |
 | `services/auth-service` | Staff identity: login, refresh, roles, permissions, audit. Core NATS request-reply only. |
 | `services/analytics-service` | The admin read model. Consumes events, writes its own database, answers admin queries — it publishes nothing and calls no other service, so an admin page waits only on the gateway, auth and analytics. |
+| `services/telemetry-service` | **[Rust]** The platform read model. Consumes one aggregated rollup envelope per minute from the gateway and answers telemetry queries — request volume, per-route latency, per-backend round trips, cache hit rate. Stores them in its own schema or forwards them to Grafana Cloud, chosen by one environment variable. |
 | `contracts` | Shared OpenAPI spec, JSON Schemas, NATS subject names, and Go types used across services. |
 | `infra` | Local development infrastructure: PostgreSQL, NATS JetStream, Redis, ACL config, and bootstrap scripts. |
 
@@ -453,6 +466,7 @@ docker compose --env-file services/universe-service/.env.local `
 | `services/nature-service/.env.local` | `services/nature-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `services/auth-service/.env.local` | `services/auth-service/docker-compose-local.yaml` | Database, NATS, Redis, token and Argon2id settings. |
 | `services/analytics-service/.env.local` | `services/analytics-service/docker-compose-local.yaml` | Database, NATS, event-consumer settings. No credentials — it verifies no token and calls no provider. |
+| `services/telemetry-service/.env.local` | `services/telemetry-service/docker-compose-local.yaml` | Sink selection, database, NATS, retention. No credentials, for the same reason. |
 | `apps/myunivokai-web/.env.local` | Web compose file and `npm run dev` | Just `NEXT_PUBLIC_GATEWAY_BASE_URL`. |
 
 ### How full-stack mode resolves variables
@@ -534,10 +548,14 @@ environment:
 │   │   ├── .env.example              # Template: Database, NATS, Redis, tokens, Argon2id
 │   │   ├── cmd/bootstrap/            # One-off: create the first super-admin
 │   │   └── internal/                 # Accounts, roles, permissions, audit, security
-│   └── analytics-service/            # Admin read model; consumes events, publishes nothing
-│       ├── .env.example              # Template: Database, NATS, event consumer
-│       ├── migrations/               # world_projections, job_projections, inbox_messages
-│       └── internal/                 # Projection writer, SQL aggregates, keyset pagination
+│   ├── analytics-service/            # Admin read model; consumes events, publishes nothing
+│   │   ├── .env.example              # Template: Database, NATS, event consumer
+│   │   ├── migrations/               # world_projections, job_projections, inbox_messages
+│   │   └── internal/                 # Projection writer, SQL aggregates, keyset pagination
+│   └── telemetry-service/            # [Rust] Platform read model; the one service not in Go
+│       ├── .env.example              # Template: Sink, Database, NATS, retention
+│       ├── migrations/               # http_rollups, error_code_rollups, nats_rollups, cache_rollups, inbox_messages
+│       └── src/sinks/                # TelemetrySink trait, postgres and otlp adapters
 ├── contracts/                        # Cross-service API and messaging contracts
 │   ├── go/                           # Shared Go types and NATS subject names
 │   ├── fixtures/                     # Executable form of each contract; validated in CI
@@ -592,6 +610,12 @@ cd ../auth-service; go test ./...; go vet ./...; go build ./...
 # Backend — analytics-service
 cd ../analytics-service; go test ./...; go vet ./...; go build ./...
 
+# Backend — telemetry-service (Rust; needs no database and no broker)
+cd ../telemetry-service; cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test; cargo build --release
+
+# Contracts — the Rust mirror, which decodes the same fixtures the Go suite does
+cd ../../contracts/rust; cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test
+
 # Frontend — product
 cd ../../apps/myunivokai-web; npm run typecheck; npm run lint; npm test; npm run build
 npm audit --omit=dev --audit-level=high
@@ -611,8 +635,8 @@ sprint. Detail, schemas and the full blocker list are in
 | Track | Proposal | State |
 | --- | --- | --- |
 | A | End-user login, and worlds owned across two databases | Blocked on a decision, not on code: `DEFERRED-AUTH-001` has seven unanswered questions |
-| B | Wake counts, request counts and status codes on a dashboard | Ready to start. Must **not** land in `myunivokai_analytics` |
-| C | One service written in Rust | Sound if it is track B's service — new, off the product path, and a contract that already exists |
+| B | Wake counts, request counts and status codes on a dashboard | **B1 shipped** (wake counters, Fleet screen). **B2 shipped** as `services/telemetry-service` — see [notes/vision/telemetry-service-plan.md](notes/vision/telemetry-service-plan.md). It did not land in `myunivokai_analytics` |
+| C | One service written in Rust | **Decided and built:** `telemetry-service`, per [notes/vision/rust-adoption-research.md](notes/vision/rust-adoption-research.md). Track B2 was its blocker and shipping both together resolved it |
 | D | WebGPU instead of WebGL | Unblocked by the Next 16 / React 19 / R3F v9 upgrade that `S1-SECURITY-001` already requires |
 
 Two findings from that research apply to the system as it runs **today**,

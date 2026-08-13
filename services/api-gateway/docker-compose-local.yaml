@@ -52,6 +52,12 @@ services:
       # a broken service from a slow one. See
       # notes/vision/service-wake-mechanism.md.
       SERVICE_WAKE_PLATFORM: ${SERVICE_WAKE_PLATFORM:-none}
+      # Off by default here too, so the local stack behaves like the shipped
+      # configuration. Set TELEMETRY_ENABLED=true in .env.local to watch
+      # telemetry-service fill up, which is also the only way to exercise the
+      # admin Telemetry screen locally.
+      TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
+      TELEMETRY_FLUSH_INTERVAL: ${TELEMETRY_FLUSH_INTERVAL:-60s}
     ports:
       - "${GATEWAY_PORT:-41800}:41800"
     volumes:

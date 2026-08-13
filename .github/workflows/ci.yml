@@ -149,6 +149,57 @@ jobs:
       - name: Build
         run: go build ./...
 
+  contracts-rust-checks:
+    name: Contracts (Rust mirror — fmt + clippy + fixture test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts/rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Rust toolchain
+        run: rustup component add rustfmt clippy
+      # The drift guard. tests/telemetry_fixture.rs decodes the same
+      # contracts/fixtures/*.json file the Go suite validates in
+      # contract-checks above, so a wire shape changed in one language and not
+      # the other fails one of these two jobs instead of a production decode.
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Build
+        run: cargo build --release
+
+  telemetry-service-checks:
+    name: Telemetry service (Rust — fmt + clippy + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/telemetry-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Rust toolchain
+        run: rustup component add rustfmt clippy
+      # No database and no broker: everything that would need one lives in the
+      # sink implementations, and what those tests assert is the SQL text
+      # rather than its result. Stated here because a suite that passes without
+      # a database can be mistaken for one that proves the queries work — see
+      # services/telemetry-service/README.md.
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+      # The release build is what Render's Dockerfile runs, and it is the step
+      # that catches a dependency resolving differently than it did locally -
+      # there is no committed Cargo.lock, deliberately, because a lock file for
+      # a service nobody else consumes buys less than it costs to keep current.
+      - name: Build
+        run: cargo build --release
+
   api-gateway-checks:
     name: API gateway (go vet + test + build)
     runs-on: ubuntu-latest
