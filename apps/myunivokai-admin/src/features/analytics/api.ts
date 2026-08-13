@@ -55,6 +55,7 @@ export const analyticsApi = {
         worldStyle: filters.worldStyle,
         mood: filters.mood,
         published: filters.published,
+        rareFeature: filters.rareFeature,
         since: dayStart(filters.since),
         until: dayEnd(filters.until),
         q: filters.search

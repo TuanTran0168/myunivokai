@@ -7,6 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { analyticsApi } from "./api";
 import { DistributionChart } from "./components/charts/DistributionChart";
@@ -59,23 +60,22 @@ export function ContentMixPage() {
       <PageHeader
         title="Content mix"
         description="What the DNA generator is producing. Select any bar to open the worlds behind it."
-        action={
-          <div className="flex items-center gap-2">
-            <FilterSelect
-              label="Family"
-              value={family}
-              onChange={(value) => setFamily(value as "" | WorldFamily)}
-              options={FAMILY_OPTIONS}
-            />
-            <FilterSelect
-              label="Range"
-              value={String(days)}
-              onChange={(value) => setDays(Number(value))}
-              options={RANGE_OPTIONS.map((option) => ({ label: `${option} days`, value: String(option) }))}
-            />
-          </div>
-        }
       />
+
+      <FilterBar>
+        <FilterSelect
+          label="Family"
+          value={family}
+          onChange={(value) => setFamily(value as "" | WorldFamily)}
+          options={FAMILY_OPTIONS}
+        />
+        <FilterSelect
+          label="Range"
+          value={String(days)}
+          onChange={(value) => setDays(Number(value))}
+          options={RANGE_OPTIONS.map((option) => ({ label: `${option} days`, value: String(option) }))}
+        />
+      </FilterBar>
 
       {overviewQuery.isError ? (
         <Card>

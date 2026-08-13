@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { SearchInput } from "@/components/ui/search-input";
@@ -54,53 +55,53 @@ export function WorldsPage() {
       <PageHeader
         title="Worlds"
         description="Every generated world, newest first, projected from universe and nature events."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput
-              value={filters.search ?? ""}
-              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
-              placeholder="Search nickname…"
-            />
-            <FilterSelect
-              label="Family"
-              value={filters.family ?? ""}
-              onChange={(value) => setFilters((current) => ({ ...current, family: value as WorldListFilters["family"] }))}
-              options={[
-                { label: "All families", value: "" },
-                { label: "Universe", value: "universe" },
-                { label: "Nature", value: "nature" }
-              ]}
-            />
-            <FilterSelect
-              label="Style"
-              value={filters.worldStyle ?? ""}
-              onChange={(value) => setFilters((current) => ({ ...current, worldStyle: value }))}
-              options={STYLE_OPTIONS}
-            />
-            <FilterSelect
-              label="Published"
-              value={filters.published ?? ""}
-              onChange={(value) => setFilters((current) => ({ ...current, published: value as WorldListFilters["published"] }))}
-              options={[
-                { label: "Any", value: "" },
-                { label: "Published", value: "true" },
-                { label: "Private", value: "false" }
-              ]}
-            />
-            <DateRangeFilter
-              since={filters.since ?? ""}
-              until={filters.until ?? ""}
-              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
-              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
-            />
-          </div>
-        }
       />
 
-      {/* Archetype and mood arrive from a dashboard chart rather than a
-          picker, so they need somewhere visible to live — otherwise the list
-          is filtered by something the page never mentions, which reads as
-          missing rows. */}
+      <FilterBar>
+        <SearchInput
+          value={filters.search ?? ""}
+          onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+          placeholder="Nickname…"
+        />
+        <FilterSelect
+          label="Family"
+          value={filters.family ?? ""}
+          onChange={(value) => setFilters((current) => ({ ...current, family: value as WorldListFilters["family"] }))}
+          options={[
+            { label: "All families", value: "" },
+            { label: "Universe", value: "universe" },
+            { label: "Nature", value: "nature" }
+          ]}
+        />
+        <FilterSelect
+          label="Style"
+          value={filters.worldStyle ?? ""}
+          onChange={(value) => setFilters((current) => ({ ...current, worldStyle: value }))}
+          options={STYLE_OPTIONS}
+        />
+        <FilterSelect
+          label="Published"
+          value={filters.published ?? ""}
+          onChange={(value) => setFilters((current) => ({ ...current, published: value as WorldListFilters["published"] }))}
+          options={[
+            { label: "Any", value: "" },
+            { label: "Published", value: "true" },
+            { label: "Private", value: "false" }
+          ]}
+        />
+        <DateRangeFilter
+          label="Created"
+          since={filters.since ?? ""}
+          until={filters.until ?? ""}
+          onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+          onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
+        />
+      </FilterBar>
+
+      {/* Archetype, mood and rare feature arrive from a chart on another
+          screen rather than from a picker here, so they need somewhere visible
+          to live — otherwise the list is filtered by something the page never
+          mentions, which reads as missing rows. */}
       <ActiveChips
         filters={filters}
         onClear={(key) => setFilters((current) => ({ ...current, [key]: "" }))}
@@ -153,14 +154,20 @@ function filtersFromQuery(searchParams: URLSearchParams | null): WorldListFilter
     worldStyle: searchParams?.get("worldStyle") ?? "",
     mood: searchParams?.get("mood") ?? "",
     published: published === "true" || published === "false" ? published : "",
+    rareFeature: searchParams?.get("rareFeature") ?? "",
     since: searchParams?.get("since") ?? "",
     until: searchParams?.get("until") ?? ""
   };
 }
 
+// Filters that arrive from a chart on another screen rather than from a picker
+// on this one. They get a chip so the list never quietly excludes rows for a
+// reason the page does not state — which reads as missing data, not as a
+// filter.
 const CHIP_LABELS: Array<[keyof WorldListFilters, string]> = [
   ["archetype", "Archetype"],
-  ["mood", "Mood"]
+  ["mood", "Mood"],
+  ["rareFeature", "Rare feature"]
 ];
 
 function ActiveChips({

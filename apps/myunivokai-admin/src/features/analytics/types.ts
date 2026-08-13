@@ -116,6 +116,44 @@ export interface Overview {
   hourOfDay: AnalyticsHourBucket[];
   // Absent when no job was submitted in the window.
   peakHour?: AnalyticsHourBucket;
+  rarity: RarityReport;
+}
+
+// One variety of a rare feature. percentOfHits is against that feature's own
+// hits, so the varieties of one feature sum to 100% — dividing by the whole
+// population instead would make three species that account for every rare bird
+// sum to the bird's own 35%.
+export interface RaritySpeciesShare {
+  key: string;
+  label: string;
+  count: number;
+  percentOfHits: number;
+}
+
+// A rare feature is never stored: the renderer re-derives it from the world's
+// variant seed on every draw. analytics-service replays that same lottery over
+// the seeds of real worlds, which is why observedPercent can differ from
+// configuredPercent — one is what the generator was aimed at, the other is what
+// it hit.
+export interface RarityFeatureRate {
+  key: string;
+  label: string;
+  family: WorldFamily;
+  configuredPercent: number;
+  // The denominator: worlds of this feature's family, in the window, carrying a
+  // seed. Small denominators make observedPercent mostly sampling noise, which
+  // is why the screen shows this number rather than the percentage alone.
+  eligibleWorlds: number;
+  observedCount: number;
+  observedPercent: number;
+  species?: RaritySpeciesShare[];
+}
+
+export interface RarityReport {
+  features: RarityFeatureRate[];
+  // Worlds in the window with no seed, and so in no denominator above. These
+  // are not misses — they are worlds the lottery cannot be replayed for at all.
+  unmeasuredWorlds: number;
 }
 
 export interface TimeseriesPoint {
@@ -243,6 +281,8 @@ export interface WorldListFilters {
   since?: string;
   until?: string;
   search?: string;
+  /** A key from the rarity catalogue, e.g. "black-hole". */
+  rareFeature?: string;
 }
 
 // search matches jobId or errorMessage, case-insensitively.

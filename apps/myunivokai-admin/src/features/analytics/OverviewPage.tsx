@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { FunnelChart } from "@/components/ui/funnel-chart";
 import { HourOfDayChart } from "@/components/ui/hour-of-day-chart";
@@ -66,23 +67,22 @@ export function OverviewPage() {
       <PageHeader
         title="Overview"
         description="Read from analytics-service. Eventually consistent — a world appears here seconds after it is created."
-        action={
-          <div className="flex items-center gap-2">
-            <FilterSelect
-              label="Family"
-              value={family}
-              onChange={(value) => setFamily(value as "" | WorldFamily)}
-              options={FAMILY_OPTIONS}
-            />
-            <FilterSelect
-              label="Range"
-              value={String(days)}
-              onChange={(value) => setDays(Number(value))}
-              options={RANGE_OPTIONS.map((option) => ({ label: `${option} days`, value: String(option) }))}
-            />
-          </div>
-        }
       />
+
+      <FilterBar>
+        <FilterSelect
+          label="Family"
+          value={family}
+          onChange={(value) => setFamily(value as "" | WorldFamily)}
+          options={FAMILY_OPTIONS}
+        />
+        <FilterSelect
+          label="Range"
+          value={String(days)}
+          onChange={(value) => setDays(Number(value))}
+          options={RANGE_OPTIONS.map((option) => ({ label: `${option} days`, value: String(option) }))}
+        />
+      </FilterBar>
 
       {overviewQuery.isError ? (
         <Card>

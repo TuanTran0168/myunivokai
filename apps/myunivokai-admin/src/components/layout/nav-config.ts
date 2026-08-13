@@ -10,6 +10,7 @@ import {
   Server,
   ShieldAlert,
   Shield,
+  Sparkles,
   Users
 } from "lucide-react";
 import { PERMISSIONS, type PermissionCode } from "@/lib/session";
@@ -84,6 +85,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Palette,
         permission: PERMISSIONS.chartRead,
         summary: "What the generator is actually producing: archetypes, styles, moods, traits."
+      },
+      {
+        href: "/rarity",
+        label: "Rarity",
+        icon: Sparkles,
+        permission: PERMISSIONS.chartRead,
+        summary: "How often each rare feature actually comes up, against the rate it was tuned to."
       }
     ]
   },
