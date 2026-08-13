@@ -429,6 +429,35 @@ a broken screen.
 
 ## Deploy and CI additions
 
+### `Dockerfile.prod` — two build-time decisions the first draft skipped
+
+Every service in this repo deploys to Render the same way regardless of
+language: `runtime: docker` plus a two-stage `Dockerfile.prod`
+([render.yaml:23-24](../../render.yaml#L23-L24)) — Render builds and runs a
+container, it does not have an opinion about Rust. That means deployability
+was never in question. Two decisions inside that Dockerfile were, and the
+first draft of this plan named neither:
+
+1. **`sqlx` needs a database at build time, and the builder stage has none.**
+   `sqlx::migrate!` and `sqlx::query!` check SQL against a real schema
+   *during* `cargo build` — there is no Go equivalent to this step, so it is
+   easy to miss when copying the pattern from a Go service. Without
+   `SQLX_OFFLINE=true` and a committed `.sqlx/` query cache (generated locally
+   ahead of time with `cargo sqlx prepare`), the Render build fails at
+   `cargo build --release`, not at runtime. Phase 3 (`sinks::postgres`) must
+   commit `.sqlx/` alongside the migration it covers; Phase 7's Dockerfile
+   sets `SQLX_OFFLINE=true` in the builder stage and does not expect a
+   `DATABASE_URL` at build time.
+2. **Rust binaries default to glibc; this repo's runtime images are Alpine.**
+   The Go services get a static binary for free from `CGO_ENABLED=0` and run
+   it on Alpine's musl libc. Rust needs an explicit choice: either add the
+   `x86_64-unknown-linux-musl` target and a musl linker to the builder stage
+   so the binary matches the existing Alpine runtime pattern, or switch this
+   one service's runtime stage to `debian:bookworm-slim` (or
+   `gcr.io/distroless/cc-debian12`) and accept it as the one image family that
+   isn't Alpine. Phase 7 picks one before `Dockerfile.prod` is written, not
+   during it.
+
 - `render.yaml`: `myunivokai-telemetry`, same `type: web` + `/healthz`-only
   shape as every other service (Render Free has no `worker` type). **This is
   the seventh free web service on the account — check the instance-hour
