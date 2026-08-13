@@ -182,23 +182,27 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install the Rust toolchain
         run: rustup component add rustfmt clippy
-      # No database and no broker: everything that would need one lives in the
-      # sink implementations, and what those tests assert is the SQL text
-      # rather than its result. Stated here because a suite that passes without
-      # a database can be mistaken for one that proves the queries work — see
-      # services/telemetry-service/README.md.
+      # No database and no broker. The logic is tested against an in-memory
+      # repository (idempotency, two-instance accumulation, window clamping,
+      # error-rate arithmetic, retention, ack-versus-nak); the SQL is tested as
+      # TEXT only — that every SUM is cast off numeric, that every conflict
+      # clause accumulates, that retention covers all five tables.
+      #
+      # Stated here because a suite that passes without a database is otherwise
+      # read as proving the queries run. What proves that is the local pipeline
+      # check in services/telemetry-service/README.md.
       - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
-      # The release build is what Render's Dockerfile runs, and it is the step
-      # that catches a dependency resolving differently than it did locally -
-      # there is no committed Cargo.lock, deliberately, because a lock file for
-      # a service nobody else consumes buys less than it costs to keep current.
+      # --locked matches what Render's Dockerfile runs. Cargo.lock is committed
+      # for this binary, so CI and the deploy resolve the same dependency tree;
+      # a lock file out of step with Cargo.toml fails here rather than shipping
+      # something nobody tested.
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --locked
 
   api-gateway-checks:
     name: API gateway (go vet + test + build)

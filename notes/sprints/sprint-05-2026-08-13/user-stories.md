@@ -1,10 +1,10 @@
 # Sprint 05 user stories — telemetry-service
 
-> **Document status:** Implemented — every story below has source and
-> automated checks. **Not Verified:** no story here claims a deployed or
-> browser-verified result yet, and the Rust half has never been compiled on
-> the machine that wrote it (no toolchain installed), so CI is its first
-> build. See §Honest status below.
+> **Document status:** Implemented, and locally verified end to end. The Rust
+> crates compile, `cargo fmt`/`clippy -D warnings`/`test` are green in the
+> container, and one gateway flush has been driven through JetStream into
+> `myunivokai_telemetry` and read back out over NATS. **Not Verified:** nothing
+> is deployed. See §Honest status below.
 > **Sprint starts:** 2026-08-13
 > **Last source review:** 2026-08-13
 
@@ -368,25 +368,31 @@ comment already describes the implicit split in prose.
 
 ## Honest status
 
-Everything above has source and automated checks; nothing above is Verified.
-The gap is specific rather than general, and worth stating in one place:
-
-- **The Go and TypeScript halves are checked here.** `contracts/go`,
-  `services/api-gateway` and `apps/myunivokai-admin` all pass `vet`/`test`/
-  `build`, `typecheck`, `lint`, the import-boundary check and their own test
-  suites on the machine that wrote them.
-- **The Rust halves have never been compiled.** No Rust toolchain exists on
-  that machine, so `contracts/rust` and `services/telemetry-service` were
-  written but not built, and the two CI jobs added in `S5-TELEMETRY-008` are
-  their first compile. Expect a `cargo fmt` pass and possibly a dependency-API
-  fix-up on the first run; `src/sinks/otlp.rs` is the file most exposed to
-  that, because the OpenTelemetry Rust SDK's builder API has moved between
-  minor versions.
-- **No SQL in `sinks/postgres.rs` has been executed.** Its tests assert the SQL
-  *text* — that every `SUM` is cast off `numeric`, that every conflict clause
-  accumulates rather than overwrites, that retention covers every table
-  including the inbox. That is worth having and it is not the same as proving
-  the queries run.
+- **Every language's checks are green.** `contracts/go`,
+  `services/api-gateway` and `apps/myunivokai-admin` pass `vet`/`test`/`build`,
+  `typecheck`, `lint` and the import-boundary check. `contracts/rust`
+  (21 tests) and `services/telemetry-service` (45 tests) pass `cargo fmt
+  --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` — run
+  inside the local container, which is where the Rust toolchain lives.
+- **The pipeline has been driven end to end locally.** With
+  `TELEMETRY_ENABLED=true` on the gateway, a flush travelled through JetStream
+  into `myunivokai_telemetry`, and
+  `myunivokai.queries.telemetry.overview.get.v1` answered `200` with real
+  aggregates over those rows. The stored `route_pattern` was
+  `/api/universe/worlds/{worldID}` with no world id anywhere, every unmatched
+  URL collapsed into one `unmatched` row, and the inbox held one
+  `{instance}:{bucket_start}` row per flush. The exact commands are in
+  `services/telemetry-service/README.md` §Verifying the whole pipeline locally.
+- **That run found a real bug**, which is the argument for doing it: a bucket
+  in which every request finished inside a millisecond reported `p95 = 5 ms`,
+  the interpolation's own bucket edge rather than anything observed. Zero is a
+  real maximum; the clamp was treating it as a missing one. Fixed in
+  `contracts/rust/src/telemetry.rs` with a test naming the case.
+- **The SQL is exercised but not asserted.** The local run proves the
+  statements execute and accumulate correctly against a real PostgreSQL; the
+  automated suite still only asserts the query *text*, because it deliberately
+  needs no database. A regression in a query would be caught by rerunning the
+  local pipeline, not by CI.
 - **Nothing has been deployed.** `render.yaml` describes the seventh free web
   service; the instance-hour budget has not been checked and the Neon database
   does not exist. `services/telemetry-service/README.md` §First deploy is the

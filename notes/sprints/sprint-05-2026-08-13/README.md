@@ -1,9 +1,9 @@
 # Sprint 05 — telemetry-service, the first Rust service
 
 > **Starts:** 2026-08-13
-> **Status:** Implemented — source and automated checks exist for every story.
-> **Not Verified:** the Rust crates have never been compiled (no toolchain on
-> the authoring machine, so CI is their first build) and nothing is deployed.
+> **Status:** Implemented, and locally verified end to end — a gateway flush
+> has travelled through JetStream into `myunivokai_telemetry` and been read
+> back over NATS. **Not Verified:** nothing is deployed.
 > See [user-stories.md §Honest status](user-stories.md#honest-status).
 > **Last source review:** 2026-08-13
 
@@ -111,17 +111,15 @@ open for the reason stated beside each, not because nobody looked.
       it has in production today — `TestWithNoCollectorTheRequestPathRecordsNothing`
       compares both responses.
 - [x] `notes/be/source-overview.md` explains why one service is not Go.
-- [ ] One fixture is decoded by a Go test **and** a Rust test. Both tests
-      exist; the Go one passes locally, the Rust one has never been run — CI is
-      its first execution.
-- [ ] A redelivered rollup envelope is a no-op in the postgres sink, proven by
-      the inbox table rather than asserted. The insert is
-      `ON CONFLICT DO NOTHING` and a unit test asserts that *text*; nothing has
-      executed it against a database.
+- [x] One fixture is decoded by a Go test **and** a Rust test, both green.
+- [x] A redelivered rollup envelope is a no-op, proven by the inbox rather than
+      asserted — `redelivering_the_same_flush_five_times_changes_nothing` in
+      `tests/rollup_pipeline.rs`, and the inbox table observed holding exactly
+      one row per flush in the local run.
 - [ ] With `TELEMETRY_SINK=otlp`, the admin Telemetry screen says where the
       charts are instead of rendering an empty one or a 501. Both halves are
-      built (`sinks/otlp.rs`, `SinkNotice.tsx`); neither has been run against
-      the other.
+      built and unit-tested; the two have not been run against each other,
+      which needs a Grafana Cloud endpoint.
 - [ ] Opening the Telemetry screen after an idle period wakes
       `telemetry-service`. The "no telemetry-specific branch" half is proven —
       `internal/wake/platform_test.go` resolves the subject by the same prefix

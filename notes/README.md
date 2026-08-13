@@ -38,6 +38,7 @@ date; it is not the original creation date.
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
 | [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution record for dynamic family chunks and the forest fidelity metrics, both shipped — including what each plan predicted wrongly | When a plan of yours meets a measurement that disagrees |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
+| [be/rust-service-architecture.md](be/rust-service-architecture.md) | The Rust keywords, the official Cargo layout, the layering in `telemetry-service`, the `thiserror`/`anyhow` split, and why there is no ORM |
 | [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe, Nature, Auth and Analytics communicate through NATS/Redis and own data | For any backend task |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
 | [vision/](vision/README.md) | Approved event-driven target plus source/target boundary, NATS, Redis, DNA/family ownership and scale roadmap | Before any architecture decision |

@@ -35,7 +35,11 @@ RUN apt-get update \
 COPY contracts/rust /workspace/contracts/rust
 COPY services/telemetry-service .
 
-RUN cargo build --release
+# --locked, not a bare build: Cargo.lock is committed for this binary, so the
+# deploy resolves the exact dependency versions CI tested rather than whatever
+# is newest at build time. A lock file out of step with Cargo.toml fails here
+# instead of shipping a different dependency tree than the one that was tested.
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

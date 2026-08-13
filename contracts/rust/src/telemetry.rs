@@ -123,7 +123,8 @@ impl HttpRollupData {
                     "buckets.{index}.statusClass must be {TELEMETRY_STATUS_CLASS_MINIMUM}-{TELEMETRY_STATUS_CLASS_MAXIMUM}"
                 ));
             }
-            if bucket.request_count < 0 || bucket.duration_sum_ms < 0 || bucket.duration_max_ms < 0 {
+            if bucket.request_count < 0 || bucket.duration_sum_ms < 0 || bucket.duration_max_ms < 0
+            {
                 return Err(format!("buckets.{index} counters must not be negative"));
             }
         }
@@ -142,7 +143,9 @@ impl HttpRollupData {
                 return Err(format!("cacheBuckets.{index}.namespace is required"));
             }
             if bucket.hits < 0 || bucket.misses < 0 {
-                return Err(format!("cacheBuckets.{index} counters must not be negative"));
+                return Err(format!(
+                    "cacheBuckets.{index} counters must not be negative"
+                ));
             }
         }
         Ok(())
@@ -389,11 +392,17 @@ fn bucket_upper_bound_ms(index: usize, observed_maximum_ms: i64) -> i64 {
     }
 }
 
+/// Caps an interpolation at the largest latency actually observed.
+///
+/// Zero is a real maximum, not a missing one — the gateway floors a
+/// sub-millisecond request to 0 ms, so a bucket in which every request was
+/// faster than the clock's resolution has an honest maximum of zero. Treating
+/// zero as "unknown" and skipping the cap here made such a bucket report a p95
+/// of 5 ms, which is the interpolation's own bucket edge rather than anything
+/// that happened. This function is only ever reached with at least one
+/// observation, so the maximum is always meaningful.
 fn clamp_to_observed_maximum(value: i64, observed_maximum_ms: i64) -> i64 {
-    if observed_maximum_ms > 0 && value > observed_maximum_ms {
-        return observed_maximum_ms;
-    }
-    value.max(0)
+    value.clamp(0, observed_maximum_ms.max(0))
 }
 
 #[cfg(test)]
@@ -458,6 +467,16 @@ mod tests {
         // than 61 ms, so no interpolation may claim 98 ms.
         let histogram: TelemetryHistogram = [0, 0, 0, 0, 10, 0, 0, 0];
         assert_eq!(percentile_from_histogram(&histogram, 95.0, 61), 61);
+    }
+
+    // Found by running the real pipeline: a bucket where every request
+    // finished inside a millisecond reported p95 = 5 ms, which is the
+    // interpolation's own bucket edge and not anything that happened. Zero is
+    // a real observed maximum, not a missing one.
+    #[test]
+    fn a_bucket_of_sub_millisecond_requests_reports_zero_rather_than_a_bucket_edge() {
+        let histogram: TelemetryHistogram = [12, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(percentile_from_histogram(&histogram, 95.0, 0), 0);
     }
 
     #[test]

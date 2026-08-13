@@ -1,18 +1,17 @@
 //! The sink that forwards rollups to Grafana Cloud instead of storing them.
 //!
-//! It exists so that alerting and ad-hoc exploration are available without
-//! building either here. What it gives up is the query surface: once data is
-//! pushed to Grafana, Grafana owns it, so `overview` and `routes` below
-//! answer `Unsupported` and the query handler turns that into a "the charts
-//! are over there" response rather than an error. That distinction has to stay
-//! visible in the admin UI - see
-//! notes/vision/telemetry-service-plan.md#admin-surface.
+//! It has no repository and no service layer, and that asymmetry is the point:
+//! there is nothing to query, nothing to retain and nothing to delete. What it
+//! gives up is the query surface — once data is pushed to Grafana, Grafana
+//! owns it — so [`OtlpSink::overview`] and [`OtlpSink::routes`] answer
+//! [`Error::Unsupported`], which the query responder turns into a "the charts
+//! are over there" response rather than an error.
 //!
 //! # Why counters and not a histogram instrument
 //!
 //! The envelope arriving here is already aggregated: eight bucket counts, not
 //! the observations that produced them. Replaying it through an OTLP histogram
-//! instrument would mean inventing individual measurements to record - a
+//! instrument would mean inventing individual measurements to record — a
 //! number that looks precise and describes nothing. Datadog documents the same
 //! failure from the other direction: aggregating twice silently changes the
 //! resulting percentile, which is why its client disables client-side
@@ -27,10 +26,9 @@ use std::time::Duration as StdDuration;
 
 use async_trait::async_trait;
 use myunivokai_contracts::{
-    normalize_telemetry_hours, HttpRollupEnvelope, TelemetryOverviewQueryData,
-    TelemetryOverviewResponseData, TelemetryRouteListQueryData, TelemetryRouteListResponseData,
-    TelemetrySinkDescriptor, TELEMETRY_HISTOGRAM_BUCKET_COUNT, TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS,
-    TELEMETRY_SINK_OTLP,
+    HttpRollupEnvelope, TelemetryOverviewQueryData, TelemetryOverviewResponseData,
+    TelemetryRouteListQueryData, TelemetryRouteListResponseData, TelemetrySinkDescriptor,
+    TELEMETRY_HISTOGRAM_BUCKET_COUNT, TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS, TELEMETRY_SINK_OTLP,
 };
 use opentelemetry::metrics::{Counter, MeterProvider};
 use opentelemetry::KeyValue;
@@ -39,8 +37,10 @@ use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
 use opentelemetry_sdk::{runtime, Resource};
 use time::OffsetDateTime;
 
-use super::{unavailable_overview, unavailable_routes, SinkError, TelemetrySink, WriteOutcome};
+use super::TelemetrySink;
 use crate::config::Config;
+use crate::domain::IngestOutcome;
+use crate::error::{Error, Result};
 
 const METER_NAME: &str = "myunivokai.telemetry";
 const SERVICE_RESOURCE_NAME: &str = "myunivokai-telemetry";
@@ -55,6 +55,8 @@ const EXPORT_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 /// is `+Inf`, exactly as Prometheus spells it, so `histogram_quantile` needs no
 /// translation layer on the Grafana side.
 const OVERFLOW_BUCKET_LABEL: &str = "+Inf";
+
+const UNSUPPORTED_REASON: &str = "the OTLP sink pushes to Grafana, which owns the query surface";
 
 pub struct OtlpSink {
     provider: SdkMeterProvider,
@@ -75,9 +77,9 @@ pub struct OtlpSink {
 
 impl OtlpSink {
     /// Authentication is supplied through the standard
-    /// `OTEL_EXPORTER_OTLP_HEADERS` environment variable rather than a
-    /// setting of our own. Grafana Cloud's instructions are already written in
-    /// those terms, and re-spelling them as TELEMETRY_* would mean an operator
+    /// `OTEL_EXPORTER_OTLP_HEADERS` environment variable rather than a setting
+    /// of our own. Grafana Cloud's instructions are already written in those
+    /// terms, and re-spelling them as `TELEMETRY_*` would mean an operator
     /// translating a copy-pasteable snippet by hand.
     pub fn connect(config: &Config) -> anyhow::Result<Self> {
         let exporter = MetricExporter::builder()
@@ -109,7 +111,9 @@ impl OtlpSink {
                 .build(),
             http_duration_bucket: meter
                 .u64_counter("myunivokai.http.server.duration.bucket")
-                .with_description("Cumulative latency buckets, carrying a Prometheus-style le label")
+                .with_description(
+                    "Cumulative latency buckets, carrying a Prometheus-style le label",
+                )
                 .build(),
             http_error_codes: meter
                 .u64_counter("myunivokai.http.server.errors")
@@ -140,22 +144,10 @@ impl OtlpSink {
             dashboard_url: config.dashboard_url.clone(),
         })
     }
-
-    /// Pushes whatever has accumulated and stops the exporter. Called on
-    /// shutdown so the last envelope consumed is not lost between the final
-    /// ack and the process exiting.
-    pub fn close(&self) {
-        if let Err(error) = self.provider.force_flush() {
-            tracing::warn!(%error, "flush pending OTLP metrics");
-        }
-        if let Err(error) = self.provider.shutdown() {
-            tracing::warn!(%error, "shut down the OTLP exporter");
-        }
-    }
 }
 
-/// `le` label values, computed once from the contract's own edges so the two
-/// cannot describe different buckets.
+/// `le` label values, computed from the contract's own edges so the two cannot
+/// describe different buckets.
 fn bucket_label(index: usize) -> String {
     match TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS.get(index) {
         Some(upper_bound) => upper_bound.to_string(),
@@ -163,9 +155,9 @@ fn bucket_label(index: usize) -> String {
     }
 }
 
-/// Counters take u64 and every value here is a count, but the contract's
+/// Counters take `u64` and every value here is a count, but the contract's
 /// integers are signed. A negative would mean a corrupt envelope, and clamping
-/// keeps one bad message from poisoning a counter that can only go up.
+/// keeps one bad message from wrapping a counter that can only go up.
 fn as_counter_value(value: i64) -> u64 {
     value.max(0) as u64
 }
@@ -182,11 +174,11 @@ impl TelemetrySink for OtlpSink {
 
     /// There is no inbox here, and there cannot be one: this sink owns no
     /// storage to remember a message in. A redelivery therefore double-counts,
-    /// which is why the outcome is always `Applied` rather than a claim this
-    /// sink cannot support. JetStream's own deduplication window - keyed on
-    /// the same Nats-Msg-Id the gateway sets - is the only guard on this path,
-    /// and it is bounded by that window rather than by retention.
-    async fn write_rollup(&self, envelope: &HttpRollupEnvelope) -> Result<WriteOutcome, SinkError> {
+    /// which is why the outcome is always `Stored` rather than a claim this
+    /// sink cannot support. JetStream's own deduplication window — keyed on
+    /// the same `Nats-Msg-Id` the gateway sets — is the only guard on this
+    /// path, and it is bounded by that window rather than by retention.
+    async fn write_rollup(&self, envelope: &HttpRollupEnvelope) -> Result<IngestOutcome> {
         let data = &envelope.data;
         let instance = KeyValue::new("service.instance.id", data.instance_id.clone());
 
@@ -204,8 +196,10 @@ impl TelemetrySink for OtlpSink {
             for index in 0..TELEMETRY_HISTOGRAM_BUCKET_COUNT {
                 let mut bucket_dimensions = dimensions.to_vec();
                 bucket_dimensions.push(KeyValue::new("le", bucket_label(index)));
-                self.http_duration_bucket
-                    .add(as_counter_value(bucket.histogram[index]), &bucket_dimensions);
+                self.http_duration_bucket.add(
+                    as_counter_value(bucket.histogram[index]),
+                    &bucket_dimensions,
+                );
             }
             for (error_code, count) in &bucket.error_codes {
                 let mut error_dimensions = dimensions.to_vec();
@@ -229,8 +223,10 @@ impl TelemetrySink for OtlpSink {
             for index in 0..TELEMETRY_HISTOGRAM_BUCKET_COUNT {
                 let mut bucket_dimensions = dimensions.to_vec();
                 bucket_dimensions.push(KeyValue::new("le", bucket_label(index)));
-                self.backend_duration_bucket
-                    .add(as_counter_value(bucket.histogram[index]), &bucket_dimensions);
+                self.backend_duration_bucket.add(
+                    as_counter_value(bucket.histogram[index]),
+                    &bucket_dimensions,
+                );
             }
         }
 
@@ -254,51 +250,36 @@ impl TelemetrySink for OtlpSink {
             );
         }
 
-        Ok(WriteOutcome::Applied)
+        Ok(IngestOutcome::Stored)
     }
 
     async fn overview(
         &self,
         _query: &TelemetryOverviewQueryData,
-    ) -> Result<TelemetryOverviewResponseData, SinkError> {
-        Err(SinkError::Unsupported(
-            "the OTLP sink pushes to Grafana, which owns the query surface",
-        ))
+        _now: OffsetDateTime,
+    ) -> Result<TelemetryOverviewResponseData> {
+        Err(Error::Unsupported(UNSUPPORTED_REASON))
     }
 
     async fn routes(
         &self,
         _query: &TelemetryRouteListQueryData,
-    ) -> Result<TelemetryRouteListResponseData, SinkError> {
-        Err(SinkError::Unsupported(
-            "the OTLP sink pushes to Grafana, which owns the query surface",
-        ))
+        _now: OffsetDateTime,
+    ) -> Result<TelemetryRouteListResponseData> {
+        Err(Error::Unsupported(UNSUPPORTED_REASON))
     }
-}
 
-/// The two responses the query handler builds when this sink answers
-/// `Unsupported`. They live here rather than in the handler so that the sink
-/// that cannot answer is also the thing that says where to look instead.
-pub fn charts_are_elsewhere_overview(
-    descriptor: TelemetrySinkDescriptor,
-    query: &TelemetryOverviewQueryData,
-) -> TelemetryOverviewResponseData {
-    unavailable_overview(
-        descriptor,
-        normalize_telemetry_hours(query.hours),
-        OffsetDateTime::now_utc(),
-    )
-}
-
-pub fn charts_are_elsewhere_routes(
-    descriptor: TelemetrySinkDescriptor,
-    query: &TelemetryRouteListQueryData,
-) -> TelemetryRouteListResponseData {
-    unavailable_routes(
-        descriptor,
-        normalize_telemetry_hours(query.hours),
-        OffsetDateTime::now_utc(),
-    )
+    /// Pushes whatever has accumulated and stops the exporter, so the last
+    /// envelope this process acknowledged is not lost between the ack and the
+    /// process exiting.
+    async fn shutdown(&self) {
+        if let Err(error) = self.provider.force_flush() {
+            tracing::warn!(%error, "flush pending OTLP metrics");
+        }
+        if let Err(error) = self.provider.shutdown() {
+            tracing::warn!(%error, "shut down the OTLP exporter");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -307,7 +288,7 @@ mod tests {
 
     // The le labels have to describe the same edges the contract does, or a
     // quantile computed in Grafana answers a different question than the one
-    // computed in the postgres sink.
+    // computed by the postgres sink.
     #[test]
     fn bucket_labels_mirror_the_contracts_own_edges() {
         assert_eq!(bucket_label(0), "5");
@@ -316,54 +297,16 @@ mod tests {
             bucket_label(TELEMETRY_HISTOGRAM_BUCKET_COUNT - 1),
             OVERFLOW_BUCKET_LABEL
         );
-        for index in 0..TELEMETRY_HISTOGRAM_BUCKET_COUNT - 1 {
-            assert_eq!(
-                bucket_label(index),
-                TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS[index].to_string()
-            );
+        for (index, upper_bound) in TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS.iter().enumerate() {
+            assert_eq!(bucket_label(index), upper_bound.to_string());
         }
     }
 
-    // A counter can only go up. A negative arriving from a corrupt envelope
-    // must be dropped rather than wrapped into an enormous positive.
     #[test]
-    fn a_negative_count_cannot_poison_a_monotonic_counter() {
+    fn a_negative_count_cannot_wrap_a_monotonic_counter() {
         assert_eq!(as_counter_value(12), 12);
         assert_eq!(as_counter_value(0), 0);
         assert_eq!(as_counter_value(-1), 0);
         assert_eq!(as_counter_value(i64::MIN), 0);
-    }
-
-    // A missing chart must read as "look elsewhere". An empty payload with no
-    // sink name and no link would read as "no traffic", which is a different
-    // and wrong conclusion.
-    #[test]
-    fn the_elsewhere_response_still_names_the_sink_and_the_dashboard() {
-        let descriptor = TelemetrySinkDescriptor {
-            sink: TELEMETRY_SINK_OTLP.to_owned(),
-            charts_available: false,
-            dashboard_url: "https://grafana.example.net/d/myunivokai".to_owned(),
-        };
-        let response = charts_are_elsewhere_overview(
-            descriptor.clone(),
-            &TelemetryOverviewQueryData { hours: 0 },
-        );
-        assert_eq!(response.sink.sink, TELEMETRY_SINK_OTLP);
-        assert!(!response.sink.charts_available);
-        assert_eq!(
-            response.sink.dashboard_url,
-            "https://grafana.example.net/d/myunivokai"
-        );
-        assert_eq!(response.hours, myunivokai_contracts::TELEMETRY_DEFAULT_HOURS);
-        assert!(response.volume_points.is_empty());
-        assert!(
-            !response.percentile_is_interpolated,
-            "a percentile that was never computed must not be labelled as an interpolation"
-        );
-
-        let routes =
-            charts_are_elsewhere_routes(descriptor, &TelemetryRouteListQueryData { hours: 12 });
-        assert_eq!(routes.hours, 12);
-        assert!(routes.routes.is_empty());
     }
 }

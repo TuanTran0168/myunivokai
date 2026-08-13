@@ -49,9 +49,16 @@ dist/
 bin/
 
 # Rust build artifacts. One `target/` per crate — contracts/rust and
-# services/telemetry-service are separate crates with separate lock files, the
-# same way each Go service has its own go.mod.
+# services/telemetry-service are separate crates, the same way each Go service
+# has its own go.mod.
 target/
+
+# A library crate's lock file is ignored and a binary's is committed, which is
+# Cargo's own convention: the lock only takes effect for the thing being built,
+# so contracts/rust's would never be read by anyone, while
+# services/telemetry-service's is what makes a Render build resolve the exact
+# versions CI tested.
+contracts/rust/Cargo.lock
 
 # Editor/IDE
 # .idea/
