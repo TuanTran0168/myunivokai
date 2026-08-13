@@ -47,6 +47,11 @@ dist/
 # Go build artifacts
 bin/
 
+# Rust build artifacts. One `target/` per crate — contracts/rust and
+# services/telemetry-service are separate crates with separate lock files, the
+# same way each Go service has its own go.mod.
+target/
+
 # Editor/IDE
 # .idea/
 # .vscode/
