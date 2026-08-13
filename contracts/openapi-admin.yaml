@@ -288,6 +288,68 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/telemetry/overview:
+    get:
+      summary: Request volume, status mix and latency over a window
+      description: >-
+        Answered by telemetry-service, which is neither analytics-service nor a
+        domain service: this is operations data about the platform itself, from
+        a third read model with its own data boundary.
+
+
+        Every number here is a sum over one-minute rollup buckets the gateway
+        published, and every percentile is an interpolation across eight fixed
+        histogram edges rather than an exact value — `percentileIsInterpolated`
+        says so on every response, and the admin UI is required to render that
+        qualification next to the number.
+
+
+        `errorRatePercent` counts 5xx only. A validation failure or a 404 is
+        the client's problem, and folding it in would produce an error rate
+        that never goes down; `statusMix` returns the rest so nothing is
+        hidden.
+
+
+        When the service runs with TELEMETRY_SINK=otlp it stores nothing
+        locally and `chartsAvailable` is false, with `dashboardUrl` naming
+        where to look. That is a 200, not a 501: a missing chart must read as
+        "look elsewhere", never as a broken screen.
+      operationId: adminTelemetryOverview
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/TelemetryHours" }
+      responses:
+        "200":
+          description: One window of platform telemetry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/telemetry/routes:
+    get:
+      summary: Per-route request count, error rate and latency
+      description: >-
+        One row per route TEMPLATE and method — `/api/universe/worlds/{worldID}`,
+        never a path carrying a world id. That rule is what keeps this table
+        bounded by the gateway's route count rather than by traffic, which is
+        also why it needs no pagination.
+      operationId: adminTelemetryRoutes
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/TelemetryHours" }
+      responses:
+        "200":
+          description: Every route observed in the window, busiest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryRouteList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 components:
   parameters:
     Family:
@@ -296,6 +358,17 @@ components:
       required: false
       description: Omit for every family.
       schema: { type: string, enum: [universe, nature] }
+    TelemetryHours:
+      name: hours
+      in: query
+      required: false
+      description: >-
+        Window in hours, clamped to 1..168 by telemetry-service rather than
+        rejected — the maximum matches MYUNIVOKAI_EVENTS's own 7-day retention,
+        so asking for more is a question the stream could never have answered.
+        Hours rather than days because a bucket here is one minute wide and the
+        questions are operational, not historical.
+      schema: { type: integer, default: 24, minimum: 1, maximum: 168 }
     Days:
       name: days
       in: query
@@ -440,6 +513,178 @@ components:
         pageSize: { type: integer }
         nextCursor: { type: string }
         totalCount: { type: integer }
+    TelemetrySink:
+      type: object
+      description: >-
+        On every telemetry response, not only the ones that fail to answer, so
+        the screen reads one field to decide whether to draw charts or a link
+        instead of inferring intent from a missing array.
+      required: [sink, chartsAvailable]
+      properties:
+        sink: { type: string, enum: [postgres, otlp] }
+        chartsAvailable:
+          type: boolean
+          description: False when the sink stores nothing locally and cannot answer a range query.
+        dashboardUrl:
+          type: string
+          description: >-
+            Where to look instead when chartsAvailable is false. Absent means
+            nobody configured one, which the screen states plainly rather than
+            rendering a dead link.
+    TelemetryVolumePoint:
+      type: object
+      additionalProperties: false
+      required: [bucketStart, requestCount, errorCount, p95DurationMs]
+      properties:
+        bucketStart: { type: string, format: date-time }
+        requestCount: { type: integer }
+        errorCount: { type: integer }
+        p95DurationMs: { type: integer }
+    TelemetryOverview:
+      allOf:
+        - { $ref: "#/components/schemas/TelemetrySink" }
+        - type: object
+          required:
+            [
+              hours,
+              generatedAt,
+              totalRequests,
+              errorRequests,
+              errorRatePercent,
+              averageDurationMs,
+              p95DurationMs,
+              slowestDurationMs,
+              percentileIsInterpolated,
+              statusMix,
+              volumePoints,
+              errorCodeTop,
+              backends,
+              cache,
+              wakeSignals,
+            ]
+          properties:
+            hours: { type: integer }
+            generatedAt: { type: string, format: date-time }
+            totalRequests: { type: integer }
+            errorRequests: { type: integer, description: 5xx only. }
+            errorRatePercent: { type: number }
+            averageDurationMs: { type: integer }
+            p95DurationMs: { type: integer }
+            slowestDurationMs: { type: integer }
+            percentileIsInterpolated:
+              type: boolean
+              description: >-
+                Always true when charts are available. The percentile is a
+                linear interpolation across fixed histogram edges, and a p95
+                that looks exact and is not is worse than no p95.
+            statusMix:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [statusClass, requestCount]
+                properties:
+                  statusClass: { type: integer, minimum: 1, maximum: 5 }
+                  requestCount: { type: integer }
+            volumePoints:
+              type: array
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            errorCodeTop:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [errorCode, count]
+                properties:
+                  errorCode: { type: string }
+                  count: { type: integer }
+            backends:
+              type: array
+              description: >-
+                Round-trip time per backend service, which end-to-end response
+                time cannot answer: a request under /api/{family}/worlds
+                reaches universe or nature depending on the family, and both
+                wear the same route template.
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [service, requestCount, errorCount, averageDurationMs, p95DurationMs, slowestDurationMs]
+                properties:
+                  service: { type: string }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer, description: Includes no-responders and timeouts. }
+                  averageDurationMs: { type: integer }
+                  p95DurationMs: { type: integer }
+                  slowestDurationMs: { type: integer }
+            cache:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [namespace, hits, misses, hitRatePercent]
+                properties:
+                  namespace: { type: string, enum: ["job:v1", "world:v1", "share:v1"] }
+                  hits: { type: integer }
+                  misses:
+                    type: integer
+                    description: >-
+                      A Redis failure counts as neither a hit nor a miss. It
+                      sends the request to the backend the same way a miss
+                      does, but folding it in would make an outage read as a
+                      cache that stopped working.
+                  hitRatePercent: { type: number }
+            wakeSignals:
+              type: array
+              description: >-
+                SERVICE_WAKING responses per time bucket — an approximation of
+                the wake-conversion rate joined on time proximity, not a
+                per-request causal trace. The UI must say so.
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            oldestBucketStart:
+              type: string
+              format: date-time
+              description: >-
+                What actually exists in the store, which is not always what was
+                asked for. A service asleep for a week has no data for most of
+                a 24-hour window, and a chart that does not say so reads as "no
+                traffic" rather than "no data".
+    TelemetryRouteList:
+      allOf:
+        - { $ref: "#/components/schemas/TelemetrySink" }
+        - type: object
+          required: [hours, generatedAt, percentileIsInterpolated, routes]
+          properties:
+            hours: { type: integer }
+            generatedAt: { type: string, format: date-time }
+            percentileIsInterpolated: { type: boolean }
+            routes:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [
+                    routePattern,
+                    method,
+                    requestCount,
+                    errorCount,
+                    errorRatePercent,
+                    averageDurationMs,
+                    p95DurationMs,
+                    slowestDurationMs,
+                  ]
+                properties:
+                  routePattern:
+                    type: string
+                    description: A chi route TEMPLATE, never a raw path.
+                  method: { type: string }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer }
+                  errorRatePercent: { type: number }
+                  averageDurationMs: { type: integer }
+                  p95DurationMs: { type: integer }
+                  slowestDurationMs: { type: integer }
     WakeStats:
       type: object
       additionalProperties: false

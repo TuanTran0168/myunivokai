@@ -28,6 +28,16 @@ func TestServiceForSubjectNamesTheResponderOfEveryQuerySubject(t *testing.T) {
 		"analytics overview":   {contracts.AnalyticsOverviewGetQuerySubject, ServiceAnalytics},
 		"analytics world list": {contracts.AnalyticsWorldListQuerySubject, ServiceAnalytics},
 		"analytics timeseries": {contracts.AnalyticsTimeseriesGetQuerySubject, ServiceAnalytics},
+		// telemetry needed no branch of its own. Its query subjects follow the
+		// same myunivokai.queries.<service>.* shape as everyone else's, which
+		// is exactly why joining the wake mechanism cost two list entries and
+		// no request-path change.
+		"telemetry overview": {contracts.TelemetryOverviewGetQuerySubject, ServiceTelemetry},
+		"telemetry routes":   {contracts.TelemetryRouteListQuerySubject, ServiceTelemetry},
+		// The rollup event is not a query. It travels over JetStream, which
+		// holds it for a sleeping consumer - the whole reason the gateway does
+		// not need to wake telemetry-service in order to publish.
+		"telemetry rollup event is not a query": {contracts.TelemetryHTTPRollupEventSubject, ""},
 		// Commands and events travel over JetStream, which holds them for a
 		// sleeping consumer rather than failing, so there is nothing to wake
 		// reactively and nothing here should resolve to a service.

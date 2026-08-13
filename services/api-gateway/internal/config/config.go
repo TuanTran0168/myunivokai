@@ -72,6 +72,7 @@ var serviceWakeURLKeys = map[string]string{
 	"nature":    "NATURE_SERVICE_URL",
 	"auth":      "AUTH_SERVICE_URL",
 	"analytics": "ANALYTICS_SERVICE_URL",
+	"telemetry": "TELEMETRY_SERVICE_URL",
 }
 
 type Config struct {
