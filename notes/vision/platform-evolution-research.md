@@ -20,8 +20,8 @@ and never revisited.
 | Track | Proposal | Verdict |
 | --- | --- | --- |
 | [A](#track-a--end-user-identity-and-world-ownership) | End-user login; worlds owned across two databases | Sound, but **blocked on a decision, not on code** |
-| [B](#track-b--operational-telemetry) | Wake counts, request counts, status codes in a dashboard | Best value per hour. **B1 is built**; the rest stands. **One trap: it must not go into `analytics-service`** |
-| [C](#track-c--a-service-written-in-rust) | A service in Rust, to learn Rust | Good, if it is **track B's** service and nothing else — but that service is now **blocked on B2's undecided landing place**. Amended by [rust-adoption-research.md](rust-adoption-research.md) |
+| [B](#track-b--operational-telemetry) | Wake counts, request counts, status codes in a dashboard | Best value per hour. **B1 is built**; the rest stands. **One trap: it must not go into `analytics-service`**. Amended by [telemetry-architecture-research.md](telemetry-architecture-research.md) |
+| [C](#track-c--a-service-written-in-rust) | A service in Rust, to learn Rust | **Decided 2026-08-13:** `telemetry-service` in Rust, per [telemetry-service-plan.md](telemetry-service-plan.md). Was blocked on B2's landing place; the plan resolves that by building both landing places behind one switch. Amended by [rust-adoption-research.md](rust-adoption-research.md) |
 | [D](#track-d--webgpu-instead-of-webgl) | WebGPU replacing WebGL | Real, cheap **after** an upgrade already required for security. Low return today |
 
 ---
@@ -412,6 +412,23 @@ answerable questions:
 ---
 
 ## Track B — operational telemetry
+
+> **Amended 2026-08-13 by
+> [telemetry-architecture-research.md](telemetry-architecture-research.md).**
+> Nothing below is wrong. That document grounds the B2 sketch against three
+> real large-system precedents (Uber M3, Datadog DogStatsD, the OpenTelemetry
+> Collector), all of which aggregate the same way this sketch already does,
+> and answers a question this document left open: this system's actual route
+> cardinality (~200 series) is 2% of Grafana Cloud's free-tier budget, so the
+> "which option" table below can be read as settled in Option 1's favour at
+> this system's current size, not merely as a coin flip.
+>
+> **Decided 2026-08-13, graduated to
+> [telemetry-service-plan.md](telemetry-service-plan.md).** The owner chose
+> both: `telemetry-service` in Rust, writing through a switchable sink to
+> either its own Postgres database or Grafana Cloud OTLP, with results
+> rendered in `myunivokai-admin`. B2's gateway-side design below is adopted
+> unchanged as that plan's phase 1.
 
 ### The data already exists
 

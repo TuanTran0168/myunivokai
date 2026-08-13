@@ -1,5 +1,14 @@
 # Rust adoption research — which vehicle, now that the first one is blocked
 
+> **Decided 2026-08-13, graduated to
+> [telemetry-service-plan.md](telemetry-service-plan.md).** The owner picked
+> `telemetry-service`, this document's own top recommendation, and resolved
+> its blocker (B2's undecided landing place) by building both candidate
+> landing places behind one switchable sink rather than choosing between
+> them. Nothing below is wrong; read it for *why* `telemetry-service` won
+> over `tools/asset-pipeline`, and read the plan for what is actually being
+> built.
+>
 > **Document status:** Research. **Nothing here is approved.** It extends
 > [platform-evolution-research.md §Track C](platform-evolution-research.md#track-c--a-service-written-in-rust),
 > whose four selection criteria are adopted unchanged; only the candidate that
