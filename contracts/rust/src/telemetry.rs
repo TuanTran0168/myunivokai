@@ -381,8 +381,11 @@ fn bucket_upper_bound_ms(index: usize, observed_maximum_ms: i64) -> i64 {
         Some(upper_bound) => *upper_bound,
         // The overflow bucket. Its real upper edge is unknown, and the
         // observed maximum is the only honest stand-in available.
-        None => observed_maximum_ms.max(TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS
-            [TELEMETRY_HISTOGRAM_BUCKET_COUNT - 2]),
+        None => {
+            let last_finite_edge =
+                TELEMETRY_HISTOGRAM_UPPER_BOUNDS_MS[TELEMETRY_HISTOGRAM_BUCKET_COUNT - 2];
+            observed_maximum_ms.max(last_finite_edge)
+        }
     }
 }
 
