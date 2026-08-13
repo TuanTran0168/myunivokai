@@ -213,6 +213,17 @@ Every aggregate is SQL here; the gateway sums nothing. Pagination is keyset on
 the response stays inside the 2500ms request/reply deadline as the table
 grows.
 
+One aggregate here is not a read of anything: the **observed rare-feature
+rate**. A rare feature — a black hole, a firebird — is never stored, because the
+frontend re-derives it from the world's variant seed on every render. So the
+seed crosses the data boundary and `contracts/go/contracts_rarity.go` replays
+the renderer's own seeded lottery (a port of its FNV-1a + xorshift32 PRNG) over
+real worlds' seeds. `contracts/fixtures/rarity/rare-feature-rolls.v1.json` is
+generated from the TypeScript side and asserted by both suites, because nothing
+else would notice the two implementations quietly disagreeing about which worlds
+hit. `world_rare_rolls` stores the raw draw rather than the outcome, so
+re-tuning a probability re-derives history instead of stranding it.
+
 **The cost this design keeps charging:** every future mutation in universe or
 nature must bump `worlds.revision` and write a `world.changed` outbox row in
 the same transaction, or the read model drifts silently. The guard is

@@ -242,6 +242,32 @@ Only flat, aggregate-shaped values cross: identifiers, an archetype, a scene
 name, a mood, a style, hex colors, five integers, three counters, two
 timestamps.
 
+**Added to the allow list: `world_variants.seed` (the selected variant's), as
+`WorldSnapshot.VariantSeed`.**
+
+| Field | Where it lives | Why it may cross |
+| --- | --- | --- |
+| `world_variants.seed` | universe/nature | A base32 identifier this platform generated. It carries nothing a person typed and nothing derived from what a person typed — the DNA it eventually shapes a scene with lives on the other side of the boundary and stays there. |
+
+It crosses because it is the only way one question has an answer at all: *the
+black hole is tuned to 40% — how often does it actually come up?* A rare feature
+is never stored anywhere. The renderer re-derives it from this seed on every
+draw, so no table in any database records that a world got one. Reading the 40%
+back out of a config would answer a different question — what the generator was
+aimed at, not what it hit.
+
+The seed is the **selected** variant's rather than the world's first, because
+switching variants changes the scene the world shows and therefore which lottery
+it rolled. Note the direction of the widening: the boundary now carries one more
+machine-generated value and no more user content, which is the only kind of
+addition this list should ever accept.
+
+Worlds projected before this shipped carry no seed. They stay in the read model
+and stay out of every rarity denominator — the admin screen counts them
+separately as *unmeasured*, because a world whose lottery cannot be replayed is
+not evidence of a low rate. Each one rejoins the numbers the next time its world
+changes and re-emits a snapshot.
+
 **One open decision.** `nickname` is the only user-entered value in the allow
 list. An admin table with no human label is close to unusable, so the
 recommendation is to include it and to hold the line that it remains the *only*
@@ -260,14 +286,24 @@ world_projections     world_id PK, family, profile_id, dna_version_id,
                       source_job_id, revision, nickname, role, archetype,
                       scene_name, mood, world_style, favorite_colors JSONB,
                       trait_creativity … trait_focus, variant_count,
-                      selected_variant_no, is_published, published_at,
-                      world_created_at, projected_at
+                      selected_variant_no, variant_seed, is_published,
+                      published_at, world_created_at, projected_at
 
 job_projections       job_id PK, family, status, error_code, error_message,
                       world_id, created_at, completed_at, duration_ms
 
+world_rare_rolls      (world_id, feature_key) PK, roll, species_roll
+
 inbox_messages        message_id PK, subject, job_id, processed_at
 ```
+
+`world_rare_rolls` stores the RAW DRAW each of a world's rarity lotteries
+produced, not whether it hit. A draw depends only on the seed and stays true
+forever; whether it hit depends on a probability that gets re-tuned. Storing the
+draw means changing the black hole from 40% to 20% re-derives the whole of
+history on the next query instead of stranding every row already written — and
+it is why the rarity panel's counts and the worlds list behind them are the same
+predicate rather than two things that can disagree.
 
 Copy `inbox_messages` verbatim from the family migrations. **There is no
 `outbox_messages` table** — analytics publishes nothing, and would be the first
