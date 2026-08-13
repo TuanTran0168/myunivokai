@@ -16,6 +16,7 @@ var (
 type Account struct {
 	ID                  string
 	Email               string
+	Name                string
 	PasswordHash        string
 	Kind                contracts.AccountKind
 	IsSuperAdmin        bool
@@ -67,6 +68,7 @@ type AuditEvent struct {
 
 type CreateAccountParams struct {
 	Email               string
+	Name                string
 	PasswordHash        string
 	Kind                contracts.AccountKind
 	IsSuperAdmin        bool
@@ -104,9 +106,15 @@ type Permission struct {
 // only path to myunivokai_auth; nothing outside this package touches SQL.
 type Store interface {
 	CreateAccount(ctx context.Context, params CreateAccountParams) (Account, error)
+	// UpdateAccount changes email and name, the two fields an admin-created
+	// account can have changed after the fact — see contracts.AccountUpdateData's
+	// comment on why nothing else is editable through this path.
+	UpdateAccount(ctx context.Context, accountID, email, name string) (Account, error)
 	GetAccountByEmail(ctx context.Context, email string) (Account, error)
 	GetAccountByID(ctx context.Context, accountID string) (Account, error)
-	ListAccounts(ctx context.Context, cursor string, pageSize int) (accounts []Account, nextCursor string, err error)
+	// ListAccounts's search, when non-empty, matches email or name
+	// case-insensitively as a substring — see PostgresStore.ListAccounts.
+	ListAccounts(ctx context.Context, cursor string, pageSize int, search string) (accounts []Account, nextCursor string, err error)
 	AccountRolesAndPermissions(ctx context.Context, accountID string) (roles []string, permissions []string, err error)
 	CountSuperAdmins(ctx context.Context) (int, error)
 
@@ -147,7 +155,7 @@ type Store interface {
 	AccountPermissionsExcludingRole(ctx context.Context, accountID, excludeRoleID string) ([]string, error)
 
 	ListPermissions(ctx context.Context) ([]Permission, error)
-	ListAuditEvents(ctx context.Context, cursor string, pageSize int) (events []AuditEvent, nextCursor string, err error)
+	ListAuditEvents(ctx context.Context, cursor string, pageSize int, since, until *time.Time, search string) (events []AuditEvent, nextCursor string, totalCount int, err error)
 
 	RecordAuditEvent(ctx context.Context, event AuditEvent) error
 }

@@ -214,6 +214,18 @@ func (store *PostgresStore) ListWorlds(ctx context.Context, filter models.WorldL
 		arguments = append(arguments, *filter.Published)
 		conditions = append(conditions, fmt.Sprintf("is_published = $%d", len(arguments)))
 	}
+	if filter.Since != nil {
+		arguments = append(arguments, *filter.Since)
+		conditions = append(conditions, fmt.Sprintf("world_created_at >= $%d", len(arguments)))
+	}
+	if filter.Until != nil {
+		arguments = append(arguments, *filter.Until)
+		conditions = append(conditions, fmt.Sprintf("world_created_at <= $%d", len(arguments)))
+	}
+	if strings.TrimSpace(filter.Search) != "" {
+		arguments = append(arguments, "%"+strings.TrimSpace(filter.Search)+"%")
+		conditions = append(conditions, fmt.Sprintf("nickname ILIKE $%d", len(arguments)))
+	}
 	countCondition := strings.Join(conditions, " AND ")
 
 	pageArguments := append([]any(nil), arguments...)
@@ -340,6 +352,18 @@ func (store *PostgresStore) ListJobs(ctx context.Context, filter models.JobListF
 	pageSize := contracts.NormalizePageSize(filter.PageSize)
 	conditions := []string{"($1 = '' OR family = $1)", "($2 = '' OR status = $2)", "($3 = '' OR error_code = $3)"}
 	arguments := []any{string(filter.Family), string(filter.Status), filter.ErrorCode}
+	if filter.Since != nil {
+		arguments = append(arguments, *filter.Since)
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(arguments)))
+	}
+	if filter.Until != nil {
+		arguments = append(arguments, *filter.Until)
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", len(arguments)))
+	}
+	if strings.TrimSpace(filter.Search) != "" {
+		arguments = append(arguments, "%"+strings.TrimSpace(filter.Search)+"%")
+		conditions = append(conditions, fmt.Sprintf("(job_id ILIKE $%d OR error_message ILIKE $%d)", len(arguments), len(arguments)))
+	}
 	countCondition := strings.Join(conditions, " AND ")
 
 	pageArguments := append([]any(nil), arguments...)

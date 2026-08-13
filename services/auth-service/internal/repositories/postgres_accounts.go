@@ -2,28 +2,41 @@ package repositories
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
 )
 
 func (store *PostgresStore) CreateAccount(ctx context.Context, params CreateAccountParams) (Account, error) {
 	var account Account
 	account.Email = params.Email
+	account.Name = params.Name
 	account.PasswordHash = params.PasswordHash
 	account.Kind = params.Kind
 	account.IsSuperAdmin = params.IsSuperAdmin
 	account.ForcePasswordChange = params.ForcePasswordChange
-	err := store.pool.QueryRow(ctx, `INSERT INTO accounts (email, password_hash, kind, is_super_admin, force_password_change)
-		VALUES ($1,$2,$3,$4,$5)
+	err := store.pool.QueryRow(ctx, `INSERT INTO accounts (email, name, password_hash, kind, is_super_admin, force_password_change)
+		VALUES ($1,$2,$3,$4,$5,$6)
 		RETURNING id::text, disabled, token_version, failed_attempts, created_at, updated_at`,
-		params.Email, params.PasswordHash, string(params.Kind), params.IsSuperAdmin, params.ForcePasswordChange,
+		params.Email, params.Name, params.PasswordHash, string(params.Kind), params.IsSuperAdmin, params.ForcePasswordChange,
 	).Scan(&account.ID, &account.Disabled, &account.TokenVersion, &account.FailedAttempts, &account.CreatedAt, &account.UpdatedAt)
 	if err != nil {
 		return Account{}, mapConstraintViolation(err)
 	}
 	return account, nil
+}
+
+// UpdateAccount relies on GetAccountByID's own not-found handling for a
+// nonexistent accountID: the UPDATE simply affects zero rows, and the
+// following read reports ErrNotFound the same way SetAccountDisabled's
+// unchecked Exec already does elsewhere in this file.
+func (store *PostgresStore) UpdateAccount(ctx context.Context, accountID, email, name string) (Account, error) {
+	if _, err := store.pool.Exec(ctx, `UPDATE accounts SET email = $2, name = $3, updated_at = NOW() WHERE id = $1`, accountID, email, name); err != nil {
+		return Account{}, mapConstraintViolation(err)
+	}
+	return store.GetAccountByID(ctx, accountID)
 }
 
 func (store *PostgresStore) GetAccountByEmail(ctx context.Context, email string) (Account, error) {
@@ -42,10 +55,10 @@ func (store *PostgresStore) scanAccount(ctx context.Context, predicate, value st
 	// normalized to "" so every other call site keeps treating PasswordHash
 	// as a plain string.
 	var passwordHash *string
-	err := store.pool.QueryRow(ctx, `SELECT id::text, email, password_hash, kind, is_super_admin, disabled, token_version,
+	err := store.pool.QueryRow(ctx, `SELECT id::text, email, name, password_hash, kind, is_super_admin, disabled, token_version,
 			failed_attempts, locked_until, force_password_change, invited_at, invite_expires_at, created_at, updated_at
 		FROM accounts WHERE `+predicate, value,
-	).Scan(&account.ID, &account.Email, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
+	).Scan(&account.ID, &account.Email, &account.Name, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
 		&account.TokenVersion, &account.FailedAttempts, &account.LockedUntil, &account.ForcePasswordChange,
 		&account.InvitedAt, &account.InviteExpiresAt, &account.CreatedAt, &account.UpdatedAt)
 	if err != nil {
@@ -60,23 +73,34 @@ func (store *PostgresStore) scanAccount(ctx context.Context, predicate, value st
 
 // ListAccounts orders created_at DESC, id DESC (see cursor.go) and fetches
 // one extra row to detect whether a next page exists without a second
-// COUNT query.
-func (store *PostgresStore) ListAccounts(ctx context.Context, cursor string, pageSize int) ([]Account, string, error) {
-	var rows pgx.Rows
-	var err error
-	const selectColumns = `id::text, email, password_hash, kind, is_super_admin, disabled, token_version,
+// COUNT query. Search, when non-empty, matches email or name
+// case-insensitively as a substring — accounts are staff-scale, not
+// user-scale, so a plain ILIKE needs no trigram index to stay fast.
+func (store *PostgresStore) ListAccounts(ctx context.Context, cursor string, pageSize int, search string) ([]Account, string, error) {
+	const selectColumns = `id::text, email, name, password_hash, kind, is_super_admin, disabled, token_version,
 			failed_attempts, locked_until, force_password_change, invited_at, invite_expires_at, created_at, updated_at`
-	if cursor == "" {
-		rows, err = store.pool.Query(ctx, `SELECT `+selectColumns+`
-			FROM accounts ORDER BY created_at DESC, id DESC LIMIT $1`, pageSize+1)
-	} else {
+
+	conditions := []string{"TRUE"}
+	arguments := []any{}
+	if strings.TrimSpace(search) != "" {
+		arguments = append(arguments, "%"+strings.TrimSpace(search)+"%")
+		conditions = append(conditions, fmt.Sprintf("(email ILIKE $%d OR name ILIKE $%d)", len(arguments), len(arguments)))
+	}
+
+	pageArguments := append([]any(nil), arguments...)
+	if cursor != "" {
 		cursorTime, cursorID, decodeErr := decodeCursor(cursor)
 		if decodeErr != nil {
 			return nil, "", decodeErr
 		}
-		rows, err = store.pool.Query(ctx, `SELECT `+selectColumns+`
-			FROM accounts WHERE (created_at, id) < ($1, $2::uuid) ORDER BY created_at DESC, id DESC LIMIT $3`, cursorTime, cursorID, pageSize+1)
+		pageArguments = append(pageArguments, cursorTime, cursorID)
+		conditions = append(conditions, fmt.Sprintf("(created_at, id) < ($%d, $%d::uuid)", len(pageArguments)-1, len(pageArguments)))
 	}
+	pageArguments = append(pageArguments, pageSize+1)
+
+	rows, err := store.pool.Query(ctx, `SELECT `+selectColumns+`
+		FROM accounts WHERE `+strings.Join(conditions, " AND ")+`
+		ORDER BY created_at DESC, id DESC LIMIT $`+fmt.Sprint(len(pageArguments)), pageArguments...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -87,7 +111,7 @@ func (store *PostgresStore) ListAccounts(ctx context.Context, cursor string, pag
 		var account Account
 		var kind string
 		var passwordHash *string
-		if err := rows.Scan(&account.ID, &account.Email, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
+		if err := rows.Scan(&account.ID, &account.Email, &account.Name, &passwordHash, &kind, &account.IsSuperAdmin, &account.Disabled,
 			&account.TokenVersion, &account.FailedAttempts, &account.LockedUntil, &account.ForcePasswordChange,
 			&account.InvitedAt, &account.InviteExpiresAt, &account.CreatedAt, &account.UpdatedAt); err != nil {
 			return nil, "", err

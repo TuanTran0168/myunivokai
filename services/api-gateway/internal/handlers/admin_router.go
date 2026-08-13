@@ -64,6 +64,8 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 
 		managementRouter.With(requirePermission(contracts.PermissionAccountRead)).Get("/accounts", accountsHandler.List)
 		managementRouter.With(requirePermission(contracts.PermissionAccountRead)).Get("/accounts/{accountID}", accountsHandler.Get)
+		managementRouter.With(requirePermission(contracts.PermissionAccountManage)).Post("/accounts", accountsHandler.Create)
+		managementRouter.With(requirePermission(contracts.PermissionAccountManage)).Patch("/accounts/{accountID}", accountsHandler.Update)
 		managementRouter.With(requirePermission(contracts.PermissionAccountManage)).Post("/accounts/invite", accountsHandler.Invite)
 		managementRouter.With(requirePermission(contracts.PermissionAccountManage)).Post("/accounts/{accountID}/disable", accountsHandler.Disable)
 		managementRouter.With(requirePermission(contracts.PermissionAccountManage)).Post("/accounts/{accountID}/enable", accountsHandler.Enable)

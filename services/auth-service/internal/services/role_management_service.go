@@ -22,19 +22,27 @@ const (
 )
 
 const (
-	auditActionInviteCreate = "invite_create"
-	auditActionInviteAccept = "invite_accept"
-	auditActionRoleCreate   = "role_create"
-	auditActionRoleUpdate   = "role_update"
-	auditActionRoleDelete   = "role_delete"
-	auditActionRoleAssign   = "role_assign"
-	auditActionRoleRevoke   = "role_revoke"
+	auditActionAccountCreate = "account_create"
+	auditActionAccountUpdate = "account_update"
+	auditActionInviteCreate  = "invite_create"
+	auditActionInviteAccept  = "invite_accept"
+	auditActionRoleCreate    = "role_create"
+	auditActionRoleUpdate    = "role_update"
+	auditActionRoleDelete    = "role_delete"
+	auditActionRoleAssign    = "role_assign"
+	auditActionRoleRevoke    = "role_revoke"
 )
+
+// minimumAccountPasswordLength matches cmd/bootstrap's own check for the
+// same reason: both are an admin choosing a password for an account that
+// isn't the one signing in yet, and the two should not be free to drift.
+const minimumAccountPasswordLength = 12
 
 var (
 	ErrInvalidInviteToken  = errors.New("invalid or expired invite token")
 	ErrSystemRoleImmutable = errors.New("system roles cannot be modified or deleted")
 	ErrSelfRevokeForbidden = errors.New("cannot revoke your own account:manage or role:manage permission")
+	ErrPasswordTooShort    = errors.New("password does not meet the minimum length")
 )
 
 // RoleInUseError carries the count the vision doc requires a role-delete
@@ -66,6 +74,53 @@ func (service *AuthService) InviteAccount(ctx context.Context, data contracts.In
 	}
 	service.audit(ctx, &data.ActorAccountID, auditActionInviteCreate, account.Email, auditResultSuccess, data.SourceAddress)
 	return contracts.InviteCreateResponseData{AccountID: account.ID, InviteToken: rawToken, InviteExpiresAt: expiresAt}, nil
+}
+
+// CreateAccount creates a staff account with a password the actor chooses
+// right away, active from the moment it exists — the direct alternative to
+// InviteAccount's token dance, adopted because no email infrastructure
+// exists to relay an invite link; see
+// notes/vision/auth-and-admin-plan.md#account-creation-is-direct-not-invited.
+func (service *AuthService) CreateAccount(ctx context.Context, data contracts.AccountCreateData) (contracts.AccountSummary, error) {
+	if len(data.Password) < minimumAccountPasswordLength {
+		return contracts.AccountSummary{}, ErrPasswordTooShort
+	}
+	passwordHash, err := service.passwordHasher.Hash(data.Password)
+	if err != nil {
+		return contracts.AccountSummary{}, err
+	}
+	account, err := service.store.CreateAccount(ctx, repositories.CreateAccountParams{
+		Email: normalizeEmail(data.Email), Name: data.Name, PasswordHash: passwordHash, Kind: contracts.AccountKindStaff,
+	})
+	if err != nil {
+		return contracts.AccountSummary{}, err
+	}
+	for _, roleID := range data.RoleIDs {
+		if err := service.store.AssignRole(ctx, account.ID, roleID); err != nil {
+			return contracts.AccountSummary{}, err
+		}
+	}
+	service.audit(ctx, &data.ActorAccountID, auditActionAccountCreate, account.Email, auditResultSuccess, data.SourceAddress)
+	roles, permissions, err := service.store.AccountRolesAndPermissions(ctx, account.ID)
+	if err != nil {
+		return contracts.AccountSummary{}, err
+	}
+	return toAccountSummary(account, roles, permissions), nil
+}
+
+// UpdateAccount changes an account's email and/or name — see
+// contracts.AccountUpdateData for why nothing else is editable here.
+func (service *AuthService) UpdateAccount(ctx context.Context, data contracts.AccountUpdateData) (contracts.AccountSummary, error) {
+	account, err := service.store.UpdateAccount(ctx, data.AccountID, normalizeEmail(data.Email), data.Name)
+	if err != nil {
+		return contracts.AccountSummary{}, err
+	}
+	service.audit(ctx, &data.ActorAccountID, auditActionAccountUpdate, account.Email, auditResultSuccess, data.SourceAddress)
+	roles, permissions, err := service.store.AccountRolesAndPermissions(ctx, account.ID)
+	if err != nil {
+		return contracts.AccountSummary{}, err
+	}
+	return toAccountSummary(account, roles, permissions), nil
 }
 
 // AcceptInvite sets the account's first password and immediately logs it
@@ -110,8 +165,8 @@ func generateInviteToken() (raw, hash string, err error) {
 	return raw, security.HashRefreshToken(raw), nil
 }
 
-func (service *AuthService) ListAccounts(ctx context.Context, cursor string, pageSize int) (contracts.AccountListResponseData, error) {
-	accounts, nextCursor, err := service.store.ListAccounts(ctx, cursor, clampListPageSize(pageSize))
+func (service *AuthService) ListAccounts(ctx context.Context, cursor string, pageSize int, search string) (contracts.AccountListResponseData, error) {
+	accounts, nextCursor, err := service.store.ListAccounts(ctx, cursor, clampListPageSize(pageSize), search)
 	if err != nil {
 		return contracts.AccountListResponseData{}, err
 	}
@@ -267,8 +322,8 @@ func (service *AuthService) ListPermissions(ctx context.Context) (contracts.Perm
 	return contracts.PermissionListResponseData{Permissions: summaries}, nil
 }
 
-func (service *AuthService) ListAuditEvents(ctx context.Context, cursor string, pageSize int) (contracts.AuditListResponseData, error) {
-	events, nextCursor, err := service.store.ListAuditEvents(ctx, cursor, clampListPageSize(pageSize))
+func (service *AuthService) ListAuditEvents(ctx context.Context, cursor string, pageSize int, since, until *time.Time, search string) (contracts.AuditListResponseData, error) {
+	events, nextCursor, totalCount, err := service.store.ListAuditEvents(ctx, cursor, clampListPageSize(pageSize), since, until, search)
 	if err != nil {
 		return contracts.AuditListResponseData{}, err
 	}
@@ -283,12 +338,12 @@ func (service *AuthService) ListAuditEvents(ctx context.Context, cursor string, 
 			Target: event.Target, Result: event.Result, SourceAddress: event.SourceAddress, OccurredAt: event.OccurredAt,
 		})
 	}
-	return contracts.AuditListResponseData{Events: summaries, NextCursor: nextCursor}, nil
+	return contracts.AuditListResponseData{Events: summaries, NextCursor: nextCursor, TotalCount: totalCount}, nil
 }
 
 func toAccountSummary(account repositories.Account, roles, permissions []string) contracts.AccountSummary {
 	return contracts.AccountSummary{
-		AccountID: account.ID, Email: account.Email, Kind: account.Kind,
+		AccountID: account.ID, Email: account.Email, Name: account.Name, Kind: account.Kind,
 		Roles: roles, Permissions: permissions, IsSuperAdmin: account.IsSuperAdmin,
 		Disabled: account.Disabled, ForcePasswordChange: account.ForcePasswordChange, CreatedAt: account.CreatedAt,
 	}

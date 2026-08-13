@@ -28,8 +28,10 @@ type AuthService interface {
 	InviteAccount(ctx context.Context, data contracts.InviteCreateData) (contracts.InviteCreateResponseData, error)
 	AcceptInvite(ctx context.Context, data contracts.InviteAcceptData) (contracts.LoginResponseData, error)
 	AccountPermissions(ctx context.Context, accountID string) (contracts.AccountPermissionsResponseData, error)
-	ListAccounts(ctx context.Context, cursor string, pageSize int) (contracts.AccountListResponseData, error)
+	ListAccounts(ctx context.Context, cursor string, pageSize int, search string) (contracts.AccountListResponseData, error)
 	GetAccount(ctx context.Context, accountID string) (contracts.AccountSummary, error)
+	CreateAccount(ctx context.Context, data contracts.AccountCreateData) (contracts.AccountSummary, error)
+	UpdateAccount(ctx context.Context, data contracts.AccountUpdateData) (contracts.AccountSummary, error)
 
 	ListRoles(ctx context.Context) (contracts.RoleListResponseData, error)
 	CreateRole(ctx context.Context, data contracts.RoleCreateData) (contracts.RoleSummary, error)
@@ -39,7 +41,7 @@ type AuthService interface {
 	RevokeRole(ctx context.Context, data contracts.RoleRevokeData) error
 
 	ListPermissions(ctx context.Context) (contracts.PermissionListResponseData, error)
-	ListAuditEvents(ctx context.Context, cursor string, pageSize int) (contracts.AuditListResponseData, error)
+	ListAuditEvents(ctx context.Context, cursor string, pageSize int, since, until *time.Time, search string) (contracts.AuditListResponseData, error)
 }
 
 type ResponsePublisher interface {
@@ -158,12 +160,12 @@ func (handler *NATSHandler) HandleAccountPermissionsQuery(message *nats.Msg) {
 }
 
 func (handler *NATSHandler) HandleAccountListQuery(message *nats.Msg) {
-	var envelope contracts.Envelope[contracts.PageQueryData]
+	var envelope contracts.Envelope[contracts.AccountListQueryData]
 	if !decodeQuery(handler, message, &envelope) {
 		return
 	}
 	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountListResponseData, error) {
-		return handler.authService.ListAccounts(ctx, envelope.Data.Cursor, envelope.Data.PageSize)
+		return handler.authService.ListAccounts(ctx, envelope.Data.Cursor, envelope.Data.PageSize, envelope.Data.Search)
 	})
 	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
 }
@@ -175,6 +177,28 @@ func (handler *NATSHandler) HandleAccountGetQuery(message *nats.Msg) {
 	}
 	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountSummary, error) {
 		return handler.authService.GetAccount(ctx, envelope.Data.AccountID)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
+}
+
+func (handler *NATSHandler) HandleAccountCreateQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.AccountCreateData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountSummary, error) {
+		return handler.authService.CreateAccount(ctx, envelope.Data)
+	})
+	handler.respondWithResult(message, envelope.JobID, http.StatusCreated, response, err)
+}
+
+func (handler *NATSHandler) HandleAccountUpdateQuery(message *nats.Msg) {
+	var envelope contracts.Envelope[contracts.AccountUpdateData]
+	if !decodeQuery(handler, message, &envelope) {
+		return
+	}
+	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AccountSummary, error) {
+		return handler.authService.UpdateAccount(ctx, envelope.Data)
 	})
 	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
 }
@@ -257,12 +281,12 @@ func (handler *NATSHandler) HandlePermissionListQuery(message *nats.Msg) {
 }
 
 func (handler *NATSHandler) HandleAuditListQuery(message *nats.Msg) {
-	var envelope contracts.Envelope[contracts.PageQueryData]
+	var envelope contracts.Envelope[contracts.AuditListQueryData]
 	if !decodeQuery(handler, message, &envelope) {
 		return
 	}
 	response, err := withQueryTimeout(handler, func(ctx context.Context) (contracts.AuditListResponseData, error) {
-		return handler.authService.ListAuditEvents(ctx, envelope.Data.Cursor, envelope.Data.PageSize)
+		return handler.authService.ListAuditEvents(ctx, envelope.Data.Cursor, envelope.Data.PageSize, envelope.Data.Since, envelope.Data.Until, envelope.Data.Search)
 	})
 	handler.respondWithResult(message, envelope.JobID, http.StatusOK, response, err)
 }
@@ -303,6 +327,13 @@ func (handler *NATSHandler) respondWithResult(message *nats.Msg, jobID string, s
 	switch {
 	case errors.Is(err, repositories.ErrNotFound):
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found."))
+	case errors.Is(err, repositories.ErrConflict):
+		// ErrConflict does not say which unique constraint fired (invite
+		// email, role name, ...), so this message stays generic rather than
+		// guessing the field. Without this case the switch fell through to
+		// the generic 500 below, turning "you already invited this email"
+		// into an opaque INTERNAL_ERROR for the caller.
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusConflict, "CONFLICT", "A resource with these details already exists."))
 	case errors.Is(err, services.ErrInvalidCredentials):
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Incorrect email or password."))
 	case errors.Is(err, services.ErrAccountDisabled):
@@ -315,6 +346,8 @@ func (handler *NATSHandler) respondWithResult(message *nats.Msg, jobID string, s
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusConflict, "LAST_SUPER_ADMIN", "The last super admin account cannot be disabled."))
 	case errors.Is(err, services.ErrInvalidInviteToken):
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusUnauthorized, "INVALID_INVITE_TOKEN", "This invite link is invalid or has expired."))
+	case errors.Is(err, services.ErrPasswordTooShort):
+		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusBadRequest, "PASSWORD_TOO_SHORT", "The password must be at least 12 characters."))
 	case errors.Is(err, services.ErrSystemRoleImmutable):
 		handler.respond(message, contracts.ErrorRPCEnvelope(jobID, http.StatusForbidden, "SYSTEM_ROLE_IMMUTABLE", "System roles cannot be edited or deleted."))
 	case errors.Is(err, services.ErrSelfRevokeForbidden):

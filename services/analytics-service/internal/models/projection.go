@@ -64,21 +64,29 @@ type ServiceStartListFilter struct {
 
 // WorldListFilter mirrors contracts.AnalyticsWorldListQueryData with the
 // cursor already decoded. Published is a pointer so "any" stays
-// distinguishable from "explicitly unpublished".
+// distinguishable from "explicitly unpublished". Since/Until bound
+// WorldCreatedAt. Search matches Nickname.
 type WorldListFilter struct {
 	Family     contracts.WorldFamily
 	Archetype  string
 	WorldStyle string
 	Mood       string
 	Published  *bool
+	Since      *time.Time
+	Until      *time.Time
+	Search     string
 	Cursor     string
 	PageSize   int
 }
 
+// Since/Until bound CreatedAt. Search matches JobID or ErrorMessage.
 type JobListFilter struct {
 	Family    contracts.WorldFamily
 	Status    contracts.JobStatus
 	ErrorCode string
+	Since     *time.Time
+	Until     *time.Time
+	Search    string
 	Cursor    string
 	PageSize  int
 }

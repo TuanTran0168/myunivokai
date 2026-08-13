@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
@@ -51,6 +52,9 @@ func (handler *AdminAnalyticsHandler) ListWorlds(responseWriter http.ResponseWri
 		WorldStyle:    strings.TrimSpace(request.URL.Query().Get("worldStyle")),
 		Mood:          strings.TrimSpace(request.URL.Query().Get("mood")),
 		Published:     boolFromQuery(request, "published"),
+		Since:         timeFromQuery(request, "since"),
+		Until:         timeFromQuery(request, "until"),
+		Search:        searchFromQuery(request),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsWorldListQuerySubject, data)
 }
@@ -73,6 +77,9 @@ func (handler *AdminAnalyticsHandler) ListJobs(responseWriter http.ResponseWrite
 		Family:        familyFromQuery(request),
 		Status:        contracts.JobStatus(strings.TrimSpace(request.URL.Query().Get("status"))),
 		ErrorCode:     strings.TrimSpace(request.URL.Query().Get("errorCode")),
+		Since:         timeFromQuery(request, "since"),
+		Until:         timeFromQuery(request, "until"),
+		Search:        searchFromQuery(request),
 	}
 	handler.relay(responseWriter, request, contracts.AnalyticsJobListQuerySubject, data)
 }
@@ -120,6 +127,21 @@ func boolFromQuery(request *http.Request, name string) *bool {
 		return nil
 	}
 	parsed, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+// timeFromQuery returns nil for an absent or unparseable value, so "no
+// bound" stays distinguishable from a bound at the zero time — the same
+// reasoning as boolFromQuery above. Callers send RFC3339.
+func timeFromQuery(request *http.Request, name string) *time.Time {
+	rawValue := strings.TrimSpace(request.URL.Query().Get(name))
+	if rawValue == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, rawValue)
 	if err != nil {
 		return nil
 	}

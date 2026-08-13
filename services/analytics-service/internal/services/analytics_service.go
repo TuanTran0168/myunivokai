@@ -41,6 +41,9 @@ func (service *AnalyticsService) ListWorlds(ctx context.Context, query contracts
 		WorldStyle: query.WorldStyle,
 		Mood:       query.Mood,
 		Published:  query.Published,
+		Since:      query.Since,
+		Until:      query.Until,
+		Search:     query.Search,
 		Cursor:     query.Cursor,
 		PageSize:   contracts.NormalizePageSize(query.PageSize),
 	})
@@ -58,6 +61,9 @@ func (service *AnalyticsService) ListJobs(ctx context.Context, query contracts.A
 		Family:    normalizeFamily(query.Family),
 		Status:    normalizeStatus(query.Status),
 		ErrorCode: query.ErrorCode,
+		Since:     query.Since,
+		Until:     query.Until,
+		Search:    query.Search,
 		Cursor:    query.Cursor,
 		PageSize:  contracts.NormalizePageSize(query.PageSize),
 	})

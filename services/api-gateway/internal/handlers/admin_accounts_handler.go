@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	contracts "github.com/myunivokai/myunivokai/contracts/go"
@@ -23,7 +24,11 @@ func NewAdminAccountsHandler(transport *RPCTransport) *AdminAccountsHandler {
 }
 
 func (handler *AdminAccountsHandler) List(responseWriter http.ResponseWriter, request *http.Request) {
-	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAccountListQuerySubject, pageQueryFromRequest(request))
+	data := contracts.AccountListQueryData{
+		PageQueryData: pageQueryFromRequest(request),
+		Search:        searchFromQuery(request),
+	}
+	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAccountListQuerySubject, data)
 	if !ok {
 		return
 	}
@@ -61,6 +66,50 @@ func (handler *AdminAccountsHandler) Invite(responseWriter http.ResponseWriter, 
 	httpx.WriteRawJSON(responseWriter, response.Data.StatusCode, response.Data.Payload)
 }
 
+// Create is the direct alternative to Invite: the actor sets the account's
+// password immediately, so it is active from creation with no token to
+// relay — see contracts.AccountCreateData's comment on why.
+func (handler *AdminAccountsHandler) Create(responseWriter http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Email    string   `json:"email"`
+		Name     string   `json:"name"`
+		Password string   `json:"password"`
+		RoleIDs  []string `json:"roleIds"`
+	}
+	if !decodeJSONBody(responseWriter, request, &body) {
+		return
+	}
+	claims, _ := middleware.AdminClaims(request.Context())
+	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAccountCreateQuerySubject, contracts.AccountCreateData{
+		Email: body.Email, Name: body.Name, Password: body.Password, RoleIDs: body.RoleIDs, ActorAccountID: claims.Subject, SourceAddress: httpx.ClientIP(request.Context()),
+	})
+	if !ok {
+		return
+	}
+	httpx.WriteRawJSON(responseWriter, response.Data.StatusCode, response.Data.Payload)
+}
+
+// Update changes an account's email and/or name — see
+// contracts.AccountUpdateData for why nothing else is editable here.
+func (handler *AdminAccountsHandler) Update(responseWriter http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	if !decodeJSONBody(responseWriter, request, &body) {
+		return
+	}
+	accountID := chi.URLParam(request, "accountID")
+	claims, _ := middleware.AdminClaims(request.Context())
+	response, ok := handler.transport.Request(responseWriter, request, contracts.AuthAccountUpdateQuerySubject, contracts.AccountUpdateData{
+		AccountID: accountID, Email: body.Email, Name: body.Name, ActorAccountID: claims.Subject, SourceAddress: httpx.ClientIP(request.Context()),
+	})
+	if !ok {
+		return
+	}
+	httpx.WriteRawJSON(responseWriter, response.Data.StatusCode, response.Data.Payload)
+}
+
 func (handler *AdminAccountsHandler) Disable(responseWriter http.ResponseWriter, request *http.Request) {
 	accountID := chi.URLParam(request, "accountID")
 	claims, _ := middleware.AdminClaims(request.Context())
@@ -86,6 +135,13 @@ func (handler *AdminAccountsHandler) Enable(responseWriter http.ResponseWriter, 
 func pageQueryFromRequest(request *http.Request) contracts.PageQueryData {
 	pageSize, _ := strconv.Atoi(request.URL.Query().Get("pageSize"))
 	return contracts.PageQueryData{Cursor: request.URL.Query().Get("cursor"), PageSize: pageSize}
+}
+
+// searchFromQuery reads the free-text "q" parameter every searchable admin
+// list route shares (accounts, audit, worlds, jobs) — one query parameter
+// name across all of them, same as pageQueryFromRequest above.
+func searchFromQuery(request *http.Request) string {
+	return strings.TrimSpace(request.URL.Query().Get("q"))
 }
 
 func decodeJSONBody(responseWriter http.ResponseWriter, request *http.Request, target any) bool {

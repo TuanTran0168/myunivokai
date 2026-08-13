@@ -180,7 +180,9 @@ type WorldProjectionSummary struct {
 // AnalyticsWorldListQueryData embeds PageQueryData for the same reason the
 // auth queries do: pagination is one shared shape and filters are additive
 // fields on the specific query. Published is a pointer so "any" (nil) stays
-// distinguishable from "explicitly unpublished" (false).
+// distinguishable from "explicitly unpublished" (false). Since/Until bound
+// WorldCreatedAt and are pointers for the same "no bound" reason. Search
+// matches Nickname — the one free-text field on the data boundary.
 type AnalyticsWorldListQueryData struct {
 	PageQueryData
 	Family     WorldFamily `json:"family,omitempty"`
@@ -188,6 +190,9 @@ type AnalyticsWorldListQueryData struct {
 	WorldStyle string      `json:"worldStyle,omitempty"`
 	Mood       string      `json:"mood,omitempty"`
 	Published  *bool       `json:"published,omitempty"`
+	Since      *time.Time  `json:"since,omitempty"`
+	Until      *time.Time  `json:"until,omitempty"`
+	Search     string      `json:"search,omitempty"`
 }
 
 type AnalyticsWorldListResponseData struct {
@@ -242,11 +247,17 @@ type JobProjectionSummary struct {
 	DurationMs   *int        `json:"durationMs,omitempty"`
 }
 
+// Since/Until bound CreatedAt for the same "no bound" reason Published is a
+// pointer on the world list query above. Search matches JobID or
+// ErrorMessage — there is no other free-text column on job_projections.
 type AnalyticsJobListQueryData struct {
 	PageQueryData
 	Family    WorldFamily `json:"family,omitempty"`
 	Status    JobStatus   `json:"status,omitempty"`
 	ErrorCode string      `json:"errorCode,omitempty"`
+	Since     *time.Time  `json:"since,omitempty"`
+	Until     *time.Time  `json:"until,omitempty"`
+	Search    string      `json:"search,omitempty"`
 }
 
 type AnalyticsJobListResponseData struct {
