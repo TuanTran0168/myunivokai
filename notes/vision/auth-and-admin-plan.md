@@ -393,6 +393,27 @@ does not log everyone out.
 - Fixed per-account and per-IP attempt limits with lockout, and a constant-time
   response whether or not the account exists.
 
+### Account creation is direct, not invited
+
+Owner decision, 2026-08-12: staff account creation skips email entirely. An
+admin (`account:manage`) sets the new account's email, password and roles in
+one call, and the account is active immediately — no token, no second step.
+
+The token-based invite flow (`InviteCreateData`/`InviteAcceptData`,
+`AuthInviteCreateQuerySubject`/`AuthInviteAcceptQuerySubject`) was built
+first and still compiles and works, but the admin app never grew a page that
+calls `AcceptInvite` — there was nowhere to redeem the token it handed out,
+which is exactly the confusion that triggered this decision. Rather than rip
+the invite columns and endpoints out now, they stay dormant: cheap to keep,
+and the natural foundation if a real email-invite flow gets built later. The
+admin UI's only account-creation entry point calls `AccountCreateData`
+(direct) — see `CreateAccountDialog.tsx` and
+`AuthService.CreateAccount`/`UpdateAccount` in role_management_service.go.
+
+An admin-set password still goes through the same 12-character minimum as
+the bootstrap account, so a "simple" creation path doesn't become the weak
+one.
+
 ### Schema
 
 `accounts`, `roles`, `permissions`, `role_permissions`, `account_roles`,

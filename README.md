@@ -24,6 +24,7 @@ flowchart TB
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
 
   subgraph L1 ["1 · Clients"]
+    direction LR
     web["<b>Myunivokai Web</b><br/>Next.js · React Three Fiber"]:::clientStyle
     admin["<b>Myunivokai Admin</b><br/>Next.js · staff only"]:::clientStyle
   end
@@ -37,6 +38,7 @@ flowchart TB
   end
 
   subgraph L4 ["4 · Services"]
+    direction LR
     dna["<b>DNA</b><br/>AI orchestration<br/>root jobs"]:::domainStyle
     universe["<b>Universe</b><br/>solar-system<br/>composition"]:::domainStyle
     nature["<b>Nature</b><br/>forest<br/>composition"]:::domainStyle
@@ -45,6 +47,7 @@ flowchart TB
   end
 
   subgraph L5 ["5 · Owned state"]
+    direction LR
     dnaDatabase[("<code>myunivokai_dna</code>")]:::dbStyle
     universeDatabase[("<code>myunivokai_universe</code>")]:::dbStyle
     natureDatabase[("<code>myunivokai_nature</code>")]:::dbStyle
@@ -237,6 +240,7 @@ flowchart TB
   port["<b><code>ai.Provider</code></b><br/>selected by <code>AI_PROVIDER</code>"]:::portStyle
 
   subgraph adapters ["internal/ai/providers — one file each"]
+    direction LR
     mock["<b>mock</b><br/>default · no API key<br/>what CI runs"]:::aiStyle
     gemini["<b>Gemini</b>"]:::aiStyle
     openai["<b>OpenAI</b>"]:::aiStyle
@@ -280,13 +284,20 @@ is the switch — the exact roles `ai.Provider`, `ai.Orchestrator` and
 | --- | --- |
 | **Go** | All backend services |
 | **chi** | HTTP router (API Gateway) |
-| **pgxpool** | PostgreSQL connection pooling (DNA, Universe, Nature) |
+| **pgxpool** | PostgreSQL connection pooling — every service (DNA, Universe, Nature, Auth, Analytics) |
 | **NATS JetStream** | Durable command/event messaging between services |
 | **Core NATS** | Lightweight request-reply queries |
-| **Redis** | Distributed rate limiting and response caching (Gateway) |
+| **Redis** | Rate limiting and response caching (Gateway); `tokenVersion` cache (Auth) |
 | **zerolog** | Structured JSON logging |
 
 ### Frontend
+
+`myunivokai-web` and `myunivokai-admin` are two independent Next.js apps on
+different major versions — the import-boundary check
+(`apps/myunivokai-admin/scripts/check-import-boundary.mjs`) is what keeps
+them from drifting into sharing code.
+
+**`myunivokai-web`** — Next.js 14, React 18
 
 | Technology | Role |
 | --- | --- |
@@ -296,7 +307,20 @@ is the switch — the exact roles `ai.Provider`, `ai.Orchestrator` and
 | **@react-three/drei** | three.js helpers and abstractions |
 | **@react-three/postprocessing** | Post-processing effects (bloom, vignette) |
 | **Web Audio API** | Ambient music: sampled instruments, convolution reverb, lookahead scheduling |
-| **Tailwind CSS** | Styling with custom design tokens (Vitrine + Liquid Glass) |
+| **Tailwind CSS 3** | Styling with custom design tokens (Vitrine + Liquid Glass) |
+| **vitest** | Unit testing |
+
+**`myunivokai-admin`** — Next.js 15, React 19
+
+| Technology | Role |
+| --- | --- |
+| **Next.js 15** | App Router, Server Components, staff-only console |
+| **React 19 + TypeScript** | UI components and type safety |
+| **@base-ui/react** | Headless primitives (select, menu, dialog) behind the shadcn `base-nova` style |
+| **@tanstack/react-query** | Server-state cache, cursor pagination, mutation invalidation |
+| **motion** | Sidebar and content-transition animation |
+| **recharts** | Dashboard charts (worlds/jobs distributions, timeseries) |
+| **Tailwind CSS 4** | Styling — dark liquid-glass theme, isolated from the web app's tokens |
 | **vitest** | Unit testing |
 
 ### Infrastructure
