@@ -22,12 +22,12 @@ flowchart TB
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
 
   subgraph clientLayer ["Layer 1 - Clients"]
-    web["<b>Myunivokai Web</b><br/><i>Next.js + React Three Fiber</i>"]:::clientStyle
-    admin["<b>Myunivokai Admin</b><br/><i>Next.js, staff only</i>"]:::clientStyle
+    web["<b>Myunivokai Web</b><br/><i>[Next.js] [React Three Fiber]</i>"]:::clientStyle
+    admin["<b>Myunivokai Admin</b><br/><i>[Next.js] · staff only</i>"]:::clientStyle
   end
 
   subgraph edgeLayer ["Layer 2 - Edge"]
-    gateway["<b>API Gateway</b><br/><i>Only Public Backend</i>"]:::edgeStyle
+    gateway["<b>API Gateway</b><br/><i>[Go] · Only Public Backend</i>"]:::edgeStyle
   end
 
   subgraph infrastructureLayer ["Layer 3 - Shared Infrastructure"]
@@ -36,23 +36,23 @@ flowchart TB
   end
 
   subgraph domainLayer ["Layer 4 - Domain & Admin Services"]
-    dna["<b>DNA Service</b><br/>AI Orchestration & Root Jobs"]:::domainStyle
-    universe["<b>Universe Service</b><br/>Solar System Composition"]:::domainStyle
-    nature["<b>Nature Service</b><br/>Forest Composition"]:::domainStyle
-    auth["<b>Auth Service</b><br/>Staff Identity & RBAC"]:::domainStyle
-    analytics["<b>Analytics Service</b><br/>Admin Read Model"]:::domainStyle
+    dna["<b>DNA Service</b><br/><i>[Go]</i> · AI Orchestration & Root Jobs"]:::domainStyle
+    universe["<b>Universe Service</b><br/><i>[Go]</i> · Solar System Composition"]:::domainStyle
+    nature["<b>Nature Service</b><br/><i>[Go]</i> · Forest Composition"]:::domainStyle
+    auth["<b>Auth Service</b><br/><i>[Go]</i> · Staff Identity & RBAC"]:::domainStyle
+    analytics["<b>Analytics Service</b><br/><i>[Go]</i> · Admin Read Model"]:::domainStyle
   end
 
   subgraph integrationLayer ["Layer 5 - AI Integration"]
-    providers["<b>AI Providers</b><br/><code>ai.Provider</code> (Mock / Gemini / OpenAI)"]:::aiStyle
+    providers["<b>AI Providers</b><br/><code>ai.Provider</code> [Mock] [Gemini] [OpenAI]"]:::aiStyle
   end
 
   subgraph persistenceLayer ["Layer 6 - Service-Owned Persistence"]
-    dnaDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_dna</code>")]:::dbStyle
-    universeDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_universe</code>")]:::dbStyle
-    natureDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_nature</code>")]:::dbStyle
-    authDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_auth</code>")]:::dbStyle
-    analyticsDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
+    dnaDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_dna</code>")]:::dbStyle
+    universeDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_universe</code>")]:::dbStyle
+    natureDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_nature</code>")]:::dbStyle
+    authDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_auth</code>")]:::dbStyle
+    analyticsDatabase[("<b>[PostgreSQL]</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
   end
 
   web -->|"HTTPS"| gateway
