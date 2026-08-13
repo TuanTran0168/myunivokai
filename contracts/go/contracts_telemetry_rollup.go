@@ -44,17 +44,24 @@ const (
 	TelemetrySinkPostgres = "postgres"
 	TelemetrySinkOTLP     = "otlp"
 
-	// The request funnel's stages, narrowest question first: of everything
-	// that arrived, how much needed a backend, how much of that came back,
-	// and how much of the whole reached the caller as a success.
+	// The request funnel's stages. Each one is a strict subset of the one
+	// before it — everything that arrived, the part of it that was a valid
+	// request, and the part of THAT the platform actually answered.
 	//
-	// These are stable keys rather than the labels beside them because the
-	// admin app colours and orders by them; a renamed label must not silently
-	// become a new stage.
-	TelemetryFunnelStageReceived    = "received"
-	TelemetryFunnelStageBackendCall = "backend_call"
-	TelemetryFunnelStageBackendOK   = "backend_ok"
-	TelemetryFunnelStageSucceeded   = "succeeded"
+	// The nesting is the whole contract. An earlier version of this funnel put
+	// backend round trips in the middle two stages, which produced
+	// 302 -> 19 -> 19 -> 302 on a real window: most traffic is health checks
+	// and 404s that never reach a backend, so the shape collapsed and then
+	// fully recovered. Four counters in a row are not a funnel unless each
+	// contains the next, and a chart that implies containment it does not have
+	// is worse than four separate numbers. Backend fan-out is a ratio, not a
+	// stage, and is reported on its own.
+	//
+	// Stable keys rather than the labels beside them: the admin app colours and
+	// orders by these, so a reworded label must not become a new stage.
+	TelemetryFunnelStageReceived = "received"
+	TelemetryFunnelStageAccepted = "accepted"
+	TelemetryFunnelStageServed   = "served"
 
 	// Windows are in hours rather than the days analytics uses: a bucket here
 	// is one minute wide and the questions are operational ("what happened

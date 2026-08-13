@@ -10,15 +10,11 @@ import { TelemetryShell } from "./components/TelemetryShell";
 import { formatWindow } from "./format";
 import { useTelemetryWindow } from "./useTelemetryWindow";
 
-// The funnel's stages get colours by meaning rather than by position: entry is
-// neutral, the backend stages are the accent, and the stage that has actually
-// lost traffic to failures is the warning colour.
-const FUNNEL_STAGE_COLORS = [
-  "var(--chart-4)",
-  "var(--chart-2)",
-  "var(--chart-2)",
-  "var(--chart-3)"
-];
+// Colours by meaning, not by position: what arrived is neutral, what the
+// client asked for correctly is the accent, and what this platform actually
+// served is the success colour — the only stage that is this platform's own
+// achievement.
+const FUNNEL_STAGE_COLORS = ["var(--chart-4)", "var(--chart-2)", "var(--chart-3)"];
 
 // What failed, what was asleep, and how much traffic survived the whole path.
 //
@@ -79,7 +75,7 @@ export function ReliabilityPage() {
 
             <FunnelChart
               title="Request funnel"
-              description="How far the traffic got. Not a subset chain: one HTTP request can call several backends, so “reached a backend” may legitimately exceed the requests that arrived — which is fan-out, and the counters alone cannot show it."
+              description="How far the traffic got. Each stage strictly contains the next: everything that arrived, the part of it the client asked for correctly (4xx removed), and the part of that this platform answered (5xx removed). The drop between the first two is the client's problem; the drop between the last two is ours."
               stages={overview?.trafficFunnel ?? []}
               isLoading={isLoading}
               formatCount={formatCount}

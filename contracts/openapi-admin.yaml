@@ -692,9 +692,11 @@ components:
             trafficFunnel:
               type: array
               description: >-
-                How far the traffic got. NOT a subset chain: one HTTP request
-                can call several backends, so backend_call may legitimately
-                exceed received and percentOfEntry may exceed 100.
+                How far the traffic got. Each stage strictly contains the next:
+                everything that arrived, the part of it the client asked for
+                correctly (4xx removed), and the part of that this platform
+                answered (5xx removed). A client may rely on the counts being
+                non-increasing.
               items:
                 type: object
                 additionalProperties: false
@@ -702,12 +704,14 @@ components:
                 properties:
                   stage:
                     type: string
-                    enum: [received, backend_call, backend_ok, succeeded]
+                    enum: [received, accepted, served]
                   label: { type: string }
                   count: { type: integer }
                   percentOfEntry:
                     type: number
-                    description: Against the FIRST stage, never the previous one.
+                    description: >-
+                      Against the FIRST stage, never the previous one. Never
+                      above 100, because every stage is a subset of the entry.
             errorCodeTop:
               type: array
               items:

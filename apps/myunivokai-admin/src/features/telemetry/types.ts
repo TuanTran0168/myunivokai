@@ -84,13 +84,18 @@ export interface TelemetryComparison {
   p95DurationMs: TelemetryDelta;
 }
 
+// Each stage strictly contains the next: everything that arrived, the part of
+// it that was a valid request, and the part of THAT the platform answered.
+//
+// The nesting is the contract. An earlier version of this funnel used backend
+// round trips for its middle stages and rendered 302 -> 19 -> 19 -> 302 on real
+// traffic — health checks and 404s never reach a backend, so it collapsed and
+// then fully recovered. Backend fan-out is a ratio, not a funnel stage.
 export interface TelemetryFunnelStage {
-  stage: "received" | "backend_call" | "backend_ok" | "succeeded";
+  stage: "received" | "accepted" | "served";
   label: string;
   count: number;
-  // Against the FIRST stage, not the previous one. It may legitimately exceed
-  // 100: one HTTP request can call several backends, and clipping it would
-  // hide the fan-out this chart exists to show.
+  /** Against the FIRST stage, never the previous one. Never above 100. */
   percentOfEntry: number;
 }
 

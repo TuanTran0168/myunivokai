@@ -5,13 +5,12 @@ use std::sync::Arc;
 use myunivokai_contracts::{
     HttpRollupEnvelope, TelemetryComparison, TelemetryDelta, TelemetryFunnelStage,
     TelemetryOverviewQueryData, TelemetryOverviewResponseData, TelemetryRouteListQueryData,
-    TelemetryRouteListResponseData, TelemetrySinkDescriptor, TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
-    TELEMETRY_FUNNEL_STAGE_BACKEND_OK, TELEMETRY_FUNNEL_STAGE_RECEIVED,
-    TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
+    TelemetryRouteListResponseData, TelemetrySinkDescriptor, TELEMETRY_FUNNEL_STAGE_ACCEPTED,
+    TELEMETRY_FUNNEL_STAGE_RECEIVED, TELEMETRY_FUNNEL_STAGE_SERVED,
 };
 use time::OffsetDateTime;
 
-use crate::domain::{BackendAggregate, HttpTotals, IngestOutcome, QueryWindow, RollupBatch};
+use crate::domain::{HttpTotals, IngestOutcome, QueryWindow, RollupBatch, StatusClassCount};
 use crate::error::Result;
 use crate::repository::RollupRepository;
 use crate::service::mapping::percentage_of;
@@ -20,6 +19,10 @@ use crate::service::mapping::percentage_of;
 /// a dozen; ten is enough to see every one that matters and short enough that
 /// a rare code cannot push a common one off a screen.
 const ERROR_CODE_TOP_LIMIT: i64 = 10;
+
+/// 4xx. The funnel subtracts this class and the server-error class in turn,
+/// which is only well defined because the two are disjoint.
+const CLIENT_ERROR_STATUS_CLASS: u8 = 4;
 
 pub struct TelemetryService {
     repository: Arc<dyn RollupRepository>,
@@ -84,7 +87,7 @@ impl TelemetryService {
             .await?;
 
         // Computed before the arrays are consumed by the mapping below.
-        let traffic_funnel = traffic_funnel(&totals, &backends);
+        let traffic_funnel = traffic_funnel(&totals, &status_mix);
         let peak_hour = hourly_buckets
             .iter()
             .copied()
@@ -196,17 +199,30 @@ fn delta(current: i64, previous: i64) -> TelemetryDelta {
     }
 }
 
-/// The request funnel, built from counters this service already has.
+/// The request funnel: everything that arrived, the part of it that was a
+/// valid request, and the part of THAT this platform actually answered.
 ///
-/// It is not a strict subset chain, and that is stated rather than smoothed
-/// over: one HTTP request can call several backends, so `backend_call` can
-/// legitimately exceed `received`. The stages answer "how much work did each
-/// layer do", not "how many of the original requests survived" — which is why
-/// `percent_of_entry` is allowed above 100 and the admin app labels the axis
-/// accordingly.
-fn traffic_funnel(totals: &HttpTotals, backends: &[BackendAggregate]) -> Vec<TelemetryFunnelStage> {
-    let backend_calls: i64 = backends.iter().map(|backend| backend.requests).sum();
-    let backend_errors: i64 = backends.iter().map(|backend| backend.errors).sum();
+/// Each stage strictly contains the next, which is the only thing that makes
+/// four bars in a row a funnel. An earlier version used backend round trips
+/// for the middle stages and produced 302 -> 19 -> 19 -> 302 against a real
+/// window: most traffic is health checks and 404s that never reach a backend,
+/// so the shape collapsed and then fully recovered. That was not a subtle
+/// inaccuracy — it was a chart claiming containment that does not exist.
+/// Backend fan-out is a ratio and is reported as one, beside the backends.
+///
+/// 4xx and 5xx are disjoint status classes, so subtracting them in turn is
+/// well defined: `received - 4xx - 5xx` is exactly the 1xx/2xx/3xx responses.
+fn traffic_funnel(
+    totals: &HttpTotals,
+    status_mix: &[StatusClassCount],
+) -> Vec<TelemetryFunnelStage> {
+    let client_errors: i64 = status_mix
+        .iter()
+        .filter(|slice| slice.status_class == CLIENT_ERROR_STATUS_CLASS)
+        .map(|slice| slice.requests)
+        .sum();
+    let accepted = (totals.requests - client_errors).max(0);
+    let served = (accepted - totals.server_errors).max(0);
     let stages = [
         (
             TELEMETRY_FUNNEL_STAGE_RECEIVED,
@@ -214,19 +230,14 @@ fn traffic_funnel(totals: &HttpTotals, backends: &[BackendAggregate]) -> Vec<Tel
             totals.requests,
         ),
         (
-            TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
-            "Reached a backend",
-            backend_calls,
+            TELEMETRY_FUNNEL_STAGE_ACCEPTED,
+            "The client asked for something real",
+            accepted,
         ),
         (
-            TELEMETRY_FUNNEL_STAGE_BACKEND_OK,
-            "Backend answered",
-            backend_calls - backend_errors,
-        ),
-        (
-            TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
+            TELEMETRY_FUNNEL_STAGE_SERVED,
             "Answered without a server error",
-            totals.requests - totals.server_errors,
+            served,
         ),
     ];
     stages
@@ -234,8 +245,8 @@ fn traffic_funnel(totals: &HttpTotals, backends: &[BackendAggregate]) -> Vec<Tel
         .map(|(stage, label, count)| TelemetryFunnelStage {
             stage: stage.to_owned(),
             label: label.to_owned(),
-            count: count.max(0),
-            percent_of_entry: percentage_of(count.max(0), totals.requests),
+            count,
+            percent_of_entry: percentage_of(count, totals.requests),
         })
         .collect()
 }
@@ -649,25 +660,28 @@ mod tests {
         );
     }
 
-    // The funnel is not a subset chain and must not be smoothed into one: a
-    // single HTTP request can call several backends. Rounding the stages down
-    // to make the shape monotonic would hide a fan-out, which is the one thing
-    // this chart can show that the counters cannot.
+    // Every stage must contain the next. An earlier funnel put backend round
+    // trips in the middle and produced 302 -> 19 -> 19 -> 302 against real
+    // traffic, because health checks and 404s never reach a backend: the shape
+    // collapsed and then fully recovered, claiming a containment that does not
+    // exist. This test is that bug.
     #[tokio::test]
-    async fn the_funnel_reports_backend_fan_out_rather_than_capping_it_at_the_entry_count() {
+    async fn every_funnel_stage_contains_the_next() {
         let repository = Arc::new(InMemoryRollupRepository::new());
         let service = service_with(repository);
         let envelope = rollup_envelope_with(
             "instance-a",
             datetime!(2026-08-13 09:14:00 UTC),
             &[
-                TestBucket::successful("/api/universe/worlds", 18, 900, 60),
-                TestBucket::with_status("/api/universe/worlds", 5, 2, 100, 60),
+                TestBucket::successful("/api/universe/worlds", 60, 900, 60),
+                // 4xx: a 404 sweep, which never reaches a backend and is not
+                // this platform's failure.
+                TestBucket::with_status("/api/universe/worlds", 4, 30, 300, 60),
+                TestBucket::with_status("/api/universe/worlds", 5, 10, 100, 60),
             ],
-            &[
-                backend_bucket("universe", 20, 600, 60, 1),
-                backend_bucket("dna", 12, 400, 60, 0),
-            ],
+            // Only a handful of requests touched a backend. This is the shape
+            // that broke the old funnel.
+            &[backend_bucket("universe", 12, 400, 60, 1)],
             &[],
         );
         service.ingest(&envelope).await.expect("ingest");
@@ -686,13 +700,44 @@ mod tests {
             .iter()
             .map(|stage| stage.count)
             .collect();
-        assert_eq!(counts, vec![20, 32, 31, 18]);
+        assert_eq!(counts, vec![100, 70, 60], "received - 4xx - 5xx");
+        for pair in counts.windows(2) {
+            assert!(
+                pair[0] >= pair[1],
+                "a funnel stage grew: {} then {}",
+                pair[0],
+                pair[1]
+            );
+        }
         assert_eq!(overview.traffic_funnel[0].percent_of_entry, 100.0);
+        assert_eq!(overview.traffic_funnel[2].percent_of_entry, 60.0);
         assert!(
-            overview.traffic_funnel[1].percent_of_entry > 100.0,
-            "32 backend calls from 20 requests must read above 100%, not be clipped"
+            overview
+                .traffic_funnel
+                .iter()
+                .all(|stage| stage.percent_of_entry <= 100.0),
+            "no stage may exceed the entry it is a subset of"
         );
-        assert_eq!(overview.traffic_funnel[3].percent_of_entry, 90.0);
+    }
+
+    // A window with no traffic must not divide by its own entry count.
+    #[tokio::test]
+    async fn an_empty_funnel_reports_zeroes_rather_than_dividing_by_nothing() {
+        let repository = Arc::new(InMemoryRollupRepository::new());
+        let service = service_with(repository);
+        let overview = service
+            .overview(
+                &TelemetryOverviewQueryData { hours: 24 },
+                descriptor(),
+                datetime!(2026-08-13 10:00:00 UTC),
+            )
+            .await
+            .expect("overview");
+        assert_eq!(overview.traffic_funnel.len(), 3);
+        for stage in &overview.traffic_funnel {
+            assert_eq!(stage.count, 0);
+            assert_eq!(stage.percent_of_entry, 0.0);
+        }
     }
 
     #[tokio::test]

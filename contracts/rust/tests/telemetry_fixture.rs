@@ -165,9 +165,8 @@ fn the_overview_response_fixture_decodes_into_the_mirror() {
     // key may not.
     let expected_stages = [
         myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_RECEIVED,
-        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_BACKEND_CALL,
-        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_BACKEND_OK,
-        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_SUCCEEDED,
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_ACCEPTED,
+        myunivokai_contracts::TELEMETRY_FUNNEL_STAGE_SERVED,
     ];
     assert_eq!(overview.traffic_funnel.len(), expected_stages.len());
     for (stage, expected) in overview.traffic_funnel.iter().zip(expected_stages) {
@@ -178,6 +177,17 @@ fn the_overview_response_fixture_decodes_into_the_mirror() {
         );
     }
     assert_eq!(overview.traffic_funnel[0].percent_of_entry, 100.0);
+    // Each stage must contain the next. Without this the shape is four
+    // counters in a row claiming a containment that does not exist.
+    for pair in overview.traffic_funnel.windows(2) {
+        assert!(
+            pair[0].count >= pair[1].count,
+            "stage {} ({}) exceeds the stage it is a subset of ({})",
+            pair[1].stage,
+            pair[1].count,
+            pair[0].count
+        );
+    }
 
     assert_eq!(overview.backends.len(), 1);
     assert_eq!(overview.backends[0].p50_duration_ms, 62);

@@ -20,17 +20,24 @@ pub const TELEMETRY_ROUTE_LIST_QUERY_SUBJECT: &str = "myunivokai.queries.telemet
 pub const TELEMETRY_SINK_POSTGRES: &str = "postgres";
 pub const TELEMETRY_SINK_OTLP: &str = "otlp";
 
-/// The request funnel's stages, narrowest question first: of everything that
-/// arrived, how much needed a backend, how much of that came back, and how
-/// much of the whole reached the caller as a success.
+/// The request funnel's stages. Each is a strict subset of the one before it:
+/// everything that arrived, the part of it that was a valid request, and the
+/// part of THAT the platform actually answered.
+///
+/// The nesting is the whole contract. An earlier version put backend round
+/// trips in the middle two stages, which produced 302 -> 19 -> 19 -> 302 on a
+/// real window — most traffic is health checks and 404s that never reach a
+/// backend, so the shape collapsed and then fully recovered. Four counters in
+/// a row are not a funnel unless each contains the next, and a chart implying
+/// containment it does not have is worse than four separate numbers. Backend
+/// fan-out is a ratio, not a stage.
 ///
 /// Stable machine keys rather than the labels beside them — the admin app
-/// colours and orders by these, so a renamed label must not become a new
+/// colours and orders by these, so a reworded label must not become a new
 /// stage.
 pub const TELEMETRY_FUNNEL_STAGE_RECEIVED: &str = "received";
-pub const TELEMETRY_FUNNEL_STAGE_BACKEND_CALL: &str = "backend_call";
-pub const TELEMETRY_FUNNEL_STAGE_BACKEND_OK: &str = "backend_ok";
-pub const TELEMETRY_FUNNEL_STAGE_SUCCEEDED: &str = "succeeded";
+pub const TELEMETRY_FUNNEL_STAGE_ACCEPTED: &str = "accepted";
+pub const TELEMETRY_FUNNEL_STAGE_SERVED: &str = "served";
 
 /// The percentile reported alongside p95 everywhere in this pipeline.
 pub const TELEMETRY_MEDIAN_PERCENTILE: f64 = 50.0;

@@ -44,10 +44,17 @@ obvious wrong version that still looks right on a screen, so each is stated:
   this platform *reliably* busy". Both group with an explicit
   `AT TIME ZONE 'UTC'`, because inheriting the session zone moves the peak
   hour for no reason.
-- **`trafficFunnel` is not a subset chain.** One HTTP request can call several
-  backends, so `backend_call` may legitimately exceed `received` and
-  `percentOfEntry` may exceed 100. Clipping it to look monotonic would hide
-  fan-out, which is the one thing the funnel shows that the counters do not.
+- **`trafficFunnel` is a strict subset chain, and that was not free.** The
+  three stages are `received` → `accepted` (4xx removed) → `served` (5xx
+  removed), each containing the next. The first draft used backend round trips
+  for the middle stages and produced `302 → 19 → 19 → 302` the first time it
+  ran against real traffic: most requests are health checks and 404s that never
+  reach a backend, so the shape collapsed and then fully recovered. Four
+  counters in a row are not a funnel unless each contains the next, and a chart
+  implying a containment that does not exist is worse than four separate
+  numbers. Backend fan-out is a ratio and is reported as one, beside the
+  backends. A test in `service/telemetry.rs` and one in each contract suite now
+  assert the counts are non-increasing.
 
 ## Layout
 

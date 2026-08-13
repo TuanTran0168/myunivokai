@@ -294,9 +294,8 @@ func TestTelemetryOverviewFixtureDecodesIntoTheContract(t *testing.T) {
 	// may be reworded; a key may not.
 	expectedStages := []string{
 		TelemetryFunnelStageReceived,
-		TelemetryFunnelStageBackendCall,
-		TelemetryFunnelStageBackendOK,
-		TelemetryFunnelStageSucceeded,
+		TelemetryFunnelStageAccepted,
+		TelemetryFunnelStageServed,
 	}
 	if len(overview.TrafficFunnel) != len(expectedStages) {
 		t.Fatalf("trafficFunnel has %d stages, want %d", len(overview.TrafficFunnel), len(expectedStages))
@@ -311,6 +310,17 @@ func TestTelemetryOverviewFixtureDecodesIntoTheContract(t *testing.T) {
 	}
 	if overview.TrafficFunnel[0].PercentOfEntry != 100 {
 		t.Errorf("the entry stage is %.2f%% of itself, want 100", overview.TrafficFunnel[0].PercentOfEntry)
+	}
+	// The nesting IS the contract. Four counters in a row are only a funnel if
+	// each contains the next; an earlier version of this shape did not, and
+	// rendered as a collapse followed by a full recovery.
+	for index := 1; index < len(overview.TrafficFunnel); index++ {
+		if overview.TrafficFunnel[index].Count > overview.TrafficFunnel[index-1].Count {
+			t.Errorf("stage %q (%d) exceeds the stage it is a subset of (%d)",
+				overview.TrafficFunnel[index].Stage,
+				overview.TrafficFunnel[index].Count,
+				overview.TrafficFunnel[index-1].Count)
+		}
 	}
 
 	if len(overview.Backends) != 1 || overview.Backends[0].P50DurationMS != 62 {

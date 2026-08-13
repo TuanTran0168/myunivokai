@@ -411,7 +411,16 @@ by link learns the grouping too.
   URL collapsed into one `unmatched` row, and the inbox held one
   `{instance}:{bucket_start}` row per flush. The exact commands are in
   `services/telemetry-service/README.md` §Verifying the whole pipeline locally.
-- **That run found a real bug**, which is the argument for doing it: a bucket
+- **The local run has now found two real bugs**, which is the argument for
+  doing it rather than trusting a green suite. The second, on 2026-08-14: the
+  request funnel's first design used backend round trips for its middle stages
+  and rendered `302 → 19 → 19 → 302` against real traffic — health checks and
+  404s never reach a backend, so it collapsed and then fully recovered. Every
+  unit test passed, because each stage's arithmetic was individually correct;
+  what was wrong was the claim the SHAPE made. Redefined as `received →
+  accepted → served`, a strict subset chain, with a non-increasing assertion in
+  the service suite and in both contract suites.
+- The first, on 2026-08-13: a bucket
   in which every request finished inside a millisecond reported `p95 = 5 ms`,
   the interpolation's own bucket edge rather than anything observed. Zero is a
   real maximum; the clamp was treating it as a missing one. Fixed in

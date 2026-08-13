@@ -12,8 +12,14 @@
   "slowestDurationMs": 910,
   "percentileIsInterpolated": true,
   "statusMix": [
-    { "statusClass": 2, "requestCount": 46 },
-    { "statusClass": 5, "requestCount": 3 }
+    {
+      "statusClass": 2,
+      "requestCount": 46
+    },
+    {
+      "statusClass": 5,
+      "requestCount": 3
+    }
   ],
   "volumePoints": [
     {
@@ -38,7 +44,12 @@
     "p95DurationMs": 910
   },
   "hourOfDay": [
-    { "hour": 9, "requestCount": 49, "errorCount": 3, "p95DurationMs": 910 }
+    {
+      "hour": 9,
+      "requestCount": 49,
+      "errorCount": 3,
+      "p95DurationMs": 910
+    }
   ],
   "comparison": {
     "previousWindowStart": "2026-08-11T10:00:00Z",
@@ -69,25 +80,24 @@
       "percentOfEntry": 100.0
     },
     {
-      "stage": "backend_call",
-      "label": "Reached a backend",
-      "count": 61,
-      "percentOfEntry": 124.49
-    },
-    {
-      "stage": "backend_ok",
-      "label": "Backend answered",
-      "count": 58,
-      "percentOfEntry": 118.37
-    },
-    {
-      "stage": "succeeded",
-      "label": "Answered without a server error",
+      "stage": "accepted",
+      "label": "The client asked for something real",
       "count": 46,
       "percentOfEntry": 93.88
+    },
+    {
+      "stage": "served",
+      "label": "Answered without a server error",
+      "count": 43,
+      "percentOfEntry": 87.76
     }
   ],
-  "errorCodeTop": [{ "errorCode": "SERVICE_WAKING", "count": 3 }],
+  "errorCodeTop": [
+    {
+      "errorCode": "SERVICE_WAKING",
+      "count": 3
+    }
+  ],
   "backends": [
     {
       "service": "universe",
