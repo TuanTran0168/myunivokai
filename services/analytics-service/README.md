@@ -59,13 +59,40 @@ Four subjects, queue group `analytics-service-v1`:
 
 | Subject | Answers |
 | --- | --- |
-| `queries.analytics.overview.get.v1` | Totals per family, failure rate, publish rate, duration percentiles, archetype/style/mood distributions |
+| `queries.analytics.overview.get.v1` | Totals per family, failure rate, publish rate, duration percentiles, archetype/style/mood distributions, the generation funnel, today-vs-yesterday deltas, and job submissions by hour of day |
 | `queries.analytics.world.list.v1` | Paginated, filterable worlds table |
 | `queries.analytics.job.list.v1` | Paginated jobs and failures with error codes |
 | `queries.analytics.timeseries.get.v1` | Counts per day per family over a range |
 
 Every aggregate is computed in SQL here. The gateway sums nothing and the
 admin app sums nothing.
+
+Three of those deserve their own note, because each has an obvious wrong
+version that reads as correct:
+
+- **The comparison is a rolling 24 hours against the 24 before it**, not two
+  calendar days, and it is deliberately independent of `days`. A calendar
+  comparison at 09:00 puts nine hours against twenty-four and reports a
+  collapse every morning; tying it to `days` would turn a 90-day view into a
+  comparison against the 90 days before it, which is a different question.
+  A period whose predecessor holds nothing reports `hasBaseline: false` rather
+  than a percentage — "+100%" against nothing is a trend that never happened.
+- **The funnel's four stages are measured over the same set of jobs** — the
+  ones submitted inside the window. Publishing is joined back through
+  `source_job_id`, so a world published today from a job submitted last month
+  cannot appear under a stage its job never entered. Each stage's share is of
+  the FIRST stage, never the previous one.
+- **p50 travels with p95 everywhere.** Both are exact here: this service has
+  every job's own `duration_ms` and uses `PERCENTILE_CONT`, unlike
+  telemetry-service's interpolation across fixed histogram edges. The gap
+  between them is the finding — a low median under a high tail is a slow
+  minority, two high numbers are a slow platform, and the fixes are opposite.
+
+The arithmetic behind those (delta, funnel share, peak hour) is unit-tested in
+`internal/repositories/overview_math_test.go` with no database, because none of
+it touches one. What a database is needed for — that the funnel's stages come
+from one job set, that the comparison's two periods do not overlap — is the
+SQL's own business and is stated beside those queries.
 
 Pagination is **keyset**, never `OFFSET`: the cursor encodes the
 `(timestamp, id)` the last page ended on, so page 1000 costs the same as page

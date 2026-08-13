@@ -112,154 +112,49 @@ flowchart TB
 
 ---
 
-## Generation flow
+## How a request travels
 
-- `POST /api/{family}/worlds` — gateway validates, rate-limits, publishes to JetStream.
-- Gateway answers **202 Accepted** with a `jobId`; it never waits for the world.
-- `dna-service` consumes the command and calls the AI provider for a ProfileDNA.
-- `dna-service` stores the root job, then emits a compose command for the family.
-- `universe-service` or `nature-service` composes the world from a seed — no AI.
-- The family service stores the world plus variant 1 and emits a completion event.
-- `dna-service` consumes that event and marks the root job done.
-- Frontend polls `GET /api/jobs/{jobId}`, then loads the world and renders it.
-
-`{family}` is `universe` or `nature`. Both families use identical request shapes.
-
-## World lifecycle after generation
-
-- `GET /api/{family}/worlds/{id}` — the private dashboard read, cached in Redis.
-- `POST /api/{family}/worlds/{id}/variants` — new seed, new scene, zero AI cost.
-- `POST /api/{family}/worlds/{id}/variants/{variantId}/select` — pick what is shown.
-- `POST /api/{family}/worlds/{id}/publish` — mint the share slug once, then reuse it.
-- `GET /api/{family}/share/worlds/{slug}` — public, privacy-safe, cached in Redis.
-- Frontend share pages live at `/universe/share/worlds/{slug}` and `/nature/share/worlds/{slug}`.
-
-## Gateway caching and invalidation
-
-- Three Redis namespaces: `job:v1`, `world:v1`, `share:v1`.
-- `world:v1` is keyed by world id; `share:v1` is keyed by share slug.
-- Every mutation deletes `world:v1` before and after the call.
-- A mutation cannot derive the slug from a world id, so the domain service
-  returns `shareSlug` in its response and the gateway deletes `share:v1` with it.
-- Without that, selecting a variant left the share page serving the previous
-  scene for a whole TTL — which looked like the share losing scene features.
-
-## Admin read path
-
-- Every world mutation above also bumps `worlds.revision` and writes a
-  `world.changed` snapshot to the outbox **inside the same transaction**.
-- `analytics-service` consumes those events into its own database:
-  `world_projections` and `job_projections`, guarded by an inbox table and an
-  upsert that only ever moves a world's `revision` forward.
-- `/api/admin/{overview,timeseries,worlds,jobs}` reads from that model alone.
-  No admin route ever publishes a `universe`, `nature` or `dna` subject, and a
-  gateway test asserts it.
-- The read model is **eventually consistent**: a new world appears in the admin
-  app seconds after it is created. That is the accepted trade for an admin page
-  that waits on two processes instead of four.
-- The cost to keep paying: a future mutation that forgets its event drifts the
-  read model silently. `world_snapshot_test.go` in both family services asserts
-  every mutating store method leaves an event behind.
-
----
-
-## Waking a sleeping service
-
-Every service except the gateway is a pure NATS consumer, so on a scale-to-zero
-plan nothing ever sends it the inbound HTTP it needs to wake up. A query
-against a sleeping service comes back as `no-responders` **immediately** — not
-as a timeout — and the gateway used to report that as the same
-`503 SERVICE_UNAVAILABLE` it reports for a genuinely broken broker.
-
-- `503 SERVICE_WAKING` + `Retry-After` — nobody was subscribed. The gateway has
-  started the service and the request never reached it, so any method is safe
-  to retry. Both frontends wait it out.
-- `503 SERVICE_UNAVAILABLE` — a real fault; retrying will not help.
-- `504 SERVICE_TIMEOUT` — awake, just slow.
-
-Reads wake reactively. `POST /api/{family}/worlds` cannot: a JetStream publish
-succeeds with no consumer alive, so that path returns `202` and stalls at
-`queued` with no error anywhere — it wakes dna and the family service *before*
-publishing instead.
-
-One call per sleeping service per lock window, triggered by a real request,
-never on a schedule. A keep-alive cron is exactly what the free tier's
-account-wide hour budget rules out. `SERVICE_WAKE_PLATFORM=none` is the default
-and the correct value on any always-on host, so leaving free tier is one line
-of config.
-
-Self-hosting is the exception, and it is the interesting one: a supervisor
-takes over restarting, but `no-responders` stops meaning *"asleep"* and starts
-meaning *"crashed"* — so the classification and the statistics around the wake
-become incident detection rather than a workaround. See
-[notes/vision/service-wake-mechanism.md](notes/vision/service-wake-mechanism.md),
-which records exactly which parts survive each destination and which one should
-be deleted.
-
----
-
-## Key design decisions
-
-### AI only generates the semantic profile — all 3D numbers are deterministic
-
-- The AI produces concepts: archetype, narrative, mood, energy, palette intent.
-- Every rendering number comes from the seed inside safe mathematical bounds.
-- That covers orbit radii, planet sizes, forest density and lighting angles.
-- Alternative variants therefore cost **zero AI calls**.
-- The same seed always produces the same scene, on any page, forever.
-- `Math.random()` is banned in scene code; the frontend mirrors the seeded PRNG.
-
-### Every world plays music, and the same DNA arranges it
-
-- The notes are **real compositions in the public domain**, shipped as note data.
-- Six pieces — Satie, Bach, Debussy — 84 kB for all six; a world fetches one.
-- The sound comes from CC0 recorded instruments: 39 samples, 1.27 MB total.
-- The DNA chooses the piece, the instruments, the tempo, the key and how full
-  the chords are; the seed chooses the opening phrase, the room and the timing.
-- `Math.random()` is banned here exactly as in scene code — same seed, same
-  performance, on every page and every reload.
-- Famous modern songs are not an option however freely their sheet music
-  circulates: a composition is copyrighted for 70 years after the composer's
-  death, and playing it with our own samples is what a sync licence covers.
-- Audio never reaches for a provider, so swapping to a live AI changes nothing
-  on this path. See [notes/fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md).
-
-### Single public edge with interchangeable AI providers
-
-- The browser talks to the gateway and nothing else.
-- `Gemini`, `OpenAI` and `mock` sit behind one `ai.Provider` interface.
-- Switching provider is an environment variable, not a code change.
-- `mock` runs the whole flow with no API key, and is what tests use.
-- `dna-service` is the only service that holds a provider key at all.
+The diagram above shows ownership. This one shows sequence — the single path
+that matters, from a visitor pressing a button to a world existing.
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "linear", "rankSpacing": 45}}}%%
-flowchart TB
-  classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
-  classDef portStyle fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#5b21b6;
-  classDef aiStyle fill:#fdf2f8,stroke:#db2777,stroke-width:2px,color:#9d174d;
+sequenceDiagram
+  autonumber
+  participant Web as Myunivokai Web
+  participant Gateway as API Gateway
+  participant NATS as NATS JetStream
+  participant DNA as DNA Service
+  participant Family as Universe / Nature Service
 
-  dna["<b>DNA Service</b><br/>business logic depends on the interface,<br/>never on a vendor client"]:::domainStyle
-  port["<b><code>ai.Provider</code></b><br/>selected by <code>AI_PROVIDER</code>"]:::portStyle
-
-  subgraph adapters ["internal/ai/providers — one file each"]
-    direction LR
-    mock["<b>mock</b><br/>default · no API key<br/>what CI runs"]:::aiStyle
-    gemini["<b>Gemini</b>"]:::aiStyle
-    openai["<b>OpenAI</b>"]:::aiStyle
+  Web->>Gateway: POST /api/{family}/worlds
+  Gateway->>NATS: publish generate command
+  Gateway-->>Web: 202 Accepted + jobId
+  Note over Gateway,Web: The gateway never waits for a world.
+  NATS->>DNA: generate command
+  DNA->>DNA: ProfileDNA from the AI provider
+  DNA->>NATS: publish compose command
+  NATS->>Family: compose command
+  Family->>Family: compose from a seed — no AI
+  Family->>NATS: publish completed event
+  NATS->>DNA: completed event, root job done
+  loop until terminal
+    Web->>Gateway: GET /api/jobs/{jobId}
   end
-
-  dna --> port
-  port --> mock
-  port --> gemini
-  port --> openai
+  Web->>Gateway: GET /api/{family}/worlds/{id}
 ```
 
-`internal/wake` in the gateway is built to the same shape on purpose:
-`wake.Platform` is the interface, `wake/platforms/` holds the adapters,
-`wake.Coordinator` holds the policy they share, and `SERVICE_WAKE_PLATFORM`
-is the switch — the exact roles `ai.Provider`, `ai.Orchestrator` and
-`AI_PROVIDER` play here.
+Everything after step 3 is asynchronous. The frontend's polling loop is what
+turns it back into something that feels synchronous.
+
+The rest of the request path — what can be done to a world afterwards, which
+Redis key is invalidated by what, how the admin app reads data it may never
+query directly, and what `no-responders` means on a scale-to-zero plan — is in
+[notes/be/request-lifecycle.md](notes/be/request-lifecycle.md).
+
+Three decisions that shape more of this codebase than their size suggests —
+AI touching only the semantic layer, every world playing real public-domain
+music, and one interface per external vendor — are in
+[notes/be/design-decisions.md](notes/be/design-decisions.md).
 
 ---
 
@@ -626,30 +521,6 @@ cd ../myunivokai-admin; npm run typecheck; npm run lint; npm run check:boundary;
 
 ---
 
-## Under research — not built, not approved
-
-Four proposals are being argued against the source before any becomes a
-sprint. Detail, schemas and the full blocker list are in
-[notes/vision/platform-evolution-research.md](notes/vision/platform-evolution-research.md).
-
-| Track | Proposal | State |
-| --- | --- | --- |
-| A | End-user login, and worlds owned across two databases | Blocked on a decision, not on code: `DEFERRED-AUTH-001` has seven unanswered questions |
-| B | Wake counts, request counts and status codes on a dashboard | **B1 shipped** (wake counters, Fleet screen). **B2 shipped** as `services/telemetry-service` — see [notes/vision/telemetry-service-plan.md](notes/vision/telemetry-service-plan.md). It did not land in `myunivokai_analytics` |
-| C | One service written in Rust | **Decided and built:** `telemetry-service`, per [notes/vision/rust-adoption-research.md](notes/vision/rust-adoption-research.md). Track B2 was its blocker and shipping both together resolved it |
-| D | WebGPU instead of WebGL | Unblocked by the Next 16 / React 19 / R3F v9 upgrade that `S1-SECURITY-001` already requires |
-
-Two findings from that research apply to the system as it runs **today**,
-independently of whether any track is approved:
-
-- A read model on a scale-to-zero plan wakes only when queried, and
-  `MYUNIVOKAI_EVENTS` retains 7 days. Leave the admin console unopened for
-  eight and the oldest events expire unconsumed — a permanent projection gap
-  with no error anywhere.
-- Prometheus cannot be used here. It scrapes on a schedule, which would keep
-  all six services permanently awake and defeat the wake mechanism outright.
-  Any observability here has to be push-based.
-
 ## Documentation
 
 Internal engineering docs live in the `notes/` folder.
@@ -658,11 +529,15 @@ See [notes/README.md](notes/README.md) for the full index.
 Key docs:
 - [coding/git-convention.md](notes/coding/git-convention.md) — branch naming and commit format
 - [coding/coding-style.md](notes/coding/coding-style.md) — code style rules
+- [be/request-lifecycle.md](notes/be/request-lifecycle.md) — generation flow, world lifecycle, cache invalidation, the admin read path, and what `no-responders` means on a sleeping service
+- [be/design-decisions.md](notes/be/design-decisions.md) — why AI touches only the semantic layer, why the music is public domain, and the one-interface-per-vendor rule
 - [be/source-overview.md](notes/be/source-overview.md) — backend architecture
+- [be/rust-service-architecture.md](notes/be/rust-service-architecture.md) — Rust's own conventions, and how the one non-Go service is laid out
 - [fe/source-overview.md](notes/fe/source-overview.md) — frontend architecture
 - [vision/analytics-service-plan.md](notes/vision/analytics-service-plan.md) — why the admin app reads from a CQRS read model instead of a gateway fan-out
+- [vision/telemetry-service-plan.md](notes/vision/telemetry-service-plan.md) — the platform read model, why observability here has to be push-based, and the 7-day retention trap a scale-to-zero read model inherits
 - [vision/auth-and-admin-plan.md](notes/vision/auth-and-admin-plan.md) — staff identity, RBAC and the admin route group
-- [vision/platform-evolution-research.md](notes/vision/platform-evolution-research.md) — end-user ownership across two databases, telemetry, Rust, WebGPU: schemas, blockers and the dependency graph
+- [vision/platform-evolution-research.md](notes/vision/platform-evolution-research.md) — proposals still being argued against the source: end-user ownership across two databases, WebGPU, and what shipped out of the earlier tracks
 - [ops/production-deployment-guide.md](notes/ops/production-deployment-guide.md) — step-by-step production deploy runbook
 - [fe/ambient-audio-mechanism.md](notes/fe/ambient-audio-mechanism.md) — how the music is made, and how to audition it
 - [contracts/openapi.yaml](contracts/openapi.yaml) — API specification

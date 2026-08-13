@@ -24,6 +24,31 @@ It publishes nothing else. The local NATS ACL in
 [infra/nats/nats-server.conf](../../infra/nats/nats-server.conf) enforces that
 rather than trusting the code to honour it.
 
+The overview answers more than a total and a p95. Four of its fields have an
+obvious wrong version that still looks right on a screen, so each is stated:
+
+- **`comparison`** measures the window against the one of the same width
+  immediately before it, over a HALF-OPEN interval so the two partition the
+  timeline — a closed upper bound counts the boundary minute twice and makes
+  every comparison optimistic. It is **absent entirely** when that previous
+  window holds no data, and `errors` compares the error COUNT rather than the
+  rate: two rates subtract into a percentage-POINT difference, and calling
+  that a percent change is how a card like this ends up lying.
+- **`p50DurationMs`** rides beside `p95DurationMs` everywhere, including per
+  route and per backend. Both are interpolations across the contract's eight
+  fixed edges and the response says so in `percentileIsInterpolated`.
+- **`hourlyPoints` and `hourOfDay`** are different questions. The first is a
+  timeline rolled up to the hour (the minute series is 10,080 points over a
+  week — a payload nobody needs and a chart nobody can read); the second is
+  every day in the window summed onto a 24-hour clock, which answers "when is
+  this platform *reliably* busy". Both group with an explicit
+  `AT TIME ZONE 'UTC'`, because inheriting the session zone moves the peak
+  hour for no reason.
+- **`trafficFunnel` is not a subset chain.** One HTTP request can call several
+  backends, so `backend_call` may legitimately exceed `received` and
+  `percentOfEntry` may exceed 100. Clipping it to look monotonic would hide
+  fan-out, which is the one thing the funnel shows that the counters do not.
+
 ## Layout
 
 The layering mirrors `services/analytics-service`'s Go packages one for one, so

@@ -350,7 +350,7 @@ Tasks:
 
 ### DEFERRED-S5-NAV-001 — Restructure the admin navigation
 
-Status: Deferred by owner decision on 2026-08-13
+Status: **Done** on 2026-08-14, on the owner's trigger
 Priority: Post-Telemetry
 
 As a staff member,
@@ -358,20 +358,48 @@ I want the sidebar grouped by concern once it holds eight entries,
 so that product, platform and administration screens stop reading as one flat
 list.
 
-Not started until `S5-TELEMETRY-009` ships and the sidebar demonstrably feels
-crowded. The two candidate directions — grouped sections inside the existing
-sidebar, or a top-level section switcher — are described in
-[telemetry-service-plan.md §Future dependency](../../vision/telemetry-service-plan.md#future-dependency-the-admin-navigation-needs-restructuring-once-this-ships),
-which takes no position between them. Whoever revisits it starts from
-`apps/myunivokai-admin/src/components/layout/nav-config.ts`, whose existing
-comment already describes the implicit split in prose.
+Deferred on 2026-08-13 until the sidebar demonstrably felt crowded rather than
+on the day the eighth entry landed. The owner reported exactly that on
+2026-08-14 — "UI hiện tại quá rối rắm không sắp xếp khoa học" — which was the
+trigger this story was waiting for.
+
+**Chosen direction:** grouped sections inside the existing sidebar, not a
+top-level section switcher. A switcher hides two thirds of the destinations
+behind a control, which is the right trade at twenty entries and the wrong one
+at eleven — it costs a click on every cross-group move to save vertical space
+that is not scarce.
+
+**The grouping is by whose question a screen answers, not by which service
+serves it:**
+
+| Group | Screens |
+| --- | --- |
+| Business | Overview · Worlds · Jobs · Content mix |
+| Platform | Traffic · Performance · Reliability · Fleet |
+| Administration | Accounts · Roles · Audit log |
+
+Traffic, Performance and Reliability all read `telemetry-service` and are three
+entries because they answer three questions; Overview and Content mix both read
+`analytics-service` for the same reason. Grouping by producer would have filed
+"how fast is the platform" beside "how many requests" only because one process
+computes both.
+
+Two screens were split out of pages that had grown past scanning: Content mix
+took every distribution, the family mix and the trait radar off Overview, and
+the single Telemetry page became three. A group with no visible items is
+dropped entirely rather than rendered as a heading over empty space.
+
+Delivered in `apps/myunivokai-admin/src/components/layout/nav-config.ts`
+(`NAV_GROUPS`), `app-sidebar.tsx` and `breadcrumb-header.tsx`, which now prints
+the group beside the page — "Platform / Performance" — so a reader who arrived
+by link learns the grouping too.
 
 ## Honest status
 
 - **Every language's checks are green.** `contracts/go`,
   `services/api-gateway` and `apps/myunivokai-admin` pass `vet`/`test`/`build`,
   `typecheck`, `lint` and the import-boundary check. `contracts/rust`
-  (21 tests) and `services/telemetry-service` (48 tests) pass `cargo fmt
+  (22 tests) and `services/telemetry-service` (57 tests) pass `cargo fmt
   --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` — run
   inside the local container, which is where the Rust toolchain lives.
 - **The pipeline has been driven end to end locally.** With
