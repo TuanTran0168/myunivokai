@@ -11,83 +11,80 @@ and renders it as an interactive 3D scene right in the browser.
 
 ## Architecture
 
-Read it top to bottom, then, where it forks, left to right. Client traffic
-converges on one gateway and one message bus, and below that trunk the
-platform splits into two independent paths — **product** (the three world
-families) and **admin** (staff tooling) — that share nothing further down.
-Inside each path, every service sits directly above the one database it owns.
-
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 45, "rankSpacing": 60, "padding": 16}}}%%
 flowchart TB
+  %% Class Definitions & Layer Colors
   classDef clientStyle fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af;
   classDef edgeStyle fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534;
   classDef infraStyle fill:#fffbe6,stroke:#d97706,stroke-width:2px,color:#92400e;
   classDef domainStyle fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
+  classDef aiStyle fill:#fdf2f8,stroke:#db2777,stroke-width:2px,color:#9d174d;
   classDef dbStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:2px,color:#075985;
 
-  subgraph CLIENTS ["Clients"]
-    direction LR
-    web(["Myunivokai Web<br/>Next.js · React Three Fiber"]):::clientStyle
-    admin(["Myunivokai Admin<br/>Next.js · staff only"]):::clientStyle
+  subgraph clientLayer ["Layer 1 - Clients"]
+    web["<b>Myunivokai Web</b><br/><i>Next.js + React Three Fiber</i>"]:::clientStyle
+    admin["<b>Myunivokai Admin</b><br/><i>Next.js, staff only</i>"]:::clientStyle
   end
 
-  gateway["API Gateway<br/>/api/* · /api/admin/*"]:::edgeStyle
-  redis[("Redis<br/>rate limits · caches · tokenVersion")]:::infraStyle
-  nats{{"NATS<br/>JetStream commands · Core NATS queries · events"}}:::infraStyle
-
-  subgraph PRODUCT ["Product path · /api/*"]
-    direction LR
-    dna["DNA<br/>AI orchestration · root jobs"]:::domainStyle --> dnaDatabase[("myunivokai_dna")]:::dbStyle
-    universe["Universe<br/>solar-system composition"]:::domainStyle --> universeDatabase[("myunivokai_universe")]:::dbStyle
-    nature["Nature<br/>forest composition"]:::domainStyle --> natureDatabase[("myunivokai_nature")]:::dbStyle
+  subgraph edgeLayer ["Layer 2 - Edge"]
+    gateway["<b>API Gateway</b><br/><i>Only Public Backend</i>"]:::edgeStyle
   end
 
-  subgraph ADMINPATH ["Admin path · /api/admin/*"]
-    direction LR
-    auth["Auth<br/>staff identity · RBAC · audit"]:::domainStyle --> authDatabase[("myunivokai_auth")]:::dbStyle
-    analytics["Analytics<br/>admin read model · events in only"]:::domainStyle --> analyticsDatabase[("myunivokai_analytics")]:::dbStyle
+  subgraph infrastructureLayer ["Layer 3 - Shared Infrastructure"]
+    redis[("<b>Redis</b><br/>Rate Limits, Caches & tokenVersion")]:::infraStyle
+    nats["<b>NATS</b><br/>JetStream Commands, Core NATS Queries & Events"]:::infraStyle
   end
 
-  web --> gateway
-  admin --> gateway
-  gateway --> nats
-  gateway -.-> redis
+  subgraph domainLayer ["Layer 4 - Domain & Admin Services"]
+    dna["<b>DNA Service</b><br/>AI Orchestration & Root Jobs"]:::domainStyle
+    universe["<b>Universe Service</b><br/>Solar System Composition"]:::domainStyle
+    nature["<b>Nature Service</b><br/>Forest Composition"]:::domainStyle
+    auth["<b>Auth Service</b><br/>Staff Identity & RBAC"]:::domainStyle
+    analytics["<b>Analytics Service</b><br/>Admin Read Model"]:::domainStyle
+  end
 
-  nats <--> dna
-  nats <--> universe
-  nats <--> nature
-  nats <--> auth
-  nats --> analytics
+  subgraph integrationLayer ["Layer 5 - AI Integration"]
+    providers["<b>AI Providers</b><br/><code>ai.Provider</code> (Mock / Gemini / OpenAI)"]:::aiStyle
+  end
+
+  subgraph persistenceLayer ["Layer 6 - Service-Owned Persistence"]
+    dnaDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_dna</code>")]:::dbStyle
+    universeDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_universe</code>")]:::dbStyle
+    natureDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_nature</code>")]:::dbStyle
+    authDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_auth</code>")]:::dbStyle
+    analyticsDatabase[("<b>PostgreSQL</b><br/><code>myunivokai_analytics</code>")]:::dbStyle
+  end
+
+  web -->|"HTTPS"| gateway
+  admin -->|"HTTPS"| gateway
+  gateway <-->|"Rate Limit & Cache"| redis
+  gateway <-->|"Commands, Queries & Events"| nats
+
+  nats <-->|"Generate DNA & Track Root Jobs"| dna
+  nats <-->|"Compose & Manage Universe Worlds"| universe
+  nats <-->|"Compose & Manage Nature Worlds"| nature
+  nats <-->|"Staff Identity, Roles & Audit"| auth
+  nats -->|"Events In, Admin Queries Answered"| analytics
+
+  dna -->|"ai.Provider Interface"| providers
+  dna -->|"Owns Schema"| dnaDatabase
+  universe -->|"Owns Schema"| universeDatabase
+  nature -->|"Owns Schema"| natureDatabase
+  auth -->|"Owns Schema"| authDatabase
+  analytics -->|"Owns Schema"| analyticsDatabase
 ```
 
-- The diagram shows **ownership, not request sequence** — the generation flow
-  is the next section.
-- Only the gateway is public. NATS, Redis and every service past them are
-  private. Product- and admin-path services are **NATS workers with no HTTP
-  business API** — each binds a port only so a scale-to-zero host has
-  something to cold-start against.
-- **The fork below NATS is the point of the drawing.** Product (`/api/*`)
-  reaches DNA, Universe and Nature; admin (`/api/admin/*`) reaches Auth and
-  Analytics. Nothing crosses lanes: an admin page never waits on, or wakes, a
-  domain service the free tier may have put to sleep.
-- Each service owns exactly one PostgreSQL database and nothing reads another
-  service's tables — which is why, inside each lane, its service row lines up
-  one-to-one with its database row.
-- **Analytics has the only single-headed arrow.** Every other service both
-  receives and publishes; analytics consumes events and answers queries but
-  publishes no domain subject, which is what makes the admin lane safe to read
-  from without waking anything in the product lane.
-- **Redis is drawn beside the gateway because that is what it is** — the
-  gateway's own store, not a step in the request path, which is why its edge
-  is dotted. It holds rate-limit counters, safe caches and `tokenVersion`,
-  never durable jobs or domain records. `auth-service` also writes
-  `tokenVersion` there, so a disabled account's still-valid access token is
-  rejected without a round trip on every request; that edge is left out of
-  the drawing because one back-arrow into the admin lane costs more
-  legibility than it buys.
-- AI providers are deliberately absent here: they are not owned persistence.
-  See [interchangeable AI providers](#single-public-edge-with-interchangeable-ai-providers).
+- The diagram shows ownership, not request sequence.
+- Each service owns its own PostgreSQL database; nothing reads another's tables.
+- Redis belongs to the gateway alone — caching and rate limits, never job queuing.
+- Only the gateway is public; NATS, Redis and every service in Layer 4 are private.
+- Layer 4 are NATS workers with no HTTP business API — each binds a port only
+  so a scale-to-zero host has something to cold-start against.
+- **Analytics is the only single-headed arrow.** Every other service both
+  receives commands and publishes back; Analytics consumes events and answers
+  admin queries but publishes no domain subject, so an admin page never waits
+  on, or wakes, a domain service the free tier may have put to sleep.
+- AI providers sit behind `dna-service` alone — no other service calls one.
 
 | Service | What it does |
 | --- | --- |
