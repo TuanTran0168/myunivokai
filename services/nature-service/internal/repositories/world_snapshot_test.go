@@ -86,6 +86,42 @@ func TestEveryMutationEmitsAWorldChangeEvent(t *testing.T) {
 	}
 }
 
+// The snapshot's seed must be the SELECTED variant's, because that is the one
+// the renderer draws — and therefore the one whose rare-wildlife lottery the
+// admin app replays. Sending the world's first variant seed forever would make
+// every observed rarity rate describe a forest nobody is looking at.
+func TestSnapshotCarriesTheSelectedVariantSeed(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	bundle := createSnapshotTestWorld(t, store)
+	worldID := bundle.World.ID
+
+	created := drainOutbox(t, store)
+	var createdEnvelope contracts.Envelope[contracts.FamilyCompletedData]
+	if err := json.Unmarshal(created[0].Payload, &createdEnvelope); err != nil {
+		t.Fatalf("decode completed event: %v", err)
+	}
+	if createdEnvelope.Data.Snapshot.VariantSeed != "seed-1" {
+		t.Fatalf("created snapshot seed = %q, want %q", createdEnvelope.Data.Snapshot.VariantSeed, "seed-1")
+	}
+
+	if _, err := store.AddVariant(ctx, worldID, models.WorldVariant{ID: "variant-2", VariantNo: 2, Seed: "seed-2"}); err != nil {
+		t.Fatal(err)
+	}
+	// Adding a variant does not change which one is selected, so the seed must
+	// not move yet.
+	if snapshot := decodeSnapshot(t, drainOutbox(t, store)[0].Payload); snapshot.VariantSeed != "seed-1" {
+		t.Fatalf("adding a variant moved the seed to %q", snapshot.VariantSeed)
+	}
+
+	if _, err := store.SelectVariant(ctx, worldID, "variant-2"); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := decodeSnapshot(t, drainOutbox(t, store)[0].Payload); snapshot.VariantSeed != "seed-2" {
+		t.Fatalf("selecting variant 2 left the seed at %q, want %q", snapshot.VariantSeed, "seed-2")
+	}
+}
+
 // A re-publish is the one mutation-shaped call that changes no state. It must
 // stay silent, or the read model gains a revision describing nothing.
 func TestUnchangedMutationsEmitNothing(t *testing.T) {

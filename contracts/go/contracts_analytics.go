@@ -82,8 +82,22 @@ type WorldSnapshot struct {
 	TraitScores       TraitScores `json:"traitScores"`
 	VariantCount      int         `json:"variantCount"`
 	SelectedVariantNo int         `json:"selectedVariantNo"`
-	PublishedAt       *time.Time  `json:"publishedAt,omitempty"`
-	WorldCreatedAt    time.Time   `json:"worldCreatedAt"`
+	// VariantSeed is the SELECTED variant's seed — the input the renderer
+	// re-derives every rare feature from, and therefore the only thing that
+	// makes "how often does a black hole actually come up" answerable
+	// (contracts_rarity.go replays the lottery from it).
+	//
+	// It is a generated identifier, not user data: a base32 string this
+	// platform minted, carrying nothing a person typed. It is also the
+	// SELECTED variant's, not the world's, because switching variants changes
+	// the scene the world shows — and with it, which lottery it rolled.
+	//
+	// Omitempty and tolerated as empty on the way in: events published before
+	// this field existed carry no seed, and a projection that refused them
+	// would drop history to gain a metric.
+	VariantSeed    string     `json:"variantSeed,omitempty"`
+	PublishedAt    *time.Time `json:"publishedAt,omitempty"`
+	WorldCreatedAt time.Time  `json:"worldCreatedAt"`
 }
 
 // FamilyWorldChangedData carries a snapshot and nothing else. Every later
@@ -116,17 +130,143 @@ type AnalyticsDistributionSlice struct {
 // shape. Durations come from envelope timestamps recorded at projection
 // time, never from a clock inside analytics-service.
 type AnalyticsJobHealth struct {
-	TotalJobs           int     `json:"totalJobs"`
-	CompletedJobs       int     `json:"completedJobs"`
-	FailedJobs          int     `json:"failedJobs"`
-	InFlightJobs        int     `json:"inFlightJobs"`
-	FailureRatePercent  float64 `json:"failureRatePercent"`
-	AverageDurationMs   int     `json:"averageDurationMs"`
+	TotalJobs          int     `json:"totalJobs"`
+	CompletedJobs      int     `json:"completedJobs"`
+	FailedJobs         int     `json:"failedJobs"`
+	InFlightJobs       int     `json:"inFlightJobs"`
+	FailureRatePercent float64 `json:"failureRatePercent"`
+	AverageDurationMs  int     `json:"averageDurationMs"`
+	// P50 is the duration a person actually experiences; P95 is the one that
+	// decides the timeout. Reporting only one of them has repeatedly meant
+	// tuning for a tail that a handful of jobs own, or shipping a median that
+	// hides an unusable tail — so both travel together everywhere.
+	//
+	// Unlike telemetry-service's, these two are exact: analytics-service has
+	// every job's own duration_ms and computes PERCENTILE_CONT over it,
+	// rather than interpolating across fixed histogram edges.
+	P50DurationMs       int     `json:"p50DurationMs"`
 	P95DurationMs       int     `json:"p95DurationMs"`
 	SlowestDurationMs   int     `json:"slowestDurationMs"`
 	MeasuredJobCount    int     `json:"measuredJobCount"`
 	PublishRatePercent  float64 `json:"publishRatePercent"`
 	MultiVariantPercent float64 `json:"multiVariantPercent"`
+}
+
+// AnalyticsDelta compares one measure against the equivalent window before it
+// — the "vs yesterday" the dashboard cards carry.
+//
+// The absolute values ride along with the percentage because a percentage
+// alone is unreadable at low volume: +200% is three worlds becoming nine, and
+// the reader has no way to know that from the percentage.
+type AnalyticsDelta struct {
+	Current       int     `json:"current"`
+	Previous      int     `json:"previous"`
+	ChangePercent float64 `json:"changePercent"`
+	// HasBaseline is false when the preceding window has no data at all,
+	// which is different from a previous value of zero. A platform that was
+	// deployed yesterday has no baseline, and rendering "+100%" against
+	// nothing invents a trend.
+	HasBaseline bool `json:"hasBaseline"`
+}
+
+// AnalyticsComparison is one period measured against the one before it. The
+// period is a day: "today vs yesterday" is the comparison an operator actually
+// makes, and it is the shortest one that is not mostly noise.
+type AnalyticsComparison struct {
+	// PeriodHours is how wide each side of the comparison is, stated rather
+	// than assumed so the card can label itself instead of hard-coding "24h".
+	PeriodHours     int            `json:"periodHours"`
+	Worlds          AnalyticsDelta `json:"worlds"`
+	PublishedWorlds AnalyticsDelta `json:"publishedWorlds"`
+	Jobs            AnalyticsDelta `json:"jobs"`
+	FailedJobs      AnalyticsDelta `json:"failedJobs"`
+}
+
+// The generation funnel's stages. Stable machine keys — the admin app orders
+// and colours by these, so a renamed label must not become a new stage.
+const (
+	AnalyticsFunnelStageSubmitted = "submitted"
+	AnalyticsFunnelStageCompleted = "completed"
+	AnalyticsFunnelStageProjected = "projected"
+	AnalyticsFunnelStagePublished = "published"
+)
+
+// AnalyticsFunnelStage is one step of the generation funnel: a job was
+// submitted, it finished, a world came out of it, and somebody published that
+// world. Each stage is a strict subset of the one before it, which is what
+// makes the shape a funnel rather than four unrelated counters.
+//
+// PercentOfEntry is against the FIRST stage, not the previous one, so the
+// whole funnel reads end to end without multiplying percentages in your head.
+type AnalyticsFunnelStage struct {
+	Stage          string  `json:"stage"`
+	Label          string  `json:"label"`
+	Count          int     `json:"count"`
+	PercentOfEntry float64 `json:"percentOfEntry"`
+}
+
+// AnalyticsHourBucket is one hour of the day summed across every day in the
+// window — "when is the generator reliably busy", which the day-by-day
+// timeline cannot answer.
+type AnalyticsHourBucket struct {
+	// Hour is 0-23 UTC. The admin app labels the timezone rather than
+	// converting, so two operators in two countries read the same number.
+	Hour     int `json:"hour"`
+	JobCount int `json:"jobCount"`
+}
+
+// AnalyticsRaritySpeciesShare is one variety of a rare feature and how often
+// it came up among the worlds that rolled that feature at all.
+//
+// PercentOfHits is against the feature's own hits, not against every world:
+// "of the forests that got a rare bird, 34% got a firebird" is the question a
+// species breakdown answers, and dividing by the whole population instead would
+// make three species that must sum to 100% sum to 35%.
+type AnalyticsRaritySpeciesShare struct {
+	Key           string  `json:"key"`
+	Label         string  `json:"label"`
+	Count         int     `json:"count"`
+	PercentOfHits float64 `json:"percentOfHits"`
+}
+
+// AnalyticsRarityFeatureRate is one lottery's configured rate beside the rate
+// it actually produced.
+//
+// The two are separate fields rather than one "drift" number because they
+// answer different questions and fail differently. ConfiguredPercent comes from
+// the catalogue — it is what the generator was AIMED at. ObservedPercent is
+// counted from real worlds, and at small EligibleWorlds it is mostly sampling
+// noise: forty worlds at a 5% rate are expected to produce two, and producing
+// none is not a bug. The admin app shows the denominator for exactly that
+// reason.
+type AnalyticsRarityFeatureRate struct {
+	Key    string      `json:"key"`
+	Label  string      `json:"label"`
+	Family WorldFamily `json:"family"`
+	// ConfiguredPercent is RarityFeature.Probability as a percentage, carried
+	// on the wire so the admin app never has to hold a second copy of the
+	// catalogue to compare against.
+	ConfiguredPercent float64 `json:"configuredPercent"`
+	// EligibleWorlds is the denominator: worlds of this feature's family, in
+	// the window, that carry a seed. It is per-feature rather than global
+	// because a forest cannot roll a black hole, and counting it in that
+	// denominator would halve every universe rate.
+	EligibleWorlds int     `json:"eligibleWorlds"`
+	ObservedCount  int     `json:"observedCount"`
+	ObservedPercent float64 `json:"observedPercent"`
+	// Species is empty for features that have no varieties.
+	Species []AnalyticsRaritySpeciesShare `json:"species,omitempty"`
+}
+
+// AnalyticsRarityReport is the whole rare-feature panel.
+type AnalyticsRarityReport struct {
+	Features []AnalyticsRarityFeatureRate `json:"features"`
+	// UnmeasuredWorlds is how many worlds in the window carry no variant seed
+	// and so are in no denominator above. It is stated rather than hidden
+	// because those worlds are not evidence of a low rate — they are worlds the
+	// lottery cannot be replayed for at all, and a panel that quietly dropped
+	// them would read as a measurement instead of a gap.
+	UnmeasuredWorlds int `json:"unmeasuredWorlds"`
 }
 
 // AnalyticsOverviewQueryData scopes the dashboard. An empty Family means
@@ -151,6 +291,19 @@ type AnalyticsOverviewResponseData struct {
 	AverageTraitScores   TraitScores                  `json:"averageTraitScores"`
 	GeneratedAt          time.Time                    `json:"generatedAt"`
 	OldestProjectedWorld *time.Time                   `json:"oldestProjectedWorld,omitempty"`
+	// Comparison is always present and always spans one day on each side,
+	// independent of Days above: the range picker scopes the distributions
+	// and the funnel, while "vs yesterday" is a fixed question.
+	Comparison AnalyticsComparison `json:"comparison"`
+	// GenerationFunnel is scoped by Days, like every other windowed figure
+	// here.
+	GenerationFunnel []AnalyticsFunnelStage `json:"generationFunnel"`
+	HourOfDay        []AnalyticsHourBucket  `json:"hourOfDay"`
+	// PeakHour is the busiest hour of the day across the window, or absent
+	// when no job was submitted in it.
+	PeakHour *AnalyticsHourBucket `json:"peakHour,omitempty"`
+	// Rarity is scoped by Days and Family like the distributions above.
+	Rarity AnalyticsRarityReport `json:"rarity"`
 }
 
 // WorldProjectionSummary is one row of the admin worlds table. It is the
@@ -193,6 +346,11 @@ type AnalyticsWorldListQueryData struct {
 	Since      *time.Time  `json:"since,omitempty"`
 	Until      *time.Time  `json:"until,omitempty"`
 	Search     string      `json:"search,omitempty"`
+	// RareFeature is a key from RarityCatalogue. It selects the worlds whose
+	// stored draw came in under that feature's CURRENT probability, which is
+	// what makes the rarity panel's counts clickable: the number and the list
+	// behind it are the same predicate, evaluated in the same place.
+	RareFeature string `json:"rareFeature,omitempty"`
 }
 
 type AnalyticsWorldListResponseData struct {

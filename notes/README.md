@@ -38,7 +38,10 @@ date; it is not the original creation date.
 | [fe/3d-development-limitations.md](fe/3d-development-limitations.md) | What limits 3D quality and the asset/art-direction strategy options | Background for visual quality work |
 | [fe/deferred-work-plan.md](fe/deferred-work-plan.md) | Execution record for dynamic family chunks and the forest fidelity metrics, both shipped — including what each plan predicted wrongly | When a plan of yours meets a measurement that disagrees |
 | [fe/refactor-plan.md](fe/refactor-plan.md) | Historical FE refactor sequence; stale checkboxes are called out at the top | Context only; use `user-stories/` for current work |
+| [be/rust-service-architecture.md](be/rust-service-architecture.md) | The Rust keywords, the official Cargo layout, the layering in `telemetry-service`, the `thiserror`/`anyhow` split, and why there is no ORM |
 | [be/source-overview.md](be/source-overview.md) | How Gateway, DNA, Universe, Nature, Auth and Analytics communicate through NATS/Redis and own data | For any backend task |
+| [be/request-lifecycle.md](be/request-lifecycle.md) | The five paths a request takes: generation flow, world lifecycle, Redis invalidation (and the share-page bug that proved why), the admin read path, and waking a sleeping service | Before changing any route, cache key or event |
+| [be/design-decisions.md](be/design-decisions.md) | Why AI produces only the semantic profile, why the music is public domain, and the one-interface-per-vendor rule `ai.Provider` / `wake.Platform` / `TelemetrySink` all follow | Before adding an external integration |
 | [be/refactor-plan.md](be/refactor-plan.md) | Historical Universe refactor sequence | Context only; use `user-stories/` for current work |
 | [vision/](vision/README.md) | Approved event-driven target plus source/target boundary, NATS, Redis, DNA/family ownership and scale roadmap | Before any architecture decision |
 | [vision/versions/v1-2026-07-22/](vision/versions/v1-2026-07-22/README.md) | **Current architecture baseline:** V1 approved 2026-07-22 | Before backend, messaging, data or deployment work |
@@ -61,6 +64,8 @@ date; it is not the original creation date.
 | --- | --- | --- |
 | `coding/*.md` | Active | Matches branch/commit convention and the seven CI jobs |
 | `be/source-overview.md` | Implemented | Matches Gateway plus the DNA/Universe/Nature/Auth/Analytics NATS services; local container lifecycle verified |
+| `be/request-lifecycle.md` | Implemented | Moved out of the root README on 2026-08-13; every route and namespace checked against the gateway source |
+| `be/design-decisions.md` | Implemented | Moved out of the root README on 2026-08-13 |
 | `be/refactor-plan.md` | Historical | Old Universe-only sequence; current work moved to `user-stories/` |
 | `fe/source-overview.md` | Active | Matches async polling/recovery, family renderers and one gateway origin |
 | `fe/threejs-scene-architecture.md` | Active | Registry exists and is now lazy per family; measured First Load JS recorded in §Family chunks |

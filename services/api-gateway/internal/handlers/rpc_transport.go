@@ -12,6 +12,7 @@ import (
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/edge"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/telemetry"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/wake"
 	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
@@ -61,11 +62,21 @@ type RPCTransport struct {
 	requester RPCRequester
 	cache     cacheStore
 	waker     ServiceWaker
+	// collector is nil unless telemetry is enabled, and every method on it
+	// tolerates that - so the two call sites below record unconditionally
+	// rather than branching, exactly as they do for waker.
+	collector *telemetry.Collector
 	timeout   time.Duration
 }
 
-func NewRPCTransport(serviceConfig config.Config, requester RPCRequester, cache cacheStore, waker ServiceWaker) *RPCTransport {
-	return &RPCTransport{requester: requester, cache: cache, waker: waker, timeout: serviceConfig.NATSRequestTimeout}
+func NewRPCTransport(serviceConfig config.Config, requester RPCRequester, cache cacheStore, waker ServiceWaker, collector *telemetry.Collector) *RPCTransport {
+	return &RPCTransport{
+		requester: requester,
+		cache:     cache,
+		waker:     waker,
+		collector: collector,
+		timeout:   serviceConfig.NATSRequestTimeout,
+	}
 }
 
 func (transport *RPCTransport) Proxy(responseWriter http.ResponseWriter, request *http.Request, subject string, data any, policy cachePolicy) {
@@ -86,7 +97,14 @@ func (transport *RPCTransport) Request(responseWriter http.ResponseWriter, reque
 	requestContext, cancel := context.WithTimeout(request.Context(), transport.timeout)
 	defer cancel()
 	requestID := httpx.RequestID(request.Context())
+	// Measured around the broker call alone, and keyed on the service the
+	// subject already names, so that "the gateway was slow" and "universe was
+	// slow" stop being the same number. wake.ServiceForSubject is reused here
+	// rather than parsing the subject a second time - it is already computed
+	// on this path for the no-responders case below.
+	requestStartedAt := time.Now()
 	response, err := transport.requester.Request(requestContext, subject, contracts.NewEnvelope(requestID, data))
+	transport.collector.RecordBackendCall(wake.ServiceForSubject(subject), time.Since(requestStartedAt), err != nil)
 	if err != nil {
 		statusCode, errorCode, errorMessage := transport.classifyTransportError(request.Context(), responseWriter, subject, err)
 		log.Error().Err(err).Str("subject", subject).Str("request_id", requestID).Str("error_code", errorCode).Msg("NATS request failed")
@@ -188,13 +206,21 @@ func (transport *RPCTransport) classifyTransportError(ctx context.Context, respo
 func (transport *RPCTransport) WriteCacheHit(responseWriter http.ResponseWriter, request *http.Request, namespace, identifier string) bool {
 	payload, err := transport.cache.Get(request.Context(), namespace, identifier)
 	if err == nil {
+		transport.collector.RecordCacheLookup(namespace, true)
 		responseWriter.Header().Set("X-Cache", "HIT")
 		httpx.WriteRawJSON(responseWriter, http.StatusOK, payload)
 		return true
 	}
 	if !errors.Is(err, edge.ErrCacheMiss) {
+		// A Redis failure is counted as neither a hit nor a miss. It sends the
+		// request to the backend the same way a miss does, but folding it in
+		// would make an outage read as a cache that suddenly stopped working -
+		// two different problems with two different fixes. The log line above
+		// is where an outage shows up.
 		log.Warn().Err(err).Str("cache_namespace", namespace).Msg("read cache")
+		return false
 	}
+	transport.collector.RecordCacheLookup(namespace, false)
 	return false
 }
 

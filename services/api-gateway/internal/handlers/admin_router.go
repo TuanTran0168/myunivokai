@@ -57,6 +57,7 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 	permissionsHandler := NewAdminPermissionsHandler(transport)
 	auditHandler := NewAdminAuditHandler(transport)
 	analyticsHandler := NewAdminAnalyticsHandler(transport)
+	telemetryHandler := NewAdminTelemetryHandler(transport)
 	wakeHandler := NewAdminWakeHandler(edgeStore, waker, serviceConfig.ServiceWakePlatform)
 
 	adminRouter.Group(func(managementRouter chi.Router) {
@@ -90,6 +91,15 @@ func newAdminRouter(serviceConfig config.Config, brokerClient broker.Client, edg
 		managementRouter.With(requirePermission(contracts.PermissionWorldRead)).Get("/worlds/{worldID}", analyticsHandler.GetWorld)
 		managementRouter.With(requirePermission(contracts.PermissionJobRead)).Get("/jobs", analyticsHandler.ListJobs)
 		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/service-starts", analyticsHandler.ListServiceStarts)
+
+		// The operational reads, from a third service with its own data
+		// boundary. They reuse chart:read for the same reason wake-stats
+		// does: a new permission code would mean a contracts change, a
+		// permission_sync run and a role update against a deployed
+		// auth-service, to gate a page of request counts that every holder of
+		// chart:read is already trusted with.
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/telemetry/overview", telemetryHandler.Overview)
+		managementRouter.With(requirePermission(contracts.PermissionChartRead)).Get("/telemetry/routes", telemetryHandler.ListRoutes)
 
 		// The one admin read that does not come from analytics-service, and
 		// the one that wakes nothing to answer - see AdminWakeHandler.

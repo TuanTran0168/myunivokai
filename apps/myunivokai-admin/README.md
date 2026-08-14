@@ -110,11 +110,11 @@ deleted like any other, which is exactly the "system becomes
 unadministerable" risk the bypass flag exists to prevent, so the UI
 represents it without reversing that design.
 
-## Dashboard, worlds and jobs (S4-ANALYTICS-007)
+## The business screens (S4-ANALYTICS-007)
 
-`src/features/analytics/` owns the three screens that read business data:
-the dashboard (`/`), the worlds table (`/worlds`) and the jobs table
-(`/jobs`). All three go through the same generic BFF relay as the management
+`src/features/analytics/` owns the screens that read business data: Overview
+(`/`), Worlds (`/worlds`), Jobs (`/jobs`), Content mix (`/content`) and Rarity
+(`/rarity`). All go through the same generic BFF relay as the management
 screens, hitting `/api/admin/{overview,timeseries,worlds,jobs}`.
 
 Every number on these screens was computed in SQL by `analytics-service`.
@@ -123,6 +123,52 @@ belongs in that service's query, not in a `.map()` here. The data is
 **eventually consistent**: a world appears seconds after it is created, which
 the dashboard says out loud rather than leaving a reader to wonder why a
 just-created world is absent.
+
+The screens are split by **whose question they answer**, not by which service
+serves them — the same axis the sidebar groups on. Overview asks "is the
+platform producing, and is production healthy"; Content mix asks "is the output
+varied, and varied the way we intended", which is a product question, not an
+operational one. They were competing for the same scroll.
+
+### Rarity, and the one number on it that is not a count
+
+`/rarity` reports how often each rare feature — a black hole, a firebird
+crossing a forest — ACTUALLY comes up. That figure exists nowhere until it is
+computed: a rare feature is never stored, the renderer re-derives it from the
+world's variant seed on every draw, so `analytics-service` replays the same
+seeded lottery over real worlds' seeds. It is deliberately not a read of the
+configured probability, which would answer what the generator was aimed at
+rather than what it hit.
+
+Which makes the screen's real hazard sampling noise, not accuracy. A 5% feature
+over 40 worlds expects two hits; four is 10% — double the target — and means
+nothing. So every card shows its denominator, and
+`src/components/ui/expected-rate.ts` draws the band a correct lottery would land
+in 95% of the time (`p ± 1.96·√(p(1−p)/n)`, the normal approximation used in the
+direction it is valid: `p` is known, the observation is what varies). Below the
+sample size where that approximation holds it says so and draws nothing, rather
+than a band it cannot support. Only a bar outside the band is coloured for
+attention — everything else is ordinary, and the screen says the word.
+
+Every count is a link into `/worlds?rareFeature=…`, filtered by the same SQL
+predicate the count came from, so the number and the list behind it cannot
+disagree.
+
+### One toolbar, defined once
+
+`src/components/ui/filter-bar.tsx` owns the filter row: the gaps, the captions,
+and the width of every field. A page states which FIELDS it has and never picks
+a layout. Before it, each screen hand-rolled `flex flex-wrap gap-2` inside
+`PageHeader`'s action slot, so Worlds wrapped onto two rows, Jobs onto two at a
+different breakpoint and Content mix onto one — three screens, three header
+heights — and inside those rows every select sized itself to its own longest
+option, so nothing lined up with anything.
+
+Field widths are named by ROLE (`filter`, `search`, `range`) rather than by
+size, because "this is the search field" survives a design change and `w-48`
+does not. `FilterSelect`, `SearchInput` and `DateRangeFilter` each render their
+own `FilterField`, which is what removes the caller's ability to give one
+control a different width from the one beside it.
 
 ### Pagination
 

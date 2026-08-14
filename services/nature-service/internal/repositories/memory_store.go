@@ -57,7 +57,7 @@ func (s *MemoryStore) CreateWorld(ctx context.Context, world models.World, varia
 	s.worlds[world.ID] = world
 	s.variants[world.ID] = []models.WorldVariant{variant}
 	s.jobs[world.SourceJobID] = world.ID
-	createdSnapshot := newWorldSnapshot(world, 1, variant.VariantNo, nil)
+	createdSnapshot := newWorldSnapshot(world, 1, variant.VariantNo, variant.Seed, nil)
 	completedEnvelope := contracts.NewEnvelope(world.SourceJobID, contracts.FamilyCompletedData{
 		Family: contracts.WorldFamilyNature, ProfileID: world.ProfileID, DNAVersionID: world.DNAVersionID,
 		WorldID: world.ID, Snapshot: &createdSnapshot,
@@ -189,16 +189,18 @@ func (s *MemoryStore) recordWorldChange(worldID string) error {
 	world.UpdatedAt = time.Now().UTC()
 	s.worlds[worldID] = world
 	selectedVariantNo := 0
+	selectedVariantSeed := ""
 	for _, variant := range s.variants[worldID] {
 		if world.SelectedVariantID != nil && variant.ID == *world.SelectedVariantID {
 			selectedVariantNo = variant.VariantNo
+			selectedVariantSeed = variant.Seed
 		}
 	}
 	var publishedAt *time.Time
 	if published, found := s.publishedAt[worldID]; found {
 		publishedAt = &published
 	}
-	snapshot := newWorldSnapshot(world, len(s.variants[worldID]), selectedVariantNo, publishedAt)
+	snapshot := newWorldSnapshot(world, len(s.variants[worldID]), selectedVariantNo, selectedVariantSeed, publishedAt)
 	subject, err := snapshot.Family.WorldChangedEventSubject()
 	if err != nil {
 		return err

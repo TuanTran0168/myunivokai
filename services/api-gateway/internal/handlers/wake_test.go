@@ -93,7 +93,7 @@ func TestASuccessfulReplyStampsTheServiceAsSeen(t *testing.T) {
 	brokerClient := &fakeBroker{response: contracts.NewEnvelope("request-id", contracts.RPCResponseData{
 		StatusCode: http.StatusOK, Payload: []byte(`{"jobId":"01HZY000000000000000000000","status":"queued"}`),
 	})}
-	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
 
@@ -114,7 +114,7 @@ func TestASuccessfulReplyStampsTheServiceAsSeen(t *testing.T) {
 // awake and every derived sleep interval zero.
 func TestNoResponderStampsNothingAsSeen(t *testing.T) {
 	waker := newFakeWaker(wake.Services...)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
 
 	if seen := waker.seenServices(); len(seen) != 0 {
@@ -174,7 +174,7 @@ func TestTransportFailuresAreClassifiedForTheClient(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			waker := newFakeWaker(testCase.supportedServices...)
-			router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: testCase.requestError}, newFakeEdgeStore(), waker)
+			router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: testCase.requestError}, newFakeEdgeStore(), waker, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
 
@@ -215,7 +215,7 @@ func TestEachRouteWakesItsOwnService(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			waker := newFakeWaker(wake.Services...)
-			router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+			router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body)))
 
@@ -236,7 +236,7 @@ func TestEachRouteWakesItsOwnService(t *testing.T) {
 // outage.
 func TestAdminLoginWakesAuthService(t *testing.T) {
 	waker := newFakeWaker(wake.Services...)
-	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router := NewRouter(testAdminGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/auth/login", strings.NewReader(`{"email":"staff@example.com","password":"x"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -268,7 +268,7 @@ func TestEveryServiceSubjectWakesItsOwnResponder(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			waker := newFakeWaker(wake.Services...)
-			transport := NewRPCTransport(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+			transport := NewRPCTransport(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 
@@ -302,7 +302,7 @@ func TestCreateWorldWakesTheWholeGenerationPathBeforePublishing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			waker := newFakeWaker(wake.Services...)
 			brokerClient := &fakeBroker{}
-			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker)
+			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker, nil)
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodPost, testCase.path, strings.NewReader(validWorldInputJSON()))
 			request.Header.Set("Content-Type", "application/json")
@@ -323,7 +323,7 @@ func TestCreateWorldWakesTheWholeGenerationPathBeforePublishing(t *testing.T) {
 // becomes a burst of outbound calls to every service in the fleet.
 func TestAnInvalidCreateWorldRequestWakesNothing(t *testing.T) {
 	waker := newFakeWaker(wake.Services...)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(`{"not":"valid"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -346,7 +346,7 @@ func TestACacheHitWakesNothing(t *testing.T) {
 	if err := edgeStore.Set(context.Background(), worldCacheNamespace, string(contracts.WorldFamilyUniverse)+":"+worldID, []byte(`{"worldId":"cached"}`), time.Minute); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
-	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, edgeStore, waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, edgeStore, waker, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/universe/worlds/"+worldID, nil))
 
@@ -376,7 +376,7 @@ func equalStrings(actual, expected []string) bool {
 // obeying that spins forever against something that is never coming back.
 func TestARepeatedlyFailedWakeStopsPromisingTheClientARetry(t *testing.T) {
 	waker := newFakeWaker(wake.ServiceDNA).failWakesFor(wake.ServiceDNA)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
 
@@ -404,7 +404,7 @@ func TestARepeatedlyFailedWakeStopsPromisingTheClientARetry(t *testing.T) {
 // nature.
 func TestAFailingServiceDoesNotCondemnItsNeighbours(t *testing.T) {
 	waker := newFakeWaker(wake.Services...).failWakesFor(wake.ServiceDNA)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/nature/worlds/9f8a1b2c-3d4e-4f50-8a1b-2c3d4e5f6071", nil))
 
@@ -421,7 +421,7 @@ func TestAFailingServiceDoesNotCondemnItsNeighbours(t *testing.T) {
 // slow service inherits a dead one's verdict.
 func TestAFailingWakeDoesNotChangeATimeout(t *testing.T) {
 	waker := newFakeWaker(wake.ServiceDNA).failWakesFor(wake.ServiceDNA)
-	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: context.DeadlineExceeded}, newFakeEdgeStore(), waker)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: context.DeadlineExceeded}, newFakeEdgeStore(), waker, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/jobs/01HZY000000000000000000000", nil))
 

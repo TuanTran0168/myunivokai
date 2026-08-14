@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,13 +30,28 @@ const worldJobHistoryLimit = 50
 // that is not a UUID reaches a ::uuid cast.
 const postgresInvalidTextCode = "22P02"
 
+// comparisonPeriod is how wide each half of the "vs yesterday" card is. It is
+// deliberately independent of the range picker: the distributions and the
+// funnel answer "what has this platform been doing lately", and the comparison
+// answers "is today different from yesterday". Tying the second to the first
+// would turn a 90-day view into a comparison against the 90 days before it,
+// which is a different — and much less useful — question.
+const comparisonPeriod = 24 * time.Hour
+
 // Overview answers the whole dashboard in one round trip. Every count, rate
 // and percentile below is computed by PostgreSQL; the gateway and the admin
 // app sum nothing, which is the rule this service exists to enforce.
 func (store *PostgresStore) Overview(ctx context.Context, filter models.OverviewFilter) (contracts.AnalyticsOverviewResponseData, error) {
 	days := contracts.NormalizeDays(filter.Days)
-	since := time.Now().UTC().AddDate(0, 0, -days)
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -days)
 	family := string(filter.Family)
+
+	// "Today vs yesterday" is a rolling 24 hours against the 24 before it, not
+	// two calendar days. A calendar comparison at 09:00 would put nine hours
+	// against twenty-four and report a collapse every morning.
+	comparisonSince := now.Add(-comparisonPeriod)
+	comparisonPreviousSince := comparisonSince.Add(-comparisonPeriod)
 
 	batch := &pgx.Batch{}
 	batch.Queue(`SELECT
@@ -44,7 +60,8 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 			COUNT(*) FILTER (WHERE world_created_at >= $2),
 			COALESCE(AVG(trait_creativity), 0), COALESCE(AVG(trait_discipline), 0),
 			COALESCE(AVG(trait_curiosity), 0), COALESCE(AVG(trait_energy), 0), COALESCE(AVG(trait_focus), 0),
-			MIN(world_created_at)
+			MIN(world_created_at),
+			COUNT(*) FILTER (WHERE world_created_at >= $2 AND variant_seed = '')
 		FROM world_projections
 		WHERE ($1 = '' OR family = $1)`, family, since)
 	batch.Queue(`SELECT w.family,
@@ -66,6 +83,7 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 			COUNT(*) FILTER (WHERE status NOT IN ('completed','failed')),
 			COUNT(*) FILTER (WHERE duration_ms IS NOT NULL),
 			COALESCE(AVG(duration_ms), 0),
+			COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms), 0),
 			COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms), 0),
 			COALESCE(MAX(duration_ms), 0)
 		FROM job_projections
@@ -85,16 +103,106 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 		FROM world_projections
 		WHERE ($1 = '' OR family = $1)`, family)
 
+	// The "vs yesterday" pair, on a fixed 24-hour period regardless of the
+	// range picker above. Both halves come from one scan with FILTER clauses
+	// rather than two round trips, and the previous period is half-open —
+	// [dayBefore, yesterday) — so a row exactly on the boundary belongs to one
+	// period, never to both.
+	//
+	// Published counts by published_at, not by "created in this period and now
+	// published". The question is "how many did we publish today", and a world
+	// created last week and published this morning is a yes.
+	batch.Queue(`SELECT
+			COUNT(*) FILTER (WHERE world_created_at >= $2),
+			COUNT(*) FILTER (WHERE world_created_at >= $3 AND world_created_at < $2),
+			COUNT(*) FILTER (WHERE published_at >= $2),
+			COUNT(*) FILTER (WHERE published_at >= $3 AND published_at < $2)
+		FROM world_projections
+		WHERE ($1 = '' OR family = $1)`, family, comparisonSince, comparisonPreviousSince)
+	batch.Queue(`SELECT
+			COUNT(*) FILTER (WHERE created_at >= $2),
+			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $2),
+			COUNT(*) FILTER (WHERE created_at >= $2 AND status = 'failed'),
+			COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $2 AND status = 'failed')
+		FROM job_projections
+		WHERE ($1 = '' OR family = $1)`, family, comparisonSince, comparisonPreviousSince)
+
+	// The generation funnel. Every stage is measured over the SAME set of jobs
+	// — the ones submitted inside the window — which is what makes the four
+	// counts a funnel instead of four unrelated totals. Publishing is joined
+	// back through source_job_id rather than counted over world_projections
+	// directly, so a world published today from a job submitted last month
+	// cannot appear under a stage its job never entered.
+	batch.Queue(`WITH windowed AS (
+			SELECT job_id, status, world_id
+			FROM job_projections
+			WHERE ($1 = '' OR family = $1) AND created_at >= $2
+		)
+		SELECT
+			(SELECT COUNT(*) FROM windowed),
+			(SELECT COUNT(*) FROM windowed WHERE status = 'completed'),
+			(SELECT COUNT(*) FROM windowed WHERE world_id IS NOT NULL),
+			(SELECT COUNT(*) FROM world_projections w
+				JOIN windowed ON w.source_job_id = windowed.job_id
+				WHERE w.is_published)`, family, since)
+
+	// When the generator is reliably busy, which the day-by-day timeline
+	// cannot answer. The zone is stated rather than inherited: without it the
+	// same row lands in a different hour depending on the session's TimeZone.
+	batch.Queue(`SELECT
+			EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::INT AS hour_of_day,
+			COUNT(*)
+		FROM job_projections
+		WHERE ($1 = '' OR family = $1) AND created_at >= $2
+		GROUP BY 1
+		ORDER BY 1`, family, since)
+
+	// The rare-feature lottery, measured. The catalogue travels in as two
+	// parallel arrays and is unnested into a join table rather than being
+	// interpolated into the SQL, so the probabilities are bound parameters and
+	// adding a feature never changes the statement text.
+	//
+	// The comparison is `roll < probability`, evaluated HERE against the
+	// catalogue's current value rather than baked in when the row was written.
+	// Re-tuning the black hole from 40% to 20% therefore re-derives the whole
+	// history on the next request instead of stranding every row.
+	featureKeys, featureProbabilities, featureSpeciesCounts := rarityCatalogueArrays()
+	batch.Queue(`SELECT r.feature_key,
+			COUNT(*),
+			COUNT(*) FILTER (WHERE r.roll < p.probability)
+		FROM world_rare_rolls r
+		JOIN world_projections w ON w.world_id = r.world_id
+		JOIN unnest($3::text[], $4::float8[]) AS p(feature_key, probability) ON p.feature_key = r.feature_key
+		WHERE ($1 = '' OR w.family = $1) AND w.world_created_at >= $2
+		GROUP BY r.feature_key`, family, since, featureKeys, featureProbabilities)
+
+	// Which variety the worlds that DID hit ended up with. Restricted to the
+	// hits for the same reason the share is expressed against them: a species
+	// breakdown over every world would report that 96% of forests got "no
+	// firebird", which is a fact about the first draw, not about the second.
+	batch.Queue(`SELECT r.feature_key,
+			FLOOR(r.species_roll * p.species_count)::INT,
+			COUNT(*)
+		FROM world_rare_rolls r
+		JOIN world_projections w ON w.world_id = r.world_id
+		JOIN unnest($3::text[], $4::float8[], $5::int[]) AS p(feature_key, probability, species_count)
+			ON p.feature_key = r.feature_key
+		WHERE ($1 = '' OR w.family = $1) AND w.world_created_at >= $2
+			AND r.species_roll IS NOT NULL AND p.species_count > 0 AND r.roll < p.probability
+		GROUP BY 1, 2
+		ORDER BY 1, 2`, family, since, featureKeys, featureProbabilities, featureSpeciesCounts)
+
 	results := store.pool.SendBatch(ctx, batch)
 	defer results.Close()
 
 	overview := contracts.AnalyticsOverviewResponseData{Days: days, GeneratedAt: time.Now().UTC()}
 	var averageCreativity, averageDiscipline, averageCuriosity, averageEnergy, averageFocus float64
 	var oldestWorld *time.Time
+	var unmeasuredWorlds int
 	if err := results.QueryRow().Scan(
 		&overview.TotalWorlds, &overview.TotalPublished, &overview.WorldsInWindow,
 		&averageCreativity, &averageDiscipline, &averageCuriosity, &averageEnergy, &averageFocus,
-		&oldestWorld,
+		&oldestWorld, &unmeasuredWorlds,
 	); err != nil {
 		return contracts.AnalyticsOverviewResponseData{}, err
 	}
@@ -116,15 +224,16 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 	}
 	overview.Families = orderFamilyTotals(familyTotals)
 
-	var averageDuration, percentile95Duration, slowestDuration float64
+	var averageDuration, percentile50Duration, percentile95Duration, slowestDuration float64
 	if err := results.QueryRow().Scan(
 		&overview.JobHealth.TotalJobs, &overview.JobHealth.CompletedJobs, &overview.JobHealth.FailedJobs,
 		&overview.JobHealth.InFlightJobs, &overview.JobHealth.MeasuredJobCount,
-		&averageDuration, &percentile95Duration, &slowestDuration,
+		&averageDuration, &percentile50Duration, &percentile95Duration, &slowestDuration,
 	); err != nil {
 		return contracts.AnalyticsOverviewResponseData{}, err
 	}
 	overview.JobHealth.AverageDurationMs = roundToInt(averageDuration)
+	overview.JobHealth.P50DurationMs = roundToInt(percentile50Duration)
 	overview.JobHealth.P95DurationMs = roundToInt(percentile95Duration)
 	overview.JobHealth.SlowestDurationMs = roundToInt(slowestDuration)
 	overview.JobHealth.FailureRatePercent = percentageOf(overview.JobHealth.FailedJobs, overview.JobHealth.TotalJobs)
@@ -145,7 +254,234 @@ func (store *PostgresStore) Overview(ctx context.Context, filter models.Overview
 	}
 	overview.JobHealth.MultiVariantPercent = percentageOf(multiVariantWorlds, countedWorlds)
 	overview.JobHealth.PublishRatePercent = percentageOf(overview.TotalPublished, overview.TotalWorlds)
+
+	var worldsNow, worldsBefore, publishedNow, publishedBefore int
+	if err := results.QueryRow().Scan(&worldsNow, &worldsBefore, &publishedNow, &publishedBefore); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	var jobsNow, jobsBefore, failedNow, failedBefore int
+	if err := results.QueryRow().Scan(&jobsNow, &jobsBefore, &failedNow, &failedBefore); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.Comparison = contracts.AnalyticsComparison{
+		PeriodHours:     int(comparisonPeriod / time.Hour),
+		Worlds:          newDelta(worldsNow, worldsBefore),
+		PublishedWorlds: newDelta(publishedNow, publishedBefore),
+		Jobs:            newDelta(jobsNow, jobsBefore),
+		FailedJobs:      newDelta(failedNow, failedBefore),
+	}
+
+	var submitted, completed, projected, published int
+	if err := results.QueryRow().Scan(&submitted, &completed, &projected, &published); err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.GenerationFunnel = generationFunnel(submitted, completed, projected, published)
+
+	hourly, err := scanHourOfDay(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.HourOfDay = hourly
+	overview.PeakHour = peakHour(hourly)
+
+	featureCounts, err := scanRarityFeatureCounts(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	speciesCounts, err := scanRaritySpeciesCounts(results)
+	if err != nil {
+		return contracts.AnalyticsOverviewResponseData{}, err
+	}
+	overview.Rarity = rarityReport(filter.Family, unmeasuredWorlds, featureCounts, speciesCounts)
 	return overview, nil
+}
+
+// rarityCatalogueArrays flattens the catalogue into the parallel arrays the two
+// rarity queries unnest. Built from contracts.RarityCatalogue on every call so
+// a feature added there needs no change here at all.
+func rarityCatalogueArrays() (keys []string, probabilities []float64, speciesCounts []int32) {
+	for _, feature := range contracts.RarityCatalogue {
+		keys = append(keys, feature.Key)
+		probabilities = append(probabilities, feature.Probability)
+		speciesCounts = append(speciesCounts, int32(len(feature.Species)))
+	}
+	return keys, probabilities, speciesCounts
+}
+
+type rarityFeatureCount struct {
+	eligible int
+	observed int
+}
+
+func scanRarityFeatureCounts(results pgx.BatchResults) (map[string]rarityFeatureCount, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]rarityFeatureCount{}
+	for rows.Next() {
+		var key string
+		var count rarityFeatureCount
+		if err := rows.Scan(&key, &count.eligible, &count.observed); err != nil {
+			return nil, err
+		}
+		counts[key] = count
+	}
+	return counts, rows.Err()
+}
+
+// scanRaritySpeciesCounts keys on the feature and the species INDEX rather than
+// a species key, because the index is what the draw selects — resolving it to a
+// name is the catalogue's job, and doing it here would put the ordered list in
+// two places.
+func scanRaritySpeciesCounts(results pgx.BatchResults) (map[string]map[int]int, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]map[int]int{}
+	for rows.Next() {
+		var featureKey string
+		var speciesIndex, count int
+		if err := rows.Scan(&featureKey, &speciesIndex, &count); err != nil {
+			return nil, err
+		}
+		if counts[featureKey] == nil {
+			counts[featureKey] = map[int]int{}
+		}
+		counts[featureKey][speciesIndex] += count
+	}
+	return counts, rows.Err()
+}
+
+// rarityReport assembles the panel from the catalogue outwards rather than from
+// the query results inwards: a feature nothing has rolled yet must still appear,
+// with a zero and its denominator, or a reader would take its absence for a
+// feature that does not exist.
+func rarityReport(
+	family contracts.WorldFamily,
+	unmeasuredWorlds int,
+	featureCounts map[string]rarityFeatureCount,
+	speciesCounts map[string]map[int]int,
+) contracts.AnalyticsRarityReport {
+	report := contracts.AnalyticsRarityReport{
+		Features:         make([]contracts.AnalyticsRarityFeatureRate, 0, len(contracts.RarityCatalogue)),
+		UnmeasuredWorlds: unmeasuredWorlds,
+	}
+	for _, feature := range contracts.RarityCatalogue {
+		// A universe feature under a nature filter is not a zero — it is not
+		// applicable, and a row of zeroes reads as "we tried and found none".
+		if family != "" && feature.Family != family {
+			continue
+		}
+		counts := featureCounts[feature.Key]
+		rate := contracts.AnalyticsRarityFeatureRate{
+			Key:               feature.Key,
+			Label:             feature.Label,
+			Family:            feature.Family,
+			ConfiguredPercent: math.Round(feature.Probability*10000) / 100,
+			EligibleWorlds:    counts.eligible,
+			ObservedCount:     counts.observed,
+			ObservedPercent:   percentageOf(counts.observed, counts.eligible),
+		}
+		for index, species := range feature.Species {
+			count := speciesCounts[feature.Key][index]
+			rate.Species = append(rate.Species, contracts.AnalyticsRaritySpeciesShare{
+				Key:           species.Key,
+				Label:         species.Label,
+				Count:         count,
+				PercentOfHits: percentageOf(count, counts.observed),
+			})
+		}
+		report.Features = append(report.Features, rate)
+	}
+	return report
+}
+
+// newDelta is the one place a percentage change is computed, so that "vs
+// yesterday" cannot mean two different arithmetics on two cards.
+//
+// A previous value of zero yields 0 with HasBaseline false rather than a
+// division by it or an invented 100%: going from nothing to something is a
+// fact the screen states in words, not a percentage.
+func newDelta(current, previous int) contracts.AnalyticsDelta {
+	delta := contracts.AnalyticsDelta{
+		Current:     current,
+		Previous:    previous,
+		HasBaseline: previous != 0,
+	}
+	if previous != 0 {
+		delta.ChangePercent = math.Round(float64(current-previous)*100/float64(previous)*100) / 100
+	}
+	return delta
+}
+
+// generationFunnel labels the four counts and expresses each as a share of the
+// first, never of the one before it — so the whole funnel reads end to end
+// without multiplying percentages in your head.
+func generationFunnel(submitted, completed, projected, published int) []contracts.AnalyticsFunnelStage {
+	stages := []struct {
+		stage string
+		label string
+		count int
+	}{
+		{contracts.AnalyticsFunnelStageSubmitted, "Jobs submitted", submitted},
+		{contracts.AnalyticsFunnelStageCompleted, "Finished without failing", completed},
+		{contracts.AnalyticsFunnelStageProjected, "Produced a world", projected},
+		{contracts.AnalyticsFunnelStagePublished, "World published", published},
+	}
+	funnel := make([]contracts.AnalyticsFunnelStage, 0, len(stages))
+	for _, stage := range stages {
+		funnel = append(funnel, contracts.AnalyticsFunnelStage{
+			Stage:          stage.stage,
+			Label:          stage.label,
+			Count:          stage.count,
+			PercentOfEntry: percentageOf(stage.count, submitted),
+		})
+	}
+	return funnel
+}
+
+func scanHourOfDay(results pgx.BatchResults) ([]contracts.AnalyticsHourBucket, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	// Only hours that actually saw a job are returned. The admin app fills the
+	// other twenty-something with zeroes, because a bar chart of the day needs
+	// all 24 slots and this service has no business inventing rows.
+	buckets := make([]contracts.AnalyticsHourBucket, 0, 24)
+	for rows.Next() {
+		var bucket contracts.AnalyticsHourBucket
+		if err := rows.Scan(&bucket.Hour, &bucket.JobCount); err != nil {
+			return nil, err
+		}
+		buckets = append(buckets, bucket)
+	}
+	return buckets, rows.Err()
+}
+
+// peakHour returns the busiest hour, or nil when nothing was submitted. Nil
+// rather than hour zero: "the busiest hour was midnight with no jobs" is a
+// claim about traffic that no traffic can support.
+func peakHour(buckets []contracts.AnalyticsHourBucket) *contracts.AnalyticsHourBucket {
+	var peak *contracts.AnalyticsHourBucket
+	for index := range buckets {
+		if buckets[index].JobCount == 0 {
+			continue
+		}
+		if peak == nil || buckets[index].JobCount > peak.JobCount {
+			peak = &buckets[index]
+		}
+	}
+	if peak == nil {
+		return nil
+	}
+	found := *peak
+	return &found
 }
 
 // Timeseries fills empty days with explicit zeroes via generate_series, so a
@@ -225,6 +561,24 @@ func (store *PostgresStore) ListWorlds(ctx context.Context, filter models.WorldL
 	if strings.TrimSpace(filter.Search) != "" {
 		arguments = append(arguments, "%"+strings.TrimSpace(filter.Search)+"%")
 		conditions = append(conditions, fmt.Sprintf("nickname ILIKE $%d", len(arguments)))
+	}
+	// "Show me the worlds behind that number." The predicate is the same
+	// `roll < probability` the rarity panel counts with, evaluated against the
+	// same catalogue value, so the list and the count can never disagree —
+	// which they would the moment one of them cached a resolved boolean.
+	//
+	// An unknown key matches nothing rather than being ignored. A filter the
+	// service silently drops returns a full, plausible list for a question
+	// nobody asked, and that is worse than an empty one.
+	if filter.RareFeature != "" {
+		feature, found := contracts.RarityFeatureByKey(filter.RareFeature)
+		if !found {
+			return contracts.AnalyticsWorldListResponseData{PageSize: pageSize, Worlds: []contracts.WorldProjectionSummary{}}, nil
+		}
+		arguments = append(arguments, feature.Key, feature.Probability)
+		conditions = append(conditions, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM world_rare_rolls r WHERE r.world_id = world_projections.world_id AND r.feature_key = $%d AND r.roll < $%d)`,
+			len(arguments)-1, len(arguments)))
 	}
 	countCondition := strings.Join(conditions, " AND ")
 

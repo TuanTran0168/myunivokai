@@ -11,6 +11,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -18,7 +19,7 @@ import {
   useSidebar
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { NAV_ITEMS } from "@/components/layout/nav-config";
+import { NAV_GROUPS } from "@/components/layout/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { hasPermission, readAccountCookie } from "@/lib/session";
 import { useLogout } from "@/hooks/use-logout";
@@ -51,7 +52,13 @@ export function AppSidebar() {
   useEffect(() => {
     setAccount(readAccountCookie());
   }, []);
-  const visibleNavItems = NAV_ITEMS.filter((item) => hasPermission(account, item.permission));
+  // A group with nothing visible in it is dropped entirely rather than
+  // rendered as a heading over empty space — a reader with no chart permission
+  // should not be told that a "Platform" section exists and is off limits.
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => hasPermission(account, item.permission))
+  })).filter((group) => group.items.length > 0);
   const logout = useLogout();
   const { isMobile, setOpenMobile } = useSidebar();
   useSessionKeepAlive();
@@ -77,36 +84,43 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {visibleNavItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      className="relative overflow-hidden data-[active=true]:bg-transparent"
-                      render={
-                        <Link href={item.href} onClick={handleNavigate}>
-                          {isActive ? (
-                            <motion.span
-                              layoutId="nav-active-pill"
-                              className="absolute inset-0 rounded-md bg-primary/15"
-                              transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                            />
-                          ) : null}
-                          <item.icon className="relative z-10" />
-                          <span className="relative z-10">{item.label}</span>
-                        </Link>
-                      }
-                    />
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {visibleGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  // Exact match, not startsWith. "/telemetry" is the parent of
+                  // "/telemetry/performance", and a prefix test would light two
+                  // entries at once — which the shared layoutId below then
+                  // animates between on every render.
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        className="relative overflow-hidden data-[active=true]:bg-transparent"
+                        render={
+                          <Link href={item.href} onClick={handleNavigate} title={item.summary}>
+                            {isActive ? (
+                              <motion.span
+                                layoutId="nav-active-pill"
+                                className="absolute inset-0 rounded-md bg-primary/15"
+                                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                              />
+                            ) : null}
+                            <item.icon className="relative z-10" />
+                            <span className="relative z-10">{item.label}</span>
+                          </Link>
+                        }
+                      />
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter>
         {account ? (

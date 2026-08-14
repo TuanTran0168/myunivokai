@@ -59,13 +59,79 @@ Four subjects, queue group `analytics-service-v1`:
 
 | Subject | Answers |
 | --- | --- |
-| `queries.analytics.overview.get.v1` | Totals per family, failure rate, publish rate, duration percentiles, archetype/style/mood distributions |
-| `queries.analytics.world.list.v1` | Paginated, filterable worlds table |
+| `queries.analytics.overview.get.v1` | Totals per family, failure rate, publish rate, duration percentiles, archetype/style/mood distributions, the generation funnel, today-vs-yesterday deltas, job submissions by hour of day, and the observed rate of every rare feature |
+| `queries.analytics.world.list.v1` | Paginated, filterable worlds table — including "the worlds that rolled a black hole" |
 | `queries.analytics.job.list.v1` | Paginated jobs and failures with error codes |
 | `queries.analytics.timeseries.get.v1` | Counts per day per family over a range |
 
 Every aggregate is computed in SQL here. The gateway sums nothing and the
 admin app sums nothing.
+
+Three of those deserve their own note, because each has an obvious wrong
+version that reads as correct:
+
+- **The comparison is a rolling 24 hours against the 24 before it**, not two
+  calendar days, and it is deliberately independent of `days`. A calendar
+  comparison at 09:00 puts nine hours against twenty-four and reports a
+  collapse every morning; tying it to `days` would turn a 90-day view into a
+  comparison against the 90 days before it, which is a different question.
+  A period whose predecessor holds nothing reports `hasBaseline: false` rather
+  than a percentage — "+100%" against nothing is a trend that never happened.
+- **The funnel's four stages are measured over the same set of jobs** — the
+  ones submitted inside the window. Publishing is joined back through
+  `source_job_id`, so a world published today from a job submitted last month
+  cannot appear under a stage its job never entered. Each stage's share is of
+  the FIRST stage, never the previous one.
+- **p50 travels with p95 everywhere.** Both are exact here: this service has
+  every job's own `duration_ms` and uses `PERCENTILE_CONT`, unlike
+  telemetry-service's interpolation across fixed histogram edges. The gap
+  between them is the finding — a low median under a high tail is a slow
+  minority, two high numbers are a slow platform, and the fixes are opposite.
+
+### Measuring a thing that is never stored
+
+The rarity panel answers *the black hole is tuned to 40% — how often does it
+actually come up, and which worlds got one?*
+
+Neither half had an answer before. A rare feature is not persisted anywhere:
+the frontend re-derives it from the selected variant's seed on every render.
+So the seed crosses the data boundary (see below), and
+`contracts/go/contracts_rarity.go` **replays the same seeded lottery** — a port
+of the renderer's FNV-1a + xorshift32 PRNG — over the seeds of real worlds.
+Reading 40% back out of the catalogue would answer a different question: what
+the generator was aimed at, not what it hit.
+
+Three things make it trustworthy rather than merely plausible:
+
+- **`contracts/fixtures/rarity/rare-feature-rolls.v1.json` pins the two
+  implementations together.** It is generated from the frontend's own lottery
+  and asserted by both suites, seed by seed and draw by draw. Nothing else
+  would notice a one-character difference in the hash or the shift order —
+  both sides would keep working and quietly disagree about which worlds hit.
+  It records raw draws, so re-tuning a probability leaves it untouched and it
+  fails only when the lottery itself moves.
+- **`world_rare_rolls` stores the raw draw, not "did it hit".** The comparison
+  against the probability happens at query time, so changing the black hole
+  from 40% to 20% re-derives the whole of history on the next request instead
+  of stranding every row already written. It is also why the panel's count and
+  the worlds list behind it are the same SQL predicate and cannot disagree.
+- **The denominator is stated, and worlds with no seed are excluded from it.**
+  A rare feature over a small population is mostly sampling noise: 5% over 40
+  worlds expects two hits, and four is not a bug. The admin screen draws the
+  band a correct lottery would land in 95% of the time and refuses to draw one
+  at all below the sample size where that approximation holds. Worlds projected
+  before the seed crossed the boundary are counted separately as *unmeasured* —
+  they are not misses, and folding them in would report a rate that falls as
+  history grows.
+
+### Tests
+
+The arithmetic behind all of it (delta, funnel share, peak hour, rarity
+denominators and species shares) is unit-tested in
+`internal/repositories/overview_math_test.go` with no database, because none of
+it touches one. What a database is needed for — that the funnel's stages come
+from one job set, that the comparison's two periods do not overlap — is the
+SQL's own business and is stated beside those queries.
 
 Pagination is **keyset**, never `OFFSET`: the cursor encodes the
 `(timestamp, id)` the last page ended on, so page 1000 costs the same as page
@@ -86,6 +152,13 @@ table has a human label. These never cross, under any phase: the submitted
 form (`profiles.raw_input`), the generated profile (`dna_versions.profile_dna`,
 `worlds.dna_snapshot`), the world quote, variant scene configs, AI request and
 response bodies, and share slugs.
+
+The one addition since: **`variant_seed`**, the selected variant's seed. It is
+a base32 identifier this platform generated, carrying nothing a person typed —
+the boundary gained a machine value and no user content, which is the only kind
+of addition this list should accept. It is the selected variant's rather than
+the world's first because switching variants changes the scene the world shows,
+and with it which lottery it rolled.
 
 ## Local development
 

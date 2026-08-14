@@ -1,16 +1,18 @@
 # Backend source overview
 
 > **Document status:** Implemented; local container smoke passed, deployed smoke pending
-> **Last source review:** 2026-08-07 (added auth-service and analytics-service)
+> **Last source review:** 2026-08-13 (added telemetry-service)
 
-The backend consists of one public HTTP edge and five private NATS services.
+The backend consists of one public HTTP edge and six private NATS services.
 The old gateway-to-domain HTTP proxy, duplicated family AI layers, public
 domain handlers, and `GATEWAY_SHARED_SECRET` runtime have been removed.
 
-Three of the five compose worlds (dna, universe, nature). The other two serve
-the staff console: `auth-service` owns identity, and `analytics-service` is a
-CQRS read model that exists so an admin page never has to wake a domain
-service.
+Three of the six compose worlds (dna, universe, nature). Two serve the staff
+console: `auth-service` owns identity, and `analytics-service` is a CQRS read
+model that exists so an admin page never has to wake a domain service. The
+sixth, `telemetry-service`, is a read model for the platform's own behaviour
+rather than its business data — and the one process here **written in Rust**;
+see §Telemetry Service below for why, before assuming it is an accident.
 
 ## Runtime topology
 
@@ -36,6 +38,11 @@ myunivokai-admin
 
 Analytics Service
   <- JetStream MYUNIVOKAI_EVENTS (durable, wildcard myunivokai.events.>)
+
+Telemetry Service [Rust]
+  <- JetStream MYUNIVOKAI_EVENTS (durable, one literal subject)
+  -> myunivokai_telemetry  (TELEMETRY_SINK=postgres)
+  -> Grafana Cloud OTLP    (TELEMETRY_SINK=otlp)
 ```
 
 Only Gateway serves business HTTP. Every other service runs `cmd/service`,
@@ -206,11 +213,81 @@ Every aggregate is SQL here; the gateway sums nothing. Pagination is keyset on
 the response stays inside the 2500ms request/reply deadline as the table
 grows.
 
+One aggregate here is not a read of anything: the **observed rare-feature
+rate**. A rare feature — a black hole, a firebird — is never stored, because the
+frontend re-derives it from the world's variant seed on every render. So the
+seed crosses the data boundary and `contracts/go/contracts_rarity.go` replays
+the renderer's own seeded lottery (a port of its FNV-1a + xorshift32 PRNG) over
+real worlds' seeds. `contracts/fixtures/rarity/rare-feature-rolls.v1.json` is
+generated from the TypeScript side and asserted by both suites, because nothing
+else would notice the two implementations quietly disagreeing about which worlds
+hit. `world_rare_rolls` stores the raw draw rather than the outcome, so
+re-tuning a probability re-derives history instead of stranding it.
+
 **The cost this design keeps charging:** every future mutation in universe or
 nature must bump `worlds.revision` and write a `world.changed` outbox row in
 the same transaction, or the read model drifts silently. The guard is
 `internal/repositories/world_snapshot_test.go` in both family services, which
 asserts every mutating store method leaves an event behind.
+
+## Telemetry Service — and why one service is not Go
+
+Source: `services/telemetry-service`. Design:
+`notes/vision/telemetry-service-plan.md`. Runbook and deviations:
+`services/telemetry-service/README.md`.
+
+**This is the only process in the repository written in Rust, and that is a
+decision rather than an accident.** Track C of
+`notes/vision/platform-evolution-research.md` set out to find one service worth
+writing in another language and named four criteria; `rust-adoption-research.md`
+scored every candidate against them and picked this one — new rather than a
+rewrite, off the product's critical path (a missing dashboard panel), a
+contract shape this repo already has five examples of, and a workload
+(sustained aggregation, predictable memory) that plays to Rust's strengths
+instead of being CRUD wearing a new syntax. Rewriting `analytics-service`,
+`auth-service`'s Argon2 and `city-service` were each rejected with the
+measurement that rejected them; that document is worth reading before anyone
+proposes a second Rust service.
+
+The cost is named rather than waved at: a second language means a
+hand-maintained copy of `contracts/go`, and contract drift is already this
+architecture's main long-term expense. The mitigation is not documentation but
+a test — `contracts/rust/tests/telemetry_fixture.rs` decodes the exact same
+`contracts/fixtures/telemetry-http-rollup-event.v1.json` that
+`contracts/go/contracts_telemetry_rollup_test.go` decodes. Two languages, one
+fixture, one CI failure if they disagree. Both jobs run in
+`.github/workflows/ci.yml`.
+
+What it does:
+
+- **The gateway aggregates; this service stores.** `internal/telemetry` in the
+  gateway keeps an in-memory map keyed on `{chi route TEMPLATE, method, status
+  class}` — never `request.URL.Path`, which is the single rule that keeps the
+  series count bounded — plus per-backend NATS round trips and Redis cache
+  hits, and flushes one envelope per interval on
+  `myunivokai.events.telemetry.http.v1`. Volume is one message per minute per
+  instance regardless of traffic.
+- **Published through JetStream, not Core NATS.** This service sleeps on the
+  free tier, and a Core publish reaches whoever is subscribed at that instant
+  or nobody — which would lose every interval for as long as it slept.
+- **One switch, two destinations.** `TELEMETRY_SINK` is `postgres` or `otlp`,
+  read once at startup exactly where `AI_PROVIDER` and
+  `SERVICE_WAKE_PLATFORM` are read in theirs. The OTLP sink stores nothing and
+  answers no range query; the admin screen then shows a link rather than an
+  empty chart.
+- **Its NATS user may publish no domain subject at all**, like
+  `analytics-service`, and is narrower in one way: its event subscription is a
+  single literal subject rather than the `myunivokai.events.>` wildcard.
+- **The gateway's telemetry path is off by default** (`TELEMETRY_ENABLED`).
+  With it off no middleware is registered, no ticker runs and nothing is
+  published.
+
+**The known inconsistency:** this service does *not* announce its own boot on
+`myunivokai.events.telemetry.service.started.v1`, so it is absent from the
+admin Fleet screen. `contracts.ServiceNames` has no `telemetry` entry, and
+adding one would mean a contracts change, an ACL grant and a projection path
+that the approved plan does not ask for. It is recorded here rather than left
+to be noticed.
 
 ## Service start announcements
 
@@ -260,10 +337,15 @@ Fresh V1 database names:
 | Nature Service | `myunivokai_nature` |
 | Auth Service | `myunivokai_auth` |
 | Analytics Service | `myunivokai_analytics` |
+| Telemetry Service | `myunivokai_telemetry` (only when `TELEMETRY_SINK=postgres`) |
 
 There are no cross-database foreign keys. IDs and immutable snapshots cross
 boundaries only through NATS contracts. Outbox messages are retried until
 JetStream acknowledges them; consumer inbox keys prevent duplicate effects.
+
+`myunivokai_telemetry` holds no user data at all — counts, durations and route
+templates — which is why it is a separate database rather than a schema inside
+the analytics one, and why it needs no data-boundary allow list.
 
 `myunivokai_analytics` is the one deliberate exception to "each row lives in
 exactly one place": it is a second copy of production data, so what may enter

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { SearchInput } from "@/components/ui/search-input";
 import { accountsApi } from "./api";
 import { CreateAccountDialog } from "./CreateAccountDialog";
@@ -44,15 +45,16 @@ export function AccountsPage() {
         title="Accounts"
         description="Staff accounts, their roles and status."
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search email or name…" />
-            <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-              <UserPlus />
-              Create account
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+            <UserPlus />
+            Create account
+          </Button>
         }
       />
+
+      <FilterBar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Email or name…" />
+      </FilterBar>
       <Card>
         <CardContent className="pt-2">
           {accountsQuery.isLoading ? (

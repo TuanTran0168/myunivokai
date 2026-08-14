@@ -75,8 +75,11 @@ type WorldListFilter struct {
 	Since      *time.Time
 	Until      *time.Time
 	Search     string
-	Cursor     string
-	PageSize   int
+	// RareFeature is a contracts.RarityCatalogue key. It selects the worlds
+	// whose stored draw came in under that feature's current probability.
+	RareFeature string
+	Cursor      string
+	PageSize    int
 }
 
 // Since/Until bound CreatedAt. Search matches JobID or ErrorMessage.

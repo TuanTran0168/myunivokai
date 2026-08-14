@@ -6,6 +6,11 @@ import { motion } from "motion/react";
 // Title + description + primary action, rendered as plain text OUTSIDE any
 // card — the Linear/Stripe pattern. v1 stuffed this into a CardHeader, which
 // is why every screen read as "one big card" instead of a page.
+//
+// `action` is for an ACTION — a "Create account" button. Filters belong in
+// FilterBar on the row below: when they lived here, the header's height
+// depended on how many filters a screen had, so no two screens had the same
+// title position and the app read as several apps.
 export function PageHeader({
   title,
   description,
@@ -16,7 +21,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

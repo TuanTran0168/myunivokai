@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { SearchInput } from "@/components/ui/search-input";
 import { CursorPagination, useCursorPagination } from "@/components/ui/cursor-pagination";
 import { auditApi } from "./api";
@@ -40,22 +41,22 @@ export function AuditPage() {
       <PageHeader
         title="Audit log"
         description="Every login, failed login, role change and admin mutation, newest first."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput
-              value={filters.search ?? ""}
-              onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
-              placeholder="Search action or target…"
-            />
-            <DateRangeFilter
-              since={filters.since ?? ""}
-              until={filters.until ?? ""}
-              onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
-              onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
-            />
-          </div>
-        }
       />
+
+      <FilterBar>
+        <SearchInput
+          value={filters.search ?? ""}
+          onChange={(value) => setFilters((current) => ({ ...current, search: value }))}
+          placeholder="Action or target…"
+        />
+        <DateRangeFilter
+          label="Occurred"
+          since={filters.since ?? ""}
+          until={filters.until ?? ""}
+          onSinceChange={(value) => setFilters((current) => ({ ...current, since: value }))}
+          onUntilChange={(value) => setFilters((current) => ({ ...current, until: value }))}
+        />
+      </FilterBar>
       <Card>
         <CardContent className="pt-2">
           {auditQuery.isLoading ? (

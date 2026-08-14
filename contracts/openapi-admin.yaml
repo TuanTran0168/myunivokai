@@ -221,6 +221,25 @@ paths:
           required: false
           description: Omit for every world; true or false to filter.
           schema: { type: boolean }
+        - name: rareFeature
+          in: query
+          required: false
+          description: >-
+            Selects the worlds whose stored rarity draw came in under this
+            feature's CURRENT probability — the same predicate the overview's
+            rarity panel counts with, so a count and the list behind it can
+            never disagree. An unrecognised key matches nothing rather than
+            being ignored.
+          schema:
+            type: string
+            enum:
+              [
+                meteor-shower,
+                binary-sun,
+                black-hole,
+                forest-special-bird,
+                forest-special-animal,
+              ]
       responses:
         "200":
           description: One page of worlds
@@ -288,6 +307,68 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/telemetry/overview:
+    get:
+      summary: Request volume, status mix and latency over a window
+      description: >-
+        Answered by telemetry-service, which is neither analytics-service nor a
+        domain service: this is operations data about the platform itself, from
+        a third read model with its own data boundary.
+
+
+        Every number here is a sum over one-minute rollup buckets the gateway
+        published, and every percentile is an interpolation across eight fixed
+        histogram edges rather than an exact value — `percentileIsInterpolated`
+        says so on every response, and the admin UI is required to render that
+        qualification next to the number.
+
+
+        `errorRatePercent` counts 5xx only. A validation failure or a 404 is
+        the client's problem, and folding it in would produce an error rate
+        that never goes down; `statusMix` returns the rest so nothing is
+        hidden.
+
+
+        When the service runs with TELEMETRY_SINK=otlp it stores nothing
+        locally and `chartsAvailable` is false, with `dashboardUrl` naming
+        where to look. That is a 200, not a 501: a missing chart must read as
+        "look elsewhere", never as a broken screen.
+      operationId: adminTelemetryOverview
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/TelemetryHours" }
+      responses:
+        "200":
+          description: One window of platform telemetry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/admin/telemetry/routes:
+    get:
+      summary: Per-route request count, error rate and latency
+      description: >-
+        One row per route TEMPLATE and method — `/api/universe/worlds/{worldID}`,
+        never a path carrying a world id. That rule is what keeps this table
+        bounded by the gateway's route count rather than by traffic, which is
+        also why it needs no pagination.
+      operationId: adminTelemetryRoutes
+      security:
+        - accessTokenCookie: []
+      parameters:
+        - { $ref: "#/components/parameters/TelemetryHours" }
+      responses:
+        "200":
+          description: Every route observed in the window, busiest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryRouteList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 components:
   parameters:
     Family:
@@ -296,6 +377,17 @@ components:
       required: false
       description: Omit for every family.
       schema: { type: string, enum: [universe, nature] }
+    TelemetryHours:
+      name: hours
+      in: query
+      required: false
+      description: >-
+        Window in hours, clamped to 1..168 by telemetry-service rather than
+        rejected — the maximum matches MYUNIVOKAI_EVENTS's own 7-day retention,
+        so asking for more is a question the stream could never have answered.
+        Hours rather than days because a bucket here is one minute wide and the
+        questions are operational, not historical.
+      schema: { type: integer, default: 24, minimum: 1, maximum: 168 }
     Days:
       name: days
       in: query
@@ -385,6 +477,58 @@ components:
         variantCount: { type: integer }
         jobCount: { type: integer }
         failedJobCount: { type: integer }
+    Delta:
+      type: object
+      additionalProperties: false
+      description: >-
+        One measure against the equivalent period before it. The absolute
+        values travel with the percentage because a percentage alone is
+        unreadable at low volume — +100% is two becoming four, and the card
+        cannot say which without them.
+      required: [current, previous, changePercent, hasBaseline]
+      properties:
+        current: { type: integer }
+        previous: { type: integer }
+        changePercent: { type: number }
+        hasBaseline:
+          type: boolean
+          description: >-
+            False when the preceding period holds no data at all, which is not
+            the same as a previous value of zero. A client MUST render "no
+            baseline" rather than a percentage when this is false.
+    TelemetryComparison:
+      type: object
+      additionalProperties: false
+      description: >-
+        The window measured against the one of the same width immediately
+        before it. Absent from the response entirely when that window holds
+        nothing.
+      required: [previousWindowStart, requests, errors, p95DurationMs]
+      properties:
+        previousWindowStart: { type: string, format: date-time }
+        requests: { $ref: "#/components/schemas/Delta" }
+        errors:
+          allOf: [{ $ref: "#/components/schemas/Delta" }]
+          description: >-
+            The error COUNT, not the rate. Two rates subtract into a
+            percentage-POINT difference, and reporting that as a percent change
+            is the most common way a card like this ends up lying.
+        p95DurationMs: { $ref: "#/components/schemas/Delta" }
+    AnalyticsComparison:
+      type: object
+      additionalProperties: false
+      description: >-
+        A rolling period against the one before it. Always present, and always
+        the same width regardless of the `days` parameter: the range picker
+        scopes the distributions and the funnel, while "vs yesterday" is a
+        fixed question.
+      required: [periodHours, worlds, publishedWorlds, jobs, failedJobs]
+      properties:
+        periodHours: { type: integer }
+        worlds: { $ref: "#/components/schemas/Delta" }
+        publishedWorlds: { $ref: "#/components/schemas/Delta" }
+        jobs: { $ref: "#/components/schemas/Delta" }
+        failedJobs: { $ref: "#/components/schemas/Delta" }
     JobHealth:
       type: object
       additionalProperties: false
@@ -396,6 +540,7 @@ components:
           inFlightJobs,
           failureRatePercent,
           averageDurationMs,
+          p50DurationMs,
           p95DurationMs,
           slowestDurationMs,
           measuredJobCount,
@@ -409,6 +554,12 @@ components:
         inFlightJobs: { type: integer }
         failureRatePercent: { type: number }
         averageDurationMs: { type: integer }
+        p50DurationMs:
+          type: integer
+          description: >-
+            Exact, unlike telemetry-service's interpolated pair —
+            analytics-service has every job's own duration and computes
+            PERCENTILE_CONT over it.
         p95DurationMs: { type: integer }
         slowestDurationMs: { type: integer }
         measuredJobCount:
@@ -440,6 +591,242 @@ components:
         pageSize: { type: integer }
         nextCursor: { type: string }
         totalCount: { type: integer }
+    TelemetrySink:
+      type: object
+      description: >-
+        On every telemetry response, not only the ones that fail to answer, so
+        the screen reads one field to decide whether to draw charts or a link
+        instead of inferring intent from a missing array.
+      required: [sink, chartsAvailable]
+      properties:
+        sink: { type: string, enum: [postgres, otlp] }
+        chartsAvailable:
+          type: boolean
+          description: False when the sink stores nothing locally and cannot answer a range query.
+        dashboardUrl:
+          type: string
+          description: >-
+            Where to look instead when chartsAvailable is false. Absent means
+            nobody configured one, which the screen states plainly rather than
+            rendering a dead link.
+    TelemetryVolumePoint:
+      type: object
+      additionalProperties: false
+      required: [bucketStart, requestCount, errorCount, p95DurationMs]
+      properties:
+        bucketStart: { type: string, format: date-time }
+        requestCount: { type: integer }
+        errorCount: { type: integer }
+        p95DurationMs: { type: integer }
+    TelemetryOverview:
+      allOf:
+        - { $ref: "#/components/schemas/TelemetrySink" }
+        - type: object
+          required:
+            [
+              hours,
+              generatedAt,
+              totalRequests,
+              errorRequests,
+              errorRatePercent,
+              averageDurationMs,
+              p50DurationMs,
+              p95DurationMs,
+              slowestDurationMs,
+              percentileIsInterpolated,
+              statusMix,
+              volumePoints,
+              hourlyPoints,
+              hourOfDay,
+              trafficFunnel,
+              errorCodeTop,
+              backends,
+              cache,
+              wakeSignals,
+            ]
+          properties:
+            hours: { type: integer }
+            generatedAt: { type: string, format: date-time }
+            totalRequests: { type: integer }
+            errorRequests: { type: integer, description: 5xx only. }
+            errorRatePercent: { type: number }
+            averageDurationMs: { type: integer }
+            p50DurationMs:
+              type: integer
+              description: >-
+                The median, always reported beside the p95. The gap between the
+                two is the finding: a low median under a high tail is a slow
+                minority, and two high numbers are a slow platform. Either
+                number alone cannot tell those apart.
+            p95DurationMs: { type: integer }
+            slowestDurationMs: { type: integer }
+            percentileIsInterpolated:
+              type: boolean
+              description: >-
+                Always true when charts are available. The percentile is a
+                linear interpolation across fixed histogram edges, and a p95
+                that looks exact and is not is worse than no p95.
+            statusMix:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [statusClass, requestCount]
+                properties:
+                  statusClass: { type: integer, minimum: 1, maximum: 5 }
+                  requestCount: { type: integer }
+            volumePoints:
+              type: array
+              description: >-
+                Minute resolution — a 7-day window holds 10,080 of these.
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            hourlyPoints:
+              type: array
+              description: >-
+                The same traffic rolled up to the hour, which is what a trend
+                line should be drawn from.
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            peakHour:
+              allOf: [{ $ref: "#/components/schemas/TelemetryVolumePoint" }]
+              description: >-
+                The busiest single hour in the window. Absent when the window
+                holds nothing at all.
+            hourOfDay:
+              type: array
+              description: >-
+                Traffic by hour of day, summed across every day in the window —
+                "when is this platform reliably busy", which the timeline
+                cannot answer. Only hours that saw traffic are returned.
+              items:
+                type: object
+                additionalProperties: false
+                required: [hour, requestCount, errorCount, p95DurationMs]
+                properties:
+                  hour: { type: integer, minimum: 0, maximum: 23, description: UTC. }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer }
+                  p95DurationMs: { type: integer }
+            comparison:
+              $ref: "#/components/schemas/TelemetryComparison"
+            trafficFunnel:
+              type: array
+              description: >-
+                How far the traffic got. Each stage strictly contains the next:
+                everything that arrived, the part of it the client asked for
+                correctly (4xx removed), and the part of that this platform
+                answered (5xx removed). A client may rely on the counts being
+                non-increasing.
+              items:
+                type: object
+                additionalProperties: false
+                required: [stage, label, count, percentOfEntry]
+                properties:
+                  stage:
+                    type: string
+                    enum: [received, accepted, served]
+                  label: { type: string }
+                  count: { type: integer }
+                  percentOfEntry:
+                    type: number
+                    description: >-
+                      Against the FIRST stage, never the previous one. Never
+                      above 100, because every stage is a subset of the entry.
+            errorCodeTop:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [errorCode, count]
+                properties:
+                  errorCode: { type: string }
+                  count: { type: integer }
+            backends:
+              type: array
+              description: >-
+                Round-trip time per backend service, which end-to-end response
+                time cannot answer: a request under /api/{family}/worlds
+                reaches universe or nature depending on the family, and both
+                wear the same route template.
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [service, requestCount, errorCount, averageDurationMs, p95DurationMs, slowestDurationMs]
+                properties:
+                  service: { type: string }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer, description: Includes no-responders and timeouts. }
+                  averageDurationMs: { type: integer }
+                  p95DurationMs: { type: integer }
+                  slowestDurationMs: { type: integer }
+            cache:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [namespace, hits, misses, hitRatePercent]
+                properties:
+                  namespace: { type: string, enum: ["job:v1", "world:v1", "share:v1"] }
+                  hits: { type: integer }
+                  misses:
+                    type: integer
+                    description: >-
+                      A Redis failure counts as neither a hit nor a miss. It
+                      sends the request to the backend the same way a miss
+                      does, but folding it in would make an outage read as a
+                      cache that stopped working.
+                  hitRatePercent: { type: number }
+            wakeSignals:
+              type: array
+              description: >-
+                SERVICE_WAKING responses per time bucket — an approximation of
+                the wake-conversion rate joined on time proximity, not a
+                per-request causal trace. The UI must say so.
+              items: { $ref: "#/components/schemas/TelemetryVolumePoint" }
+            oldestBucketStart:
+              type: string
+              format: date-time
+              description: >-
+                What actually exists in the store, which is not always what was
+                asked for. A service asleep for a week has no data for most of
+                a 24-hour window, and a chart that does not say so reads as "no
+                traffic" rather than "no data".
+    TelemetryRouteList:
+      allOf:
+        - { $ref: "#/components/schemas/TelemetrySink" }
+        - type: object
+          required: [hours, generatedAt, percentileIsInterpolated, routes]
+          properties:
+            hours: { type: integer }
+            generatedAt: { type: string, format: date-time }
+            percentileIsInterpolated: { type: boolean }
+            routes:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [
+                    routePattern,
+                    method,
+                    requestCount,
+                    errorCount,
+                    errorRatePercent,
+                    averageDurationMs,
+                    p95DurationMs,
+                    slowestDurationMs,
+                  ]
+                properties:
+                  routePattern:
+                    type: string
+                    description: A chi route TEMPLATE, never a raw path.
+                  method: { type: string }
+                  requestCount: { type: integer }
+                  errorCount: { type: integer }
+                  errorRatePercent: { type: number }
+                  averageDurationMs: { type: integer }
+                  p95DurationMs: { type: integer }
+                  slowestDurationMs: { type: integer }
     WakeStats:
       type: object
       additionalProperties: false
@@ -504,6 +891,10 @@ components:
           errorCodeTop,
           averageTraitScores,
           generatedAt,
+          comparison,
+          generationFunnel,
+          hourOfDay,
+          rarity,
         ]
       properties:
         days: { type: integer }
@@ -519,6 +910,109 @@ components:
         averageTraitScores: { $ref: "#/components/schemas/TraitScores" }
         generatedAt: { type: string, format: date-time }
         oldestProjectedWorld: { type: string, format: date-time }
+        comparison: { $ref: "#/components/schemas/AnalyticsComparison" }
+        generationFunnel:
+          type: array
+          description: >-
+            Every stage measured over the SAME set of jobs — the ones submitted
+            inside the window — which is what makes the four counts a funnel
+            rather than four unrelated totals.
+          items:
+            type: object
+            additionalProperties: false
+            required: [stage, label, count, percentOfEntry]
+            properties:
+              stage: { type: string, enum: [submitted, completed, projected, published] }
+              label: { type: string }
+              count: { type: integer }
+              percentOfEntry:
+                type: number
+                description: Against the FIRST stage, never the previous one.
+        hourOfDay:
+          type: array
+          description: >-
+            Job submissions by hour of day, summed across every day in the
+            window. Only hours that saw a job are returned; a client fills the
+            rest with zeroes, because a 24-slot axis is a rendering concern.
+          items:
+            type: object
+            additionalProperties: false
+            required: [hour, jobCount]
+            properties:
+              hour: { type: integer, minimum: 0, maximum: 23, description: UTC. }
+              jobCount: { type: integer }
+        peakHour:
+          type: object
+          additionalProperties: false
+          description: Absent when no job was submitted in the window.
+          required: [hour, jobCount]
+          properties:
+            hour: { type: integer, minimum: 0, maximum: 23 }
+            jobCount: { type: integer }
+        rarity: { $ref: "#/components/schemas/RarityReport" }
+    RarityReport:
+      type: object
+      additionalProperties: false
+      description: >-
+        How often each rare feature ACTUALLY came up, measured by replaying the
+        renderer's own seeded lottery over the seeds of real worlds. A rare
+        feature is never stored — it is re-derived on every render from the
+        selected variant's seed — so this is the only way the question has an
+        answer at all, and it is deliberately not a read of the configured
+        probability.
+      required: [features, unmeasuredWorlds]
+      properties:
+        unmeasuredWorlds:
+          type: integer
+          description: >-
+            Worlds in the window carrying no variant seed, and so in no
+            denominator below. Stated rather than hidden: these are not
+            evidence of a low rate, they are worlds the lottery cannot be
+            replayed for.
+        features:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              [
+                key,
+                label,
+                family,
+                configuredPercent,
+                eligibleWorlds,
+                observedCount,
+                observedPercent,
+              ]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              family: { type: string, enum: [universe, nature] }
+              configuredPercent:
+                type: number
+                description: What the generator is tuned to produce.
+              eligibleWorlds:
+                type: integer
+                description: >-
+                  The denominator — worlds of this feature's family, in the
+                  window, that carry a seed. Per-feature rather than global
+                  because a forest cannot roll a black hole.
+              observedCount: { type: integer }
+              observedPercent: { type: number }
+              species:
+                type: array
+                description: >-
+                  Absent for features with no varieties. Shares are against this
+                  feature's own hits, so they sum to 100%.
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [key, label, count, percentOfHits]
+                  properties:
+                    key: { type: string }
+                    label: { type: string }
+                    count: { type: integer }
+                    percentOfHits: { type: number }
     TimeseriesPoint:
       type: object
       additionalProperties: false

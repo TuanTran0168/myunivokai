@@ -38,6 +38,9 @@ services:
       ANALYTICS_DATABASE_NAME: ${ANALYTICS_DATABASE_NAME:-myunivokai_analytics}
       ANALYTICS_DATABASE_USER: ${ANALYTICS_DATABASE_USER:-myunivokai_analytics_app}
       ANALYTICS_DATABASE_PASSWORD: ${ANALYTICS_DATABASE_PASSWORD:-myunivokai_local_analytics}
+      TELEMETRY_DATABASE_NAME: ${TELEMETRY_DATABASE_NAME:-myunivokai_telemetry}
+      TELEMETRY_DATABASE_USER: ${TELEMETRY_DATABASE_USER:-myunivokai_telemetry_app}
+      TELEMETRY_DATABASE_PASSWORD: ${TELEMETRY_DATABASE_PASSWORD:-myunivokai_local_telemetry}
     volumes:
       - ./postgres/init-databases.sh:/scripts/init-databases.sh:ro
     entrypoint: ["/bin/sh", "/scripts/init-databases.sh"]
@@ -62,6 +65,8 @@ services:
       NATS_AUTH_PASSWORD: ${NATS_AUTH_PASSWORD:-myunivokai_local_auth}
       NATS_ANALYTICS_USERNAME: ${NATS_ANALYTICS_USERNAME:-myunivokai_analytics}
       NATS_ANALYTICS_PASSWORD: ${NATS_ANALYTICS_PASSWORD:-myunivokai_local_analytics}
+      NATS_TELEMETRY_USERNAME: ${NATS_TELEMETRY_USERNAME:-myunivokai_telemetry}
+      NATS_TELEMETRY_PASSWORD: ${NATS_TELEMETRY_PASSWORD:-myunivokai_local_telemetry}
       NATS_BOOTSTRAP_USERNAME: ${NATS_BOOTSTRAP_USERNAME:-myunivokai_bootstrap}
       NATS_BOOTSTRAP_PASSWORD: ${NATS_BOOTSTRAP_PASSWORD:-myunivokai_local_bootstrap}
     ports:

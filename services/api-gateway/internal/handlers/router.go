@@ -11,6 +11,7 @@ import (
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/config"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/httpx"
 	"github.com/myunivokai/myunivokai/services/api-gateway/internal/middleware"
+	"github.com/myunivokai/myunivokai/services/api-gateway/internal/telemetry"
 )
 
 const corsMaximumAgeSeconds = 300
@@ -32,14 +33,32 @@ const (
 	adminRateLimitRouteKey   = "admin"
 )
 
-func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, waker ServiceWaker) http.Handler {
+// NewRouter builds the gateway's whole HTTP surface.
+//
+// collector may be nil, and is whenever TELEMETRY_ENABLED is off. Nil means no
+// telemetry middleware is registered at all - not a middleware that checks a
+// flag on every request - so the shipped default costs the request path
+// nothing. See internal/telemetry.
+func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStore EdgeStore, waker ServiceWaker, collector *telemetry.Collector) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestContext(serviceConfig.TrustProxyHeaders))
+	if collector != nil {
+		// Registered at the top level, not per group, so that a 404 and a
+		// rate-limited request are counted too - both are things the gateway
+		// did, and both are invisible from inside a route group.
+		//
+		// Registered OUTSIDE Recover, deliberately. A panicking handler never
+		// returns to a middleware nested inside Recover, so a telemetry
+		// middleware placed below it would miss precisely the 500s worth
+		// looking at. From out here, Recover has already turned the panic into
+		// a written 500 by the time the recording runs.
+		router.Use(middleware.Telemetry(collector))
+	}
 	router.Use(middleware.Recover)
 	router.Use(middleware.Logging)
 	router.Use(middleware.SecurityHeaders)
 	healthHandler := NewHealthHandler(serviceConfig.AppName, brokerClient, edgeStore)
-	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore, waker)
+	rpcTransport := NewRPCTransport(serviceConfig, brokerClient, edgeStore, waker, collector)
 	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
 	universeHandler := NewUniverseHandler(serviceConfig, brokerClient, rpcTransport)
 	natureHandler := NewNatureHandler(serviceConfig, brokerClient, rpcTransport)

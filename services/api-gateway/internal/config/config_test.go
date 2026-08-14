@@ -78,6 +78,34 @@ func TestValidationRequiresANonWildcardAdminOriginWhenEnabled(t *testing.T) {
 	}
 }
 
+// The flush interval is only validated once telemetry is switched on, for the
+// same reason the wake values are: with telemetry off it is never read, and
+// demanding it would make every hand-built Config carry a field that does
+// nothing. With telemetry on, a zero makes time.NewTicker panic at startup.
+func TestTelemetryFlushIntervalIsOnlyRequiredOnceTelemetryIsOn(t *testing.T) {
+	serviceConfig := validTestConfig()
+	serviceConfig.TelemetryEnabled = false
+	serviceConfig.TelemetryFlushInterval = 0
+	if err := serviceConfig.Validate(); err != nil {
+		t.Fatalf("a config with telemetry off must not be judged on a value it never reads: %v", err)
+	}
+
+	serviceConfig.TelemetryEnabled = true
+	if err := serviceConfig.Validate(); err == nil {
+		t.Fatal("expected a zero flush interval to be rejected once telemetry is enabled")
+	}
+
+	serviceConfig.TelemetryFlushInterval = -time.Minute
+	if err := serviceConfig.Validate(); err == nil {
+		t.Fatal("expected a negative flush interval to be rejected")
+	}
+
+	serviceConfig.TelemetryFlushInterval = time.Minute
+	if err := serviceConfig.Validate(); err != nil {
+		t.Fatalf("valid telemetry config rejected: %v", err)
+	}
+}
+
 func validTestConfig() Config {
 	return Config{
 		AppEnvironment:             "test",

@@ -123,13 +123,14 @@ const (
 	ServiceNature    = "nature"
 	ServiceAuth      = "auth"
 	ServiceAnalytics = "analytics"
+	ServiceTelemetry = "telemetry"
 )
 
 // Services lists every service the gateway can wake, in the order an operator
 // meets them in configuration. The gateway itself is deliberately absent: it
 // is the one component that receives inbound HTTP in normal operation, so a
 // browser request already wakes it and nothing needs to ask.
-var Services = []string{ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics}
+var Services = []string{ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics, ServiceTelemetry}
 
 // Platform is one hosting provider's answer to "start this sleeping
 // instance". Adapters stay deliberately dumb — no retry, no deduplication, no
@@ -172,7 +173,7 @@ func ServiceForSubject(subject string) string {
 	}
 	service, _, _ := strings.Cut(remainder, ".")
 	switch service {
-	case ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics:
+	case ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics, ServiceTelemetry:
 		return service
 	default:
 		return ""

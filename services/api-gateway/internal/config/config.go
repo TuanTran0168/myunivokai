@@ -53,6 +53,13 @@ const (
 	// What Retry-After advertises. A cold-start estimate, not a promise; the
 	// client retries on a budget rather than trusting this number once.
 	defaultServiceWakeRetryAfter = 15 * time.Second
+	// One minute is B2's own figure and the one every downstream number is
+	// sized against: at ~50 route templates and 4 status classes it is roughly
+	// 200 rows per minute in the worst case, and it is short enough that a
+	// chart of the last hour has 60 points rather than 6. Lowering it
+	// multiplies rows without adding resolution anybody reads; raising it
+	// makes a spike disappear into an average.
+	defaultTelemetryFlushInterval = 60 * time.Second
 )
 
 // serviceWakeURLKeys maps each wakeable service to the variable holding its
@@ -65,6 +72,7 @@ var serviceWakeURLKeys = map[string]string{
 	"nature":    "NATURE_SERVICE_URL",
 	"auth":      "AUTH_SERVICE_URL",
 	"analytics": "ANALYTICS_SERVICE_URL",
+	"telemetry": "TELEMETRY_SERVICE_URL",
 }
 
 type Config struct {
@@ -123,6 +131,17 @@ type Config struct {
 	ServiceWakeTimeout        time.Duration
 	ServiceWakeLockTimeToLive time.Duration
 	ServiceWakeRetryAfter     time.Duration
+	// TelemetryEnabled gates the whole rollup path. Default false, and that
+	// default is load-bearing rather than cautious: with it off no middleware
+	// is registered, no collector exists, no ticker runs and nothing is
+	// published, so a deploy of this binary behaves exactly as the one before
+	// it did. Turning it on is the only way any of internal/telemetry runs.
+	TelemetryEnabled bool
+	// TelemetryFlushInterval is how much traffic one published envelope
+	// summarises. It also becomes the bucket width every chart is drawn at,
+	// so changing it changes the resolution of history already stored, not
+	// only of history still to come.
+	TelemetryFlushInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -162,6 +181,9 @@ func Load() (Config, error) {
 		ServiceWakeTimeout:        getDuration("SERVICE_WAKE_TIMEOUT", defaultServiceWakeTimeout),
 		ServiceWakeLockTimeToLive: getDuration("SERVICE_WAKE_LOCK_TTL", defaultServiceWakeLockTimeToLive),
 		ServiceWakeRetryAfter:     getDuration("SERVICE_WAKE_RETRY_AFTER", defaultServiceWakeRetryAfter),
+
+		TelemetryEnabled:       getBool("TELEMETRY_ENABLED", false),
+		TelemetryFlushInterval: getDuration("TELEMETRY_FLUSH_INTERVAL", defaultTelemetryFlushInterval),
 	}
 	adminAccessPublicKeys, err := decodeEd25519PublicKeys(get("ADMIN_ACCESS_PUBLIC_KEYS", ""))
 	if err != nil {
@@ -283,6 +305,14 @@ func (loadedConfig Config) Validate() error {
 		if loadedConfig.ServiceWakeTimeout <= 0 || loadedConfig.ServiceWakeLockTimeToLive <= 0 || loadedConfig.ServiceWakeRetryAfter <= 0 {
 			return errors.New("service wake timeout, lock TTL and retry-after must be positive")
 		}
+	}
+	// Only meaningful once telemetry is switched on, for the same reason the
+	// wake values above are. A zero interval would make time.NewTicker panic
+	// at startup and a negative one would truncate every bucket start to the
+	// same instant, which the consumer would read as one interval delivered
+	// forever.
+	if loadedConfig.TelemetryEnabled && loadedConfig.TelemetryFlushInterval <= 0 {
+		return errors.New("TELEMETRY_FLUSH_INTERVAL must be positive when TELEMETRY_ENABLED is true")
 	}
 	return nil
 }
