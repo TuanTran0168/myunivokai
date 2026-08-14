@@ -1,5 +1,10 @@
 *.sh text eol=lf
 Dockerfile* text eol=lf
+# sqlx checksums a migration file byte-for-byte, so a CRLF checkout on Windows
+# makes `sqlx::migrate!` refuse to start against a database migrated from an LF
+# checkout: "migration 1 was previously applied but has been modified". goose
+# does not checksum, so the Go services never noticed. Pinned for every service.
+*.sql text eol=lf
 
 # GitHub Linguist Overrides - Go #1, TypeScript #2
 notes/** linguist-documentation=true
