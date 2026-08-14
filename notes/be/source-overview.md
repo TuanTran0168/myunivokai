@@ -385,8 +385,9 @@ Universe and Nature jobs completed through Gateway, NATS, DNA, their family
 service, and PostgreSQL. Managed deployment still requires operator
 credentials. All five two-stage production images also build successfully.
 
-Production promotion is not yet approved: the audit identified high-severity
-advisories in the current Next.js 14 production tree. Sprint story
-`S1-SECURITY-001` requires an isolated framework upgrade plus browser
-regression before cutover; this backend migration does not silently waive or
-bundle that behavior-sensitive major upgrade.
+That blocker is largely cleared as of 2026-08-14: the frontend moved to
+Next 15.5.23 / React 19 on its own branch, with before/after scene screenshots
+as the browser-regression evidence, closing every `next` advisory. What remains
+is `postcss` and `sharp` pinned inside next's own tree, neither reachable from
+this app, and only Next 16 replaces them — see `S1-SECURITY-001`. The upgrade
+was kept out of this backend migration exactly as that story asked.

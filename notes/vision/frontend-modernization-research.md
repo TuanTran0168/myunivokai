@@ -1,7 +1,11 @@
 # Frontend modernization research — Next.js 16, React 19, R3F v9, WebGPU
 
-> **Document status:** Research. **Nothing here is approved and nothing here is
-> built.** No dependency was changed to produce it.
+> **Document status:** Research, and **Route A is now built** —
+> `feat/fe/next-15-react-19`, 2026-08-14. Five of this document's claims did not
+> survive execution and are corrected in
+> §What executing it actually found, which is the section to read before acting
+> on anything below. Route B (Next 16), three.js 0.185 and WebGPU remain
+> research only.
 > **Raised:** 2026-08-12 by the owner — *"cái này khá nguy hiểm vì các function
 > có thể outdate hoặc lỗi diện rộng toàn FE… nó có thể phá sập hệ thống nếu hời
 > hợt"*.
@@ -1014,6 +1018,70 @@ as the repo's own *"one concern per PR"* rule, applied to risk instead of review
   shift, there would be no way to tell which change did it.
 - **Starting with WebGPU.** It is last, it is flagged, and it is gated on a
   visual baseline existing.
+
+---
+
+## What executing it actually found — 2026-08-14
+
+Route A shipped on `feat/fe/next-15-react-19`. Five of this document's claims
+did not survive contact with the code, and they are recorded here rather than
+edited away, because a research document that only keeps its wins teaches
+nobody where to be careful next time.
+
+**1. `use(params)` is NOT safe on Next 14, and the plan says it is.** §Suggested
+order, step 2 reads *"Async `params` — 3 files. Safe on 14, so it can land and
+merge alone."* That holds for the two share pages, which `await` — a
+non-Promise awaits fine. It is false for `worlds/[worldId]`, which is
+`"use client"` and therefore uses React's `use`: on 14 `params` is a plain
+object, and `use()` throws *"An unsupported type was passed to use()"* at
+runtime. Build, lint, typecheck and 259 tests all pass; the page is dead.
+
+**This is the single most dangerous sentence in the document**, because it
+invites shipping that commit alone, and every automated gate agrees it is fine.
+The correction: async `params` and the version bump are **one deployment**. They
+may be separate commits for review, never separate deploys.
+
+It was found by the screenshots, which is exactly what they were added for —
+though not the way anyone expected. Playwright reused a still-running Next 14
+server, so the "after" run was really an "async params on 14" run, and it failed
+on the one page that matters.
+
+**2. `output: "standalone"` must stay.** §`output: "standalone"` should go says
+*"Keep it only if something still builds a Docker image from this app; nothing
+appears to."* Something does: `apps/myunivokai-web/Dockerfile.prod` copies
+`.next/standalone`, and `render.yaml` still carries the (commented) web service
+block that would build it. Removing the option to save Hobby build time would
+break a Dockerfile in the same change as a framework major. Not done.
+
+**3. The five StrictMode dispose sites needed no edit.** §What does cost work
+prices them as work and calls for five files changed. Driven against a dev
+server with StrictMode active — the only place a double mount happens — the
+solar system renders complete, planet rings and procedural moons included, zero
+console errors. `BufferGeometry.dispose()` releases the GPU buffer and leaves
+`attributes` in JS memory, so the next frame re-uploads. The hazard is real in
+shape and absent here. Five speculative edits were not made.
+
+**4. Four 3D files DID need an edit this document does not mention.**
+§Per-file verdict puts `<bufferAttribute>` users under "unchanged". They are
+not. R3F v9 treats `array`/`itemSize` as **constructor arguments** —
+`args={[array, itemSize]}` — and derives `count`; the old three-prop form
+builds an attribute with no data. Twelve attributes across `SizedStarPoints`,
+`ConstellationField` and `NebulaCloudPoints`. v9's types are what caught it,
+which is an argument for typecheck over faith.
+
+**5. `sharp` joined the advisory list, and the catch is smaller than feared.**
+After the bump `npm audit` reports three high advisories and **none against
+`next` itself**: `postcss@8.4.31` and `sharp@0.34.5`, both pinned inside next's
+own tree. §The catch anticipated postcss. It could not anticipate sharp, and the
+answer is the same shape: `next/image` appears exactly once in this app, with
+`unoptimized`, so the Image Optimizer that loads sharp never runs.
+
+What did survive, and is worth saying plainly: **the version numbers, the
+pinning advice and the risk ranking were right.** 15.5.23 does clear all 21
+advisories. `postprocessing` did have to be pinned at 3.0.4 — 3.0.5 raises its
+`three` peer to `>=0.182.0`. And the instruction to build a visual baseline
+first was the most valuable sentence in the document; without it, finding 1
+would have been found by a user.
 
 ---
 

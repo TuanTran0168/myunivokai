@@ -68,3 +68,11 @@ contracts/rust/Cargo.lock
 *.tsbuildinfo
 
 .vscode
+
+# Playwright scene shots. The images are a before/after instrument for a human
+# eye, taken on either side of a dependency change and thrown away afterwards —
+# committing them would put megabytes of GPU-dependent WebGL output into git
+# history to answer a question that only matters for one afternoon.
+apps/myunivokai-web/e2e/shots/
+apps/myunivokai-web/playwright-report/
+apps/myunivokai-web/test-results/
