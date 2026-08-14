@@ -65,6 +65,7 @@ admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_aut
 | [frontend-plan.md](frontend-plan.md) | Current renderer architecture and frontend gaps |
 | [visual-diversity.md](visual-diversity.md) | Visual/art direction that remains valid across the migration |
 | [city-service-plan.md](city-service-plan.md) | Approved City product plan, now dependent on the platform migration/hardening |
+| [ocean-family-research.md](ocean-family-research.md) | **Research, not approved.** The owner's 2026-08-14 deep-sea proposal argued against the source: depth as an axis with real light-attenuation numbers, a section-by-section mirror of `ForestSceneConfig`, the ~70% frontend reuse measured file by file, verified CC0 assets and public-domain audio — and the licence wall City's multi-civilisation ambition runs into, which is what makes the two comparable at all |
 | [nature-service-plan.md](nature-service-plan.md) | Historical Nature implementation record |
 | [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | Implemented single-origin frontend baseline |
 | [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
