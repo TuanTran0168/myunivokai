@@ -290,13 +290,18 @@ func TestEveryServiceSubjectWakesItsOwnResponder(t *testing.T) {
 // 202 with no error anywhere in the trace while the job sits at `queued`
 // forever. The wake has to be fired before the fact, for both services the job
 // will need.
+//
+// Analytics is third and last on purpose. The first two are cold starts on the
+// critical path and fire before the publish; the read model has hours rather
+// than milliseconds to catch up, so it is woken only once the publish has
+// provably produced something for it to consume.
 func TestCreateWorldWakesTheWholeGenerationPathBeforePublishing(t *testing.T) {
 	testCases := map[string]struct {
 		path             string
 		expectedServices []string
 	}{
-		"universe": {"/api/universe/worlds", []string{wake.ServiceDNA, wake.ServiceUniverse}},
-		"nature":   {"/api/nature/worlds", []string{wake.ServiceDNA, wake.ServiceNature}},
+		"universe": {"/api/universe/worlds", []string{wake.ServiceDNA, wake.ServiceUniverse, wake.ServiceAnalytics}},
+		"nature":   {"/api/nature/worlds", []string{wake.ServiceDNA, wake.ServiceNature, wake.ServiceAnalytics}},
 	}
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
@@ -315,6 +320,103 @@ func TestCreateWorldWakesTheWholeGenerationPathBeforePublishing(t *testing.T) {
 				t.Fatalf("woke %v, want %v", woken, testCase.expectedServices)
 			}
 		})
+	}
+}
+
+// Every mutation feeds the read model, so every mutation has to wake it. The
+// world-change event is written to the family service's outbox inside the same
+// transaction as the write, which makes "the mutation succeeded" and "an event
+// exists" the same fact - and an event nobody consumes before MYUNIVOKAI_EVENTS
+// ages it out at seven days leaves the projection permanently wrong with
+// nothing logged anywhere. See WorldHandler.wakeReadModel.
+func TestEveryWorldMutationWakesTheReadModel(t *testing.T) {
+	worldID := "9f8a1b2c-3d4e-4f50-8a1b-2c3d4e5f6071"
+	variantID := "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9"
+	testCases := map[string]string{
+		"create variant": "/api/universe/worlds/" + worldID + "/variants",
+		"select variant": "/api/universe/worlds/" + worldID + "/variants/" + variantID + "/select",
+		"publish world":  "/api/universe/worlds/" + worldID + "/publish",
+	}
+	for name, path := range testCases {
+		t.Run(name, func(t *testing.T) {
+			waker := newFakeWaker(wake.Services...)
+			brokerClient := &fakeBroker{response: contracts.NewEnvelope("request-id", contracts.RPCResponseData{
+				StatusCode: http.StatusOK, Payload: []byte(`{"worldId":"` + worldID + `","shareSlug":"aurora-1234"}`),
+			})}
+			router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker, nil)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; the wake must not change the response", response.Code)
+			}
+			if woken := waker.wokenServices(); !equalStrings(woken, []string{wake.ServiceAnalytics}) {
+				t.Fatalf("woke %v, want [%s]", woken, wake.ServiceAnalytics)
+			}
+		})
+	}
+}
+
+// The other half of the same rule. A mutation the family service refused wrote
+// no row and staged no event, so there is nothing for the read model to consume
+// and no reason to spend an instance-hour starting it. Waking on the attempt
+// rather than on the outcome would turn a client retrying a 404 into a service
+// that never gets to sleep.
+func TestARefusedMutationDoesNotWakeTheReadModel(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	brokerClient := &fakeBroker{response: contracts.NewEnvelope("request-id", contracts.RPCResponseData{
+		StatusCode: http.StatusNotFound,
+		Error:      &contracts.RPCError{Code: "NOT_FOUND", Message: "The requested resource was not found."},
+	})}
+	router := NewRouter(testGatewayConfig(), brokerClient, newFakeEdgeStore(), waker, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/universe/worlds/9f8a1b2c-3d4e-4f50-8a1b-2c3d4e5f6071/publish", nil))
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.Code)
+	}
+	if woken := waker.wokenServices(); len(woken) != 0 {
+		t.Fatalf("a refused mutation woke %v", woken)
+	}
+}
+
+// And the same again for the one write that is not a request/reply call. A
+// generation command that never reached JetStream produces no job, no world and
+// no event, so the two cold starts already paid for on the critical path are
+// wasted either way - but the read model must not be a third.
+func TestACommandThatWasNeverPublishedDoesNotWakeTheReadModel(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{publishError: errors.New("nats: no stream response")}, newFakeEdgeStore(), waker, nil)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/universe/worlds", strings.NewReader(validWorldInputJSON()))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", response.Code)
+	}
+	for _, service := range waker.wokenServices() {
+		if service == wake.ServiceAnalytics {
+			t.Fatal("a command that was never published woke the read model")
+		}
+	}
+}
+
+// Reads produce no events, so they must leave the read model asleep. This is
+// the boundary that keeps the fix from quietly becoming a keep-alive: the
+// product's read traffic is continuous, and waking analytics on any of it would
+// hold an instance up permanently for a console nobody has opened.
+func TestReadingAWorldNeverWakesTheReadModel(t *testing.T) {
+	waker := newFakeWaker(wake.Services...)
+	router := NewRouter(testGatewayConfig(), &fakeBroker{requestError: nats.ErrNoResponders}, newFakeEdgeStore(), waker, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/universe/worlds/9f8a1b2c-3d4e-4f50-8a1b-2c3d4e5f6071", nil))
+
+	if code := errorCodeOf(t, response.Body.Bytes()); code != "SERVICE_WAKING" {
+		t.Fatalf("error code = %q, want SERVICE_WAKING", code)
+	}
+	if woken := waker.wokenServices(); !equalStrings(woken, []string{wake.ServiceUniverse}) {
+		t.Fatalf("woke %v, want only the responder the read actually needed", woken)
 	}
 }
 

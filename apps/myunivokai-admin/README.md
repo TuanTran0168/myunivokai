@@ -100,6 +100,15 @@ Screens: `accounts` (list, invite, disable/enable), `accounts/[accountId]`
 invite token once — no email infrastructure exists yet, so a staff member
 relays it out of band.
 
+Five permissions in that dialog say "Not enforced yet" in their description, and
+they mean it literally: `world:unpublish`, `variant:read`, `job:retry`,
+`profile:read` and `profile:reveal` are declared and grantable, and no gateway
+route checks any of them. Granting one changes nothing. They are kept rather
+than deleted because `SyncPermissions` prunes what Go stops declaring — removal
+would silently strip them from every role holding them — and the reasoning is in
+`services/auth-service/internal/services/permission_sync.go`. Everything the
+sidebar links to is behind a permission that is enforced.
+
 The Roles screen shows two system-level entries, but only one is a database
 row: `basic_user` is the real seeded system role (`permission_sync.go`
 reseeds it at every auth-service startup). "Super Admin" is a pinned,
