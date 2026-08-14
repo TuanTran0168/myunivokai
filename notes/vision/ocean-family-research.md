@@ -7,12 +7,13 @@
 > rather than on which one sounds better.
 > **Raised:** 2026-08-14 by the owner
 > **Last source review:** 2026-08-14
-> **Graduation path:** if approved, this becomes `ocean-service-plan.md` with
-> phases and a branch sequence, exactly as
-> [telemetry-architecture-research.md](telemetry-architecture-research.md)
-> became [telemetry-service-plan.md](telemetry-service-plan.md). Until then
-> [city-service-plan.md](city-service-plan.md) remains the only approved family
-> plan and Sprint 3 remains City's.
+> **Graduated 2026-08-14** into
+> [ocean-service-plan.md](ocean-service-plan.md), which is the document to
+> implement from. This one remains the argument and the evidence behind it —
+> read it for *why* depth is the axis and why City is re-scoped, not for phases.
+> The owner's decisions taken on graduation: Ocean proceeds as its own service,
+> named `ocean`; O4 and O5 are answered in the plan's §1; O2 and O3 remain open
+> there with the phase each one gates.
 
 The owner's brief, verbatim:
 
