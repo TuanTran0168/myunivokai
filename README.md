@@ -190,23 +190,26 @@ music, and one interface per external vendor — are in
 
 ### Frontend
 
-`myunivokai-web` and `myunivokai-admin` are two independent Next.js apps on
-different major versions — the import-boundary check
-(`apps/myunivokai-admin/scripts/check-import-boundary.mjs`) is what keeps
-them from drifting into sharing code.
+`myunivokai-web` and `myunivokai-admin` are two independent Next.js apps that
+share no code — the import-boundary check
+(`apps/myunivokai-admin/scripts/check-import-boundary.mjs`) is what keeps them
+from drifting into doing so. Since 2026-08-14 they are on the same major:
+the admin app went to Next 15 first deliberately, as the proving ground for the
+upgrade the 3D app owed, and the 3D app has now followed it.
 
-**`myunivokai-web`** — Next.js 14, React 18
+**`myunivokai-web`** — Next.js 15, React 19
 
 | Technology | Role |
 | --- | --- |
-| **Next.js 14** | App Router, SSR, API route proxies |
-| **React 18 + TypeScript** | UI components and type safety |
+| **Next.js 15** | App Router, SSR, API route proxies |
+| **React 19 + TypeScript** | UI components and type safety |
 | **React Three Fiber** | three.js integration for 3D rendering |
 | **@react-three/drei** | three.js helpers and abstractions |
 | **@react-three/postprocessing** | Post-processing effects (bloom, vignette) |
 | **Web Audio API** | Ambient music: sampled instruments, convolution reverb, lookahead scheduling |
 | **Tailwind CSS 3** | Styling with custom design tokens (Vitrine + Liquid Glass) |
 | **vitest** | Unit testing |
+| **Playwright** | Scene screenshots — not a test suite. `npm run shoot` photographs both families against committed reference images in `e2e/reference/`, because nothing else here can see the canvas |
 
 **`myunivokai-admin`** — Next.js 15, React 19
 

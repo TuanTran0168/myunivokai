@@ -191,7 +191,31 @@ is automated.
 
 ## S1-SECURITY-001 — Remove vulnerable frontend runtime dependencies
 
-Status: Required before production cutover
+Status: **Mostly done, 2026-08-14, and one acceptance line deliberately left
+open.** `myunivokai-web` is on `next@15.5.23` / React 19.2.8 / R3F 9.7.0, which
+closes **all 21** `next` advisories — the premise below that Next **16** is the
+available remediation was wrong, and the correction is in
+[frontend-modernization-research.md](../../vision/frontend-modernization-research.md):
+`npm audit` prints `16.x` because `fixAvailable` reports the `latest` tag rather
+than the minimum sufficient version.
+
+What is done: the upgrade, the async route params, and visual regression
+evidence — twelve before/after screenshots of both families, committed under
+`apps/myunivokai-web/e2e/reference/`, which is the "browser regression evidence"
+this story asked for and the repo previously had no way to produce.
+
+What is NOT done, and why: `npm audit --omit=dev --audit-level=high` still exits
+non-zero. Three advisories remain and **none is against `next`** — they are
+`postcss@8.4.31` and `sharp@0.34.5`, pinned inside next's own dependency tree.
+Only Next 16 replaces that postcss. Neither is reachable from this app: postcss
+runs at build time, and `next/image` is used exactly once, with `unoptimized`,
+so the Image Optimizer that loads sharp never runs. Closing the last line
+literally means taking Route B, which is a separate decision with its own risk —
+Turbopack, ESLint 9 flat config, and `params` becoming fatal — not a
+continuation of this one.
+
+ESLint flat config is likewise not done and not needed: `next@15.5.23` accepts
+ESLint 8. It becomes required at Next 16.
 
 As an operator, I want the deployed web runtime free of known high-severity
 dependency advisories so passing functional tests is not mistaken for
