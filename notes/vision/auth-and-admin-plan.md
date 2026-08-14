@@ -458,6 +458,32 @@ Custom permission rows are not in scope for phase 1. If they are ever added,
 they need a documented meaning and a route that consults them; until then the
 sync is authoritative and prunes unknown rows.
 
+**Amended 2026-08-14 — "each one exists only because a route checks it" was
+not true, and is now stated rather than assumed.** Five of the thirteen declared
+codenames — `world:unpublish`, `variant:read`, `job:retry`, `profile:read`,
+`profile:reveal` — are checked by no route, and have been since S4-AUTH-005.
+Nothing is insecure about that: a permission nobody consults grants nothing. It
+is a *lie to the operator*, which is the exact failure this section's own
+argument is built to avoid — the checkbox appears in the Roles dialog, a staff
+member grants it, and the holder gains nothing.
+
+`permission_sync.go` now splits the set into `enforcedPermissions` and
+`reservedPermissions`, syncs the union exactly as before, and says so in each
+reserved row's description, which the dialog renders under the checkbox.
+Deleting them instead would have been worse than the problem: `SyncPermissions`
+ends in `DELETE FROM permissions WHERE NOT (codename = ANY($1))`, so a codename
+removed from Go is removed from production and from every role holding it on the
+next boot, with nothing logged.
+
+Two tests hold the two halves. `TestEveryAdminManagementRouteDemandsAPermission`
+(gateway) refuses an authenticated account holding no permissions at every
+`/api/admin` route, which is what catches a route mounted without a guard —
+default-deny alone does not, since such a route still answers `401` to a
+stranger while being readable by everyone who can log in.
+`TestReservedPermissionsAreDeclaredDeliberately` (auth-service) pins the
+reserved set, so the next codename with no route behind it has to be added on
+purpose.
+
 ### Schema shape
 
 `permissions` — `codename`, `description`, `audience`, `is_system`.

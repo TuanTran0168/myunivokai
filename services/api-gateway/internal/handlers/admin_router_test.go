@@ -113,6 +113,64 @@ func TestAdminRoutesDefaultDenyUnlessExplicitlyPublic(t *testing.T) {
 	}
 }
 
+// Default-deny proves a route cannot be reached by a stranger. It does not
+// prove the route is gated on anything in particular, and the difference is a
+// real hole: a route added to the management group as
+// `managementRouter.Get(...)` instead of
+// `managementRouter.With(requirePermission(...)).Get(...)` still answers 401 to
+// an anonymous caller and passes the test above - while being readable by every
+// account that can log in at all, including one seeded with basic_user and
+// nothing else.
+//
+// So this asks the sharper question. An authenticated staff account holding NO
+// permissions and no super-admin bypass must be refused by every management
+// route. A route with no permission middleware reaches its handler instead and
+// answers something other than 403, which fails here.
+func TestEveryAdminManagementRouteDemandsAPermission(t *testing.T) {
+	// The session routes are the whole exception list, and each is gated by
+	// something other than a permission: two are public by design, two require
+	// a presented refresh cookie. Both facts are asserted by their own tests.
+	sessionRoutes := map[string]bool{
+		"POST /api/admin/auth/login":         true,
+		"POST /api/admin/auth/invite/accept": true,
+		"POST /api/admin/auth/refresh":       true,
+		"POST /api/admin/auth/logout":        true,
+	}
+	brokerClient := &fakeBroker{responsesBySubject: map[string]contracts.Envelope[contracts.RPCResponseData]{
+		contracts.AuthTokenVersionQuerySubject:       tokenVersionResponseEnvelope(t),
+		contracts.AuthAccountPermissionsQuerySubject: accountPermissionsResponseEnvelope(t, nil, false),
+	}}
+	router := NewRouter(testAdminGatewayConfig(), brokerClient, newFakeEdgeStore(), nil, nil)
+	accessToken := mintAdminAccessToken(t, "account-with-no-permissions")
+
+	guarded := 0
+	walkErr := chi.Walk(router.(chi.Router), func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if !strings.HasPrefix(route, "/api/admin") || sessionRoutes[method+" "+route] {
+			return nil
+		}
+		request := httptest.NewRequest(method, route, nil)
+		request.AddCookie(&http.Cookie{Name: "myunivokai_admin_access", Value: accessToken})
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Errorf("route %s %s: expected 403 for an account with no permissions, got %d - is it missing requirePermission? body=%s",
+				method, route, response.Code, response.Body.String())
+			return nil
+		}
+		guarded++
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatal(walkErr)
+	}
+	// A router that mounted nothing would pass every assertion above by
+	// vacuous truth, which is exactly the failure this kind of test is prone
+	// to. Assert it actually walked the management group.
+	if guarded < len(sessionRoutes) {
+		t.Fatalf("only %d management routes were checked; the walk found almost nothing to assert on", guarded)
+	}
+}
+
 func TestAdminRoutesAreNotMountedWhenDisabled(t *testing.T) {
 	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil, nil)
 	response := httptest.NewRecorder()
