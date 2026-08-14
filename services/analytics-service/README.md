@@ -257,6 +257,22 @@ free. There is no other backfill: an outage longer than 7 days is a permanent
 gap, accepted deliberately at current data volume. Diagnose a hole in the read
 model as retention first, not corruption.
 
+That retention used to be reachable without any outage at all, which is a
+different and worse thing. This service sleeps when idle and woke only when a
+staff member opened the console, so a week with no visit expired the oldest
+events **unconsumed** — the projection permanently wrong, nothing logged
+anywhere, because a message that ages out of a stream is not a failure anybody
+observes. Since 2026-08-14 the gateway wakes this service on each of the four
+world mutations that produce an event, after the write is accepted rather than
+before it, so the consumer starts at the moment there is something to consume.
+Reads still wake nothing. See `WorldHandler.wakeReadModel` in api-gateway and
+[service-wake-mechanism.md](../../notes/vision/service-wake-mechanism.md).
+
+An outage still ends in a permanent gap, and one thing remains uncovered by
+design: a `service.started` event nobody asked the gateway for can still expire
+if the fleet restarts during a quiet week. That costs a row of Fleet history,
+not a wrong world count.
+
 ## The cost to keep paying
 
 Every future mutation in universe-service or nature-service must also bump

@@ -113,6 +113,44 @@ answers "not failing". Measurement must never break the thing it measures, and
 failing closed there would turn one unreachable Redis into a fleet-wide outage
 report.
 
+**Extended 2026-08-14 — the read model is woken by writes, not only by
+readers.** One case the design below does not reach, found while researching
+end-user ownership and recorded as B4 in
+[platform-evolution-research.md](platform-evolution-research.md#the-retention-trap--and-it-applies-to-library-service-too):
+`analytics-service` wakes only when a staff member opens the console, and
+`MYUNIVOKAI_EVENTS` retains seven days. A week with no visit expires the oldest
+events **unconsumed**, and the projection is then permanently wrong with nothing
+logged anywhere — a message that ages out of a stream is not a failure anybody
+observes.
+
+Reactive waking structurally cannot reach it, for the same reason `POST
+/worlds` wakes proactively: analytics-service is never the responder for any
+request a client makes, so no `no-responders` reply exists to hang a wake off.
+`WorldHandler.wakeReadModel` therefore fires on each of the four mutations that
+produce an event — create, add variant, select variant, publish — and this is
+the third mitigation the research section lists, chosen because it is the one
+that composes: the consumer wakes at the moment there is something to consume,
+and stays up for one idle window per burst of activity rather than on a
+schedule.
+
+Two boundaries make it a wake rather than a keep-alive, and both are enforced by
+a test:
+
+- **It fires after the write is accepted**, unlike the two wakes in
+  `CreateWorld` that overlap cold starts on the critical path. The read model
+  has hours to catch up, not milliseconds, so waking it only once an event
+  provably exists keeps a client retrying a `404` from becoming a service that
+  never sleeps.
+- **Reads wake nothing.** Product read traffic is continuous; waking analytics
+  on any of it would hold an instance up permanently for a console nobody has
+  opened.
+
+What it deliberately does not cover: `service.started`, which no client asks
+the gateway for. A fleet that restarts during a quiet week can still lose a row
+of boot history. That costs a line on the Fleet screen, not a wrong world
+count, and covering it would mean waking the read model on every wake of every
+service.
+
 *Not part of this mechanism, though built alongside it:* each service announces
 its own boot on `myunivokai.events.<service>.service.started.v1`, which
 analytics-service projects into `service_starts`. That is durable
@@ -315,6 +353,7 @@ specifies).
 | Part | On leaving free tier |
 | --- | --- |
 | Proactive ping on `POST` | **Remove.** Becomes a useless outbound call on every world creation |
+| Read-model wake on mutation (`wakeReadModel`) | **Remove only once `analytics-service` itself stops sleeping.** It is not part of the wake-on-demand design above: it exists because a consumer that sleeps through a seven-day retention window loses events silently. A paid gateway with a still-free read model keeps needing it |
 | Reactive ping on `no-responders` | **Remove** the ping call itself |
 | `no-responders` vs `DeadlineExceeded` classification | **Keep permanently** — see below |
 | `SERVICE_WAKING` / `SERVICE_UNAVAILABLE` / `SERVICE_TIMEOUT` split | **Keep permanently** |

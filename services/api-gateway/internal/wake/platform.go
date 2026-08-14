@@ -41,7 +41,11 @@
 //     Keep the three-way error split itself if anything is kept: no-responders
 //     means something different from a deadline on any host.
 //   - internal/handlers/world_handler.go — drop familyService and the two
-//     proactive Wake calls in CreateWorld
+//     proactive Wake calls in CreateWorld. wakeReadModel is a different
+//     question with a different answer: it exists because a scale-to-zero read
+//     model can miss events permanently, so it survives on any host where
+//     analytics-service still sleeps and dies with the tier that makes it
+//     sleep, not with this package. See its own doc comment.
 //   - internal/config/config.go — drop the four ServiceWake* fields,
 //     serviceWakeURLKeys, readServiceWakeTargets, serviceWakeConfigured and
 //     their validation

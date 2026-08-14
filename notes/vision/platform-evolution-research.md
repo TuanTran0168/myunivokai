@@ -353,6 +353,18 @@ Three mitigations, and the first is the one that composes:
 **This is a defect in the current system, not only in the proposal.** It should
 be fixed for `analytics-service` regardless of whether track A is ever built.
 
+**Fixed for `analytics-service` on 2026-08-14**, by mitigation 1.
+`WorldHandler.wakeReadModel` wakes the read model on each of the four mutations
+that produce an event, after the write is accepted rather than before it, and
+reads wake nothing — the two boundaries that keep it a wake rather than a
+keep-alive, both held by a test in
+`services/api-gateway/internal/handlers/wake_test.go`. It does not cover
+`service.started`, which no client asks the gateway for; the reasoning for
+leaving that uncovered is in
+[service-wake-mechanism.md](service-wake-mechanism.md#what-was-built-and-where-it-differs-from-this-design).
+Mitigation 2 remains available and independent, and would be worth taking on
+managed NATS regardless.
+
 ### Identity issuer — the decision under `DEFERRED-AUTH-001`
 
 `auth-service` today is staff-only, and the gateway's admin router is
@@ -820,7 +832,7 @@ by-product of a security upgrade, not a reason for one.
 | B1 | Sprint 4 is built but not deployed | everything | `S4-AUTH-006`, `S4-ANALYTICS-006` | Operator |
 | B2 | `DEFERRED-AUTH-001` unanswered — 7 open questions | all of track A | One decision session. **Cheapest unblock in this document** | Decision |
 | B3 | Every production world is anonymous | track A | Nullable `owner_account_id` + `anonymous_id` claim flow | Design, solved above |
-| B4 | Read model + 7-day retention = silent permanent gap | track A, **and analytics today** | Wake the read model on the write path | Design, solved above |
+| B4 | ~~Read model + 7-day retention = silent permanent gap~~ | track A, **and analytics today** | **Fixed 2026-08-14** — `WorldHandler.wakeReadModel` | Shipped |
 | B5 | Prometheus pull keeps all six services awake | all of track B | Push-only. OTLP, or NATS rollup events | Design, solved above |
 | B6 | `analytics-service` data boundary forbids telemetry | track B | A separate store; never that database | Design, solved above |
 | B7 | Unbounded cardinality from raw URL paths | track B | Key on chi's route pattern | Design, solved above |
