@@ -12,7 +12,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "shoot": "playwright test",
+    "shoot:report": "playwright show-report"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
@@ -26,6 +28,7 @@
     "three": "^0.171.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
