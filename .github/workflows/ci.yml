@@ -86,6 +86,27 @@ jobs:
       - name: Build
         run: go build ./...
 
+  ocean-service-checks:
+    name: Ocean service (go vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ocean-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/ocean-service/go.mod
+          cache-dependency-path: services/ocean-service/go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+
   dna-service-checks:
     name: DNA service (go vet + test + build)
     runs-on: ubuntu-latest

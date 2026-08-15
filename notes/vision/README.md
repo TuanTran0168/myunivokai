@@ -5,8 +5,8 @@
 > **Last source review:** 2026-08-07 (auth-service, analytics-service and the admin app added)
 
 Myunivokai turns one person's semantic DNA into multiple deterministic 3D
-portrait families. Universe and Nature remain independent bounded contexts so
-they can evolve, deploy and scale separately. Canonical DNA and AI generation
+portrait families. Universe, Nature and Ocean are independent bounded contexts
+so they can evolve, deploy and scale separately. Canonical DNA and AI generation
 move to `dna-service`; the public gateway becomes a NATS edge; Redis supplies
 shared edge state.
 
@@ -49,6 +49,7 @@ the owner approves them; whatever survives is copied into
 web   -> api-gateway /api/*       -> NATS -> dna-service       -> myunivokai_dna
                                         -> universe-service   -> myunivokai_universe
                                         -> nature-service     -> myunivokai_nature
+                                        -> ocean-service      -> myunivokai_ocean
 
 admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_auth
                                         -> analytics-service  -> myunivokai_analytics
@@ -66,7 +67,7 @@ admin -> api-gateway /api/admin/* -> NATS -> auth-service      -> myunivokai_aut
 | [visual-diversity.md](visual-diversity.md) | Visual/art direction that remains valid across the migration |
 | [city-service-plan.md](city-service-plan.md) | Approved City product plan, now dependent on the platform migration/hardening |
 | [ocean-family-research.md](ocean-family-research.md) | **Research; graduated 2026-08-14.** The argument and evidence behind Ocean: depth as an axis with real light-attenuation numbers, a section-by-section mirror of `ForestSceneConfig`, the ~70% frontend reuse measured file by file, verified CC0 assets and public-domain audio — and the licence wall City's multi-civilisation ambition runs into. Read it for *why*; implement from the row below |
-| [ocean-service-plan.md](ocean-service-plan.md) | **Approved design, not yet built.** Ocean as the third family, decided 2026-08-14: the depth curve as a specified, tested piece of maths whose results are stored rather than recomputed, the seam inventory read in the working tree (including the four places that need **no** change and the one literal family check that fails no build), the frontend's second builder that the City plan never mentions, phases O0–O6 and a ten-branch sequence |
+| [ocean-service-plan.md](ocean-service-plan.md) | **Built 2026-08-15; deployed verification outstanding.** Read its "What executing it found" section first — four of the plan's own claims were wrong, including a seam it recorded as needing no change that needed three. Ocean as the third family, decided 2026-08-14: the depth curve as a specified, tested piece of maths whose results are stored rather than recomputed, the seam inventory read in the working tree (including the four places that need **no** change and the one literal family check that fails no build), the frontend's second builder that the City plan never mentions, phases O0–O6 and a ten-branch sequence |
 | [nature-service-plan.md](nature-service-plan.md) | Historical Nature implementation record |
 | [frontend-gateway-consolidation.md](frontend-gateway-consolidation.md) | Implemented single-origin frontend baseline |
 | [auth-and-admin-plan.md](auth-and-admin-plan.md) | Staff identity, RBAC and the `/api/admin` route group. Implemented; its read-path sections are superseded by the document below |
@@ -86,6 +87,7 @@ One canonical, family-neutral DNA version can produce multiple media:
 | --- | --- |
 | Universe | planets, orbits, palette, lighting and cosmic atmosphere |
 | Nature | terrain, landmarks, vegetation, water, weather and season |
+| Ocean | depth, water, light attenuation, seafloor, flora, schools, drifters and bioluminescence |
 | City, future | districts, skyline, roads, traffic and urban lighting |
 
 The same DNA is snapshotted into every generated world. Family services never
@@ -109,8 +111,13 @@ world remains renderable even when DNA later gets a new version.
 7. **At-least-once is explicit.** Inbox/outbox and idempotent consumers are
    required; `jobId` is the correlation/deduplication anchor.
 8. **Names express domains.** Deployments are `myunivokai-dna`,
-   `myunivokai-universe`, `myunivokai-nature`, `myunivokai-auth` and
-   `myunivokai-analytics`; runtime type is not appended to the name.
+   `myunivokai-universe`, `myunivokai-nature`, `myunivokai-ocean`,
+   `myunivokai-auth` and `myunivokai-analytics`; runtime type is not appended to
+   the name. A family is named for its domain and not for its most evocative
+   corner: the ocean service is `ocean`, never `abyss`, because the abyss is one
+   end of its own depth axis and a sunlit reef would be a permanent mismatch
+   under that name — across the database, the subjects and every public share
+   URL, none of which can be renamed once a link is out.
 9. **No placeholder auth for end users.** Product authentication stays
    deferred. `auth-service` is **staff-only** identity for the admin console;
    it does not open a signup path for visitors. NATS credentials and subject
@@ -118,9 +125,9 @@ world remains renderable even when DNA later gets a new version.
 10. **Admin reads never wake a domain service.** A staff page waits on the
     gateway, auth and analytics — never on universe, nature or dna, which the
     free tier may have put to sleep.
-11. **Scale by measured bottleneck.** Gateway, DNA, Universe, Nature, Auth and
-    Analytics scale independently; database and stream partitioning happen only
-    on evidence.
+11. **Scale by measured bottleneck.** Gateway, DNA, Universe, Nature, Ocean,
+    Auth and Analytics scale independently; database and stream partitioning
+    happen only on evidence.
 
 ## Delivery order
 
@@ -131,8 +138,13 @@ The dated execution plans live under [../sprints/](../sprints/README.md).
    frontend async flow, Compose, Render configuration/runbook and live cutover.
 2. **Sprint 2, starts 2026-08-05:** load/resilience hardening,
    observability, horizontal-scale proof and operational SLOs.
-3. **Sprint 3, starts 2026-08-19:** introduce City contracts/service and
-   high-fidelity vertical slice on the stable platform.
+3. **Sprint 6, starts 2026-08-19:** Ocean as the third family — its own
+   service, the depth curve as specified maths whose results are stored, and a
+   renderer that needs no downloaded asset at all.
+4. **Sprint 3, starts 2026-09-09:** introduce City contracts/service and
+   high-fidelity vertical slice on the stable platform. Moved back from
+   2026-08-19 on 2026-08-15 when the owner brought Ocean forward; the two
+   families touch disjoint services, so the cost was calendar time only.
 
 ## Decisions recorded 2026-07-22
 
@@ -161,6 +173,12 @@ The dated execution plans live under [../sprints/](../sprints/README.md).
 - Do not delete old databases before the new deployed smoke suite passes and
   the exact destructive targets are confirmed.
 - Do not start City implementation before the platform migration is complete.
+- Do not name any machine-readable identifier after a family's most evocative
+  zone. See principle 8.
+- Do not recompute a stored derived value at render time. The ocean's depth
+  curve decides water, fog, god rays and caustics ONCE, in the builder, and
+  what is stored is the answer — which is what makes re-tuning it safe for
+  every world that already exists.
 - Do not give `analytics-service` a write path, an outbox, or a call to another
   service. It consumes events, writes its own database, and answers queries.
 - Do not let an admin route publish a `universe`, `nature` or `dna` subject.

@@ -188,6 +188,7 @@ func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
 	}{
 		{name: "universe", path: "/api/universe/worlds/" + worldID, expectedSubject: contracts.UniverseWorldGetQuerySubject},
 		{name: "nature", path: "/api/nature/worlds/" + worldID, expectedSubject: contracts.NatureWorldGetQuerySubject},
+		{name: "ocean", path: "/api/ocean/worlds/" + worldID, expectedSubject: contracts.OceanWorldGetQuerySubject},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -210,7 +211,11 @@ func TestWorldQueryUsesFamilySpecificNATSSubject(t *testing.T) {
 func TestUnsupportedFamilyKeepsGatewayErrorContract(t *testing.T) {
 	router := NewRouter(testGatewayConfig(), &fakeBroker{}, newFakeEdgeStore(), nil, nil)
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/ocean/worlds", nil))
+	// Deliberately a family that does not exist and is not planned. This test
+	// used "/api/ocean" until ocean-service shipped, at which point it started
+	// failing — correctly, and loudly. Pick a name no roadmap mentions when the
+	// next family arrives, rather than one that is merely unbuilt today.
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/tundra/worlds", nil))
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"code":"WORLD_FAMILY_NOT_FOUND"`) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}

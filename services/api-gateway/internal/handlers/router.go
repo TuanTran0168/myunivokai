@@ -62,6 +62,7 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 	dnaJobHandler := NewDNAJobHandler(serviceConfig, rpcTransport)
 	universeHandler := NewUniverseHandler(serviceConfig, brokerClient, rpcTransport)
 	natureHandler := NewNatureHandler(serviceConfig, brokerClient, rpcTransport)
+	oceanHandler := NewOceanHandler(serviceConfig, brokerClient, rpcTransport)
 	landingHandler := func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpx.WriteJSON(responseWriter, http.StatusOK, map[string]any{"service": serviceConfig.AppName, "status": "ok", "architecture": "nats-redis"})
 	}
@@ -91,7 +92,13 @@ func NewRouter(serviceConfig config.Config, brokerClient broker.Client, edgeStor
 		businessRouter.Route("/api/nature", func(familyRouter chi.Router) {
 			registerWorldRoutes(familyRouter, natureHandler)
 		})
-		businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
+			businessRouter.Route("/api/ocean", func(familyRouter chi.Router) {
+				registerWorldRoutes(familyRouter, oceanHandler)
+			})
+			// Every supported family must be registered ABOVE this line: chi
+			// matches in registration order, so a family mounted after the
+			// wildcard would answer WORLD_FAMILY_NOT_FOUND for routes that exist.
+			businessRouter.Route("/api/{family}", registerUnsupportedFamilyRoutes)
 	})
 	if serviceConfig.AdminRoutesEnabled {
 		router.Mount("/api/admin", newAdminRouter(serviceConfig, brokerClient, edgeStore, rpcTransport, waker))

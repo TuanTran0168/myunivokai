@@ -20,6 +20,7 @@ const (
 	ServiceNameDNA       = "dna"
 	ServiceNameUniverse  = "universe"
 	ServiceNameNature    = "nature"
+	ServiceNameOcean     = "ocean"
 	ServiceNameAuth      = "auth"
 	ServiceNameAnalytics = "analytics"
 )
@@ -31,6 +32,7 @@ var ServiceNames = []string{
 	ServiceNameDNA,
 	ServiceNameUniverse,
 	ServiceNameNature,
+	ServiceNameOcean,
 	ServiceNameAuth,
 	ServiceNameAnalytics,
 }

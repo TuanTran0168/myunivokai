@@ -1,12 +1,17 @@
 # Ocean service plan — the third family, decided
 
-> **Document status:** Approved design. **Not yet built** — this is the plan to
-> implement from, not a research document. It graduates
-> [ocean-family-research.md](ocean-family-research.md) into one decided design.
+> **Document status:** **Built 2026-08-15**, in one branch rather than the ten
+> in §11 — the owner asked for the whole family at once. Deployed verification
+> is outstanding.
 > **Decided:** 2026-08-14 by the owner — Ocean proceeds, as its own service,
-> named `ocean` rather than `abyss`.
-> **Last source review:** 2026-08-14 — every seam listed in §2 was read in the
-> working tree, not inferred from the City plan.
+> named `ocean` rather than `abyss`. Free-tier hosting approved 2026-08-15,
+> which closed O3.
+> **Last source review:** 2026-08-15.
+>
+> **Read [§16](#16-what-executing-this-plan-found) before trusting §2 or §7.**
+> Four of this document's own claims were wrong, and one of them — a seam
+> recorded as needing no change — would have shipped a family the admin app
+> could never see.
 
 Ocean is a deterministic deep-sea portrait family: a reef in sunlit water, a
 twilight reach, or an abyssal trench, chosen by the visitor's canonical DNA and
@@ -459,3 +464,136 @@ but it is still two codebases computing one curve.
   line to the data boundary in
   [analytics-service-plan.md](analytics-service-plan.md).
 - Do not add NATS permission work to any estimate for this plan.
+
+---
+
+## 16. What executing this plan found
+
+The plan was written from the working tree and was still wrong in four places.
+They are recorded here rather than quietly fixed, because three of the four
+would have failed silently, and the pattern behind them is worth more than the
+individual corrections.
+
+### 16.1 "Analytics: None" was wrong, and it was the dangerous one
+
+§2 recorded the analytics read model as needing **no change**, on the grounds
+that `normalizeFamily` gates on `family.Valid()`. That much is true. What the
+row missed is that `BuildProjection` does not dispatch on the family field at
+all — it switches on **subject literals**, in three separate arms:
+
+```go
+case contracts.UniverseCompletedEventSubject, contracts.NatureCompletedEventSubject:
+case contracts.UniverseFailedEventSubject, contracts.NatureFailedEventSubject:
+case contracts.UniverseWorldChangedEventSubject, contracts.NatureWorldChangedEventSubject:
+```
+
+An ocean event reaching that switch falls to `default`, resolves to
+`ErrUnknownSubject`, and is **skipped rather than retried** — which is correct
+behaviour for a subject from a service analytics does not know about, and
+exactly why nothing would have gone red. Ocean worlds would simply never have
+appeared in the admin app, which is the same failure §6 warns about for the
+outbox, arriving from the other end.
+
+Two more of the same shape turned up beside it:
+
+- `analytics-service/internal/repositories/postgres_queries.go` had a
+  hard-coded `[]WorldFamily{Universe, Nature}` ordering the overview's family
+  cards.
+- dna-service's `familyForResultSubject` **and** its JetStream
+  `ConsumerFilterSubjects` list both enumerate the family result subjects. The
+  plan's "None" was right about outbound dispatch — `job.Family.ComposeCommandSubject()`
+  really does generalise — and wrong about inbound result consumption, which is
+  a different code path in a different file.
+
+**The lesson, for the next family:** `family.Valid()` generalising is not the
+same as the *dispatch* generalising. Grep for the subject constants, not for the
+family type.
+
+### 16.2 `DNALandmark.Type` does not carry the landmark vocabulary
+
+§3.1 said `DNALandmark.Type` carries `kelpCathedral`, `sunkenRelic` and the
+rest. In the working tree that field is the human provenance label — nature-service
+sets it to `"Interest Landmark"` or `"Trait Landmark"` from `facet.Kind` — and
+the scene KIND is a separate seeded draw made in the builder, deduped against
+the kinds already used.
+
+Built to mirror the forest exactly: `Type` stays the provenance label, and the
+ocean vocabulary lives in the builder's `nonHeroLandmarkKinds`, with
+`kelpCathedral` as the fixed hero the way `heartTree` is. A landmark's meaning
+therefore never depends on which shape the lottery gave it.
+
+### 16.3 The preview cannot be pinned byte-for-byte, and did not need to be
+
+§7 required the preview builder to be "asserted against the **same** committed
+golden fixture the Go builder is". Taken literally that is not achievable
+without porting Go's `math/rand` — a lagged-Fibonacci generator over a
+607-element table — into TypeScript, because the frontend PRNG is a 32-bit
+xorshift. The forest preview already accepts this and says so: its output is
+*plausible*, not byte-equal.
+
+What matters is narrower than what the plan asked for. The seeded halves of the
+two builders are duplicated **tables**, which drift loudly (a missing species
+shows up immediately). The depth curve is duplicated **logic**, which drifts
+silently — and it takes no PRNG at all, so it can be pinned exactly.
+
+`oceanDepthCurve.test.ts` therefore reads the Go builder's four golden fixtures
+directly out of `services/ocean-service/.../testdata/` and asserts that the
+TypeScript curve reproduces every stored water and lighting value, hex colours
+included. It passes, which also settles a real question about floating point:
+Go's and V8's `exp`/`log` agree to within the two decimals both sides round to.
+
+### 16.4 The first zone boundaries made two of the three zones identical
+
+The plan used the textbook oceanographic boundaries — epipelagic to 200 m,
+mesopelagic to 1000 m — with a twilight band of 220–900 m. Built that way, the
+`focused` golden landed at 750 m and came out with **byte-identical water and
+lighting** to the `reflective` golden at 2431 m: `#030914` fog, 12 m visibility,
+zero god rays, both. Two of the three zones were the same world.
+
+The physics was right and the boundaries were wrong. Both are now constants of
+the depth curve itself rather than round numbers:
+
+- the sunlit shallows end where **orange dies**, at 40 m;
+- the twilight reach ends at the **sunlight floor**, 1000 m — which is also
+  where god rays and caustics reach zero, so "the abyss has no caustics" is a
+  consequence rather than a rule.
+
+The bands moved with them: 3–28 m for the reef (where reef-building coral
+actually lives), 45–170 m for the twilight, 1050–3800 m for the abyss. The
+goldens now read `#127586` / `#024667` / `#030914` across the three, and a test
+fails if they ever collapse back into one sea.
+
+### 16.5 The literal family check had two siblings
+
+§2 named `lib/api.ts:176` as "the one literal family check that fails no build".
+There were three:
+
+| Where | What it silently did |
+| --- | --- |
+| `lib/api.ts` | Discarded a resumed generation for the new family on reload |
+| `lib/savedWorlds.ts` | Dropped every ocean world out of the visitor's gallery |
+| `lib/ambientSoundscape.ts` | Arranged the sea as a solar system — an `isForest: **boolean**` has two answers, and the third family arrived as "not forest" |
+
+All three are now derived from a `Record<WorldFamily, …>` or a three-valued
+union, so the compiler refuses the next family rather than defaulting it.
+
+### 16.6 What the plan got right
+
+Worth recording as well, because it is what the seam inventory was for: the
+gateway's `WorldHandler` needed a 17-line handler and one route; `wake.ServiceForSubject`
+needed no ocean branch; `CameraRig` and `PlanetPositionTracker` needed nothing
+at all; and NATS production permissions cost exactly what the plan said they
+would, which is nothing.
+
+### 16.7 Decisions this closed
+
+- **O3 — free-tier budget.** Approved by the owner on 2026-08-15. The
+  `render.yaml` block is `plan: free`, and Ocean is the eighth such service.
+- **O4 — `ocean-abyss-visitor`'s species.** Settled as anglerfish, giant squid,
+  gulper eel, in that frozen order, against what the procedural `ocean-1`
+  catalogue actually builds. That catalogue resolves every model key to browser
+  geometry rather than a downloaded GLB, which is what made the decision
+  possible at all: no licence, no download, and no species that cannot be drawn.
+- **O2 — City's multi-civilisation scope.** Still open, and still nothing this
+  family depends on. City moved to
+  [2026-09-09](../sprints/sprint-03-2026-09-09/README.md).

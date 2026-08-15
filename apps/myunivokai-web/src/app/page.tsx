@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Loader2, Orbit, Plus, Trees } from "lucide-react";
+import { ArrowRight, Check, Loader2, Orbit, Plus, Trees, Waves } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api";
 import { addWorldIdentifierToGallery } from "@/lib/savedWorlds";
 import { UniverseCanvas } from "@/components/UniverseCanvas";
@@ -13,17 +13,20 @@ import { FORM_RAIL_ELEMENT_ID } from "@/lib/formRailCollapse";
 import { useWorldChromeCollapse, WorldChromeToggle } from "@/components/WorldChromeToggle";
 import { buildPreviewSceneConfig, pointsOfInterestFromScene } from "@/lib/scene";
 import { buildPreviewForestSceneConfig } from "@/lib/forestScene";
+import { buildPreviewOceanSceneConfig } from "@/lib/oceanScene";
 import { planetIdentityKey } from "@/features/scene-renderers/planetIdentity";
 import { prefetchSceneRendererForFamily } from "@/features/scene-renderers/registry";
 import { worldPagePath } from "@/lib/worldRoutes";
 import type { GenerationJobStatus, PlanetSceneConfig, WorldFamily } from "@/lib/types";
 
 // The world-family picker: which backend curates the portrait. Universe =
-// universe-service (solar system), Forest = nature-service (living forest).
-// Same inputs, same mechanism — only the scene family differs.
+// universe-service (solar system), Forest = nature-service (living forest),
+// Ocean = ocean-service (a sea at one depth). Same inputs, same mechanism —
+// only the scene family differs.
 const familyOptions: { label: string; value: WorldFamily; description: string; Icon: typeof Orbit }[] = [
   { label: "Universe", value: "universe", description: "A solar system of you", Icon: Orbit },
-  { label: "Forest", value: "nature", description: "A living forest of you", Icon: Trees }
+  { label: "Forest", value: "nature", description: "A living forest of you", Icon: Trees },
+  { label: "Ocean", value: "ocean", description: "A sea of you, at depth", Icon: Waves }
 ];
 
 const interestOptions = ["Technology", "Art", "Science", "Design", "Music", "AI", "Storytelling", "Product"];
@@ -44,6 +47,55 @@ const natureMoodOptions = [
   { label: "Summer Meadow", value: "energetic", swatch: "#4ADE80" },
   { label: "Amber Autumn", value: "reflective", swatch: "#F59E0B" }
 ];
+// Each ocean label names the depth that mood leans toward in the ocean builder,
+// the same way the forest labels name a season.
+const oceanMoodOptions = [
+  { label: "Still Water", value: "focused", swatch: "#5EEAD4" },
+  { label: "Drifting", value: "dreamy", swatch: "#A78BFA" },
+  { label: "Reef Surge", value: "energetic", swatch: "#F2B24C" },
+  { label: "The Abyss", value: "reflective", swatch: "#1E3A5F" }
+];
+
+// Everything the create page says differently per family, in one record typed
+// by WorldFamily. It replaced a run of `worldFamily === "nature" ? ... : ...`
+// ternaries, each of which quietly treated a third family as "universe" — the
+// compiler now refuses to let a family be added without answering all of this.
+const FAMILY_COPY: Record<
+  WorldFamily,
+  {
+    noun: string;
+    moodLabel: string;
+    moodOptions: typeof moodOptions;
+    chromeClassName: string;
+    submitLabel: string;
+    showsWorldStylePicker: boolean;
+  }
+> = {
+  universe: {
+    noun: "Universe",
+    moodLabel: "Atmospheric Mood",
+    moodOptions,
+    chromeClassName: "",
+    submitLabel: "Curate this universe",
+    showsWorldStylePicker: true
+  },
+  nature: {
+    noun: "Forest",
+    moodLabel: "Forest Mood",
+    moodOptions: natureMoodOptions,
+    chromeClassName: "forest-chrome",
+    submitLabel: "Curate this forest",
+    showsWorldStylePicker: false
+  },
+  ocean: {
+    noun: "Ocean",
+    moodLabel: "Depth & Mood",
+    moodOptions: oceanMoodOptions,
+    chromeClassName: "forest-chrome",
+    submitLabel: "Curate this ocean",
+    showsWorldStylePicker: false
+  }
+};
 const styleOptions = [
   { label: "Cosmic", value: "cosmic-galaxy", swatch: "#8B5CF6" },
   { label: "Nebula", value: "nebula", swatch: "#a855f7" },
@@ -170,7 +222,13 @@ export default function HomePage() {
     };
     // Same inputs, family-specific mirror: the preview always renders with the
     // exact renderer the generated world will use.
-    return worldFamily === "nature" ? buildPreviewForestSceneConfig(previewInput) : buildPreviewSceneConfig(previewInput);
+    if (worldFamily === "nature") {
+      return buildPreviewForestSceneConfig(previewInput);
+    }
+    if (worldFamily === "ocean") {
+      return buildPreviewOceanSceneConfig(previewInput);
+    }
+    return buildPreviewSceneConfig(previewInput);
   }, [debouncedPayload, worldFamily]);
 
   // The preview mounts the selected family immediately, so that chunk is already
@@ -265,7 +323,7 @@ export default function HomePage() {
   return (
     <main
       className={`relative flex min-h-screen flex-col lg:block lg:h-screen lg:overflow-hidden ${
-        worldFamily === "nature" ? "forest-chrome" : ""
+        FAMILY_COPY[worldFamily].chromeClassName
       }`}
     >
       <GeneratingOverlay
@@ -316,7 +374,7 @@ export default function HomePage() {
           {/* The world's owner, live from the form (payload defaults keep it
               non-empty), so the placard reads like the mockup's title card. */}
           <div className="font-display text-lg font-semibold leading-tight text-paper">
-            {payload.nickname}&rsquo;s {worldFamily === "nature" ? "Forest" : "Universe"}
+            {payload.nickname}&rsquo;s {FAMILY_COPY[worldFamily].noun}
           </div>
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brass">Curated from</div>
@@ -549,10 +607,10 @@ export default function HomePage() {
 
               <div className="grid gap-3">
                 <span className="font-mono text-xs uppercase tracking-widest text-brass">
-                  {worldFamily === "nature" ? "Forest Mood" : "Atmospheric Mood"}
+                  {FAMILY_COPY[worldFamily].moodLabel}
                 </span>
                 <div className="grid grid-cols-2 gap-3">
-                  {(worldFamily === "nature" ? natureMoodOptions : moodOptions).map((option) => {
+                  {FAMILY_COPY[worldFamily].moodOptions.map((option) => {
                     const selected = mood === option.value;
                     return (
                       <button
@@ -582,9 +640,10 @@ export default function HomePage() {
               </div>
 
               {/* World Style only shapes universe visuals (sky/orbit themes);
-                  the forest's look comes from mood/season, so the section
-                  hides for nature (the stored theme keeps its default). */}
-              <div className={worldFamily === "nature" ? "hidden" : "grid gap-3"}>
+                  the forest's look comes from mood/season and the ocean's from
+                  mood/depth, so the section hides for both (their stored theme
+                  keeps its default). */}
+              <div className={FAMILY_COPY[worldFamily].showsWorldStylePicker ? "grid gap-3" : "hidden"}>
                 <span className="font-mono text-xs uppercase tracking-widest text-brass">World Style</span>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {styleOptions.map((option) => {
@@ -648,7 +707,7 @@ export default function HomePage() {
               className="focus-ring btn-brass inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold uppercase tracking-[0.04em] transition disabled:cursor-wait disabled:opacity-70"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              {worldFamily === "nature" ? "Curate this forest" : "Curate this universe"}
+              {FAMILY_COPY[worldFamily].submitLabel}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>

@@ -14,7 +14,8 @@ import { apiBaseUrlForFamily, gatewayOriginUrl } from "./gateway";
 // gateway contract; the gateway translates those requests into NATS traffic.
 const API_BASE_URLS_BY_FAMILY: Record<WorldFamily, string> = {
   universe: apiBaseUrlForFamily("universe"),
-  nature: apiBaseUrlForFamily("nature")
+  nature: apiBaseUrlForFamily("nature"),
+  ocean: apiBaseUrlForFamily("ocean")
 };
 
 const PENDING_GENERATION_STORAGE_KEY = "myunivokai:pending-generation:v1";
@@ -37,6 +38,21 @@ export type GenerationOptions = {
 };
 
 export const DEFAULT_WORLD_FAMILY: WorldFamily = "universe";
+
+/**
+ * Whether a value read back out of sessionStorage names a family this build
+ * knows.
+ *
+ * Derived from API_BASE_URLS_BY_FAMILY rather than written out as a literal
+ * comparison. The literal it replaces (`family === "universe" || family ===
+ * "nature"`) failed no build when the ocean family was added — a resumed
+ * generation would simply be discarded on reload, silently, for the newest
+ * family only. Because that record is typed `Record<WorldFamily, string>`, the
+ * compiler now refuses to let the two drift.
+ */
+function isKnownWorldFamily(value: unknown): value is WorldFamily {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(API_BASE_URLS_BY_FAMILY, value);
+}
 export class ApiError extends Error {
   code: string;
   details: unknown[];
@@ -173,7 +189,7 @@ function loadPendingGeneration(): PendingGeneration | null {
     const pendingGeneration = JSON.parse(storedValue) as Partial<PendingGeneration>;
     if (
       typeof pendingGeneration.jobId === "string" &&
-      (pendingGeneration.family === "universe" || pendingGeneration.family === "nature") &&
+      isKnownWorldFamily(pendingGeneration.family) &&
       typeof pendingGeneration.startedAtMilliseconds === "number"
     ) {
       return pendingGeneration as PendingGeneration;

@@ -892,7 +892,7 @@ func mergeFamilyJobTotals(results pgx.BatchResults, totals map[contracts.WorldFa
 // not reorder themselves between refreshes.
 func orderFamilyTotals(totals map[contracts.WorldFamily]*contracts.AnalyticsFamilyTotals) []contracts.AnalyticsFamilyTotals {
 	ordered := make([]contracts.AnalyticsFamilyTotals, 0, len(totals))
-	for _, family := range []contracts.WorldFamily{contracts.WorldFamilyUniverse, contracts.WorldFamilyNature} {
+	for _, family := range []contracts.WorldFamily{contracts.WorldFamilyUniverse, contracts.WorldFamilyNature, contracts.WorldFamilyOcean} {
 		if row, found := totals[family]; found {
 			ordered = append(ordered, *row)
 			delete(totals, family)

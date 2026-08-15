@@ -43,6 +43,42 @@
         "spirit-wolf",
         "verdant-stag"
       ]
+    },
+    {
+      "key": "ocean-bioluminescent-bloom",
+      "family": "ocean",
+      "probability": 0.35,
+      "seedSuffix": "-ocean-rare-bioluminescent-bloom",
+      "species": []
+    },
+    {
+      "key": "ocean-sunken-relic",
+      "family": "ocean",
+      "probability": 0.2,
+      "seedSuffix": "-ocean-rare-sunken-relic",
+      "species": []
+    },
+    {
+      "key": "ocean-whale-passage",
+      "family": "ocean",
+      "probability": 0.12,
+      "seedSuffix": "-ocean-rare-whale-passage",
+      "species": [
+        "humpback",
+        "blue-whale",
+        "manta-parade"
+      ]
+    },
+    {
+      "key": "ocean-abyss-visitor",
+      "family": "ocean",
+      "probability": 0.05,
+      "seedSuffix": "-ocean-rare-abyss-visitor",
+      "species": [
+        "anglerfish",
+        "giant-squid",
+        "gulper-eel"
+      ]
     }
   ],
   "rolls": [
@@ -70,6 +106,24 @@
           "feature": "forest-special-animal",
           "roll": 0.3699,
           "speciesRoll": 0.5807
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.0162
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.8693
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.9728,
+          "speciesRoll": 0.9041
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.1867,
+          "speciesRoll": 0.2372
         }
       ]
     },
@@ -97,6 +151,24 @@
           "feature": "forest-special-animal",
           "roll": 0.7018,
           "speciesRoll": 0.2626
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.5747
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.0148
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.6258,
+          "speciesRoll": 0.1575
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.347,
+          "speciesRoll": 0.5094
         }
       ]
     },
@@ -124,6 +196,24 @@
           "feature": "forest-special-animal",
           "roll": 0.644,
           "speciesRoll": 0.1922
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.5526
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.8787
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.8666,
+          "speciesRoll": 0.6132
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.339,
+          "speciesRoll": 0.284
         }
       ]
     },
@@ -151,6 +241,24 @@
           "feature": "forest-special-animal",
           "roll": 0.5241,
           "speciesRoll": 0.9557
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.1523
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.3039
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.0216,
+          "speciesRoll": 0.0456
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.0595,
+          "speciesRoll": 0.3007
         }
       ]
     },
@@ -178,6 +286,24 @@
           "feature": "forest-special-animal",
           "roll": 0.8317,
           "speciesRoll": 0.7262
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.8714
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.5378
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.3099,
+          "speciesRoll": 0.04
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.5998,
+          "speciesRoll": 0.6414
         }
       ]
     },
@@ -205,6 +331,24 @@
           "feature": "forest-special-animal",
           "roll": 0.3061,
           "speciesRoll": 0.1247
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.695
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.5947
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.2856,
+          "speciesRoll": 0.2256
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.7757,
+          "speciesRoll": 0.6455
         }
       ]
     },
@@ -232,6 +376,24 @@
           "feature": "forest-special-animal",
           "roll": 0.5198,
           "speciesRoll": 0.3444
+        },
+        {
+          "feature": "ocean-bioluminescent-bloom",
+          "roll": 0.3005
+        },
+        {
+          "feature": "ocean-sunken-relic",
+          "roll": 0.0873
+        },
+        {
+          "feature": "ocean-whale-passage",
+          "roll": 0.4988,
+          "speciesRoll": 0.472
+        },
+        {
+          "feature": "ocean-abyss-visitor",
+          "roll": 0.7717,
+          "speciesRoll": 0.9062
         }
       ]
     }

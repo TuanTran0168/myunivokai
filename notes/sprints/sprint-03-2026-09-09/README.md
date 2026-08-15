@@ -1,6 +1,6 @@
 # Sprint 03 — City vertical slice
 
-> **Starts:** 2026-08-19
+> **Starts:** 2026-09-09 (moved from 2026-08-19 on 2026-08-15, when the owner brought the Ocean family forward — see Sprint 06)
 > **Status:** Planned; starts only after Sprint 2 gates
 > **Last source review:** 2026-07-22
 

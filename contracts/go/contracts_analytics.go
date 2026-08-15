@@ -18,6 +18,7 @@ const (
 	// already publish "myunivokai.events.<family>.>" as a wildcard.
 	UniverseWorldChangedEventSubject = "myunivokai.events.universe.world.changed.v1"
 	NatureWorldChangedEventSubject   = "myunivokai.events.nature.world.changed.v1"
+	OceanWorldChangedEventSubject    = "myunivokai.events.ocean.world.changed.v1"
 
 	// The analytics query subjects need no gateway ACL change either —
 	// the gateway may already publish "myunivokai.queries.>".
@@ -46,6 +47,8 @@ func (family WorldFamily) WorldChangedEventSubject() (string, error) {
 		return UniverseWorldChangedEventSubject, nil
 	case WorldFamilyNature:
 		return NatureWorldChangedEventSubject, nil
+	case WorldFamilyOcean:
+		return OceanWorldChangedEventSubject, nil
 	default:
 		return "", fmt.Errorf("unsupported world family %q", family)
 	}

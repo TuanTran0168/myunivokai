@@ -102,6 +102,54 @@ var RarityCatalogue = []RarityFeature{
 			{Key: "verdant-stag", Label: "Verdant Stag"},
 		},
 	},
+	// The ocean suffixes are clean, unlike the forest pair above: OceanRenderer
+	// receives the variant seed directly as SceneRendererProps.seed and does not
+	// have to start from the middle of a placement-seed chain.
+	{
+		Key:         "ocean-bioluminescent-bloom",
+		Label:       "Bioluminescent Bloom",
+		Family:      WorldFamilyOcean,
+		Probability: 0.35,
+		SeedSuffix:  "-ocean-rare-bioluminescent-bloom",
+	},
+	{
+		Key:         "ocean-sunken-relic",
+		Label:       "Sunken Relic",
+		Family:      WorldFamilyOcean,
+		Probability: 0.2,
+		SeedSuffix:  "-ocean-rare-sunken-relic",
+	},
+	{
+		Key:         "ocean-whale-passage",
+		Label:       "Whale Passage",
+		Family:      WorldFamilyOcean,
+		Probability: 0.12,
+		SeedSuffix:  "-ocean-rare-whale-passage",
+		Species: []RaritySpecies{
+			{Key: "humpback", Label: "Humpback"},
+			{Key: "blue-whale", Label: "Blue Whale"},
+			{Key: "manta-parade", Label: "Manta Parade"},
+		},
+	},
+	{
+		// This list was the one decision the ocean plan deliberately deferred:
+		// species are selected by floor(roll * len), so the ORDER is frozen the
+		// moment the first world ships, and shipping a species the renderer
+		// cannot draw is the one mistake here that cannot be undone cheaply.
+		// It is settled now, against what the procedural ocean-1 catalogue
+		// actually builds — all three are geometry, not a download that may
+		// never arrive.
+		Key:         "ocean-abyss-visitor",
+		Label:       "Abyssal Visitor",
+		Family:      WorldFamilyOcean,
+		Probability: 0.05,
+		SeedSuffix:  "-ocean-rare-abyss-visitor",
+		Species: []RaritySpecies{
+			{Key: "anglerfish", Label: "Anglerfish"},
+			{Key: "giant-squid", Label: "Giant Squid"},
+			{Key: "gulper-eel", Label: "Gulper Eel"},
+		},
+	},
 }
 
 // RarityFeatureByKey looks a feature up, reporting whether it exists rather

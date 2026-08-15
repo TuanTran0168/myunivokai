@@ -69,7 +69,7 @@ func BuildProjection(subject, messageID string, payload []byte) (models.Projecti
 			},
 		}, nil
 
-	case contracts.UniverseCompletedEventSubject, contracts.NatureCompletedEventSubject:
+	case contracts.UniverseCompletedEventSubject, contracts.NatureCompletedEventSubject, contracts.OceanCompletedEventSubject:
 		envelope, err := decodeEnvelope[contracts.FamilyCompletedData](payload)
 		if err != nil {
 			return models.Projection{}, err
@@ -88,7 +88,7 @@ func BuildProjection(subject, messageID string, payload []byte) (models.Projecti
 			Snapshot: envelope.Data.Snapshot,
 		}, nil
 
-	case contracts.UniverseFailedEventSubject, contracts.NatureFailedEventSubject:
+	case contracts.UniverseFailedEventSubject, contracts.NatureFailedEventSubject, contracts.OceanFailedEventSubject:
 		envelope, err := decodeEnvelope[contracts.FamilyFailedData](payload)
 		if err != nil {
 			return models.Projection{}, err
@@ -103,7 +103,7 @@ func BuildProjection(subject, messageID string, payload []byte) (models.Projecti
 			},
 		}, nil
 
-	case contracts.UniverseWorldChangedEventSubject, contracts.NatureWorldChangedEventSubject:
+	case contracts.UniverseWorldChangedEventSubject, contracts.NatureWorldChangedEventSubject, contracts.OceanWorldChangedEventSubject:
 		envelope, err := decodeEnvelope[contracts.FamilyWorldChangedData](payload)
 		if err != nil {
 			return models.Projection{}, err

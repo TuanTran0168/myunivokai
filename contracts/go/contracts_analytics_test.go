@@ -9,6 +9,7 @@ func TestWorldChangedEventSubjectCoversEveryFamily(t *testing.T) {
 	expectedSubjects := map[WorldFamily]string{
 		WorldFamilyUniverse: UniverseWorldChangedEventSubject,
 		WorldFamilyNature:   NatureWorldChangedEventSubject,
+		WorldFamilyOcean:    OceanWorldChangedEventSubject,
 	}
 	for family, expectedSubject := range expectedSubjects {
 		subject, err := family.WorldChangedEventSubject()
@@ -28,7 +29,7 @@ func TestWorldChangedEventSubjectCoversEveryFamily(t *testing.T) {
 // user subscribes to that same wildcard, so a subject that drifts out of the
 // events namespace would silently never be delivered or never be captured.
 func TestAnalyticsSubjectsStayInsideTheirNamespaces(t *testing.T) {
-	eventSubjects := []string{UniverseWorldChangedEventSubject, NatureWorldChangedEventSubject}
+	eventSubjects := []string{UniverseWorldChangedEventSubject, NatureWorldChangedEventSubject, OceanWorldChangedEventSubject}
 	for _, subject := range eventSubjects {
 		if got := subject[:len("myunivokai.events.")]; got != "myunivokai.events." {
 			t.Fatalf("%q is not under myunivokai.events.", subject)
@@ -105,6 +106,7 @@ func TestWorldChangedFixturesDecodeIntoTheSnapshotContract(t *testing.T) {
 	fixtures := map[string]WorldFamily{
 		"../fixtures/universe-world-changed-event.v1.json": WorldFamilyUniverse,
 		"../fixtures/nature-world-changed-event.v1.json":   WorldFamilyNature,
+		"../fixtures/ocean-world-changed-event.v1.json":    WorldFamilyOcean,
 	}
 	for fixturePath, expectedFamily := range fixtures {
 		var envelope Envelope[FamilyWorldChangedData]

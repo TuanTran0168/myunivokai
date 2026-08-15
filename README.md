@@ -104,6 +104,7 @@ flowchart TB
 | `services/dna-service` | Handles AI orchestration, root generation jobs, ProfileDNA versioning, and the transactional outbox. |
 | `services/universe-service` | Computes deterministic solar-system worlds and variants from a seed. No AI calls. |
 | `services/nature-service` | Computes deterministic forest worlds and variants from a seed. No AI calls. |
+| `services/ocean-service` | Computes deterministic ocean worlds from a seed and a depth. Water, fog and light come from a measured attenuation curve and are stored, never recomputed. No AI calls. |
 | `services/auth-service` | Staff identity: login, refresh, roles, permissions, audit. Core NATS request-reply only. |
 | `services/analytics-service` | The admin read model. Consumes events, writes its own database, answers admin queries — it publishes nothing and calls no other service, so an admin page waits only on the gateway, auth and analytics. |
 | `services/telemetry-service` | **[Rust]** The platform read model. Consumes one aggregated rollup envelope per minute from the gateway and answers telemetry queries — request volume, per-route latency, per-backend round trips, cache hit rate. Stores them in its own schema or forwards them to Grafana Cloud, chosen by one environment variable. |
@@ -362,6 +363,7 @@ docker compose --env-file services/universe-service/.env.local `
 | `services/dna-service/.env.local` | `services/dna-service/docker-compose-local.yaml` | Database, NATS, AI provider config, API keys. |
 | `services/universe-service/.env.local` | `services/universe-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `services/nature-service/.env.local` | `services/nature-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
+| `services/ocean-service/.env.local` | `services/ocean-service/docker-compose-local.yaml` | Database, NATS, outbox settings. |
 | `services/auth-service/.env.local` | `services/auth-service/docker-compose-local.yaml` | Database, NATS, Redis, token and Argon2id settings. |
 | `services/analytics-service/.env.local` | `services/analytics-service/docker-compose-local.yaml` | Database, NATS, event-consumer settings. No credentials — it verifies no token and calls no provider. |
 | `services/telemetry-service/.env.local` | `services/telemetry-service/docker-compose-local.yaml` | Sink selection, database, NATS, retention. No credentials, for the same reason. |
@@ -439,6 +441,7 @@ environment:
 │   │   ├── Dockerfile.prod
 │   │   └── internal/                 # Seed/PRNG math, models, database
 │   ├── nature-service/               # Forest world generator worker
+│   ├── ocean-service/                # Ocean world generator worker
 │   │   ├── .env.example              # Template: Database, NATS, outbox
 │   │   ├── Dockerfile.prod
 │   │   └── internal/                 # Seed/PRNG math, models, database
@@ -501,6 +504,9 @@ cd ../universe-service; go test ./...; go vet ./...; go build ./...
 
 # Backend — nature-service
 cd ../nature-service; go test ./...; go vet ./...; go build ./...
+
+# Backend — ocean-service
+cd ../ocean-service; go test ./...; go vet ./...; go build ./...
 
 # Backend — auth-service
 cd ../auth-service; go test ./...; go vet ./...; go build ./...
