@@ -84,6 +84,53 @@ rows either side of the belly seam, real myctophid anatomy, so the existing
 "a lanternfish is a dark fish wearing lights" comment in `oceanRig.ts` is
 finally true at the pixel level instead of as a uniform whole-body glow.
 
+## Thirteen more species, same reasoning: nothing free exists for any of them
+
+A real search — Poly Pizza (every source it aggregates, not just Quaternius),
+Quaternius's full itch.io catalogue, Kenney.nl, several itch.io "deep sea
+creatures" packs, OpenGameArt — turned up no free CC0/CC-BY model for
+barracuda, orca, clownfish, pufferfish, viperfish, black dragonfish,
+fangtooth, gulper/pelican eel, hatchetfish, giant oarfish, or giant isopod.
+(Octopus and squid models exist on Poly Pizza, but only as CC0 sushi-ingredient
+poses from Quaternius's *Modular Sushi Restaurant Kit* or as CC-BY "Poly by
+Google" archive pieces — neither fits a living swim pose under this family's
+CC0-only bar, which is why the cephalopods are their own, separate pass.)
+
+Every one of the eleven is `oceanRigBodies.ts` geometry plus, since none has a
+GLB, an `oceanFishSkinTexture.ts` bake — nine reuse the existing
+`bodyGeometry()`/`fusiform()` machinery with new parameters (four of those,
+barracuda/orca/clownfish/pufferfish, reuse an EXISTING archetype outright:
+`shark`, `dolphin` and `reefFish` respectively, the same way swordfish already
+reuses `shark`). Two needed a genuinely new construction:
+
+- **`ribbon`** (giant oarfish): extreme lateral compression plus a continuous
+  "mane" dorsal crest built from sixteen small picket fins instead of the one
+  or two hand-placed fins every other archetype uses, since no single quad can
+  carry a crest whose height varies continuously from head to tail.
+- **`isopod`** (giant isopod): a deliberately cheap approximation. A real
+  segmented, flattened carapace is not a body of revolution at all, and
+  building one properly is a much larger job than one rare, non-schooling
+  creature justifies. A symmetric profile (blunt at both ends, unlike every
+  fish archetype here) plus a new periodic dark-banding option in the albedo
+  bake (`FishSkinOptions.bands`) suggests the tergite-plate seams instead.
+
+Black dragonfish is the one species here with its own glow colour
+(`FaunaSpecies.glowColor`) rather than the teal every other deep species
+shares — real *Idiacanthus* bioluminescence is red, which most deep-sea eyes
+can't see, making it a private searchlight. Fangtooth is the one species that
+opts OUT of the ambient glow wash entirely (`glowColor: null`): it is
+confirmed non-bioluminescent, relying on ultra-black, light-trapping skin
+instead, which is also why it gets a much rougher, non-metallic material
+override (`FaunaSpecies.roughness`/`metalness`) rather than the rig's default
+— a light-trap reads as matte, not as polished plastic.
+
+Sea turtle, seahorse, true segmented-carapace isopod, dumbo octopus and giant
+Pacific octopus were considered and deliberately deferred: the first two don't
+fit a Z-axis body of revolution at all (a shell-and-flippers or a bent,
+segmented spine each want their own construction), and the latter three are
+cheap follow-ons once the cephalopod tentacle geometry exists, better done
+once that pass has proven the pattern out than rushed alongside it.
+
 ## Not used: PBR textures — [Poly Haven](https://polyhaven.com), CC0
 
 Six 1k tiling maps were fetched and then **removed without ever being loaded**,

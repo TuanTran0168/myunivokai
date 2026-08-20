@@ -78,16 +78,72 @@ function jitterFor(seed: string, row: number, slot: number): number {
   return ((hash >>> 0) % 10000) / 10000;
 }
 
+/** One glowing dot in the emissive bake's own UV space. */
+export type PhotophoreDot = { u: number; v: number; radius?: number };
+
 export type FishSkinOptions = {
   seed: string;
   /**
    * Photophore rows either side of the belly seam (u = 0.75), the real
    * anatomy of a myctophid: paired ventral photophore rows running most of
-   * the body's length. Nothing else in this rig's species table asks for
-   * this, so it stays an opt-in rather than a field every species carries.
+   * the body's length. `true` keeps that exact two-row layout; an explicit
+   * array of dots switches to drawing exactly those points instead, for
+   * species whose photophores don't sit in a myctophid's ventral rows —
+   * vampire squid's arm tips and fin bases, for one.
    */
-  photophores?: boolean;
+  photophores?: boolean | PhotophoreDot[];
+  /**
+   * One or two extra glowing points, ADDITIVE to whatever `photophores`
+   * already draws (or drawn alone if `photophores` is unset) — a viperfish's
+   * or dragonfish's single lure/barbel tip, at that fin's own
+   * `u = 0.5, v = <the fin's along>` convention (every fin in
+   * oceanRigBodies.ts samples u = 0.5, so this needs no geometry change).
+   */
+  extraPoints?: PhotophoreDot[];
+  /**
+   * Periodic dark seams multiplied into the albedo mottle, independent of the
+   * photophore path — used only to suggest the giant isopod's tergite-plate
+   * boundaries on an otherwise ordinary body-of-revolution mesh. The number
+   * of seams running head to tail.
+   */
+  bands?: number;
 };
+
+const MYCTOPHID_ROWS_U = [0.68, 0.82] as const;
+const MYCTOPHID_DOTS_PER_ROW = 11;
+
+/** The paired ventral rows every lanternfish/hatchetfish bake has always drawn. */
+function myctophidDots(seed: string): PhotophoreDot[] {
+  const dots: PhotophoreDot[] = [];
+  for (let row = 0; row < MYCTOPHID_ROWS_U.length; row += 1) {
+    for (let slot = 0; slot < MYCTOPHID_DOTS_PER_ROW; slot += 1) {
+      const baseV = 0.12 + (slot / (MYCTOPHID_DOTS_PER_ROW - 1)) * 0.72;
+      const jitterV = (jitterFor(seed, row, slot) - 0.5) * 0.03;
+      dots.push({ u: MYCTOPHID_ROWS_U[row], v: baseV + jitterV });
+    }
+  }
+  return dots;
+}
+
+function drawDot(context: CanvasRenderingContext2D, dot: PhotophoreDot): void {
+  const centerX = dot.u * MAP_WIDTH;
+  const centerY = dot.v * MAP_HEIGHT;
+  const radius = MAP_HEIGHT * (dot.radius ?? 0.028);
+  const paint = (x: number) => {
+    const gradient = context.createRadialGradient(x, centerY, 0, x, centerY, radius);
+    gradient.addColorStop(0, "#FFFFFF");
+    gradient.addColorStop(0.55, "#FFFFFF");
+    gradient.addColorStop(1, "#00000000");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(x, centerY, radius, 0, Math.PI * 2);
+    context.fill();
+  };
+  paint(centerX);
+  // u wraps: a dot near u = 0/1 would otherwise clip at the canvas edge.
+  if (centerX < radius) paint(centerX + MAP_WIDTH);
+  else if (centerX > MAP_WIDTH - radius) paint(centerX - MAP_WIDTH);
+}
 
 export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
   const albedoCanvas = document.createElement("canvas");
@@ -112,7 +168,14 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
       // Mottling only, never a net brightness shift: the swim shader's own
       // vBelly countershading already carries the dorsal/ventral gradient, and
       // stacking a second one here would double it.
-      const shade = Math.min(255, Math.round((0.86 + scaleMottle(u, v) * 0.28) * 255));
+      let mottle = 0.86 + scaleMottle(u, v) * 0.28;
+      if (options.bands) {
+        // Thin dark seams at regular intervals along v — cos^8 stays near 1
+        // (no darkening) except right at each seam, where it spikes to 0.
+        const seam = Math.pow(Math.max(0, Math.cos(v * options.bands * Math.PI * 2)), 8);
+        mottle *= 1 - 0.25 * seam;
+      }
+      const shade = Math.min(255, Math.round(mottle * 255));
       const offset = (y * MAP_WIDTH + x) * 4;
       albedoImage.data[offset] = shade;
       albedoImage.data[offset + 1] = shade;
@@ -132,8 +195,17 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
   map.wrapS = RepeatWrapping;
   map.wrapT = RepeatWrapping;
 
+  const dots: PhotophoreDot[] = [
+    ...(options.photophores === true
+      ? myctophidDots(options.seed)
+      : Array.isArray(options.photophores)
+        ? options.photophores
+        : []),
+    ...(options.extraPoints ?? []),
+  ];
+
   let emissiveMap: CanvasTexture | null = null;
-  if (options.photophores) {
+  if (dots.length > 0) {
     const emissiveCanvas = document.createElement("canvas");
     emissiveCanvas.width = MAP_WIDTH;
     emissiveCanvas.height = MAP_HEIGHT;
@@ -143,42 +215,7 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
     }
     emissiveContext.fillStyle = "#000000";
     emissiveContext.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-    emissiveContext.fillStyle = "#FFFFFF";
-    // Paired rows straddling the belly seam (u = 0.75), the two most obvious
-    // ventral photophore lines a myctophid actually carries. Spaced along v
-    // from just behind the head to just short of the tail, jittered per slot
-    // so twelve dots do not read as a printed scale.
-    const rowsU = [0.68, 0.82];
-    const dotsPerRow = 11;
-    for (let row = 0; row < rowsU.length; row += 1) {
-      for (let slot = 0; slot < dotsPerRow; slot += 1) {
-        const baseV = 0.12 + (slot / (dotsPerRow - 1)) * 0.72;
-        const jitterV = (jitterFor(options.seed, row, slot) - 0.5) * 0.03;
-        const centerX = rowsU[row] * MAP_WIDTH;
-        const centerY = (baseV + jitterV) * MAP_HEIGHT;
-        const radius = MAP_HEIGHT * 0.028;
-        const gradient = emissiveContext.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
-        gradient.addColorStop(0, "#FFFFFF");
-        gradient.addColorStop(0.55, "#FFFFFF");
-        gradient.addColorStop(1, "#00000000");
-        emissiveContext.fillStyle = gradient;
-        emissiveContext.beginPath();
-        emissiveContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        emissiveContext.fill();
-        // u wraps: a dot near u = 0/1 would otherwise clip at the canvas edge.
-        // Neither row sits there (0.68/0.82 are both mid-canvas), so this is
-        // future-proofing rather than a bug fix for the rows actually used.
-        if (centerX < radius) {
-          emissiveContext.beginPath();
-          emissiveContext.arc(centerX + MAP_WIDTH, centerY, radius, 0, Math.PI * 2);
-          emissiveContext.fill();
-        } else if (centerX > MAP_WIDTH - radius) {
-          emissiveContext.beginPath();
-          emissiveContext.arc(centerX - MAP_WIDTH, centerY, radius, 0, Math.PI * 2);
-          emissiveContext.fill();
-        }
-      }
-    }
+    for (const dot of dots) drawDot(emissiveContext, dot);
     emissiveMap = new CanvasTexture(emissiveCanvas);
     // Emissive intensity is linear light multiplied straight in; encoding it
     // sRGB here would be the identical mistake round 3 of this family's work

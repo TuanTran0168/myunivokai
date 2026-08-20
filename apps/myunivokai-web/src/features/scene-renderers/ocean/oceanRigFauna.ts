@@ -38,7 +38,7 @@ import {
   Vector3,
 } from "three";
 import { bodyForArchetype, type BodyArchetype } from "./oceanRigBodies";
-import { createFishSkinBake } from "./oceanFishSkinTexture";
+import { createFishSkinBake, type PhotophoreDot } from "./oceanFishSkinTexture";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { randomFromSeed } from "@/lib/scene";
 import { OCEAN_MODEL_BASE_PATH } from "./oceanFaunaModels";
@@ -151,7 +151,21 @@ export type FaunaSpecies = {
    * wearing lights" rather than as a uniformly pale flake. See
    * oceanFishSkinTexture.ts.
    */
-  photophores?: boolean;
+  photophores?: boolean | PhotophoreDot[];
+  /** One or two extra glowing points, additive to `photophores` — see FishSkinOptions.extraPoints. */
+  extraPoints?: PhotophoreDot[];
+  /** Periodic dark seams baked into the albedo — see FishSkinOptions.bands. Only the isopod uses this. */
+  bands?: number;
+  /**
+   * Overrides the hardcoded teal every non-nearField species otherwise
+   * shares. `undefined` keeps that default; `null` opts a species (fangtooth)
+   * out of the ambient glow wash entirely. See oceanRig.ts.
+   */
+  glowColor?: string | null;
+  /** Defaults to 0.44 — ultra-black deep-sea skin (fangtooth) wants this much higher, so it doesn't render glossy. */
+  roughness?: number;
+  /** Defaults to 0.3. */
+  metalness?: number;
   /** Rides a rotating bait-ball instead of a flat ring. See VortexStyle. */
   vortex?: VortexStyle;
   /** A threat: fleesPredators schools bias away from its leaders' positions. */
@@ -536,6 +550,284 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     speedScale: 0.06,
     tightRing: true,
   },
+  // ---- thirteen more, none of them found free anywhere (see ATTRIBUTION.md) ---
+  // Every one below is procedural only — no file — for the same reason the
+  // four above were: no CC0 model exists for any of them, so the choice was
+  // never "download or draw", it was "draw or omit the species entirely".
+  {
+    key: "barracuda",
+    color: "#9AA5AC",
+    body: "shark",
+    label: "barracuda",
+    swim: { onset: 0.8, amplitude: 0.06, waves: 0.5, beat: 1.8 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 100,
+    count: 5,
+    leaders: 5,
+    size: 1.8,
+    spread: 1,
+    pathRadius: 55,
+    heightBase: -5,
+    heightRange: 10,
+    speedScale: 1.0,
+    tightRing: true,
+    // Another threat prey reacts to, alongside the reef shark and swordfish.
+    predator: true,
+  },
+  {
+    key: "orca",
+    color: "#12161A",
+    body: "dolphin",
+    label: "orca pod",
+    // A cetacean, bigger and slower-beating than the dolphin pod at the same
+    // size scale — beat frequency falls with size. The existing counter-
+    // shading (dark back, bright belly) already fakes an orca's cape/underside
+    // pattern for free from a near-black base colour, with no new code.
+    swim: { onset: 0.62, amplitude: 0.06, waves: 0.42, beat: 0.5, vertical: true },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 200,
+    needsSurface: true,
+    count: 5,
+    leaders: 2,
+    size: 7,
+    spread: 5,
+    pathRadius: 85,
+    heightBase: -6,
+    heightRange: 9,
+    speedScale: 0.9,
+    tightRing: true,
+    surfacing: true,
+    predator: true,
+  },
+  {
+    key: "clownfish",
+    color: "#FF6B35",
+    nearField: true,
+    body: "reefFish",
+    label: "clownfish",
+    swim: { onset: 0.78, amplitude: 0.04, waves: 0.6, beat: 2.2 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 15,
+    needsSeafloor: true,
+    count: 60,
+    leaders: 6,
+    size: 0.11,
+    spread: 2,
+    pathRadius: 10,
+    heightBase: -6,
+    heightRange: 3,
+    speedScale: 1.1,
+  },
+  {
+    key: "pufferfish",
+    color: "#C9A227",
+    body: "reefFish",
+    label: "pufferfish",
+    // A round body at rest, not the alarmed sphere — the same compromise
+    // blobfish already accepts from this same archetype.
+    swim: { onset: 0.65, amplitude: 0.02, waves: 0.5, beat: 0.6 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 30,
+    needsSeafloor: true,
+    count: 8,
+    leaders: 8,
+    size: 0.3,
+    spread: 1,
+    pathRadius: 14,
+    heightBase: -5,
+    heightRange: 4,
+    speedScale: 0.15,
+    tightRing: true,
+  },
+  {
+    key: "viperfish",
+    color: "#141A20",
+    body: "viperfish",
+    label: "viperfish",
+    // Paired body rows like a myctophid, plus one extra point at the lure's
+    // tip (u = 0.5, matching every fin's own convention; v = 0.08 matches the
+    // viperfish archetype's lure fin `along`).
+    photophores: true,
+    extraPoints: [{ u: 0.5, v: 0.08, radius: 0.024 }],
+    swim: { onset: 0.5, amplitude: 0.1, waves: 0.8, beat: 1.1 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 200,
+    maxDepthMetres: 2000,
+    count: 5,
+    leaders: 5,
+    size: 0.35,
+    spread: 1.5,
+    pathRadius: 26,
+    heightBase: -8,
+    heightRange: 16,
+    speedScale: 0.5,
+    fleesPredators: true,
+    tightRing: true,
+  },
+  {
+    key: "blackDragonfish",
+    color: "#12181C",
+    body: "dragonfish",
+    label: "black dragonfish",
+    // Broader, scattered rows rather than the strict two-row myctophid
+    // pattern — real Idiacanthus carries photophores over most of the body.
+    // The chin barbel's tip is the one extra point (along = 0.06 there).
+    photophores: [
+      { u: 0.62, v: 0.2 }, { u: 0.62, v: 0.4 }, { u: 0.62, v: 0.6 }, { u: 0.62, v: 0.8 },
+      { u: 0.75, v: 0.15 }, { u: 0.75, v: 0.35 }, { u: 0.75, v: 0.55 }, { u: 0.75, v: 0.75 },
+      { u: 0.88, v: 0.25 }, { u: 0.88, v: 0.45 }, { u: 0.88, v: 0.65 },
+    ],
+    extraPoints: [{ u: 0.5, v: 0.06, radius: 0.022 }],
+    // Notably RED, not the teal every other deep species here carries — real
+    // Idiacanthus light is red, invisible to almost everything else down
+    // there, which is the whole point of it as a private searchlight.
+    glowColor: "#FF3322",
+    swim: { onset: 0.48, amplitude: 0.1, waves: 0.8, beat: 1.0 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 200,
+    maxDepthMetres: 2000,
+    count: 5,
+    leaders: 5,
+    size: 0.4,
+    spread: 1.5,
+    pathRadius: 28,
+    heightBase: -9,
+    heightRange: 18,
+    speedScale: 0.45,
+    tightRing: true,
+  },
+  {
+    key: "fangtooth",
+    color: "#0D0F12",
+    body: "fangtooth",
+    label: "fangtooth",
+    // Confirmed non-bioluminescent — relies on ultra-black, light-trapping
+    // skin instead, which is why this opts all the way OUT of the faint
+    // ambient wash every other deep species otherwise carries, and why it
+    // needs a rougher, non-metallic material: a light-trapping surface reads
+    // as matte, not as polished plastic.
+    glowColor: null,
+    roughness: 0.88,
+    metalness: 0.02,
+    swim: { onset: 0.62, amplitude: 0.04, waves: 0.55, beat: 0.8 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 500,
+    maxDepthMetres: 5000,
+    count: 4,
+    leaders: 4,
+    size: 0.16,
+    spread: 1,
+    pathRadius: 16,
+    heightBase: -5,
+    heightRange: 6,
+    speedScale: 0.2,
+    tightRing: true,
+  },
+  {
+    key: "gulperEel",
+    color: "#171310",
+    body: "gulperEel",
+    label: "gulper eel",
+    // Anguilliform: almost the whole body undulates, slowly — a huge gape on
+    // a whip is not a fish that darts.
+    swim: { onset: 0.3, amplitude: 0.12, waves: 1.0, beat: 0.6 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 500,
+    maxDepthMetres: 3000,
+    count: 3,
+    leaders: 3,
+    size: 0.8,
+    spread: 1,
+    pathRadius: 22,
+    heightBase: -6,
+    heightRange: 8,
+    speedScale: 0.15,
+    tightRing: true,
+  },
+  {
+    key: "hatchetfish",
+    color: "#C8D8DE",
+    body: "hatchetfish",
+    label: "hatchetfish",
+    // Real hatchetfish ventral counter-illumination is anatomically close
+    // enough to the myctophid pattern to reuse it verbatim.
+    photophores: true,
+    swim: { onset: 0.58, amplitude: 0.08, waves: 0.75, beat: 2.6 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 200,
+    maxDepthMetres: 1200,
+    count: 150,
+    leaders: 7,
+    size: 0.1,
+    spread: 4,
+    pathRadius: 22,
+    heightBase: -7,
+    heightRange: 10,
+    speedScale: 1.1,
+    fleesPredators: true,
+  },
+  {
+    key: "giantOarfish",
+    color: "#D9E4E8",
+    body: "ribbon",
+    label: "giant oarfish",
+    // Real oarfish locomotion is a dorsal-fin wave with the body held nearly
+    // straight; this rig only has a lateral body wave, so a gentle, mostly-
+    // whole-body ripple (low onset, many waves, slow beat) is the closest
+    // approximation available without a second locomotion model.
+    swim: { onset: 0.15, amplitude: 0.05, waves: 1.3, beat: 0.5 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 20,
+    maxDepthMetres: 1000,
+    count: 1,
+    leaders: 1,
+    size: 8,
+    spread: 1,
+    pathRadius: 100,
+    heightBase: -10,
+    heightRange: 15,
+    speedScale: 0.15,
+    tightRing: true,
+  },
+  {
+    key: "giantIsopod",
+    color: "#C9A38C",
+    body: "isopod",
+    label: "giant isopod",
+    // Periodic dark seams suggest tergite-plate boundaries on what is
+    // otherwise an ordinary body-of-revolution mesh — see FishSkinOptions.bands.
+    bands: 7,
+    needsSeafloor: true,
+    // A scavenger that barely moves at all.
+    swim: { onset: 0.7, amplitude: 0.02, waves: 0.6, beat: 0.3 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 200,
+    maxDepthMetres: 2500,
+    count: 4,
+    leaders: 4,
+    size: 0.5,
+    spread: 1,
+    pathRadius: 14,
+    heightBase: -1,
+    heightRange: 1,
+    speedScale: 0.03,
+    tightRing: true,
+  },
 ];
 
 type MergedPart = { geometry: BufferGeometry; color: Color };
@@ -794,8 +1086,8 @@ export function createSchool(
   const placeholder = bodyForArchetype(species.body);
   const material = new MeshStandardMaterial({
     color: new Color(species.color),
-    roughness: 0.44,
-    metalness: 0.3,
+    roughness: species.roughness ?? 0.44,
+    metalness: species.metalness ?? 0.3,
     side: DoubleSide,
     emissive: new Color("#000000"),
     emissiveIntensity: 0,
@@ -809,7 +1101,14 @@ export function createSchool(
   // material.color is left alone: the bake is a grey multiplier, not a
   // colour, so the near-field emissive copy below (which reads
   // material.color) still sees the species' real colour.
-  const skinBake = species.file ? null : createFishSkinBake({ seed, photophores: species.photophores });
+  const skinBake = species.file
+    ? null
+    : createFishSkinBake({
+        seed,
+        photophores: species.photophores,
+        extraPoints: species.extraPoints,
+        bands: species.bands,
+      });
   if (skinBake) {
     material.map = skinBake.map;
     if (skinBake.emissiveMap) material.emissiveMap = skinBake.emissiveMap;

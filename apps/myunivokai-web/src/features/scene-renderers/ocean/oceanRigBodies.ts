@@ -257,7 +257,14 @@ export type BodyArchetype =
   | "whale"
   | "manta"
   | "anglerfish"
-  | "lanternfish";
+  | "lanternfish"
+  | "viperfish"
+  | "dragonfish"
+  | "fangtooth"
+  | "gulperEel"
+  | "hatchetfish"
+  | "ribbon"
+  | "isopod";
 
 const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // Jacks and herring: the schooling default. The posterior 30-50% undulates.
@@ -343,6 +350,122 @@ const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
         { plane: "vertical", root: 0, tip: 0.4, tip2: -0.4, z0: -0.46, z1: -0.7, z2: -0.7, z3: -0.46, along: 1 },
         { plane: "vertical", root: 0.05, tip: 0.26, tip2: 0.05, z0: 0.02, z1: -0.1, z2: -0.2, z3: -0.2, along: 0.5 },
       ],
+    }),
+  // A deep-water ambush predator built almost entirely of jaw: an oversized
+  // gape and needle teeth on a slim body, the forked tail and second dorsal
+  // shared with lanternfish, plus a single dorsal-lure fin reusing the
+  // anglerfish illicium's own trick — thinner, since a viperfish's lure is a
+  // filament, not a rod.
+  viperfish: () =>
+    bodyGeometry({
+      lengthSegments: 17,
+      profile: fusiform(0.55, 1.7, 0.22),
+      widthRatio: 0.3,
+      heightRatio: 0.95,
+      fins: [
+        { plane: "vertical", root: 0, tip: 0.4, tip2: -0.4, z0: -0.46, z1: -0.7, z2: -0.7, z3: -0.46, along: 1 },
+        { plane: "vertical", root: 0.05, tip: 0.26, tip2: 0.05, z0: 0.02, z1: -0.1, z2: -0.2, z3: -0.2, along: 0.5 },
+        { plane: "vertical", root: 0.04, tip: 0.5, tip2: 0.46, z0: 0.3, z1: 0.42, z2: 0.48, z3: 0.34, along: 0.08 },
+      ],
+    }),
+  // The same ambush silhouette as the viperfish, with the lure moved to a
+  // barbel hanging FROM THE CHIN rather than a rod over the head — the quad
+  // builder makes no sign assumption on a fin's tip, so a negative tip simply
+  // hangs the blade downward instead of raising it.
+  dragonfish: () =>
+    bodyGeometry({
+      lengthSegments: 17,
+      profile: fusiform(0.5, 1.6, 0.2),
+      widthRatio: 0.28,
+      heightRatio: 0.9,
+      fins: [
+        { plane: "vertical", root: 0, tip: 0.4, tip2: -0.4, z0: -0.46, z1: -0.7, z2: -0.7, z3: -0.46, along: 1 },
+        { plane: "vertical", root: 0.05, tip: 0.26, tip2: 0.05, z0: 0.02, z1: -0.1, z2: -0.2, z3: -0.2, along: 0.5 },
+        { plane: "vertical", root: 0.03, tip: -0.55, tip2: -0.5, z0: 0.32, z1: -0.05, z2: -0.15, z3: 0.28, along: 0.06 },
+      ],
+    }),
+  // Almost all head — the profile peaks at t ~ 0.09, a short stubby body with
+  // no lure and only a small tail. No other archetype here is this front-heavy.
+  fangtooth: () =>
+    bodyGeometry({
+      lengthSegments: 11,
+      profile: fusiform(0.22, 2.3, 0.5),
+      widthRatio: 0.6,
+      heightRatio: 0.85,
+      fins: [{ plane: "vertical", root: 0, tip: 0.3, tip2: -0.3, z0: -0.4, z1: -0.5, z2: -0.5, z3: -0.4, along: 1 }],
+    }),
+  // The gape sits almost exactly at the nose (peak at t ~ 0.036) and tapers
+  // into a long thin whip — more length segments than any other archetype so
+  // the travelling wave has room to look smooth over that much body.
+  gulperEel: () =>
+    bodyGeometry({
+      lengthSegments: 24,
+      radialSegments: 8,
+      profile: fusiform(0.12, 3.2, 0.46),
+      widthRatio: 0.5,
+      heightRatio: 0.9,
+      fins: [{ plane: "vertical", root: 0, tip: 0.18, tip2: -0.18, z0: -0.44, z1: -0.5, z2: -0.5, z3: -0.44, along: 1 }],
+    }),
+  // The "hatchet blade" silhouette: taller than any other archetype here
+  // (heightRatio 1.9, against reefFish's 1.25), carrying the same ventral
+  // photophore rows as the lanternfish.
+  hatchetfish: () =>
+    bodyGeometry({
+      lengthSegments: 11,
+      profile: fusiform(0.58, 1.9, 0.34),
+      widthRatio: 0.22,
+      heightRatio: 1.9,
+      fins: [{ plane: "vertical", root: 0, tip: 0.3, tip2: -0.3, z0: -0.42, z1: -0.62, z2: -0.62, z3: -0.42, along: 1 }],
+    }),
+  // The giant oarfish: extreme lateral compression (widthRatio 0.08 — the
+  // whole point) and a continuous "mane" dorsal crest running nearly the full
+  // body, tallest near the head and settling to a low ridge by the tail —
+  // built as a run of small picket fins rather than one or two hand-placed
+  // ones, since no single quad can carry a continuously-varying crest height.
+  // No caudal fin: a real oarfish has none.
+  ribbon: () => {
+    const maneFins: Fin[] = [];
+    const picketCount = 16;
+    for (let i = 0; i < picketCount; i += 1) {
+      const along = i / (picketCount - 1);
+      const z = 0.5 - along;
+      const crestHeight = 0.35 * Math.exp(-along * 2.2) + 0.04;
+      const halfWidth = 0.04;
+      maneFins.push({
+        plane: "vertical",
+        root: 0,
+        tip: crestHeight,
+        tip2: crestHeight,
+        z0: z + halfWidth,
+        z1: z + halfWidth,
+        z2: z - halfWidth,
+        z3: z - halfWidth,
+        along,
+      });
+    }
+    return bodyGeometry({
+      lengthSegments: 28,
+      radialSegments: 8,
+      profile: fusiform(0.35, 1.15, 0.5),
+      widthRatio: 0.08,
+      heightRatio: 0.9,
+      fins: maneFins,
+    });
+  },
+  // A deliberately cheap stand-in for the giant isopod: a real segmented,
+  // flattened carapace is not a body of revolution at all, and building one
+  // properly is a much larger job than one rare, non-schooling creature
+  // justifies here. A SYMMETRIC profile — equal shoulder/taper, unlike every
+  // fish archetype above which pinches to a point only at the tail — gives a
+  // body blunt at both ends instead of tapering to a fish-like tail, flattened
+  // top-to-bottom (heightRatio 0.45) rather than side-to-side. No fins: an
+  // isopod has none large enough to read at this scale.
+  isopod: () =>
+    bodyGeometry({
+      lengthSegments: 9,
+      profile: fusiform(1.0, 1.0, 0.55),
+      widthRatio: 0.85,
+      heightRatio: 0.45,
     }),
 };
 

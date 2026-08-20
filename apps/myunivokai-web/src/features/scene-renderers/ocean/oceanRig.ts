@@ -774,12 +774,19 @@ export function createOceanRig(options: OceanRigOptions): OceanRig {
       // the water it is sitting in.
       school.material.emissive.copy(school.material.color);
       school.material.emissiveIntensity = 0.34 * (0.35 + brightness) + biolum * 0.8;
+    } else if (species.glowColor === null) {
+      // An explicit opt-out (fangtooth): ultra-black deep-sea skin traps
+      // light rather than emitting any, and the default teal wash would
+      // undercut that identity even at a faint intensity.
+      school.material.emissiveIntensity = 0;
     } else {
       // A lanternfish is a DARK fish wearing lights. Making the whole body emit
       // turns a school into a cloud of pale flakes, which is what the abyss
       // looked like; the body stays nearly black and the photophores are the
-      // light.
-      school.material.emissive.set("#3BE0C8");
+      // light. glowColor lets a species override the default teal — black
+      // dragonfish's real bioluminescence is red, not teal like every other
+      // deep species here.
+      school.material.emissive.set(species.glowColor ?? "#3BE0C8");
       school.material.emissiveIntensity = biolum * 0.16;
     }
     group.add(school.mesh);
