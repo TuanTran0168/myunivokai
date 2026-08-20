@@ -301,23 +301,39 @@ const assetCatalogVersion = "ocean-1"
 
 // oceanMoodProfile tunes the deterministic ocean numbers by atmospheric mood.
 //
-// Zone is a PIN, not a lean, and that is a correction. It used to be
-// `ZoneWeights [3]float64` — a probability per zone — on the reasoning that a
-// hard mapping would make repeated generations too samey. What it actually
-// produced was a control that lies: the create form labels these four options
-// DEPTH & MOOD and names them after depths, so choosing "The Abyss" and
-// receiving a view of the water surface is not pleasant variety, it is the
-// control not working. That combination had a 5% chance every time somebody
-// picked the abyss (15% weight on the shallows, times a one-in-three breach),
-// and it was reported as a bug the first time anyone saw it.
+// Zone is a HOME, not an absolute pin — and that has been true twice, for two
+// different reasons.
 //
-// Variety does not come from the zone. It comes from the fifteen other values
-// drawn per world — depth within the band, floor clearance, water type, wind,
-// sun elevation and azimuth, landmarks, fauna counts — and from bands wide
-// enough to matter: the abyss spans 1050 to 3800 m, which is a bigger spread
-// than the whole rest of the axis put together.
+// It started as `ZoneWeights [3]float64` — a probability per zone — on the
+// reasoning that a hard mapping would make repeated generations too samey.
+// What it actually produced was a control that lies: the create form labels
+// these four options DEPTH & MOOD and names them after depths, so choosing
+// "The Abyss" and receiving a view of the water surface is not pleasant
+// variety, it is the control not working. That combination had a 5% chance
+// every time somebody picked the abyss (15% weight on the shallows, times a
+// one-in-three breach), and it was reported as a bug the first time anyone
+// saw it. The fix was to pin Zone absolutely.
+//
+// Once that shipped, the opposite complaint arrived: every generation of the
+// same mood came out at the same depth, and that felt less like a portrait
+// than a colour swatch. So the zone is a weighted home again — see
+// oceanZoneDriftWeightsByMood — but built so it CANNOT reproduce the original
+// bug:
+//
+//   - Drift is ADJACENT-ONLY. A zone can lean one step up or down the stack;
+//     it can never skip one. The Abyss can reach the twilight reach but never
+//     the sunlit shallows, in the same roll.
+//   - The direction that recreated the bug is zeroed outright, not just made
+//     unlikely. The Abyss's weight on the shallows is exactly 0, not a small
+//     number — "The Abyss never shows the water surface" is a guarantee this
+//     family makes, not a tendency.
+//   - AboveWater does not drift at all. "Still Water" breaks the surface
+//     every seed, because that is also the create form's default mood and
+//     therefore the first view of the whole family — a separate, explicit
+//     guarantee this drift must not touch. See driftZone.
 type oceanMoodProfile struct {
-	// Zone the world IS, for every seed, with no roll involved.
+	// Zone is the home the mood leans toward — see oceanZoneDriftWeightsByMood
+	// for how far a given generation may drift from it.
 	Zone string
 	// AboveWater lifts the viewer out of the water entirely: depth goes
 	// negative and the world is the sea seen from the air. Not a fourth zone —
@@ -366,6 +382,71 @@ func oceanProfileForMood(mood string) oceanMoodProfile {
 		return profile
 	}
 	return neutralOceanProfile
+}
+
+// oceanZoneDriftWeights are relative probabilities over the three underwater
+// zones. They do not need to sum to 1 (see zoneForDriftRoll), and any weight
+// left at 0 is a wall the drift may not cross, not a rounding artefact.
+type oceanZoneDriftWeights struct {
+	Shallow  float64
+	Twilight float64
+	Abyss    float64
+}
+
+// Per-mood drift weights. Every table is biased toward the shallow end —
+// "the water someone can actually see the surface or the reef through" is
+// the more common photograph in real diving and diving media both, and the
+// person who wants certainty about the deep end still has The Abyss, whose
+// own weight there is 0.70.
+//
+// Read as: each mood's HOME zone (see oceanMoodProfiles) carries the
+// plurality, drift reaches one zone over, and the zone that would recreate
+// the original bug — Reef Surge into the abyss, The Abyss into the shallows —
+// carries exactly 0.
+var oceanZoneDriftWeightsByMood = map[string]oceanZoneDriftWeights{
+	// energetic (Reef Surge): shallow is home; drifts down into the twilight
+	// reach sometimes; never all the way to the abyss.
+	"energetic": {Shallow: 0.75, Twilight: 0.25, Abyss: 0.00},
+	// dreamy (Drifting): twilight is home, and being the middle of the axis it
+	// is the one mood that may drift either way — weighted toward the
+	// shallower neighbour, per the family bias.
+	"dreamy": {Shallow: 0.30, Twilight: 0.55, Abyss: 0.15},
+	// reflective (The Abyss): abyss is home; drifts up into the twilight reach
+	// sometimes; NEVER into the shallows, which is the one direction that used
+	// to put a diver who asked for the trench in front of a coral reef.
+	"reflective": {Shallow: 0.00, Twilight: 0.30, Abyss: 0.70},
+}
+
+// neutralZoneDriftWeights backs an unrecognised mood, matching
+// neutralOceanProfile's own twilight-reach home.
+var neutralZoneDriftWeights = oceanZoneDriftWeights{Shallow: 0.30, Twilight: 0.55, Abyss: 0.15}
+
+// driftZone turns a mood's home zone into the zone one particular seed
+// actually lands in. AboveWater moods are exempt entirely: "Still Water"
+// surfaces every seed, which is a separate, explicit, tested guarantee (it is
+// also the create form's default mood, so it is the first view anyone sees of
+// the whole family) and this drift must not put that at risk.
+func driftZone(mood string, moodProfile oceanMoodProfile, roll float64) string {
+	if moodProfile.AboveWater {
+		return moodProfile.Zone
+	}
+	weights, ok := oceanZoneDriftWeightsByMood[strings.ToLower(strings.TrimSpace(mood))]
+	if !ok {
+		weights = neutralZoneDriftWeights
+	}
+	total := weights.Shallow + weights.Twilight + weights.Abyss
+	if total <= 0 {
+		return moodProfile.Zone
+	}
+	cumulative := weights.Shallow
+	if roll < cumulative/total {
+		return ZoneSunlitShallows
+	}
+	cumulative += weights.Twilight
+	if roll < cumulative/total {
+		return ZoneTwilightReach
+	}
+	return ZoneAbyss
 }
 
 type weightedCurrentKind struct {
@@ -525,8 +606,12 @@ var floraDepthTintBaseByZone = map[string]float64{
 }
 
 // Per-zone colour grades — the ocean counterpart of the forest's per-season
-// grade table. A table lookup, no PRNG draw, so two worlds in the same zone
-// always grade identically.
+// grade table. This USED TO BE a bare table lookup with no PRNG draw at all,
+// flagged in its own comment as the one deliberately static spot in the whole
+// builder: "two worlds in the same zone always grade identically." It is the
+// base a small per-world jitter (see gradeHueJitterRange and friends) is now
+// applied on top of, so the zone still reads as a coherent look and no two
+// worlds in it are the same photograph.
 var oceanGradesByZone = map[string]models.PostFXGradeConfig{
 	ZoneSunlitShallows: {HueRadians: 0.02, Saturation: 0.14, Brightness: 0.02, Contrast: 0.05},
 	ZoneTwilightReach:  {HueRadians: 0.04, Saturation: 0.05, Brightness: 0.03, Contrast: 0.08},
@@ -579,6 +664,15 @@ const (
 	bloomIntensityRange     = 0.55
 	minimumBloomIntensity   = 0.25
 	maximumBloomIntensity   = 1.40
+
+	// Grade jitter, applied on top of oceanGradesByZone. Small relative to the
+	// gap BETWEEN zones on every channel (saturation alone spans 0.24 across
+	// the axis) — enough that two worlds in the same zone are not the same
+	// photograph, not so much that a zone stops reading as a coherent look.
+	gradeHueJitterRange        = 0.015
+	gradeSaturationJitterRange = 0.03
+	gradeBrightnessJitterRange = 0.015
+	gradeContrastJitterRange   = 0.03
 
 	// seafloor
 	minimumBasinRadius         = 26.0

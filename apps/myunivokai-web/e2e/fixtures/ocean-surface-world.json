@@ -17,7 +17,7 @@
       "name": "The Lantern Trench",
       "seed": "OCN-GOLDEN-SURFACE-17",
       "config": {
-        "schemaVersion": "1.2",
+        "schemaVersion": "1.3",
         "sceneType": "ocean",
         "sceneName": "The Lantern Trench",
         "archetype": "Tidekeeper",
@@ -35,8 +35,8 @@
           ]
         },
         "depth": {
-          "metres": -23.96,
-          "seafloorMetres": 28.25,
+          "metres": -16.56,
+          "seafloorMetres": 25.73,
           "zone": "sunlitShallows"
         },
         "water": {
@@ -192,10 +192,10 @@
         "postFX": {
           "bloomIntensity": 0.34,
           "grade": {
-            "hueRadians": 0.02,
-            "saturation": 0.14,
-            "brightness": 0.02,
-            "contrast": 0.05
+            "hueRadians": 0.03,
+            "saturation": 0.16,
+            "brightness": 0.01,
+            "contrast": 0.03
           }
         },
         "hud": {

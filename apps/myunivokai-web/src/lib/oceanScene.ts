@@ -37,7 +37,7 @@ import { clampNumber, depthAt, roundToHundredths, roundToThousandths } from "./o
 // logic rather than a duplicated table.
 
 // Mirrors oceanSchemaVersion in ocean_config_builder.go.
-export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.1";
+export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.3";
 
 // Depth zones, in canonical order from the surface down. Both boundaries are
 // physical constants of the depth curve rather than round numbers: the sunlit
@@ -140,15 +140,22 @@ const OCEAN_ASSET_CATALOG_VERSION = "ocean-1";
 
 // Mirrors oceanMoodProfile in ocean_scene_profile.go.
 //
-// `zone` is a PIN, not a lean. It used to be a `zoneWeights` triple — a
-// probability per zone — so that repeated generations would vary. What it
-// produced was a control that lies: the create form labels these four options
-// DEPTH & MOOD and names them after depths, so choosing "The Abyss" and getting
-// a view of the water surface (5% of the time: 15% weight on the shallows times
-// a one-in-three breach) is not variety, it is the control not working.
+// `zone` is a HOME, not an absolute pin — and that has been true twice.
 //
-// Variety comes from the fifteen other values drawn per world, and from bands
-// wide enough to matter — the abyss alone spans 1050 to 3800 m.
+// It started as a `zoneWeights` triple — a probability per zone — so that
+// repeated generations would vary. What it produced was a control that lies:
+// the create form labels these four options DEPTH & MOOD and names them after
+// depths, so choosing "The Abyss" and getting a view of the water surface (5%
+// of the time: 15% weight on the shallows times a one-in-three breach) is not
+// variety, it is the control not working. The fix was to pin zone absolutely.
+//
+// Once that shipped, the opposite complaint arrived: every generation of the
+// same mood came out at the same depth. So zone is a weighted home again — see
+// OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD — built so it cannot reproduce the original
+// bug: drift is adjacent-zone-only, the direction that recreated the bug is a
+// hard zero rather than a small number, and aboveWater does not drift at all
+// ("Still Water" surfaces every seed — it is also this family's default mood,
+// so it is the first view anyone sees of it, and that guarantee is untouched).
 type OceanMoodProfile = {
   zone: string;
   aboveWater: boolean;
@@ -209,6 +216,51 @@ const OCEAN_MOOD_PROFILES: Record<string, OceanMoodProfile> = {
 
 function oceanProfileForMood(mood: string): OceanMoodProfile {
   return OCEAN_MOOD_PROFILES[mood.trim().toLowerCase()] ?? NEUTRAL_OCEAN_PROFILE;
+}
+
+// Mirrors oceanZoneDriftWeights / oceanZoneDriftWeightsByMood in
+// ocean_scene_profile.go. Weights are relative (see zoneForDriftRoll); a
+// weight left at 0 is a wall the drift may not cross, not a rounding
+// artefact.
+type OceanZoneDriftWeights = {
+  shallow: number;
+  twilight: number;
+  abyss: number;
+};
+
+// Every table biases toward the shallow end, and the zone that would
+// recreate the original bug is exactly 0, not merely small: Reef Surge can
+// drift into the twilight reach but never the abyss, and The Abyss can drift
+// into the twilight reach but never the shallows.
+const OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD: Record<string, OceanZoneDriftWeights> = {
+  energetic: { shallow: 0.75, twilight: 0.25, abyss: 0.0 },
+  dreamy: { shallow: 0.3, twilight: 0.55, abyss: 0.15 },
+  reflective: { shallow: 0.0, twilight: 0.3, abyss: 0.7 }
+};
+
+const NEUTRAL_ZONE_DRIFT_WEIGHTS: OceanZoneDriftWeights = { shallow: 0.3, twilight: 0.55, abyss: 0.15 };
+
+// Mirrors driftZone in ocean_config_builder.go. AboveWater moods are exempt
+// entirely — "Still Water" surfaces every seed, a separate, explicit
+// guarantee this drift must not touch.
+function driftZone(mood: string, moodProfile: OceanMoodProfile, roll: number): string {
+  if (moodProfile.aboveWater) {
+    return moodProfile.zone;
+  }
+  const weights = OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD[mood.trim().toLowerCase()] ?? NEUTRAL_ZONE_DRIFT_WEIGHTS;
+  const total = weights.shallow + weights.twilight + weights.abyss;
+  if (total <= 0) {
+    return moodProfile.zone;
+  }
+  let cumulative = weights.shallow;
+  if (roll < cumulative / total) {
+    return OCEAN_ZONE_SUNLIT_SHALLOWS;
+  }
+  cumulative += weights.twilight;
+  if (roll < cumulative / total) {
+    return OCEAN_ZONE_TWILIGHT_REACH;
+  }
+  return OCEAN_ZONE_ABYSS;
 }
 
 type WeightedCurrentKind = {
@@ -360,11 +412,25 @@ const FLORA_DEPTH_TINT_BASE_BY_ZONE: Record<string, number> = {
   [OCEAN_ZONE_ABYSS]: 0.7
 };
 
+// This used to be a bare table lookup with no PRNG draw at all — "two worlds
+// in the same zone always grade identically." It is now the base a small
+// per-world jitter (see GRADE_*_JITTER_RANGE below) applies on top of, mirrors
+// oceanGradesByZone in ocean_scene_profile.go.
 export const OCEAN_GRADES_BY_ZONE: Record<string, ScenePostFXGradeConfig> = {
   [OCEAN_ZONE_SUNLIT_SHALLOWS]: { hueRadians: 0.02, saturation: 0.14, brightness: 0.02, contrast: 0.05 },
   [OCEAN_ZONE_TWILIGHT_REACH]: { hueRadians: 0.04, saturation: 0.05, brightness: 0.03, contrast: 0.08 },
   [OCEAN_ZONE_ABYSS]: { hueRadians: 0.06, saturation: -0.1, brightness: 0.06, contrast: 0.12 }
 };
+
+// Small relative to the gap BETWEEN zones on every channel (saturation alone
+// spans 0.24 across the axis) — enough that two worlds in the same zone are
+// not the same photograph, not so much that a zone stops reading as a
+// coherent look. Mirrors the gradeXJitterRange constants in
+// ocean_scene_profile.go.
+const GRADE_HUE_JITTER_RANGE = 0.015;
+const GRADE_SATURATION_JITTER_RANGE = 0.03;
+const GRADE_BRIGHTNESS_JITTER_RANGE = 0.015;
+const GRADE_CONTRAST_JITTER_RANGE = 0.03;
 
 const DEFAULT_OCEAN_PRIMARY_COLOR = "#8B5CF6";
 const DEFAULT_OCEAN_SECONDARY_COLOR = "#06B6D4";
@@ -606,22 +672,25 @@ function currentKindForRoll(roll: number, entries: WeightedCurrentKind[]): strin
 // Draw order: zone roll, transition roll, transition direction, blend amount,
 // depth-within-band. The transition draws happen even for non-transition worlds
 // so the depth pick never shifts.
-function buildPreviewDepthConfig(seed: string, moodProfile: OceanMoodProfile): OceanDepthConfig {
+function buildPreviewDepthConfig(seed: string, mood: string, moodProfile: OceanMoodProfile): OceanDepthConfig {
   const nextRandomValue = randomFromSeed(seed + DEPTH_SEED_SUFFIX);
+  // Drawn first because every later roll here needs to know which zone's band
+  // it is rolling within. See driftZone for the clamp that keeps this from
+  // reproducing the bug the absolute pin fixed.
+  const zoneDriftRoll = nextRandomValue();
   const transitionRoll = nextRandomValue();
   const transitionDirectionRoll = nextRandomValue();
   const blendAmountRoll = nextRandomValue();
   const depthWithinBandRoll = nextRandomValue();
-  // Appended after every existing draw, so adding it moved no world's depth.
   const floorClearanceRoll = nextRandomValue();
   const altitudeRoll = nextRandomValue();
   const boundaryRoll = nextRandomValue();
   const boundaryAmountRoll = nextRandomValue();
 
-  // Not drawn. The mood IS the zone; the roll this used to take was removed
-  // rather than kept and ignored, which shifts every later draw by one and
-  // therefore moves the depth of every ocean world.
-  const zone = moodProfile.zone;
+  // The mood names a HOME zone; this is which zone this particular seed
+  // actually lands in. See OceanMoodProfile's own comment for why this is a
+  // weighted lean again rather than an absolute pin, and why that is safe.
+  const zone = driftZone(mood, moodProfile, zoneDriftRoll);
   const band = DEPTH_BAND_BY_ZONE[zone];
   const metres = roundToHundredths(band.minimum + depthWithinBandRoll * (band.maximum - band.minimum));
   const clearanceBand = FLOOR_CLEARANCE_BAND_BY_ZONE[zone];
@@ -720,27 +789,48 @@ function buildPreviewWaterConfig(
   };
 }
 
-// Draw order: surface elevation, exposure jitter, bloom, sun azimuth. Colours,
-// god rays and caustics come from the depth curve and are drawn from no stream
-// at all.
+// Draw order: surface elevation, exposure jitter, bloom, sun azimuth, grade
+// jitter (hue, saturation, brightness, contrast). Colours, god rays and
+// caustics come from the depth curve and are drawn from no stream at all.
 function buildPreviewLightingConfig(
   seed: string,
   metres: number,
+  zone: string,
   moodProfile: OceanMoodProfile
-): { lighting: OceanLightingConfig; bloomIntensity: number } {
+): { lighting: OceanLightingConfig; bloomIntensity: number; grade: ScenePostFXGradeConfig } {
   const nextRandomValue = randomFromSeed(seed + LIGHTING_SEED_SUFFIX);
   const surfaceElevationRoll = nextRandomValue();
   const exposureRoll = nextRandomValue();
   const bloomRoll = nextRandomValue();
-  // Last in the stream, so adding a bearing moved no world's elevation, exposure
-  // or bloom. The full circle: the renderer places the camera opposite the
-  // bearing and therefore composes toward the sun whatever the bearing is.
+  // The full circle: the renderer places the camera opposite the bearing and
+  // therefore composes toward the sun whatever the bearing is.
   const azimuthRoll = nextRandomValue();
+  // Appended after every existing draw in this stream, so this jitter moved
+  // nothing that already existed here (the depth-zone draw it depends on
+  // lives in its own stream and moved for its own reason).
+  const hueJitterRoll = nextRandomValue();
+  const saturationJitterRoll = nextRandomValue();
+  const brightnessJitterRoll = nextRandomValue();
+  const contrastJitterRoll = nextRandomValue();
   const response = depthAt(metres);
   // Which band the roll lands in depends on the medium the viewer is in.
   const above = metres < 0;
   const elevationFloor = above ? MINIMUM_BREACHED_SURFACE_ELEVATION : MINIMUM_SURFACE_ELEVATION;
   const elevationRange = above ? BREACHED_SURFACE_ELEVATION_RANGE : SURFACE_ELEVATION_RANGE;
+
+  const baseGrade = OCEAN_GRADES_BY_ZONE[zone];
+  const grade: ScenePostFXGradeConfig = {
+    hueRadians: roundToHundredths((baseGrade.hueRadians ?? 0) + (hueJitterRoll - 0.5) * 2 * GRADE_HUE_JITTER_RANGE),
+    saturation: roundToHundredths(
+      clampNumber((baseGrade.saturation ?? 0) + (saturationJitterRoll - 0.5) * 2 * GRADE_SATURATION_JITTER_RANGE, -1, 1)
+    ),
+    brightness: roundToHundredths(
+      (baseGrade.brightness ?? 0) + (brightnessJitterRoll - 0.5) * 2 * GRADE_BRIGHTNESS_JITTER_RANGE
+    ),
+    contrast: roundToHundredths(
+      clampNumber((baseGrade.contrast ?? 0) + (contrastJitterRoll - 0.5) * 2 * GRADE_CONTRAST_JITTER_RANGE, 0, 1)
+    )
+  };
 
   return {
     lighting: {
@@ -760,7 +850,8 @@ function buildPreviewLightingConfig(
         MINIMUM_BLOOM_INTENSITY,
         MAXIMUM_BLOOM_INTENSITY
       )
-    )
+    ),
+    grade
   };
 }
 
@@ -1080,12 +1171,12 @@ export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneCon
   // like universe planets and forest landmarks — reuse the shared mirror.
   const landmarkNames = previewPlanetNames(input.interests, input.traits);
 
-  const depth = buildPreviewDepthConfig(seed, moodProfile);
+  const depth = buildPreviewDepthConfig(seed, input.mood, moodProfile);
   const metres = depth.metres ?? DEPTH_BAND_BY_ZONE[OCEAN_ZONE_SUNLIT_SHALLOWS].minimum;
   const zone = depth.zone ?? OCEAN_ZONE_SUNLIT_SHALLOWS;
 
   const water = buildPreviewWaterConfig(seed, metres, zone, moodProfile);
-  const { lighting, bloomIntensity } = buildPreviewLightingConfig(seed, metres, moodProfile);
+  const { lighting, bloomIntensity, grade } = buildPreviewLightingConfig(seed, metres, zone, moodProfile);
   const { seafloor, cameraDistance } = buildPreviewSeafloorConfig(seed);
   const current = buildPreviewCurrentConfig(seed, zone, moodProfile);
   const flora = buildPreviewFloraConfig(seed, zone, moodProfile);
@@ -1123,9 +1214,7 @@ export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneCon
     camera: { distance: cameraDistance, fov: OCEAN_CAMERA_FIELD_OF_VIEW },
     postFX: {
       bloomIntensity,
-      // The grade is a per-zone table lookup (no PRNG draw), so two oceans in
-      // the same zone always grade identically.
-      grade: OCEAN_GRADES_BY_ZONE[zone]
+      grade
     },
     hud: { showTraitBars: true, showLabels: true },
     assets: buildPreviewAssetsConfig(flora, fauna, landmarks)

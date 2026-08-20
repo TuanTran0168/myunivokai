@@ -62,7 +62,7 @@ describe("the ocean preview builder", () => {
   it("stamps the contract keys the renderer registry resolves on", () => {
     const scene = buildPreviewOceanSceneConfig(previewInput());
     expect(scene.sceneType).toBe("ocean");
-    expect(scene.schemaVersion).toBe("1.1");
+    expect(scene.schemaVersion).toBe("1.3");
     expect(scene.assets?.catalogVersion).toBe("ocean-1");
     // This family has no sky, so it must never claim an environment map.
     expect(scene.assets?.hdriKey).toBeUndefined();
@@ -97,30 +97,54 @@ describe("the ocean preview builder", () => {
   // This replaced a rate assertion — "above the waterline sometimes, and not
   // usually" — and the replacement is the point rather than a re-tune. A rate is
   // the right assertion for something nobody selects. It is the wrong one for a
-  // control: these four moods are the create form's DEPTH & MOOD options, so what
-  // matters is that picking one gets that depth every time, and that not picking
-  // it excludes that depth every time.
+  // control: these four moods are the create form's DEPTH & MOOD options, and
+  // aboveWater is still an absolute pin (unchanged) while the underwater zone
+  // is a weighted HOME that may drift one zone away — except in the direction
+  // that recreated the original bug, which must never happen at all.
   //
-  // Both halves were real defects. The surface view was unreachable on purpose
-  // (one in twenty, from a control that never mentioned it) and reachable by
-  // accident (picking "The Abyss" drew the water surface 5% of the time).
-  it("gives each mood exactly one depth, the same one every time", () => {
-    const expected: Record<string, { zone: string; aboveWater: boolean }> = {
-      focused: { zone: OCEAN_ZONE_SUNLIT_SHALLOWS, aboveWater: true },
-      energetic: { zone: OCEAN_ZONE_SUNLIT_SHALLOWS, aboveWater: false },
-      dreamy: { zone: OCEAN_ZONE_TWILIGHT_REACH, aboveWater: false },
-      reflective: { zone: OCEAN_ZONE_ABYSS, aboveWater: false }
+  // "The Abyss" drawing the water surface 5% of the time was the original
+  // defect, and the clamp below is what makes that combination impossible
+  // rather than merely unlikely: forbiddenZone is a hard wall, not a small
+  // number.
+  it("keeps every mood inside its clamp, with its home zone as the plurality", () => {
+    const expected: Record<string, { aboveWater: boolean; forbiddenZone?: string; homeZone: string }> = {
+      focused: { aboveWater: true, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
+      energetic: { aboveWater: false, forbiddenZone: OCEAN_ZONE_ABYSS, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
+      dreamy: { aboveWater: false, homeZone: OCEAN_ZONE_TWILIGHT_REACH },
+      reflective: { aboveWater: false, forbiddenZone: OCEAN_ZONE_SUNLIT_SHALLOWS, homeZone: OCEAN_ZONE_ABYSS }
     };
+    const samplesPerMood = 80;
+    const covered = new Set<string>();
     for (const [mood, want] of Object.entries(expected)) {
-      for (let index = 0; index < 40; index += 1) {
+      const zoneCounts: Record<string, number> = {};
+      for (let index = 0; index < samplesPerMood; index += 1) {
         const scene = buildPreviewOceanSceneConfig(previewInput({ mood, nickname: `Mai-${index}` }));
         const metres = scene.depth?.metres ?? 0;
-        expect({ mood, zone: scene.depth?.zone, aboveWater: metres < 0 }).toEqual({
-          mood,
-          zone: want.zone,
-          aboveWater: want.aboveWater
-        });
+        const zone = scene.depth?.zone ?? "";
+        expect(metres < 0, `mood ${mood} at ${metres}m`).toBe(want.aboveWater);
+        if (want.forbiddenZone) {
+          expect(zone, `mood ${mood} produced the forbidden zone ${want.forbiddenZone} at sample ${index}`).not.toBe(
+            want.forbiddenZone
+          );
+        }
+        zoneCounts[zone] = (zoneCounts[zone] ?? 0) + 1;
+        covered.add(zone);
       }
+      // Plurality, not majority: the home zone's count must be the LARGEST of
+      // the three, which is the bar the weight tables are actually tuned to
+      // clear. A strict >50% bar is tighter than that (dreamy's own weight is
+      // 0.55 of three candidates) and is not what "home" means here.
+      const homeCount = zoneCounts[want.homeZone] ?? 0;
+      const otherCounts = Object.entries(zoneCounts)
+        .filter(([zone]) => zone !== want.homeZone)
+        .map(([, count]) => count);
+      expect(
+        homeCount,
+        `mood ${mood}'s home zone ${want.homeZone} was not the plurality: ${JSON.stringify(zoneCounts)}`
+      ).toBeGreaterThan(Math.max(0, ...otherCounts));
+    }
+    for (const zone of [OCEAN_ZONE_SUNLIT_SHALLOWS, OCEAN_ZONE_TWILIGHT_REACH, OCEAN_ZONE_ABYSS]) {
+      expect(covered.has(zone), `no mood ever reached ${zone}`).toBe(true);
     }
   });
 

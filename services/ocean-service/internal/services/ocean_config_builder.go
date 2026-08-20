@@ -12,13 +12,16 @@ import (
 // what this builder emits for an existing seed is a breaking change and must
 // bump the schema version.
 //
-// 1.2 makes two: `lighting.surfaceAzimuthRadians` is new, and the mood now pins
-// the depth zone instead of weighting it, which moves the depth of every seed.
-// No reader is kept for 1.1 because this family has not shipped and nothing has
-// ever been stored at that version — a compatibility shim for zero rows is a
-// liability, not caution. The version still moves so the renderer key does.
+// 1.3 makes two: the mood's zone is a weighted home again rather than an
+// absolute pin (see oceanZoneDriftWeightsByMood — clamped so it cannot
+// reproduce the bug the 1.2 pin fixed), and the per-zone colour grade takes a
+// small per-world jitter instead of being a bare table lookup. Both move the
+// depth and grade of every existing seed. No reader is kept for 1.1 or 1.2
+// because this family has not shipped and nothing has ever been stored at
+// either version — a compatibility shim for zero rows is a liability, not
+// caution. The version still moves so the renderer key does.
 const (
-	oceanSchemaVersion = "1.2"
+	oceanSchemaVersion = "1.3"
 	oceanSceneType     = "ocean"
 )
 
@@ -89,7 +92,7 @@ func (b *OceanConfigBuilder) Build(input BuildOceanConfigInput) models.OceanScen
 	depthResponse := DepthAt(depth.Metres)
 
 	water := buildWaterConfig(input, depth, depthResponse, moodProfile)
-	lighting, bloomIntensity := buildLightingConfig(input, depth, depthResponse, moodProfile)
+	lighting, bloomIntensity, grade := buildLightingConfig(input, depth, depthResponse, moodProfile)
 	seafloor, cameraDistance := buildSeafloorConfig(input)
 	current := buildCurrentConfig(input, depth, moodProfile)
 	flora := buildFloraConfig(input, depth, moodProfile)
@@ -123,38 +126,38 @@ func (b *OceanConfigBuilder) Build(input BuildOceanConfigInput) models.OceanScen
 		Camera:          models.CameraConfig{Distance: cameraDistance, FOV: oceanCameraFOV},
 		PostFX: models.PostFXConfig{
 			BloomIntensity: bloomIntensity,
-			// The grade is a per-zone table lookup (no PRNG draw), so two
-			// oceans in the same zone always grade identically.
-			Grade: oceanGradesByZone[depth.Zone],
+			Grade:          grade,
 		},
 		HUD:    models.HUDConfig{ShowTraitBars: true, ShowLabels: true},
 		Assets: buildAssetsConfig(flora, fauna, landmarks),
 	}
 }
 
-// Draw order: transition roll, transition direction, blend amount,
-// depth-within-band, floor clearance, altitude, boundary, boundary amount. The
-// transition draws happen even for non-transition worlds so the depth pick never
-// shifts, and the altitude draw happens even for worlds under the water.
+// Draw order: zone drift, transition roll, transition direction, blend
+// amount, depth-within-band, floor clearance, altitude, boundary, boundary
+// amount. The transition draws happen even for non-transition worlds so the
+// depth pick never shifts, and the altitude draw happens even for worlds
+// under the water.
 func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile) models.DepthConfig {
 	rng := seed.NewPRNG(input.Seed + depthSeedSuffix)
+	// Drawn first because every later roll in this function needs to know
+	// which zone's band it is rolling within. See driftZone for the clamp that
+	// keeps this from reproducing the bug the 1.2 pin fixed.
+	zoneDriftRoll := rng.Float64()
 	transitionRoll := rng.Float64()
 	transitionDirectionRoll := rng.Float64()
 	blendAmountRoll := rng.Float64()
 	depthWithinBandRoll := rng.Float64()
-	// Appended AFTER every existing draw, which is the only place a new field
-	// may be added: taking a roll earlier would move the depth of every world
-	// that already exists.
 	floorClearanceRoll := rng.Float64()
 	altitudeRoll := rng.Float64()
 	boundaryRoll := rng.Float64()
 	boundaryAmountRoll := rng.Float64()
 
-	// Not drawn. The mood IS the zone — see oceanMoodProfiles for why the roll
-	// this used to take was removed rather than kept and ignored. Removing it
-	// shifts every later draw by one and therefore moves the depth of every
-	// ocean world, which is why the golden fixtures move with this commit.
-	zone := moodProfile.Zone
+	// The mood names a HOME zone; this is which zone one particular seed
+	// actually lands in. See oceanMoodProfile's own doc comment for why this
+	// is a weighted lean again rather than the absolute pin 1.2 shipped, and
+	// why that is safe this time.
+	zone := driftZone(input.Input.Mood, moodProfile, zoneDriftRoll)
 	band := depthBandByZone[zone]
 	metres := round(band.Minimum + depthWithinBandRoll*(band.Maximum-band.Minimum))
 
@@ -254,23 +257,39 @@ func buildWaterConfig(input BuildOceanConfigInput, depth models.DepthConfig, dep
 	}
 }
 
-// Draw order: surface elevation, exposure jitter, bloom, sun azimuth. Colours,
-// god rays and caustics come from the depth curve and are drawn from no stream
-// at all. Returns the lighting section plus the bloom intensity (which lives
+// Draw order: surface elevation, exposure jitter, bloom, sun azimuth, grade
+// jitter (hue, saturation, brightness, contrast). Colours, god rays and
+// caustics come from the depth curve and are drawn from no stream at all.
+// Returns the lighting section, the bloom intensity and the grade (both live
 // under postFX in the envelope).
-func buildLightingConfig(input BuildOceanConfigInput, depth models.DepthConfig, depthResponse DepthResponse, moodProfile oceanMoodProfile) (models.OceanLightingConfig, float64) {
+func buildLightingConfig(input BuildOceanConfigInput, depth models.DepthConfig, depthResponse DepthResponse, moodProfile oceanMoodProfile) (models.OceanLightingConfig, float64, models.PostFXGradeConfig) {
 	rng := seed.NewPRNG(input.Seed + lightingSeedSuffix)
 	surfaceElevationRoll := rng.Float64()
 	exposureRoll := rng.Float64()
 	bloomRoll := rng.Float64()
-	// Last in the stream, so adding a bearing moved no world's elevation,
-	// exposure or bloom. The full circle, with no preferred direction: the
-	// renderer places the camera opposite the bearing and therefore composes
-	// toward the sun whatever the bearing is, so constraining it would only
-	// remove variety without buying any composition.
+	// The full circle, with no preferred direction: the renderer places the
+	// camera opposite the bearing and therefore composes toward the sun
+	// whatever the bearing is, so constraining it would only remove variety
+	// without buying any composition.
 	azimuthRoll := rng.Float64()
+	// Appended after every existing draw in this stream, so this jitter moved
+	// nothing that already existed here (the depth-zone draw it depends on
+	// lives in its own stream and moved for its own reason — see
+	// buildDepthConfig).
+	hueJitterRoll := rng.Float64()
+	saturationJitterRoll := rng.Float64()
+	brightnessJitterRoll := rng.Float64()
+	contrastJitterRoll := rng.Float64()
 
 	bloomIntensity := round(clampFloat((baseBloomIntensity+bloomRoll*bloomIntensityRange)*moodProfile.BloomMultiplier, minimumBloomIntensity, maximumBloomIntensity))
+
+	baseGrade := oceanGradesByZone[depth.Zone]
+	grade := models.PostFXGradeConfig{
+		HueRadians: round(baseGrade.HueRadians + (hueJitterRoll-0.5)*2*gradeHueJitterRange),
+		Saturation: round(clampFloat(baseGrade.Saturation+(saturationJitterRoll-0.5)*2*gradeSaturationJitterRange, -1, 1)),
+		Brightness: round(baseGrade.Brightness + (brightnessJitterRoll-0.5)*2*gradeBrightnessJitterRange),
+		Contrast:   round(clampFloat(baseGrade.Contrast+(contrastJitterRoll-0.5)*2*gradeContrastJitterRange, 0, 1)),
+	}
 
 	// Which band the roll lands in depends on the medium the viewer is in. A
 	// negative depth is above the waterline, where a low sun is the best light
@@ -289,7 +308,7 @@ func buildLightingConfig(input BuildOceanConfigInput, depth models.DepthConfig, 
 		CausticStrength:         depthResponse.CausticStrength,
 		AmbientColor:            depthResponse.AmbientColor,
 		Exposure:                round(depthResponse.BaseExposure + exposureRoll*exposureJitterRange),
-	}, bloomIntensity
+	}, bloomIntensity, grade
 }
 
 // Draw order: basin radius, ridge amplitude, ridge frequency, rock count,

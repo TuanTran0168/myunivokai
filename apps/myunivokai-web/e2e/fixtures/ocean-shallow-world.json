@@ -17,7 +17,7 @@
       "name": "The Lantern Trench",
       "seed": "OCN-GOLDEN-SHALLOW",
       "config": {
-        "schemaVersion": "1.2",
+        "schemaVersion": "1.3",
         "sceneType": "ocean",
         "sceneName": "The Lantern Trench",
         "archetype": "Tidekeeper",
@@ -35,25 +35,25 @@
           ]
         },
         "depth": {
-          "metres": 13.97,
-          "seafloorMetres": 22.54,
+          "metres": 16.69,
+          "seafloorMetres": 26.2,
           "zone": "sunlitShallows"
         },
         "water": {
-          "fogColor": "#15798A",
+          "fogColor": "#127586",
           "fogDensity": 0.018,
           "visibilityMetres": 49.89,
-          "tintStrength": 0.45,
+          "tintStrength": 0.47,
           "jerlovWaterType": "IB",
           "windSpeedMetresPerSecond": 9.56
         },
         "lighting": {
-          "surfaceLightColor": "#23847E",
+          "surfaceLightColor": "#1E7F7A",
           "surfaceElevationRadians": 0.94,
           "surfaceAzimuthRadians": 0.06,
-          "godRayStrength": 0.55,
-          "causticStrength": 0.44,
-          "ambientColor": "#0B434C",
+          "godRayStrength": 0.49,
+          "causticStrength": 0.4,
+          "ambientColor": "#0A404A",
           "exposure": 1.2
         },
         "seafloor": {
@@ -211,8 +211,8 @@
           "grade": {
             "hueRadians": 0.02,
             "saturation": 0.14,
-            "brightness": 0.02,
-            "contrast": 0.05
+            "brightness": 0.03,
+            "contrast": 0.02
           }
         },
         "hud": {

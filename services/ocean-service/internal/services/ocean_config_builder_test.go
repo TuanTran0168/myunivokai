@@ -84,39 +84,66 @@ func TestBuildOceanConfigDeterministic(t *testing.T) {
 // So the assertion is inverted, and it is now the stronger of the two: each
 // mood produces exactly one zone, for every seed, and the four of them lay out
 // the whole axis in order with nothing missing and nothing doubled up.
-func TestEachMoodPinsExactlyOneDepth(t *testing.T) {
+// TestEachMoodDriftsWithinItsClamp is the two-sided contract for the 1.3
+// zone drift: AboveWater is still an absolute pin (unchanged from 1.2, and
+// tested again here because a mood's drift must never leak into it), while
+// the underwater zone is now a weighted home that may drift ONE zone away —
+// except in the one direction that recreated the original bug, which must
+// never happen at all, not just rarely.
+func TestEachMoodDriftsWithinItsClamp(t *testing.T) {
 	builder := NewOceanConfigBuilder()
-	expected := map[string]struct {
-		zone       string
-		aboveWater bool
-	}{
-		"focused":    {ZoneSunlitShallows, true},
-		"energetic":  {ZoneSunlitShallows, false},
-		"dreamy":     {ZoneTwilightReach, false},
-		"reflective": {ZoneAbyss, false},
+	type expectation struct {
+		aboveWater    bool
+		forbiddenZone string // "" if the mood may reach every underwater zone
+		homeZone      string
 	}
+	expected := map[string]expectation{
+		"focused": {aboveWater: true, homeZone: ZoneSunlitShallows},
+		// Reef Surge may drift down into the twilight reach, but reaching the
+		// abyss in one step is exactly the bug the 1.2 pin fixed: a diver who
+		// asked for a reef must never be shown the trench.
+		"energetic": {aboveWater: false, forbiddenZone: ZoneAbyss, homeZone: ZoneSunlitShallows},
+		// Drifting is the middle of the axis, so it is the one mood allowed to
+		// reach either neighbour.
+		"dreamy": {aboveWater: false, homeZone: ZoneTwilightReach},
+		// The Abyss may drift up into the twilight reach, but reaching the
+		// shallows is the specific combination that was reported as a bug:
+		// picking the deepest option and receiving the water surface.
+		"reflective": {aboveWater: false, forbiddenZone: ZoneSunlitShallows, homeZone: ZoneAbyss},
+	}
+	const samplesPerMood = 240
+	covered := map[string]bool{}
 	for mood, want := range expected {
-		for sample := 0; sample < 240; sample++ {
+		zoneCounts := map[string]int{}
+		for sample := 0; sample < samplesPerMood; sample++ {
 			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-ZONE-%s-%d", mood, sample), mood, 4))
-			if config.Depth.Zone != want.zone {
-				t.Fatalf("mood %q produced zone %q at %.2f m, want %q every time",
-					mood, config.Depth.Zone, config.Depth.Metres, want.zone)
-			}
 			if above := config.Depth.Metres < 0; above != want.aboveWater {
 				t.Fatalf("mood %q put the viewer at %.2f m; aboveWater = %v, want %v",
 					mood, config.Depth.Metres, above, want.aboveWater)
 			}
+			if want.forbiddenZone != "" && config.Depth.Zone == want.forbiddenZone {
+				t.Fatalf("mood %q produced zone %q at sample %d — this exact combination is the bug the 1.2 pin fixed, and the 1.3 drift must never reopen it",
+					mood, want.forbiddenZone, sample)
+			}
+			zoneCounts[config.Depth.Zone]++
+			covered[config.Depth.Zone] = true
+		}
+		// Plurality, not majority: the home zone's count must be the LARGEST
+		// of the three, which is the bar the weight tables are actually tuned
+		// to clear (dreamy's own weight is 0.55 of three candidates, so a
+		// strict >50% bar is tighter than "home" needs to mean).
+		for zone, count := range zoneCounts {
+			if zone != want.homeZone && count >= zoneCounts[want.homeZone] {
+				t.Fatalf("mood %q's home zone %q (%d) was not the plurality across %d samples: %v",
+					mood, want.homeZone, zoneCounts[want.homeZone], samplesPerMood, zoneCounts)
+			}
 		}
 	}
-	// And the four together must still cover the axis, or pinning has quietly
-	// deleted a zone from the family.
-	covered := map[string]bool{}
-	for mood := range expected {
-		covered[builder.Build(buildTestInput("OCN-ZONE-COVER", mood, 4)).Depth.Zone] = true
-	}
+	// And the four moods together must still cover the whole axis, or the
+	// clamp has quietly made a zone unreachable from the create form.
 	for _, zone := range zoneKindsInOrder {
 		if !covered[zone] {
-			t.Fatalf("no mood reaches %q, so that zone is unreachable from the create form", zone)
+			t.Fatalf("no mood reaches %q across any sample, so that zone is unreachable from the create form", zone)
 		}
 	}
 }
