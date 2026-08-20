@@ -73,6 +73,20 @@ export type SwimStyle = {
   span?: number;
 };
 
+/**
+ * A bait ball: leaders cluster onto one shared, slowly-drifting axis instead
+ * of scattering around the whole ring, and members spiral that axis instead
+ * of riding a fixed offset in the leader's frame. See createSchool.
+ */
+export type VortexStyle = {
+  /** Metres from the shared axis at the cone's widest point. */
+  radius: number;
+  /** Full rotations per second the swirl completes around the axis. */
+  spinHertz: number;
+  /** How sharply the cone tapers top/bottom; 1 is a true cone, higher is more cylindrical. */
+  taper: number;
+};
+
 export type FaunaSpecies = {
   key: string;
   /**
@@ -138,6 +152,24 @@ export type FaunaSpecies = {
    * oceanFishSkinTexture.ts.
    */
   photophores?: boolean;
+  /** Rides a rotating bait-ball instead of a flat ring. See VortexStyle. */
+  vortex?: VortexStyle;
+  /** A threat: fleesPredators schools bias away from its leaders' positions. */
+  predator?: boolean;
+  /** Biases its leaders away from the nearest predator school's leaders. */
+  fleesPredators?: boolean;
+  /** Metres at which alarm reaches its maximum. Default: max(16, pathRadius*0.9). */
+  fleeRadiusMetres?: number;
+  /** Flash-expansion strength: members fan outward as alarm rises. 0 (default) is leader-swerve only. */
+  fleeFanOut?: number;
+  /** Cruise-speed multiplier while alarmed — the startled dash, on top of speedScale. */
+  burstSpeedScale?: number;
+  /** Periodically detours a leader toward the camera, then eases back to its ring. */
+  approachesCamera?: boolean;
+  /** How close the detour brings it, in metres. Default 6. */
+  approachDistanceMetres?: number;
+  /** Seconds per approach-and-retreat cycle. Default 34 (off the dolphin's 26s breathing cycle). */
+  approachCycleSeconds?: number;
 };
 
 /**
@@ -166,6 +198,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     pathRadius: 16,
     heightBase: -6,
     heightRange: 5,
+    // An unhurried reef grazer — same baseline every other unset species used
+    // to share, now distinguished from the livelier small schoolers below.
+    speedScale: 0.8,
   },
   {
     key: "lionfish",
@@ -234,6 +269,14 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -4,
     heightRange: 11,
     tightRing: true,
+    // A reef shark cruises, it doesn't hurry — slower than the default every
+    // unset species used to share.
+    speedScale: 0.8,
+    // The one predator whose leaders' positions prey schools react to.
+    predator: true,
+    // Occasionally breaks its ring to close on the lens, then eases back —
+    // the "swims close, then peels away" the flat orbit could never do alone.
+    approachesCamera: true,
   },
   {
     key: "swordfish",
@@ -255,6 +298,8 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 11,
     speedScale: 1.5,
     tightRing: true,
+    // The open-water counterpart to the reef shark: also a threat prey reacts to.
+    predator: true,
   },
   {
     key: "manta",
@@ -301,6 +346,7 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 8,
     tightRing: true,
     surfacing: true,
+    speedScale: 1.1,
   },
   {
     key: "whale",
@@ -345,6 +391,8 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 9,
     speedScale: 0.3,
     tightRing: true,
+    // Shares the twilight/abyss with lanternfish — a threat there too.
+    predator: true,
   },
   {
     key: "blobfish",
@@ -397,6 +445,14 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     pathRadius: 19,
     heightBase: -6,
     heightRange: 15,
+    // A lively flicker, not the same baseline every unset species used to share.
+    speedScale: 1.35,
+    // A real bait ball: the mass clusters onto one drifting axis and spirals it,
+    // instead of scattering loosely around the whole ring.
+    vortex: { radius: 5, spinHertz: 0.12, taper: 1.4 },
+    fleesPredators: true,
+    fleeFanOut: 0.5,
+    burstSpeedScale: 1.6,
   },
   {
     key: "anthias",
@@ -420,6 +476,10 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     pathRadius: 13,
     heightBase: -7,
     heightRange: 6,
+    speedScale: 1.25,
+    fleesPredators: true,
+    fleeFanOut: 0.5,
+    burstSpeedScale: 1.5,
   },
   {
     key: "lanternfish",
@@ -442,6 +502,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     pathRadius: 30,
     heightBase: -8,
     heightRange: 22,
+    speedScale: 1.2,
+    fleesPredators: true,
+    burstSpeedScale: 1.4,
   },
   {
     key: "anglerfish",
@@ -669,7 +732,21 @@ export type School = {
    * sky, and a breach becomes the point rather than an accident.
    */
   setSurfacing: (baseOffsetMetres: number, breachMetres: number) => void;
-  update: (elapsed: number, bounds: SchoolBounds) => void;
+  /**
+   * Where a predator school's leaders currently are — the SAME Vector3
+   * instances update() mutates every frame, exposed once at construction so
+   * reading them costs nothing per frame. Present only when species.predator
+   * is true.
+   */
+  predatorAnchors?: readonly Vector3[];
+  /**
+   * threats: every predator school's leader positions, built once per frame
+   * by the caller (see oceanRig.ts) — O(leaders), never O(members) or
+   * O(schools²). cameraPosition: for the small opt-in list of
+   * species.approachesCamera species. Both optional so a school with no
+   * predators/camera-approach nearby costs nothing extra.
+   */
+  update: (elapsed: number, bounds: SchoolBounds, threats?: readonly Vector3[], cameraPosition?: Vector3) => void;
   dispose: () => void;
 };
 
@@ -680,11 +757,23 @@ type Leader = {
   height: number;
   bob: number;
   breathPhase: number;
+  /** Drives the approachesCamera cycle — see FaunaSpecies.approachesCamera. */
+  approachPhase: number;
+  /** How close the nearest predator is, 0 (calm) to 1 (at the flee radius' edge or closer). */
+  alarm: number;
   position: Vector3;
   heading: Vector3;
 };
 
-type Member = { leader: Leader; offset: Vector3; scale: number; wander: number };
+type Member = {
+  leader: Leader;
+  offset: Vector3;
+  scale: number;
+  wander: number;
+  /** Set only for species.vortex members — see createSchool's member loop. */
+  spiralPhase?: number;
+  spiralRadius?: number;
+};
 
 const FORWARD = new Vector3(0, 0, 1);
 
@@ -799,16 +888,25 @@ export function createSchool(
   // this only pulls in the four that were outside it, and their sizes differ by a
   // factor of four, so they still read as near and far.
   const ringLimit = Math.max(6, visibilityMetres);
+  // A bait ball: leaders cluster onto ONE shared, drifting angle/radius
+  // instead of scattering independently around the whole ring — see
+  // FaunaSpecies.vortex and the member spiral below. Drawn once, before the
+  // per-leader loop, so it costs nothing for the species that don't set it.
+  const vortexAngle = species.vortex ? next() * Math.PI * 2 : 0;
+  const vortexRadius = species.vortex ? Math.min(species.pathRadius, ringLimit) * (0.9 + next() * 0.1) : 0;
   for (let i = 0; i < species.leaders; i += 1) {
     leaders.push({
-      angle: next() * Math.PI * 2,
-      radius:
-        Math.min(species.pathRadius, ringLimit) *
-        (species.tightRing ? 0.9 + next() * 0.25 : 0.35 + next() * 0.75),
+      angle: species.vortex ? vortexAngle + (next() - 0.5) * 0.2 : next() * Math.PI * 2,
+      radius: species.vortex
+        ? vortexRadius * (0.96 + next() * 0.08)
+        : Math.min(species.pathRadius, ringLimit) *
+          (species.tightRing ? 0.9 + next() * 0.25 : 0.35 + next() * 0.75),
       speed: (0.05 + next() * 0.05) * (next() > 0.5 ? 1 : -1) * (species.speedScale ?? 1),
       height: species.heightBase + next() * species.heightRange,
       bob: next() * Math.PI * 2,
       breathPhase: next(),
+      approachPhase: next(),
+      alarm: 0,
       position: new Vector3(),
       heading: new Vector3(1, 0, 0),
     });
@@ -818,6 +916,15 @@ export function createSchool(
     const leader = leaders[i % leaders.length];
     if (!leader) break;
     phases[i] = next() * Math.PI * 2;
+    // The member's own belt around the vortex axis, tapered from the shared
+    // radius by how far up/down the cone it sits — see FaunaSpecies.vortex.
+    let spiralPhase: number | undefined;
+    let spiralRadius: number | undefined;
+    if (species.vortex) {
+      const tierFraction = Math.abs(next() - 0.5) * 2;
+      spiralPhase = next() * Math.PI * 2;
+      spiralRadius = species.vortex.radius * Math.pow(1 - tierFraction, species.vortex.taper) * (0.85 + next() * 0.3);
+    }
     members.push({
       leader,
       offset: new Vector3(
@@ -827,6 +934,8 @@ export function createSchool(
       ),
       scale: species.size * (0.82 + next() * 0.36),
       wander: next() * Math.PI * 2,
+      spiralPhase,
+      spiralRadius,
     });
   }
   placeholder.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
@@ -850,6 +959,7 @@ export function createSchool(
       baseOffset = baseOffsetMetres;
       breach = breachMetres;
     },
+    predatorAnchors: species.predator ? leaders.map((leader) => leader.position) : undefined,
     adopt: (model) => {
       model.geometry.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
       bellyUniform.value = model.bellyScale;
@@ -862,7 +972,7 @@ export function createSchool(
       mesh.geometry = model.geometry;
       previous.dispose();
     },
-    update: (elapsed, bounds) => {
+    update: (elapsed, bounds, threats, cameraPosition) => {
       // An animal lives BETWEEN the boundaries. The two numbers that decide what
       // is in frame decide where it can be — and this is not cosmetic: without
       // it a manta on a reef swims through the sky, and no frame metric can see
@@ -872,8 +982,13 @@ export function createSchool(
       const floorY = bounds.floorY === null ? -Infinity : bounds.floorY + clearance;
 
       for (const leader of leaders) {
-        leader.angle += leader.speed * 0.016;
-        const radius = leader.radius * (1 + Math.sin(leader.angle * 1.7 + leader.bob) * 0.14);
+        // Cruise speed carries LAST frame's alarm as a burst multiplier — a
+        // one-frame lag, invisible at 60fps, that avoids restructuring this
+        // loop around alarm being computed further down in this same pass.
+        const speedMultiplier = 1 + leader.alarm * ((species.burstSpeedScale ?? 1) - 1);
+        leader.angle += leader.speed * speedMultiplier * 0.016;
+        let angle = leader.angle;
+        let radius = leader.radius * (1 + Math.sin(leader.angle * 1.7 + leader.bob) * 0.14);
         let height = leader.height + Math.sin(elapsed * 0.24 + leader.bob) * species.heightRange * 0.3;
         height += baseOffset;
         height = Math.min(Math.max(height, floorY), ceiling);
@@ -888,26 +1003,98 @@ export function createSchool(
           height = height * (1 - ascent) + (bounds.surfaceY + breach) * ascent;
           breachHeight = Math.max(0, breach + clearance) * ascent;
         }
-        leader.position.set(Math.cos(leader.angle) * radius, height, Math.sin(leader.angle) * radius);
+        // A scripted detour toward the camera, then back — reserved for a
+        // short opt-in list (species.approachesCamera). This blends the
+        // RENDERED angle/radius/height only, never the persistent
+        // leader.angle, so once the envelope decays the leader is exactly
+        // back on its ordinary ring with no separate "return" phase to author.
+        if (species.approachesCamera && cameraPosition) {
+          const cycleSeconds = species.approachCycleSeconds ?? 34;
+          const cycle = ((elapsed / cycleSeconds + leader.approachPhase) % 1 + 1) % 1;
+          const approach = Math.pow(Math.max(0, Math.sin(Math.PI * cycle)), 5);
+          if (approach > 0.001) {
+            const camAngle = Math.atan2(cameraPosition.z, cameraPosition.x);
+            const camDist = Math.max(
+              species.approachDistanceMetres ?? 6,
+              Math.hypot(cameraPosition.x, cameraPosition.z),
+            );
+            let deltaAngle = camAngle - angle;
+            deltaAngle -= Math.PI * 2 * Math.round(deltaAngle / (Math.PI * 2));
+            angle += deltaAngle * approach;
+            radius = radius * (1 - approach) + camDist * approach;
+            height = height * (1 - approach) + cameraPosition.y * approach;
+          }
+        }
+        leader.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
         leader.heading
-          .set(
-            -Math.sin(leader.angle) * Math.sign(leader.speed),
-            climb * 0.5,
-            Math.cos(leader.angle) * Math.sign(leader.speed),
-          )
+          .set(-Math.sin(angle) * Math.sign(leader.speed), climb * 0.5, Math.cos(angle) * Math.sign(leader.speed))
           .normalize();
+
+        // Predator proximity: a continuous alarm from nearest-threat distance,
+        // not a state machine — calm/alert/flee/calm falls out of the distance
+        // curve alone. O(threats) per leader, never O(members) or O(schools²).
+        let alarm = 0;
+        if (species.fleesPredators && threats && threats.length > 0) {
+          let nearestDistSq = Infinity;
+          let awayX = 0;
+          let awayZ = 0;
+          for (const threat of threats) {
+            const dx = leader.position.x - threat.x;
+            const dz = leader.position.z - threat.z;
+            const distSq = dx * dx + dz * dz;
+            if (distSq < nearestDistSq) {
+              nearestDistSq = distSq;
+              awayX = dx;
+              awayZ = dz;
+            }
+          }
+          const fleeRadius = species.fleeRadiusMetres ?? Math.max(16, species.pathRadius * 0.9);
+          const dist = Math.sqrt(nearestDistSq);
+          alarm = Math.min(1, Math.max(0, 1 - dist / fleeRadius));
+          if (alarm > 0 && dist > 1e-3) {
+            const push = alarm * fleeRadius * 0.6;
+            leader.position.x += (awayX / dist) * push;
+            leader.position.z += (awayZ / dist) * push;
+            leader.heading.x = leader.heading.x * (1 - alarm) + (awayX / dist) * alarm;
+            leader.heading.z = leader.heading.z * (1 - alarm) + (awayZ / dist) * alarm;
+            leader.heading.normalize();
+          }
+        }
+        leader.alarm = alarm;
       }
 
       for (let i = 0; i < members.length; i += 1) {
         const member = members[i];
         if (!member) continue;
         const leader = member.leader;
+        // A bait ball: members spiral the vortex axis instead of riding a
+        // fixed offset in the leader's frame. See FaunaSpecies.vortex.
+        if (species.vortex && member.spiralRadius !== undefined) {
+          const spiralAngle = (member.spiralPhase ?? 0) + elapsed * species.vortex.spinHertz * Math.PI * 2;
+          const cosSpiral = Math.cos(spiralAngle);
+          const sinSpiral = Math.sin(spiralAngle);
+          position.copy(leader.position);
+          position.x += cosSpiral * member.spiralRadius;
+          position.z += sinSpiral * member.spiralRadius;
+          position.y += member.offset.y;
+          position.y = Math.min(position.y, ceiling + breachHeight);
+          if (bounds.floorY !== null) position.y = Math.max(position.y, floorY);
+          right.set(-sinSpiral, 0, cosSpiral);
+          quaternion.setFromUnitVectors(FORWARD, right);
+          scaleVector.setScalar(member.scale);
+          matrix.compose(position, quaternion, scaleVector);
+          mesh.setMatrixAt(i, matrix);
+          continue;
+        }
         const drift = Math.sin(elapsed * 0.7 + member.wander) * 0.25;
+        // Flash-expansion: members fan outward from the leader's line as its
+        // alarm rises — see FaunaSpecies.fleeFanOut. 1 (no fan-out) when unset.
+        const fan = species.fleeFanOut ? 1 + leader.alarm * species.fleeFanOut : 1;
         position.copy(leader.position);
         right.set(leader.heading.z, 0, -leader.heading.x).normalize();
-        position.addScaledVector(right, member.offset.x + drift);
+        position.addScaledVector(right, (member.offset.x + drift) * fan);
         position.y += member.offset.y;
-        position.addScaledVector(leader.heading, member.offset.z);
+        position.addScaledVector(leader.heading, member.offset.z * fan);
         position.y = Math.min(position.y, ceiling + breachHeight);
         if (bounds.floorY !== null) position.y = Math.max(position.y, floorY);
         quaternion.setFromUnitVectors(FORWARD, leader.heading);

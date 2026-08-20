@@ -795,6 +795,16 @@ export function createOceanRig(options: OceanRigOptions): OceanRig {
       });
   }
 
+  // Every predator school's leader positions, flattened once — built here
+  // rather than per frame so a prey school's alarm scan (see
+  // oceanRigFauna.ts's School.update) stays O(threats), never O(schools²).
+  // The Vector3 instances are the SAME ones each predator school's own
+  // update() mutates every frame, so this list never needs rebuilding.
+  const threats: Vector3[] = [];
+  for (const school of schools) {
+    if (school.predatorAnchors) threats.push(...school.predatorAnchors);
+  }
+
   const bounds = {
     surfaceY: surfaceInSight ? viewerDepthMetres : null,
     floorY: seafloorInSight ? -floorClearance : null,
@@ -861,7 +871,7 @@ export function createOceanRig(options: OceanRigOptions): OceanRig {
         foreground.update(elapsed);
       }
 
-      for (const school of schools) school.update(elapsed, bounds);
+      for (const school of schools) school.update(elapsed, bounds, threats, cameraPosition);
     },
     dispose: () => {
       for (const school of schools) school.dispose();
