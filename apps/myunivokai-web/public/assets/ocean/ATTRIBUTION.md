@@ -56,6 +56,34 @@ silhouette.
 fishing game and have no meaning in a portrait scene; a fish that plays `Death`
 because a clip index shifted is the failure mode worth naming here.
 
+## Not found anywhere: a lanternfish or myctophid model
+
+Searched beyond Poly Pizza and Sketchfab on request — Kenney.nl (2D sprites
+only, no 3D fish pack), OpenGameArt.org, several itch.io "deep sea creatures"
+packs, and Cults3D (3D-printing STL, wrong format and style entirely). One
+real myctophid exists on Sketchfab — a Florida Museum of Natural History
+photogrammetry scan — but `isDownloadable: false` and an empty license
+(all-rights-reserved by default). No CC0/CC-BY lanternfish exists anywhere
+free that this search reached.
+
+## Procedural skin, not a missing asset: silversides, anthias, lanternfish
+
+Three species in `oceanRigFauna.ts`'s `OCEAN_RIG_SPECIES` have no GLB and,
+after the search above, are not going to get one soon. Rather than leave them
+a flat single-colour `MeshStandardMaterial` — the "toy" read a texture-less
+procedural body always has — `oceanFishSkinTexture.ts` bakes a
+`CanvasTexture` onto the same cylindrical UV `oceanRigBodies.ts`'s body of
+revolution already exposes (u = angle around the body, v = head to tail),
+using the identical "hash a wrapped lattice, smoothstep-interpolate" noise
+`createSandTextures` already bakes the seabed with — CC0-equivalent in that
+it costs no download and needs no licence line, generated at runtime from a
+seed.
+
+The lanternfish additionally gets an emissive-only texture: paired photophore
+rows either side of the belly seam, real myctophid anatomy, so the existing
+"a lanternfish is a dark fish wearing lights" comment in `oceanRig.ts` is
+finally true at the pixel level instead of as a uniform whole-body glow.
+
 ## Not used: PBR textures — [Poly Haven](https://polyhaven.com), CC0
 
 Six 1k tiling maps were fetched and then **removed without ever being loaded**,

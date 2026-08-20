@@ -38,6 +38,7 @@ import {
   Vector3,
 } from "three";
 import { bodyForArchetype, type BodyArchetype } from "./oceanRigBodies";
+import { createFishSkinBake } from "./oceanFishSkinTexture";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { randomFromSeed } from "@/lib/scene";
 import { OCEAN_MODEL_BASE_PATH } from "./oceanFaunaModels";
@@ -129,6 +130,14 @@ export type FaunaSpecies = {
    */
   nearField?: boolean;
   label: string;
+  /**
+   * Paired ventral photophore rows, baked into an emissive texture instead of
+   * the flat whole-body glow every species with no GLB used to get. Real
+   * myctophid anatomy, and the reason a lanternfish reads as "a dark fish
+   * wearing lights" rather than as a uniformly pale flake. See
+   * oceanFishSkinTexture.ts.
+   */
+  photophores?: boolean;
 };
 
 /**
@@ -417,6 +426,7 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     color: "#1E2A33",
     body: "lanternfish",
     label: "lanternfish",
+    photophores: true,
     swim: { onset: 0.35, amplitude: 0.09, waves: 0.9, beat: 2.2 },
     bodyAxis: "long",
     head: 1,
@@ -704,6 +714,18 @@ export function createSchool(
   const bellyUniform = { value: 1 };
   const spanUniform = { value: species.swim.span ?? 0.5 };
 
+  // A skin bake only for species with no GLB to adopt — a species with one
+  // gets its texture from the model itself the moment `adopt()` runs, and a
+  // bake it would discard within a frame or two is wasted canvas work.
+  // material.color is left alone: the bake is a grey multiplier, not a
+  // colour, so the near-field emissive copy below (which reads
+  // material.color) still sees the species' real colour.
+  const skinBake = species.file ? null : createFishSkinBake({ seed, photophores: species.photophores });
+  if (skinBake) {
+    material.map = skinBake.map;
+    if (skinBake.emissiveMap) material.emissiveMap = skinBake.emissiveMap;
+  }
+
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uCreatureTime = creatureTime;
     shader.uniforms.uOnset = { value: species.swim.onset };
@@ -898,6 +920,7 @@ export function createSchool(
     dispose: () => {
       mesh.geometry.dispose();
       material.dispose();
+      skinBake?.dispose();
     },
   };
 }

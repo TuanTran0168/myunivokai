@@ -87,6 +87,7 @@ function bodyGeometry(options: BodyOptions): BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
   const along: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
   const normal = new Vector3();
 
@@ -104,6 +105,13 @@ function bodyGeometry(options: BodyOptions): BufferGeometry {
       normal.set(x, y, 0.18).normalize();
       normals.push(normal.x, normal.y, normal.z);
       along.push(t);
+      // u wraps exactly once around the revolve (angle / 2pi), v runs head to
+      // tail — the same cylindrical parameterisation createSandTextures already
+      // bakes noise on, chosen for the same reason: a wrap-safe u is what makes
+      // a tileable skin texture possible at all. sin(angle) = -1 is the belly
+      // (y most negative — see the vBelly countershading this shares the sign
+      // convention with), which is u = 0.75 here.
+      uvs.push(r / radialSegments, t);
     }
   }
   for (let s = 0; s < lengthSegments; s += 1) {
@@ -116,6 +124,11 @@ function bodyGeometry(options: BodyOptions): BufferGeometry {
 
   // Fins are flat quads wound BOTH ways: a fin is a membrane, and a fish seen
   // from its other side with back-face culling on loses its tail.
+  //
+  // u = 0.5 for every fin vertex — a fixed strip down the middle of the skin
+  // texture's u range, deliberately away from the belly seam at u = 0.75. A
+  // fin is not skin and does not need real texture space; it only needs to
+  // sample somewhere that is not one of the lanternfish's photophore rows.
   const quad = (
     corners: readonly [number, number, number][],
     alongValue: number,
@@ -126,6 +139,7 @@ function bodyGeometry(options: BodyOptions): BufferGeometry {
       positions.push(corner[0], corner[1], corner[2]);
       normals.push(faceNormal[0], faceNormal[1], faceNormal[2]);
       along.push(alongValue);
+      uvs.push(0.5, alongValue);
     }
     indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
@@ -163,6 +177,7 @@ function bodyGeometry(options: BodyOptions): BufferGeometry {
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
   geometry.setAttribute("along", new Float32BufferAttribute(along, 1));
+  geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   return geometry;
 }
