@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://myunivokai.com/contracts/scenes/ocean-scene-config.schema.json",
   "title": "OceanSceneConfig",
-  "description": "Scene contract for the ocean family, produced by ocean-service (sceneType 'ocean', schemaVersion '1.1'). Renderers are keyed by (sceneType, schemaVersion). Only semantic and hero placements are stored; mass scatter (flora, marine snow, plankton, school paths) is derived frontend-side from the placement/path seeds embedded here. The whole water and lighting section is DERIVED from depth.metres by services/ocean-service/internal/services/depth_curve.go and then stored, so re-tuning the curve never changes a world that already exists. There is no hdriKey anywhere: the sky, where a world has one, is evaluated analytically (Preetham) rather than sampled, and below the waterline there is no sky to sample at all. Golden fixtures in services/ocean-service/internal/services/testdata are the executable form of this contract.",
+  "description": "Scene contract for the ocean family, produced by ocean-service (sceneType 'ocean', schemaVersion '1.4'). Renderers are keyed by (sceneType, schemaVersion). Only semantic and hero placements are stored; mass scatter (flora, marine snow, plankton, school paths) is derived frontend-side from the placement/path seeds embedded here. The whole water and lighting section is DERIVED from depth.metres by services/ocean-service/internal/services/depth_curve.go and then stored, so re-tuning the curve never changes a world that already exists. There is no hdriKey anywhere: the sky, where a world has one, is evaluated analytically (Preetham) rather than sampled, and below the waterline there is no sky to sample at all. Golden fixtures in services/ocean-service/internal/services/testdata are the executable form of this contract.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -28,7 +28,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.1"
+      "const": "1.4"
     },
     "sceneType": {
       "const": "ocean"
@@ -87,7 +87,7 @@
         "metres": {
           "type": "number",
           "description": "How deep the VIEWER is. NEGATIVE means above the waterline, by that many metres — depth is this family's axis and the axis continues through zero, so surfacing is a depth rather than a mode. The renderer branches on the sign because air is a different optical medium, not water with different numbers. Only shallow worlds surface, and only to a person's eye height.",
-          "minimum": -7.8,
+          "minimum": -24,
           "maximum": 3800
         },
         "seafloorMetres": {
@@ -134,13 +134,13 @@
         },
         "fogDensity": {
           "type": "number",
-          "minimum": 0.026,
+          "minimum": 0.011,
           "maximum": 0.084
         },
         "visibilityMetres": {
           "type": "number",
           "description": "How far a viewer can actually see: the SHORTER of the two limits, how much light is left and how clear the water is. A trench is gin-clear and unlit; a harbour is brilliantly lit and opaque.",
-          "minimum": 12,
+          "minimum": 11.85,
           "maximum": 71
         },
         "tintStrength": {
@@ -178,7 +178,7 @@
         },
         "surfaceElevationRadians": {
           "type": "number",
-          "minimum": 0.55,
+          "minimum": 0.06,
           "maximum": 1.3
         },
         "godRayStrength": {
@@ -512,7 +512,7 @@
               "approachDistance": {
                 "type": "number",
                 "minimum": 9,
-                "maximum": 44
+                "maximum": 57.37
               },
               "passDurationSeconds": {
                 "type": "number",
@@ -603,7 +603,7 @@
           "radiusFromCenter": {
             "type": "number",
             "minimum": 12,
-            "maximum": 34
+            "maximum": 58
           },
           "heightAboveFloor": {
             "type": "number",
