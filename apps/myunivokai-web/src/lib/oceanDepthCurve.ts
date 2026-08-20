@@ -99,8 +99,12 @@ const KEY_LIGHT_FLOOR_COLOR: RgbColor = { red: 0.06, green: 0.12, blue: 0.2 };
 const AMBIENT_FLOOR_COLOR: RgbColor = { red: 0.02, green: 0.05, blue: 0.09 };
 
 const BRIGHTNESS_COMPRESSION = 0.3;
-const MINIMUM_VISIBILITY_METRES = 12;
-const VISIBILITY_METRES_RANGE = 26;
+// Mirrors minimumVisibilityMetres / visibilityMetresRange in depth_curve.go.
+// Raised once the fog was actually connected to the scene: at the old 38 m
+// ceiling, a basin 36 m across was 46% hazed through its middle, which is not
+// what clear tropical water looks like. Clear ocean runs 30-80 m horizontally.
+const MINIMUM_VISIBILITY_METRES = 14;
+const VISIBILITY_METRES_RANGE = 76;
 const MINIMUM_TINT_STRENGTH = 0.15;
 const MAXIMUM_TINT_STRENGTH = 0.95;
 // Renderer parameters in 0..1, not irradiances: the physics owns the shape of

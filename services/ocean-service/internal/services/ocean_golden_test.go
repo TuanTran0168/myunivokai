@@ -27,18 +27,39 @@ var goldenCases = []struct {
 	Mood          string
 	LandmarkCount int
 }{
-	// The seeds are chosen, not arbitrary: between them the four cases land in all
-	// three depth zones and cover both a world with a giant and a world without.
-	// TestGoldenFixturesCoverEveryDepthZone below is what keeps that true.
+	// One case per mood, and since each mood now pins one depth, these four ARE
+	// the create form's four DEPTH & MOOD options — the whole axis, in order,
+	// with the fixture name matching the mood that produces it.
 	//
-	//	reflective  OCN-GOLDEN-DEEP       abyss           ~2431 m   no giant
-	//	focused     OCN-GOLDEN-TWILIGHT   twilightReach    ~751 m   giant
-	//	dreamy      OCN-GOLDEN-BLOOM      twilightReach    ~224 m   no giant
-	//	energetic   OCN-GOLDEN-SURGE      sunlitShallows    ~35 m   giant
+	//	focused     OCN-GOLDEN-TWILIGHT   above water     -22.62 m   sun 4.0 deg
+	//	energetic   OCN-GOLDEN-SURGE      sunlitShallows      ~24 m
+	//	dreamy      OCN-GOLDEN-BLOOM      twilightReach      ~120 m
+	//	reflective  OCN-GOLDEN-DEEP       abyss             ~3000 m
+	//
+	// The seeds are inherited from when the zone was rolled rather than pinned,
+	// so the names no longer describe the depths they used to land in — kept
+	// anyway, because a fixture's value is that it does not move, and renaming
+	// the seeds would throw away the one property they exist for.
 	{Name: "reflective", Seed: "OCN-GOLDEN-DEEP", Mood: "reflective", LandmarkCount: 5},
 	{Name: "focused", Seed: "OCN-GOLDEN-TWILIGHT", Mood: "focused", LandmarkCount: 3},
 	{Name: "dreamy", Seed: "OCN-GOLDEN-BLOOM", Mood: "dreamy", LandmarkCount: 7},
 	{Name: "energetic", Seed: "OCN-GOLDEN-SURGE", Mood: "energetic", LandmarkCount: 4},
+
+	// ---- ABOVE THE WATERLINE ---------------------------------------------
+	// Not covered until recently, and that gap is why the surface view stayed
+	// broken through several rounds of work: every golden world was underwater,
+	// so the entire negative half of this family's own axis was outside the
+	// compatibility contract. A path no fixture exercises is a path that drifts.
+	//
+	//	surface-golden-hour  OCN-GOLDEN-SURFACE-7  -23.96 m   sun  4.6 deg
+	//	surface-daylight     OCN-GOLDEN-SURFACE-4  -17.76 m   sun 37.2 deg
+	//
+	// The two bracket the sun band an above-water world can draw from, because
+	// the low end is a different photograph from the high end and both have to
+	// keep working. Both are "focused", which is the only mood above the water —
+	// they are two more samples of that one preset, not a fifth and sixth option.
+	{Name: "surface-golden-hour", Seed: "OCN-GOLDEN-SURFACE-7", Mood: "focused", LandmarkCount: 4},
+	{Name: "surface-daylight", Seed: "OCN-GOLDEN-SURFACE-4", Mood: "focused", LandmarkCount: 4},
 }
 
 func TestGoldenFixtures(t *testing.T) {

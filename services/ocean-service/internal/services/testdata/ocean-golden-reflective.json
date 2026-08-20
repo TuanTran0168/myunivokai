@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "ocean",
   "sceneName": "The Lantern Trench",
   "archetype": "Tidekeeper",
@@ -17,18 +17,22 @@
     ]
   },
   "depth": {
-    "metres": 2430.69,
+    "metres": 1144.21,
+    "seafloorMetres": 1149.72,
     "zone": "abyss"
   },
   "water": {
     "fogColor": "#030914",
-    "fogDensity": 0.083,
-    "visibilityMetres": 12,
-    "tintStrength": 0.95
+    "fogDensity": 0.071,
+    "visibilityMetres": 14,
+    "tintStrength": 0.95,
+    "jerlovWaterType": "I",
+    "windSpeedMetresPerSecond": 5
   },
   "lighting": {
     "surfaceLightColor": "#0F1F33",
     "surfaceElevationRadians": 0.67,
+    "surfaceAzimuthRadians": 4.92,
     "godRayStrength": 0,
     "causticStrength": 0,
     "ambientColor": "#050D17",
@@ -122,7 +126,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "kelpCathedral",
       "angleRadians": -0.2,
-      "radiusFromCenter": 21.5,
+      "radiusFromCenter": 40.67,
       "heightAboveFloor": 5.99,
       "accentColor": "#06B6D4",
       "energy": 60
@@ -133,7 +137,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "abyssalTrench",
       "angleRadians": 1.42,
-      "radiusFromCenter": 27.93,
+      "radiusFromCenter": 53.99,
       "heightAboveFloor": 3.77,
       "accentColor": "#FACC15",
       "energy": 65
@@ -144,7 +148,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "whaleFall",
       "angleRadians": 2.57,
-      "radiusFromCenter": 20.44,
+      "radiusFromCenter": 38.46,
       "heightAboveFloor": 0.4,
       "accentColor": "#8B5CF6",
       "energy": 70
@@ -155,7 +159,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "sunkenRelic",
       "angleRadians": 3.76,
-      "radiusFromCenter": 26.66,
+      "radiusFromCenter": 51.36,
       "heightAboveFloor": 4.79,
       "accentColor": "#06B6D4",
       "energy": 75
@@ -166,7 +170,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "hydrothermalVent",
       "angleRadians": 4.88,
-      "radiusFromCenter": 27.57,
+      "radiusFromCenter": 53.25,
       "heightAboveFloor": 5.93,
       "accentColor": "#FACC15",
       "energy": 80

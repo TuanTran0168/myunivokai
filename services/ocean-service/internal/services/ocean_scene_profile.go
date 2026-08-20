@@ -18,8 +18,8 @@ import (
 // per-zone fog-colour table the way the forest has a per-season one.
 
 // Depth zones, in canonical order from the surface down. The order is part of
-// the contract: the mood zone-weight vectors index into it, and the
-// transitional blend picks an adjacent zone.
+// the contract: each mood pins one of them, and the transitional blend picks an
+// adjacent zone by stepping along this list.
 //
 // NEITHER BOUNDARY IS A ROUND NUMBER SOMEBODY LIKED. Both come out of
 // depth_curve.go:
@@ -37,6 +37,95 @@ const (
 )
 
 var zoneKindsInOrder = []string{ZoneSunlitShallows, ZoneTwilightReach, ZoneAbyss}
+
+// How far above the waterline an above-water world's viewer sits.
+//
+// HOW OFTEN IS NO LONGER A PROBABILITY, AND THAT IS THE POINT. This used to be
+// a `surfaceBreachProbability` of one in three, rolled for every shallow world,
+// which meant the sea-surface view was a lottery nobody could enter on purpose
+// and the abyss could win it by accident. It is now a property of the mood the
+// person picked — "Still Water" is above the water, every seed, and no other
+// mood ever is. See oceanMoodProfiles.
+//
+// What is left here is the altitude, which is still drawn, because how high
+// above a sea you are is a genuine degree of freedom and 4 m and 24 m are
+// different photographs.
+//
+// THE ALTITUDE BAND WAS WRONG, AND THE REASONING THAT SET IT WAS TOO.
+//
+// It used to be 1.4-7.8 m, chosen as "a person's eye height on the water:
+// standing in a small boat at the low end, a flybridge or a low cliff at the
+// high end. Higher than that and the waves stop being something you are among."
+// That is a nice sentence and it produced a frame with no horizon in it.
+//
+// Two things are wrong with it. The first is arithmetic: wind in this family runs
+// to 13 m/s, and Pierson-Moskowitz puts the significant wave height there at
+// 3.6 m. At 4.5 m of altitude the crests are at eye level, the sea fills the
+// frame edge to edge, and there is no sky line — so the one view that exists to
+// show the surface showed no surface, only water. That is exactly the report this
+// change answers.
+//
+// The second is that "a person's eye height" is a story about a viewer this
+// family does not otherwise have. Nothing else on this axis is a person: 2448 m
+// is not a diver and 142 m is not a submarine, they are places. The altitude
+// should be chosen for what the FRAME needs, and what the frame needs is enough
+// height for the horizon to separate from the water.
+//
+// So: 4 m at the low end, which clears the crests of the roughest sea this family
+// can generate, up to 24 m — the height the prototype's own two above-water views
+// are composed at (12 m and 22 m), and where sea and sky each get half the frame.
+//
+// The water below an above-water world is still drawn from the shallows band, so
+// "Still Water" is a shallow sea seen from the air — turquoise over sand, with
+// the bottom legible through it — rather than mid-ocean grey. That is the more
+// beautiful of the two and it is also the honest one: a 24 m altitude cannot see
+// a 3 km seabed, but it can absolutely see a 20 m one.
+const (
+	minimumBreachAltitudeMetres = 4.0
+	breachAltitudeRangeMetres   = 20.0
+)
+
+// THE BOUNDARY RULE: every ocean world must be able to see the surface or the
+// floor.
+//
+// Water with neither is not a place, it is a colour. A viewer needs one plane
+// of reference to read scale, direction and motion from — take both away and
+// the fish have nothing to be near, the god rays have nothing to land on, and
+// the frame is a flat wash. This is the rule the twilight zone used to be
+// exempt from, on purpose, and the exemption is what made a third of all worlds
+// render as an empty blue rectangle.
+//
+// Both ways of satisfying it are real places, and which one a world gets is
+// drawn:
+//
+//   - RISE THE FLOOR. Seamounts are ordinary — there are on the order of a
+//     hundred thousand of them — and a world in open water above one is exactly
+//     as honest as a world above an abyssal plain. The viewer's depth, which is
+//     this family's whole axis, is untouched.
+//   - LIFT THE VIEWER. Most of what anyone has ever seen of open water is from
+//     the top of it. The demo's own "open water" view is 17 m down with three
+//     kilometres beneath it, and it is the best-looking frame in the study.
+//
+// The clearance a rise leaves is deliberately generous: close enough to be seen
+// through the water, far enough that the floor is a landscape below rather than
+// something the viewer is standing on.
+//
+// Whichever way a world satisfies it, THE ZONE MUST NOT CHANGE. Lifting a
+// twilight viewer up to nine metres was the first attempt, and it quietly
+// reclassified those worlds as shallows — which contradicted the mood's own
+// pinned zone, and then let them draw coastal water whose sighting range could not
+// reach the surface it had just been moved to see. So a lift only ever moves a
+// world within its OWN depth band.
+const (
+	seamountRiseProbability    = 0.5
+	minimumRiseClearanceMetres = 18.0
+	riseClearanceRangeMetres   = 34.0
+	// How much of a sighting range a boundary may sit at and still count as
+	// visible. The renderer uses the same multiplier to decide whether to draw
+	// it, and if these two ever disagree the builder guarantees a boundary the
+	// renderer then refuses to draw.
+	boundarySightMultiplier = 1.5
+)
 
 const (
 	twilightReachTopMetres = orangeDeathMetres
@@ -79,6 +168,53 @@ var depthBandByZone = map[string]floatRange{
 	ZoneTwilightReach:  {Minimum: 45, Maximum: 170},
 	ZoneAbyss:          {Minimum: 1050, Maximum: 3800},
 }
+
+// floorClearanceBandByZone is the water BELOW the viewer, in metres, and it is
+// what finally makes the three zones three different places rather than three
+// colour grades of the same place.
+//
+// The first draft had no such concept, so every world — reef, twilight, trench
+// — sat a few metres above a seabed. Two of those three are wrong, and the
+// middle one is wrong in the most interesting way:
+//
+//   - A reef IS shallow water over a floor. You are on the continental shelf,
+//     the bottom is right there, and kelp confirms it: kelp forests are rarely
+//     deeper than 15-40 m because they need light. Floor visible.
+//   - The twilight zone is OPEN WATER. Against a mean ocean depth of 3682 m,
+//     a world at 143 m has kilometres of nothing beneath it, so no floor.
+//
+//     It used to have no surface either, and that was written down here as a
+//     virtue: "the one zone where you can see neither boundary, which is
+//     precisely what makes the midwater unnerving rather than empty". It is
+//     wrong, and it is wrong in a way only a rendered frame shows. A viewer at
+//     143 m with fifty metres of sighting range is not unnerved — there is
+//     nothing in frame to be unnerved BY. It renders as a flat blue rectangle
+//     with some fish in it, which is the single ugliest thing this family can
+//     produce, and it produced it for a third of all worlds. See
+//     surfacedByBoundaryRule below.
+//   - The abyssal worlds are placed ON the bottom, because everything that
+//     makes the abyss worth drawing lives there: hydrothermal vents (mean
+//     ~2100 m along the mid-ocean ridges), whale falls, tubeworm fields. An
+//     abyssal world suspended in mid-water would be a black screen.
+//
+// The renderer never reads this table, or the zone. It subtracts, compares the
+// result against visibility, and draws a floor or does not.
+// The two on-the-bottom bands must stay INSIDE the visibility at their own
+// depth, or "this world sits on the seabed" silently becomes "this world sits
+// slightly too far above the seabed to see it". The abyss is the tight case:
+// visibility down there is about 12 m, so a 3-26 m band left more than a third
+// of abyssal worlds staring into nothing. TestOnBottomZonesCanActuallySeeTheir
+// Floor pins this against the depth curve rather than against a comment.
+var floorClearanceBandByZone = map[string]floatRange{
+	ZoneSunlitShallows: {Minimum: 2, Maximum: 14},
+	ZoneTwilightReach:  {Minimum: 1900, Maximum: 3900},
+	ZoneAbyss:          {Minimum: 2, Maximum: 9},
+}
+
+// onBottomZones are the zones whose worlds are placed on the seabed. The
+// twilight reach is deliberately absent: it is open water and its floor is
+// SUPPOSED to be out of sight.
+var onBottomZones = []string{ZoneSunlitShallows, ZoneAbyss}
 
 // Current kinds. Still water belongs to the deep, surge to the shallows — the
 // per-zone weight tables below encode the whole compatibility matrix, the same
@@ -164,35 +300,65 @@ var landmarkModelKeysByKind = map[string]string{
 const assetCatalogVersion = "ocean-1"
 
 // oceanMoodProfile tunes the deterministic ocean numbers by atmospheric mood.
-// ZoneWeights index into zoneKindsInOrder — a leaning zone, never a hard
-// mapping, so repeated generations still vary.
+//
+// Zone is a PIN, not a lean, and that is a correction. It used to be
+// `ZoneWeights [3]float64` — a probability per zone — on the reasoning that a
+// hard mapping would make repeated generations too samey. What it actually
+// produced was a control that lies: the create form labels these four options
+// DEPTH & MOOD and names them after depths, so choosing "The Abyss" and
+// receiving a view of the water surface is not pleasant variety, it is the
+// control not working. That combination had a 5% chance every time somebody
+// picked the abyss (15% weight on the shallows, times a one-in-three breach),
+// and it was reported as a bug the first time anyone saw it.
+//
+// Variety does not come from the zone. It comes from the fifteen other values
+// drawn per world — depth within the band, floor clearance, water type, wind,
+// sun elevation and azimuth, landmarks, fauna counts — and from bands wide
+// enough to matter: the abyss spans 1050 to 3800 m, which is a bigger spread
+// than the whole rest of the axis put together.
 type oceanMoodProfile struct {
-	ZoneWeights       [3]float64
+	// Zone the world IS, for every seed, with no roll involved.
+	Zone string
+	// AboveWater lifts the viewer out of the water entirely: depth goes
+	// negative and the world is the sea seen from the air. Not a fourth zone —
+	// the zone below is still the one named above.
+	AboveWater        bool
 	CurrentMultiplier float64
 	FaunaMultiplier   float64
 	BloomMultiplier   float64
 }
 
+// The fallback for a mood this family does not know. Twilight because it is the
+// middle of the axis and unambiguously underwater: an unknown mood should get
+// the most ordinary ocean there is, not an edge of the range.
 var neutralOceanProfile = oceanMoodProfile{
-	ZoneWeights:       [3]float64{0.34, 0.33, 0.33},
+	Zone:              ZoneTwilightReach,
+	AboveWater:        false,
 	CurrentMultiplier: 1.0,
 	FaunaMultiplier:   1.0,
 	BloomMultiplier:   1.0,
 }
 
 // Keyed by the atmospheric mood values the create form sends — the same four
-// backend values every family uses. The leaning zone per mood: energetic → the
-// reef (surge, most fauna), dreamy and focused → the twilight reach (drifting
-// and still respectively), reflective → the abyss (quiet, dark, one light).
+// backend values every family uses. Four moods across an axis with three zones
+// and a negative half, which is what makes the table square without inventing
+// anything: three depths under the water and one above it.
 //
-// Two moods leaning on one zone is deliberate: there are four moods and three
-// zones, and inventing a fourth zone to make the table square would add a
-// depth band nobody asked for.
+//	focused    Still Water  the sea from the air. Still water is a description
+//	                        of a SURFACE — there is no visible stillness at
+//	                        142 m — and its low current multiplier already gave
+//	                        it the calmest wind of the four.
+//	energetic  Reef Surge   the shallows, floor in frame, most fauna, surge.
+//	dreamy     Drifting     the twilight reach: midwater, no floor, drifting.
+//	reflective The Abyss    on the bottom, kilometres down, one light.
+//
+// Read down the Zone column and it is the depth axis in order, which is the
+// property the form's own labels promise and the old weights could not keep.
 var oceanMoodProfiles = map[string]oceanMoodProfile{
-	"focused":    {ZoneWeights: [3]float64{0.20, 0.60, 0.20}, CurrentMultiplier: 0.75, FaunaMultiplier: 0.80, BloomMultiplier: 1.00},
-	"dreamy":     {ZoneWeights: [3]float64{0.25, 0.60, 0.15}, CurrentMultiplier: 0.85, FaunaMultiplier: 1.00, BloomMultiplier: 1.35},
-	"energetic":  {ZoneWeights: [3]float64{0.60, 0.25, 0.15}, CurrentMultiplier: 1.35, FaunaMultiplier: 1.35, BloomMultiplier: 1.15},
-	"reflective": {ZoneWeights: [3]float64{0.15, 0.25, 0.60}, CurrentMultiplier: 0.70, FaunaMultiplier: 0.75, BloomMultiplier: 0.85},
+	"focused":    {Zone: ZoneSunlitShallows, AboveWater: true, CurrentMultiplier: 0.75, FaunaMultiplier: 0.80, BloomMultiplier: 1.00},
+	"energetic":  {Zone: ZoneSunlitShallows, AboveWater: false, CurrentMultiplier: 1.35, FaunaMultiplier: 1.35, BloomMultiplier: 1.15},
+	"dreamy":     {Zone: ZoneTwilightReach, AboveWater: false, CurrentMultiplier: 0.85, FaunaMultiplier: 1.00, BloomMultiplier: 1.35},
+	"reflective": {Zone: ZoneAbyss, AboveWater: false, CurrentMultiplier: 0.70, FaunaMultiplier: 0.75, BloomMultiplier: 0.85},
 }
 
 func oceanProfileForMood(mood string) oceanMoodProfile {
@@ -383,8 +549,31 @@ const (
 	// lighting. The surface elevation is the angle daylight enters the water
 	// at, not the sun's position in a sky this family does not have: it sets
 	// the slant of the god rays and the stretch of the caustic pattern.
+	//
+	// 0.55-1.30 rad is 31.5-74.5 degrees, and for a world UNDER the water that
+	// band is correct rather than conservative. Fresnel reflectance at the
+	// air-water interface climbs steeply below about 20 degrees and Snell's
+	// window narrows with it, so a low sun does not light a water column at all —
+	// it bounces off the top of it. A 5-degree sun underwater is a black frame.
 	minimumSurfaceElevation = 0.55
 	surfaceElevationRange   = 0.75
+
+	// ABOVE the waterline the same low sun is the best light there is, and the
+	// premise above stops applying: nothing has to survive a trip through the
+	// surface, so the only thing a shallow angle costs is height in the sky and
+	// the only thing it buys is every warm colour the atmosphere makes.
+	//
+	// This is why the sun's band now depends on which medium the viewer is in.
+	// The band was one number for both, so every ocean world was drawn at
+	// midday — the renderer could draw a sunrise correctly and no world ever
+	// asked it to. 0.06-0.70 rad is 3.4-40 degrees: golden hour at the bottom of
+	// the band, mid-morning at the top.
+	//
+	// The roll is unchanged and comes from the same stream, so no underwater world
+	// moves by a single digit. Only a breached one reads its roll into a different
+	// band.
+	minimumBreachedSurfaceElevation = 0.06
+	breachedSurfaceElevationRange   = 0.64
 	exposureJitterRange     = 0.10
 	baseBloomIntensity      = 0.30
 	bloomIntensityRange     = 0.55
@@ -471,30 +660,28 @@ const (
 
 	// landmarks
 	landmarkAngleJitterRadians  = 0.25
-	landmarkRadiusFractionBase  = 0.50
-	landmarkRadiusFractionRange = 0.38
+	// LANDMARKS ARE PLACED RELATIVE TO THE CAMERA, NOT TO THE BASIN.
+	//
+	// They used to be a fraction of the basin radius, 0.50 to 0.88. The basin is
+	// 26 to 38 m, so the ring landed anywhere from 13 to 33 m out — and the camera
+	// orbits at 16 to 24 m. The two ranges overlap almost completely, which means
+	// a landmark standing exactly where the viewer does was not a rare accident
+	// but the ordinary case, and a landmark at arm's length is not a landmark: it
+	// is a flat pale slab filling the frame with no readable shape. On the
+	// abyssal-plain fixture one came to rest 9.6 m from the lens and measured
+	// three times the reference's brightness, which was first misread as a seabed
+	// lighting fault.
+	//
+	// Tying the ring to the camera's own distance makes the collision impossible
+	// by construction rather than unlikely by luck. 8 m of standoff is enough that
+	// the nearest landmark reads as an object across a space; 26 m of ring depth
+	// keeps the furthest inside the mid boulder band, so they still sit in a
+	// landscape rather than out past its edge.
+	landmarkCameraStandoffMetres = 8.0
+	landmarkRingDepthMetres      = 26.0
 	landmarkHeightBase          = 0.0
 	landmarkHeightRange         = 6.0
 )
-
-// zoneForRoll maps a [0,1) roll onto the mood's zone weights.
-func zoneForRoll(roll float64, weights [3]float64) string {
-	total := 0.0
-	for _, weight := range weights {
-		total += weight
-	}
-	if total <= 0 {
-		return zoneKindsInOrder[0]
-	}
-	cumulative := 0.0
-	for index, weight := range weights {
-		cumulative += weight
-		if roll < cumulative/total {
-			return zoneKindsInOrder[index]
-		}
-	}
-	return zoneKindsInOrder[len(zoneKindsInOrder)-1]
-}
 
 // adjacentZone picks the zone above or below. Unlike the forest's seasons this
 // does NOT wrap: the surface has nothing above it and the abyss nothing below,

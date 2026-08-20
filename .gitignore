@@ -69,10 +69,24 @@ contracts/rust/Cargo.lock
 
 .vscode
 
-# Playwright scene shots. The images are a before/after instrument for a human
-# eye, taken on either side of a dependency change and thrown away afterwards —
-# committing them would put megabytes of GPU-dependent WebGL output into git
-# history to answer a question that only matters for one afternoon.
-apps/myunivokai-web/e2e/shots/
+# Playwright's own run artefacts: traces, videos, retries, the HTML report.
+# Large, per-run, and reproducible by re-running the suite.
 apps/myunivokai-web/playwright-report/
 apps/myunivokai-web/test-results/
+
+# e2e/shots/ is deliberately NOT ignored.
+#
+# It used to be, with the reasoning that WebGL output is GPU-dependent and the
+# images only matter for one afternoon. The first half is wrong: playwright.config
+# forces --use-angle=swiftshader, so every frame is a SOFTWARE render and two
+# machines running the same commit produce the same pixels. That is what makes
+# them worth keeping.
+#
+# The second half is wrong too. This repository's scene work has produced a run
+# of bugs that only an image could show — water rendering grey, a frame clipped
+# flat to white, fish above the waterline, a street lamp on the seabed — and in
+# every case the question asked afterwards was "when did this start". Committed
+# frames answer it; a local folder that is wiped on every checkout does not.
+
+# Demo builds: three.js is spliced in at build time, never committed.
+demos/*/dist/

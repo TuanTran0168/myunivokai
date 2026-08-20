@@ -47,8 +47,11 @@ const natureMoodOptions = [
   { label: "Summer Meadow", value: "energetic", swatch: "#4ADE80" },
   { label: "Amber Autumn", value: "reflective", swatch: "#F59E0B" }
 ];
-// Each ocean label names the depth that mood leans toward in the ocean builder,
-// the same way the forest labels name a season.
+// Each ocean label names the depth that mood IS. Unlike the forest's seasons,
+// which bias a world's character, these four pin a coordinate on the family's
+// one axis — so the label is a promise: "The Abyss" is on the bottom every time
+// and "Still Water" is above the surface every time. See OCEAN_MOOD_PROFILES in
+// lib/oceanScene.ts and oceanMoodProfiles in ocean_scene_profile.go.
 const oceanMoodOptions = [
   { label: "Still Water", value: "focused", swatch: "#5EEAD4" },
   { label: "Drifting", value: "dreamy", swatch: "#A78BFA" },

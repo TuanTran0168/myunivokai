@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "ocean",
   "sceneName": "The Lantern Trench",
   "archetype": "Tidekeeper",
@@ -17,21 +17,25 @@
     ]
   },
   "depth": {
-    "metres": 16.69,
+    "metres": 13.97,
+    "seafloorMetres": 22.54,
     "zone": "sunlitShallows"
   },
   "water": {
-    "fogColor": "#127586",
-    "fogDensity": 0.039,
-    "visibilityMetres": 25.88,
-    "tintStrength": 0.47
+    "fogColor": "#15798A",
+    "fogDensity": 0.018,
+    "visibilityMetres": 49.89,
+    "tintStrength": 0.45,
+    "jerlovWaterType": "IB",
+    "windSpeedMetresPerSecond": 9.56
   },
   "lighting": {
-    "surfaceLightColor": "#1E7F7A",
+    "surfaceLightColor": "#23847E",
     "surfaceElevationRadians": 0.94,
-    "godRayStrength": 0.49,
-    "causticStrength": 0.4,
-    "ambientColor": "#0A404A",
+    "surfaceAzimuthRadians": 0.06,
+    "godRayStrength": 0.55,
+    "causticStrength": 0.44,
+    "ambientColor": "#0B434C",
     "exposure": 1.2
   },
   "seafloor": {
@@ -120,7 +124,7 @@
       {
         "modelKey": "giant-manta",
         "passSeed": "OCN-GOLDEN-SURGE-ocean-giant-0",
-        "approachDistance": 29.75,
+        "approachDistance": 57.35,
         "passDurationSeconds": 22.5
       }
     ]
@@ -141,7 +145,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "kelpCathedral",
       "angleRadians": -0.22,
-      "radiusFromCenter": 30.75,
+      "radiusFromCenter": 49.96,
       "heightAboveFloor": 3.94,
       "accentColor": "#06B6D4",
       "energy": 60
@@ -152,7 +156,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "sunkenRelic",
       "angleRadians": 1.61,
-      "radiusFromCenter": 27.81,
+      "radiusFromCenter": 44.39,
       "heightAboveFloor": 4.56,
       "accentColor": "#FACC15",
       "energy": 65
@@ -163,7 +167,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "abyssalTrench",
       "angleRadians": 3.33,
-      "radiusFromCenter": 19.33,
+      "radiusFromCenter": 28.27,
       "heightAboveFloor": 2.36,
       "accentColor": "#8B5CF6",
       "energy": 70
@@ -174,7 +178,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "whaleFall",
       "angleRadians": 4.79,
-      "radiusFromCenter": 20.28,
+      "radiusFromCenter": 30.08,
       "heightAboveFloor": 3.46,
       "accentColor": "#06B6D4",
       "energy": 75

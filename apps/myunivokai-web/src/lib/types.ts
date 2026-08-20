@@ -286,7 +286,15 @@ export type ForestAssetsConfig = {
 // reads numbers rather than recomputing physics.
 
 export type OceanDepthConfig = {
+  /** How deep the VIEWER is. */
   metres?: number;
+  /**
+   * How deep the SEABED is. Their difference is the water below you, and it is
+   * the only thing that decides whether a floor is drawn — mean ocean depth is
+   * 3682 m, so a midwater world carries a value in the thousands and shows no
+   * bottom at all.
+   */
+  seafloorMetres?: number;
   zone?: string;
   blendTowardZone?: string;
   blendAmount?: number;
@@ -297,11 +305,33 @@ export type OceanWaterConfig = {
   fogDensity?: number;
   visibilityMetres?: number;
   tintStrength?: number;
+  /**
+   * Jerlov's 1976 optical class — "I" to "III" for open ocean, "1C" to "9C"
+   * for coastal. Decides hue, the per-channel depth curve and how coherent a
+   * caustic pattern can still be. Optional because worlds stored before
+   * schemaVersion 1.1 do not carry it.
+   */
+  jerlovWaterType?: string;
+  /**
+   * Wind at 10 m above the sea. The whole wave field comes out of this one
+   * number: significant wave height, peak wavelength and whitecap coverage.
+   */
+  windSpeedMetresPerSecond?: number;
 };
 
 export type OceanLightingConfig = {
   surfaceLightColor?: string;
   surfaceElevationRadians?: number;
+  /**
+   * The sun's compass bearing, in radians. Separate from the elevation because
+   * the renderer needs it for a different reason: elevation decides how much
+   * light there is, bearing decides where the CAMERA goes, since an above-water
+   * frame is composed looking toward the sun.
+   *
+   * Optional because worlds stored before schemaVersion 1.2 do not carry it; the
+   * renderer falls back to the constant bearing every ocean used to share.
+   */
+  surfaceAzimuthRadians?: number;
   godRayStrength?: number;
   causticStrength?: number;
   ambientColor?: string;

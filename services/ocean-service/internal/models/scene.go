@@ -49,11 +49,28 @@ type OceanSceneConfig struct {
 // renderer that wants a continuous response reads Metres, one that wants a
 // discrete dressing reads Zone, and the two can never disagree because the
 // builder derives the second from the first.
+// SeafloorMetres is the second number this family cannot do without, and its
+// absence was the first draft's worst mistake: every world put a seabed a few
+// metres under the camera no matter how deep it was. That is only true in
+// shallow water. The mean depth of the ocean is 3682 m, so a world floating at
+// 143 m has the bottom roughly three and a half KILOMETRES below it and must
+// show nothing down there at all — open water fading to black.
+//
+// Metres is how deep the VIEWER is; SeafloorMetres is how deep the SEABED is.
+// Their difference is the water below you, and whether it is smaller than
+// water.visibilityMetres is the only thing that decides if a floor is drawn.
+// One subtraction replaces what would otherwise be a per-zone "has floor" flag.
 type DepthConfig struct {
 	Metres          float64 `json:"metres"`
+	SeafloorMetres  float64 `json:"seafloorMetres"`
 	Zone            string  `json:"zone"`
 	BlendTowardZone string  `json:"blendTowardZone,omitempty"`
 	BlendAmount     float64 `json:"blendAmount,omitempty"`
+}
+
+// FloorClearanceMetres is the water between the viewer and the seabed.
+func (d DepthConfig) FloorClearanceMetres() float64 {
+	return d.SeafloorMetres - d.Metres
 }
 
 // WaterConfig is entirely derived from DepthConfig by the depth curve and then
@@ -67,12 +84,39 @@ type WaterConfig struct {
 	// water colour. It is what makes a red coral read brown-grey at 30 m
 	// without anyone hand-picking a brown.
 	TintStrength float64 `json:"tintStrength"`
+
+	// JerlovWaterType names the water on Jerlov's 1976 optical scale — "I"
+	// through "III" for open ocean, "1C" through "9C" for coastal. It is what
+	// decides the water's hue, its per-channel depth curve and how coherent a
+	// caustic pattern can still be, none of which a single visibility number
+	// can answer. Before this existed the renderer inferred it from
+	// VisibilityMetres, which meant the answer lived outside the world.
+	JerlovWaterType string `json:"jerlovWaterType"`
+
+	// WindSpeedMetresPerSecond is the wind at 10 m above the sea — the number
+	// every marine forecast, every buoy and every paper on wave spectra uses.
+	// The whole surface comes out of it: significant wave height
+	// (Pierson-Moskowitz 1964), peak wavelength, and whitecap coverage
+	// (Monahan & O'Muircheartaigh 1980). It is weather, not a consequence of
+	// depth, which is why it is the one value under Water that is drawn.
+	WindSpeedMetresPerSecond float64 `json:"windSpeedMetresPerSecond"`
 }
 
-// OceanLightingConfig has no sun position because the sun is not in the scene
-// — SurfaceElevationRadians is the angle the surface light enters the water
-// at, which is what sets the direction of the god rays and the scale of the
-// caustic pattern.
+// OceanLightingConfig carries the sun as two angles, because on this axis the
+// sun is sometimes in the scene and sometimes only its consequences are.
+//
+//   - SurfaceElevationRadians is the height of the sun above the horizon. Under
+//     the water that is the angle the light ENTERS at, which sets the direction
+//     of the god rays and the scale of the caustic pattern. Above the water it
+//     is the sun itself, and low values are the golden hour.
+//   - SurfaceAzimuthRadians is its compass bearing, and it exists because the
+//     renderer needs to know where to PUT the camera. The frame is composed
+//     looking toward the sun, so a bearing that is not carried in the config is
+//     a bearing the backend cannot vary — which is what it was: one shared
+//     constant, so every above-water world in the family had its sun in the
+//     same place. The prototype set this per view (0 for its golden hour, 118
+//     degrees for its daylight sea) and it was the only authored parameter in
+//     that study with no counterpart here.
 //
 // GodRayStrength and CausticStrength reach exactly zero on their own as depth
 // crosses the sunlight floor. No branch anywhere says "if abyss then disable
@@ -81,6 +125,7 @@ type WaterConfig struct {
 type OceanLightingConfig struct {
 	SurfaceLightColor       string  `json:"surfaceLightColor"`
 	SurfaceElevationRadians float64 `json:"surfaceElevationRadians"`
+	SurfaceAzimuthRadians   float64 `json:"surfaceAzimuthRadians"`
 	GodRayStrength          float64 `json:"godRayStrength"`
 	CausticStrength         float64 `json:"causticStrength"`
 	AmbientColor            string  `json:"ambientColor"`

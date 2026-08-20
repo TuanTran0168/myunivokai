@@ -165,3 +165,41 @@ func TestDepthCurveAnchorsAreOrdered(t *testing.T) {
 		t.Fatal("the last measured anchor must sit above the sunlight floor, or the ramp to zero has no room to run")
 	}
 }
+
+// TestOnBottomZonesCanActuallySeeTheirFloor is the test that would have caught
+// the number this family shipped wrong: the abyssal clearance band ran to 26 m
+// while visibility in the abyss is about 12 m, so worlds declared to be sitting
+// on the seabed could not see it. It sweeps each on-bottom zone's whole depth
+// band rather than sampling, because the failure was at one end of the range.
+func TestOnBottomZonesCanActuallySeeTheirFloor(t *testing.T) {
+	const sightMultiplier = 1.5 // BOUNDARY_SIGHT_MULTIPLIER in OceanRenderer.tsx
+	for _, zone := range onBottomZones {
+		depthBand := depthBandByZone[zone]
+		clearanceBand := floorClearanceBandByZone[zone]
+		for step := 0; step <= 100; step++ {
+			metres := depthBand.Minimum + (depthBand.Maximum-depthBand.Minimum)*float64(step)/100
+			sightLimit := DepthAt(metres).VisibilityMetres * sightMultiplier
+			if clearanceBand.Maximum > sightLimit {
+				t.Fatalf("zone %s at %.1f m: worst-case clearance %.1f m exceeds the sight limit %.1f m, so a world placed on the seabed would render no seabed",
+					zone, metres, clearanceBand.Maximum, sightLimit)
+			}
+		}
+	}
+}
+
+// The twilight reach must fail that same check — its floor is kilometres down
+// and is supposed to be invisible. A band that crept into sight would quietly
+// give the midwater a bottom again.
+func TestTheTwilightReachHasNoFloorInSight(t *testing.T) {
+	const sightMultiplier = 1.5
+	band := depthBandByZone[ZoneTwilightReach]
+	clearance := floorClearanceBandByZone[ZoneTwilightReach]
+	for step := 0; step <= 100; step++ {
+		metres := band.Minimum + (band.Maximum-band.Minimum)*float64(step)/100
+		sightLimit := DepthAt(metres).VisibilityMetres * sightMultiplier
+		if clearance.Minimum <= sightLimit {
+			t.Fatalf("twilight at %.1f m: best-case clearance %.1f m is within the sight limit %.1f m; open water would show a seabed",
+				metres, clearance.Minimum, sightLimit)
+		}
+	}
+}

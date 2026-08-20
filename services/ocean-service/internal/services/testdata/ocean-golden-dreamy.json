@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "sceneType": "ocean",
   "sceneName": "The Lantern Trench",
   "archetype": "Tidekeeper",
@@ -17,24 +17,26 @@
     ]
   },
   "depth": {
-    "metres": 45.72,
-    "zone": "twilightReach",
-    "blendTowardZone": "sunlitShallows",
-    "blendAmount": 0.46
+    "metres": 58.13,
+    "seafloorMetres": 1969.71,
+    "zone": "twilightReach"
   },
   "water": {
-    "fogColor": "#024667",
-    "fogDensity": 0.045,
-    "visibilityMetres": 22.11,
-    "tintStrength": 0.61
+    "fogColor": "#02385F",
+    "fogDensity": 0.025,
+    "visibilityMetres": 40.74,
+    "tintStrength": 0.65,
+    "jerlovWaterType": "I",
+    "windSpeedMetresPerSecond": 6.93
   },
   "lighting": {
-    "surfaceLightColor": "#0F4959",
+    "surfaceLightColor": "#0F3850",
     "surfaceElevationRadians": 0.62,
-    "godRayStrength": 0.17,
-    "causticStrength": 0.14,
-    "ambientColor": "#052639",
-    "exposure": 1.28
+    "surfaceAzimuthRadians": 2.61,
+    "godRayStrength": 0.12,
+    "causticStrength": 0.1,
+    "ambientColor": "#051F34",
+    "exposure": 1.3
   },
   "seafloor": {
     "placementSeed": "OCN-GOLDEN-BLOOM-ocean-seafloor-scatter",
@@ -134,7 +136,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "kelpCathedral",
       "angleRadians": -0.21,
-      "radiusFromCenter": 25.46,
+      "radiusFromCenter": 41.59,
       "heightAboveFloor": 5.19,
       "accentColor": "#06B6D4",
       "energy": 60
@@ -145,7 +147,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "sunkenRelic",
       "angleRadians": 0.93,
-      "radiusFromCenter": 25.99,
+      "radiusFromCenter": 42.56,
       "heightAboveFloor": 1.64,
       "accentColor": "#FACC15",
       "energy": 65
@@ -156,7 +158,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "hydrothermalVent",
       "angleRadians": 1.6,
-      "radiusFromCenter": 31.08,
+      "radiusFromCenter": 51.78,
       "heightAboveFloor": 3.4,
       "accentColor": "#8B5CF6",
       "energy": 70
@@ -167,7 +169,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "abyssalTrench",
       "angleRadians": 2.65,
-      "radiusFromCenter": 23.26,
+      "radiusFromCenter": 37.6,
       "heightAboveFloor": 5.1,
       "accentColor": "#06B6D4",
       "energy": 75
@@ -178,7 +180,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "coralGarden",
       "angleRadians": 3.55,
-      "radiusFromCenter": 21.96,
+      "radiusFromCenter": 35.23,
       "heightAboveFloor": 2.63,
       "accentColor": "#FACC15",
       "energy": 80
@@ -189,7 +191,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "whaleFall",
       "angleRadians": 4.6,
-      "radiusFromCenter": 29.45,
+      "radiusFromCenter": 48.83,
       "heightAboveFloor": 2.55,
       "accentColor": "#8B5CF6",
       "energy": 85
@@ -200,7 +202,7 @@
       "meaning": "A meaningful place in the sea.",
       "kind": "sunkenRelic",
       "angleRadians": 5.47,
-      "radiusFromCenter": 28.77,
+      "radiusFromCenter": 47.59,
       "heightAboveFloor": 4.83,
       "accentColor": "#06B6D4",
       "energy": 90

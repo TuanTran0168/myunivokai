@@ -62,7 +62,7 @@ describe("the ocean preview builder", () => {
   it("stamps the contract keys the renderer registry resolves on", () => {
     const scene = buildPreviewOceanSceneConfig(previewInput());
     expect(scene.sceneType).toBe("ocean");
-    expect(scene.schemaVersion).toBe("1.0");
+    expect(scene.schemaVersion).toBe("1.1");
     expect(scene.assets?.catalogVersion).toBe("ocean-1");
     // This family has no sky, so it must never claim an environment map.
     expect(scene.assets?.hdriKey).toBeUndefined();
@@ -70,21 +70,98 @@ describe("the ocean preview builder", () => {
 
   it("never labels a depth with a zone that depth is not in", () => {
     for (const scene of previewsAcrossMoodsAndNicknames(30)) {
-      const metres = scene.depth?.metres ?? -1;
+      const metres = scene.depth?.metres ?? 0;
       expect(scene.depth?.zone).toBe(oceanZoneForDepth(metres));
-      expect(metres).toBeGreaterThan(0);
+      // A negative depth is a viewer ABOVE the waterline, which is a real value
+      // in this family rather than a bug — but it has to be high enough that the
+      // horizon separates from the water, and there must still be a seabed under
+      // them.
+      //
+      // The band was 1.4-7.8 m, chosen as "a person's eye height on the water".
+      // With wind reaching 13 m/s and Pierson-Moskowitz putting the significant
+      // wave height there at 3.6 m, the low end of that band was BELOW the crests:
+      // the sea filled the frame, no sky line, and the one view that exists to
+      // show the surface showed none. 4-24 m clears the roughest sea this family
+      // makes and reaches the height the surface composes at.
+      if (metres < 0) {
+        expect(scene.depth?.zone).toBe(OCEAN_ZONE_SUNLIT_SHALLOWS);
+        expect(-metres).toBeGreaterThanOrEqual(4);
+        expect(-metres).toBeLessThanOrEqual(24);
+        expect(scene.depth?.seafloorMetres ?? 0).toBeGreaterThan(0);
+      }
     }
   });
 
-  it("derives the water from the depth curve and nothing else", () => {
+  // Mirrors TestEachMoodPinsExactlyOneDepth in ocean_config_builder_test.go.
+  //
+  // This replaced a rate assertion — "above the waterline sometimes, and not
+  // usually" — and the replacement is the point rather than a re-tune. A rate is
+  // the right assertion for something nobody selects. It is the wrong one for a
+  // control: these four moods are the create form's DEPTH & MOOD options, so what
+  // matters is that picking one gets that depth every time, and that not picking
+  // it excludes that depth every time.
+  //
+  // Both halves were real defects. The surface view was unreachable on purpose
+  // (one in twenty, from a control that never mentioned it) and reachable by
+  // accident (picking "The Abyss" drew the water surface 5% of the time).
+  it("gives each mood exactly one depth, the same one every time", () => {
+    const expected: Record<string, { zone: string; aboveWater: boolean }> = {
+      focused: { zone: OCEAN_ZONE_SUNLIT_SHALLOWS, aboveWater: true },
+      energetic: { zone: OCEAN_ZONE_SUNLIT_SHALLOWS, aboveWater: false },
+      dreamy: { zone: OCEAN_ZONE_TWILIGHT_REACH, aboveWater: false },
+      reflective: { zone: OCEAN_ZONE_ABYSS, aboveWater: false }
+    };
+    for (const [mood, want] of Object.entries(expected)) {
+      for (let index = 0; index < 40; index += 1) {
+        const scene = buildPreviewOceanSceneConfig(previewInput({ mood, nickname: `Mai-${index}` }));
+        const metres = scene.depth?.metres ?? 0;
+        expect({ mood, zone: scene.depth?.zone, aboveWater: metres < 0 }).toEqual({
+          mood,
+          zone: want.zone,
+          aboveWater: want.aboveWater
+        });
+      }
+    }
+  });
+
+  it("never puts open water in coastal water", () => {
+    for (const scene of previewsAcrossMoodsAndNicknames(40)) {
+      if (scene.depth?.zone === OCEAN_ZONE_SUNLIT_SHALLOWS) {
+        continue;
+      }
+      // The turbidity that makes coastal water coastal is river outflow and
+      // resuspended sediment, and neither reaches the middle of an ocean.
+      expect(["I", "IA", "IB"]).toContain(scene.water?.jerlovWaterType);
+    }
+  });
+
+  it("gives every world a sea state inside the band the wave spectrum covers", () => {
+    for (const scene of previewsAcrossMoodsAndNicknames(30)) {
+      const wind = scene.water?.windSpeedMetresPerSecond ?? 0;
+      // Below Beaufort 3 the sea is a mirror with no wave field in it; above
+      // Beaufort 6 every world becomes a storm nobody asked for.
+      expect(wind).toBeGreaterThanOrEqual(5);
+      expect(wind).toBeLessThanOrEqual(13);
+    }
+  });
+
+  it("derives the water's optics from the depth curve and nothing else", () => {
     for (const scene of previewsAcrossMoodsAndNicknames(20)) {
       const expected = depthAt(scene.depth?.metres ?? 0);
-      expect(scene.water).toEqual({
+      // Clarity and weather are excluded on purpose and covered by their own
+      // tests above: two worlds at the same depth can legitimately sit in
+      // different water under different wind, and neither is a consequence of
+      // how deep they are.
+      expect({
+        fogColor: scene.water?.fogColor,
+        fogDensity: scene.water?.fogDensity,
+        tintStrength: scene.water?.tintStrength
+      }).toEqual({
         fogColor: expected.fogColor,
         fogDensity: expected.fogDensity,
-        visibilityMetres: expected.visibilityMetres,
         tintStrength: expected.tintStrength
       });
+      expect(scene.water?.visibilityMetres ?? 0).toBeLessThanOrEqual(expected.visibilityMetres + 0.01);
       expect(scene.lighting?.godRayStrength).toBe(expected.godRayStrength);
       expect(scene.lighting?.causticStrength).toBe(expected.causticStrength);
     }
@@ -116,12 +193,22 @@ describe("the ocean preview builder", () => {
     const kinds = landmarks.map((landmark) => landmark.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
     for (const landmark of landmarks) {
-      expect(landmark.radiusFromCenter ?? 0).toBeGreaterThan(0);
-      expect(landmark.radiusFromCenter ?? 0).toBeLessThanOrEqual(scene.seafloor?.basinRadius ?? 0);
+      // The invariant is CLEARANCE FROM THE CAMERA, not containment in the
+      // basin. It used to be the latter, and the latter is what allowed the bug:
+      // the basin is 26-38 m and the camera orbits at 16-24 m, so "inside the
+      // basin" was satisfied by a landmark standing exactly where the viewer
+      // does. The basin bounds small dressing; the seabed is drawn 680 m across.
+      const radius = landmark.radiusFromCenter ?? 0;
+      const distance = scene.camera?.distance ?? 0;
+      expect(radius).toBeGreaterThanOrEqual(distance + 8);
+      expect(radius).toBeLessThanOrEqual(distance + 8 + 26);
     }
   });
 
-  it("reaches every zone across the four moods rather than pinning one sea", () => {
+  // Still needed alongside the per-mood test above: pinning each mood to a depth
+  // would also satisfy that test if two moods pinned the same zone and a third
+  // zone became unreachable from the form entirely.
+  it("reaches every zone across the four moods", () => {
     const zones = new Set(previewsAcrossMoodsAndNicknames(40).map((scene) => scene.depth?.zone));
     expect(zones.has(OCEAN_ZONE_SUNLIT_SHALLOWS)).toBe(true);
     expect(zones.has(OCEAN_ZONE_TWILIGHT_REACH)).toBe(true);

@@ -37,7 +37,7 @@ import { clampNumber, depthAt, roundToHundredths, roundToThousandths } from "./o
 // logic rather than a duplicated table.
 
 // Mirrors oceanSchemaVersion in ocean_config_builder.go.
-export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.0";
+export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.1";
 
 // Depth zones, in canonical order from the surface down. Both boundaries are
 // physical constants of the depth curve rather than round numbers: the sunlit
@@ -65,6 +65,20 @@ const DEPTH_BAND_BY_ZONE: Record<string, { minimum: number; maximum: number }> =
   [OCEAN_ZONE_SUNLIT_SHALLOWS]: { minimum: 3, maximum: 28 },
   [OCEAN_ZONE_TWILIGHT_REACH]: { minimum: 45, maximum: 170 },
   [OCEAN_ZONE_ABYSS]: { minimum: 1050, maximum: 3800 }
+};
+
+// The water BELOW the viewer, mirroring floorClearanceBandByZone in
+// ocean_scene_profile.go. A reef sits on the shelf with the bottom right there;
+// the twilight zone is open water above an abyssal plain kilometres down and
+// shows no floor; abyssal worlds sit ON the bottom, because the vents, whale
+// falls and tubeworm fields that make the abyss worth drawing are all there.
+const FLOOR_CLEARANCE_BAND_BY_ZONE: Record<string, { minimum: number; maximum: number }> = {
+  [OCEAN_ZONE_SUNLIT_SHALLOWS]: { minimum: 2, maximum: 14 },
+  [OCEAN_ZONE_TWILIGHT_REACH]: { minimum: 1900, maximum: 3900 },
+  // Kept inside the ~12 m visibility of the abyss. A wider band silently turns
+  // "this world sits on the seabed" into "this world sits just too far above
+  // the seabed to see it", which is exactly what shipped first.
+  [OCEAN_ZONE_ABYSS]: { minimum: 2, maximum: 9 }
 };
 
 export const OCEAN_CURRENT_STILL = "still";
@@ -124,28 +138,73 @@ export const OCEAN_LANDMARK_MODEL_KEYS_BY_KIND: Record<string, string> = {
 
 const OCEAN_ASSET_CATALOG_VERSION = "ocean-1";
 
+// Mirrors oceanMoodProfile in ocean_scene_profile.go.
+//
+// `zone` is a PIN, not a lean. It used to be a `zoneWeights` triple — a
+// probability per zone — so that repeated generations would vary. What it
+// produced was a control that lies: the create form labels these four options
+// DEPTH & MOOD and names them after depths, so choosing "The Abyss" and getting
+// a view of the water surface (5% of the time: 15% weight on the shallows times
+// a one-in-three breach) is not variety, it is the control not working.
+//
+// Variety comes from the fifteen other values drawn per world, and from bands
+// wide enough to matter — the abyss alone spans 1050 to 3800 m.
 type OceanMoodProfile = {
-  zoneWeights: [number, number, number];
+  zone: string;
+  aboveWater: boolean;
   currentMultiplier: number;
   faunaMultiplier: number;
   bloomMultiplier: number;
 };
 
+// Twilight because it is the middle of the axis and unambiguously underwater: an
+// unknown mood should get the most ordinary ocean there is, not an edge.
 const NEUTRAL_OCEAN_PROFILE: OceanMoodProfile = {
-  zoneWeights: [0.34, 0.33, 0.33],
+  zone: OCEAN_ZONE_TWILIGHT_REACH,
+  aboveWater: false,
   currentMultiplier: 1.0,
   faunaMultiplier: 1.0,
   bloomMultiplier: 1.0
 };
 
-// The leaning zone per mood: energetic → the reef (surge, most fauna), dreamy
-// and focused → the twilight reach (drifting and still respectively),
-// reflective → the abyss (quiet, dark, one light).
+// Four moods across an axis with three zones and a negative half, which is what
+// makes the table square without inventing anything: three depths under the
+// water and one above it.
+//
+//   focused    Still Water  the sea from the air — still water describes a
+//                           SURFACE, and this mood already had the calmest wind
+//   energetic  Reef Surge   the shallows, floor in frame, most fauna, surge
+//   dreamy     Drifting     the twilight reach: midwater, no floor, drifting
+//   reflective The Abyss    on the bottom, kilometres down, one light
 const OCEAN_MOOD_PROFILES: Record<string, OceanMoodProfile> = {
-  focused: { zoneWeights: [0.2, 0.6, 0.2], currentMultiplier: 0.75, faunaMultiplier: 0.8, bloomMultiplier: 1.0 },
-  dreamy: { zoneWeights: [0.25, 0.6, 0.15], currentMultiplier: 0.85, faunaMultiplier: 1.0, bloomMultiplier: 1.35 },
-  energetic: { zoneWeights: [0.6, 0.25, 0.15], currentMultiplier: 1.35, faunaMultiplier: 1.35, bloomMultiplier: 1.15 },
-  reflective: { zoneWeights: [0.15, 0.25, 0.6], currentMultiplier: 0.7, faunaMultiplier: 0.75, bloomMultiplier: 0.85 }
+  focused: {
+    zone: OCEAN_ZONE_SUNLIT_SHALLOWS,
+    aboveWater: true,
+    currentMultiplier: 0.75,
+    faunaMultiplier: 0.8,
+    bloomMultiplier: 1.0
+  },
+  energetic: {
+    zone: OCEAN_ZONE_SUNLIT_SHALLOWS,
+    aboveWater: false,
+    currentMultiplier: 1.35,
+    faunaMultiplier: 1.35,
+    bloomMultiplier: 1.15
+  },
+  dreamy: {
+    zone: OCEAN_ZONE_TWILIGHT_REACH,
+    aboveWater: false,
+    currentMultiplier: 0.85,
+    faunaMultiplier: 1.0,
+    bloomMultiplier: 1.35
+  },
+  reflective: {
+    zone: OCEAN_ZONE_ABYSS,
+    aboveWater: false,
+    currentMultiplier: 0.7,
+    faunaMultiplier: 0.75,
+    bloomMultiplier: 0.85
+  }
 };
 
 function oceanProfileForMood(mood: string): OceanMoodProfile {
@@ -315,6 +374,80 @@ const FULL_CIRCLE_RADIANS = Math.PI * 2;
 
 // Seed stream labels, prefixed "-ocean-" so no stream can collide with a forest
 // or universe one.
+// How far above the waterline an above-water world's viewer sits. Mirrors
+// ocean-service's ocean_scene_profile.go.
+//
+// There is no longer a probability here. It used to be one in three, rolled for
+// every shallow world, which made the sea-surface view a lottery: nobody could
+// ask for it and the abyss could win it. It is now decided by the mood — see
+// OCEAN_MOOD_PROFILES — and only the altitude is drawn.
+//
+// The band used to be 1.4-7.8 m, which put the camera inside the wave field:
+// wind here reaches 13 m/s and Pierson-Moskowitz gives a 3.6 m significant
+// height there, so at 4.5 m up the crests sit at eye level and the frame has no
+// horizon in it. 4-24 m clears the roughest sea this family makes and reaches
+// the height the surface actually composes at.
+const MINIMUM_BREACH_ALTITUDE_METRES = 4;
+const BREACH_ALTITUDE_RANGE_METRES = 20;
+
+// THE BOUNDARY RULE: every ocean world must be able to see the surface or the
+// floor. Water with neither is not a place, it is a colour — nothing to read
+// scale or direction from, nothing for the light to land on. Mirrors
+// ocean_scene_profile.go, where the reasoning is written out.
+const SEAMOUNT_RISE_PROBABILITY = 0.5;
+const MINIMUM_RISE_CLEARANCE_METRES = 18;
+const RISE_CLEARANCE_RANGE_METRES = 34;
+const BOUNDARY_SIGHT_MULTIPLIER = 1.5;
+
+// Which water a zone can be made of. This is GEOGRAPHY, not depth: the
+// turbidity that makes coastal water coastal is river outflow and resuspended
+// sediment, and neither reaches the middle of an ocean. Mirrors
+// ocean_water_optics.go.
+const WATER_TYPES_BY_ZONE: Record<string, string[]> = {
+  [OCEAN_ZONE_SUNLIT_SHALLOWS]: ["IB", "II", "III", "1C", "3C"],
+  [OCEAN_ZONE_TWILIGHT_REACH]: ["I", "IA", "IB"],
+  [OCEAN_ZONE_ABYSS]: ["I", "IA", "IB"]
+};
+
+const MINIMUM_WIND_SPEED_METRES_PER_SECOND = 5;
+const WIND_SPEED_RANGE_METRES_PER_SECOND = 8;
+
+// Published Kd at 475 nm per Jerlov water type, m^-1, and the two constants of
+// pure seawater the reconstruction stands on. Mirrors ocean_water_optics.go.
+const JERLOV_KD_475: Record<string, number> = {
+  I: 0.025,
+  IA: 0.038,
+  IB: 0.05,
+  II: 0.085,
+  III: 0.13,
+  "1C": 0.2,
+  "3C": 0.42,
+  "5C": 0.7,
+  "7C": 1.2,
+  "9C": 2.0
+};
+// The worst case a zone can hand the renderer. A boundary visible in the
+// murkiest water a zone allows is visible in all of it.
+function murkiestWaterTypeForZone(zone: string): string {
+  const candidates = WATER_TYPES_BY_ZONE[zone] ?? WATER_TYPES_BY_ZONE[OCEAN_ZONE_TWILIGHT_REACH];
+  return candidates[candidates.length - 1];
+}
+
+const PURE_SEAWATER_KD_GREEN = 0.065;
+const PURE_SEAWATER_KD_BLUE = 0.016;
+const TURBIDITY_SHAPE_GREEN = 0.8;
+const CONTRAST_ATTENUATION_LENGTHS = 4.6;
+
+// Contrast against a background falls by 1/e per attenuation length and the eye
+// gives up at roughly 2% contrast, which is about 4.6 lengths. This does NOT
+// depend on depth — at two thousand metres a lamp reaches exactly as far as it
+// does at twenty.
+function sightingRangeForWaterType(waterType: string): number {
+  const kd475 = JERLOV_KD_475[waterType] ?? JERLOV_KD_475.IB;
+  const load = Math.max(0, kd475 - PURE_SEAWATER_KD_BLUE);
+  return CONTRAST_ATTENUATION_LENGTHS / (PURE_SEAWATER_KD_GREEN + load * TURBIDITY_SHAPE_GREEN);
+}
+
 const DEPTH_SEED_SUFFIX = "-ocean-depth";
 const LIGHTING_SEED_SUFFIX = "-ocean-lighting";
 const SEAFLOOR_SEED_SUFFIX = "-ocean-seafloor";
@@ -323,6 +456,7 @@ const FLORA_SEED_SUFFIX = "-ocean-flora";
 const FAUNA_SEED_SUFFIX = "-ocean-fauna";
 const BIOLUMINESCENCE_SEED_SUFFIX = "-ocean-biolum";
 const LANDMARKS_SEED_SUFFIX = "-ocean-landmarks";
+const SEA_STATE_SEED_SUFFIX = "-ocean-sea-state";
 
 const SEAFLOOR_SCATTER_SEED_SUFFIX = "-ocean-seafloor-scatter";
 const FLORA_PLACEMENT_SEED_SUFFIX = "-ocean-flora-placement";
@@ -332,8 +466,17 @@ const ZONE_TRANSITION_PROBABILITY = 0.2;
 const MINIMUM_ZONE_BLEND_AMOUNT = 0.2;
 const ZONE_BLEND_AMOUNT_RANGE = 0.4;
 
+// 31.5-74.5 degrees, and correct for a world UNDER the water: Fresnel
+// reflectance climbs steeply below about 20 degrees and Snell's window narrows
+// with it, so a low sun bounces off the surface instead of lighting the column.
 const MINIMUM_SURFACE_ELEVATION = 0.55;
 const SURFACE_ELEVATION_RANGE = 0.75;
+// Above the waterline that premise stops applying — nothing has to survive the
+// trip through the surface — and a low sun becomes the best light available.
+// 3.4-40 degrees: golden hour at the bottom of the band. Same roll, same stream,
+// different band, so no underwater world moves.
+const MINIMUM_BREACHED_SURFACE_ELEVATION = 0.06;
+const BREACHED_SURFACE_ELEVATION_RANGE = 0.64;
 const EXPOSURE_JITTER_RANGE = 0.1;
 const BASE_BLOOM_INTENSITY = 0.3;
 const BLOOM_INTENSITY_RANGE = 0.55;
@@ -409,8 +552,17 @@ const BIOLUMINESCENCE_BLOOM_BASE = 0.2;
 const BIOLUMINESCENCE_BLOOM_RANGE = 0.55;
 
 const LANDMARK_ANGLE_JITTER_RADIANS = 0.25;
-const LANDMARK_RADIUS_FRACTION_BASE = 0.5;
-const LANDMARK_RADIUS_FRACTION_RANGE = 0.38;
+// Landmarks are placed relative to the CAMERA, not to the basin. Mirrors
+// ocean_scene_profile.go.
+//
+// They used to be a fraction of the basin radius, 0.50 to 0.88. The basin is 26
+// to 38 m and the camera orbits at 16 to 24 m, so the ring landed at 13 to 33 m
+// and overlapped the orbit almost completely — a landmark standing where the
+// viewer does was the ordinary case, not a rare accident, and at arm's length it
+// is a flat pale slab filling the frame rather than a place. Tying the ring to
+// the camera's own distance makes that impossible by construction.
+const LANDMARK_CAMERA_STANDOFF_METRES = 8;
+const LANDMARK_RING_DEPTH_METRES = 26;
 const LANDMARK_HEIGHT_RANGE = 6;
 const LANDMARK_COLOR_CYCLE_LENGTH = 3;
 const FIRST_LANDMARK_ENERGY = 60;
@@ -420,21 +572,6 @@ const MAXIMUM_LANDMARK_ENERGY = 100;
 /** Mirrors rng.Intn(n) in Go: an integer in [0, spread). */
 function integerFromRoll(roll: number, spread: number): number {
   return Math.min(spread - 1, Math.floor(roll * spread));
-}
-
-function zoneForRoll(roll: number, weights: [number, number, number]): string {
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  if (total <= 0) {
-    return ZONE_KINDS_IN_ORDER[0];
-  }
-  let cumulative = 0;
-  for (let index = 0; index < weights.length; index += 1) {
-    cumulative += weights[index];
-    if (roll < cumulative / total) {
-      return ZONE_KINDS_IN_ORDER[index];
-    }
-  }
-  return ZONE_KINDS_IN_ORDER[ZONE_KINDS_IN_ORDER.length - 1];
 }
 
 /**
@@ -471,16 +608,70 @@ function currentKindForRoll(roll: number, entries: WeightedCurrentKind[]): strin
 // so the depth pick never shifts.
 function buildPreviewDepthConfig(seed: string, moodProfile: OceanMoodProfile): OceanDepthConfig {
   const nextRandomValue = randomFromSeed(seed + DEPTH_SEED_SUFFIX);
-  const zoneRoll = nextRandomValue();
   const transitionRoll = nextRandomValue();
   const transitionDirectionRoll = nextRandomValue();
   const blendAmountRoll = nextRandomValue();
   const depthWithinBandRoll = nextRandomValue();
+  // Appended after every existing draw, so adding it moved no world's depth.
+  const floorClearanceRoll = nextRandomValue();
+  const altitudeRoll = nextRandomValue();
+  const boundaryRoll = nextRandomValue();
+  const boundaryAmountRoll = nextRandomValue();
 
-  const zone = zoneForRoll(zoneRoll, moodProfile.zoneWeights);
+  // Not drawn. The mood IS the zone; the roll this used to take was removed
+  // rather than kept and ignored, which shifts every later draw by one and
+  // therefore moves the depth of every ocean world.
+  const zone = moodProfile.zone;
   const band = DEPTH_BAND_BY_ZONE[zone];
   const metres = roundToHundredths(band.minimum + depthWithinBandRoll * (band.maximum - band.minimum));
-  const config: OceanDepthConfig = { metres, zone: oceanZoneForDepth(metres) };
+  const clearanceBand = FLOOR_CLEARANCE_BAND_BY_ZONE[zone];
+  const clearance = clearanceBand.minimum + floorClearanceRoll * (clearanceBand.maximum - clearanceBand.minimum);
+  // Fixed before the viewer can surface, so a world that breaks the waterline
+  // still has a real floor under it rather than one computed from a negative
+  // depth. Mirrors buildDepthConfig in ocean-service.
+  let waterMetres = metres;
+  let seafloorMetres = roundToHundredths(waterMetres + clearance);
+
+  // The boundary rule, applied before the breach because a breached world is
+  // above the water and can see the surface by definition. The reach uses the
+  // MURKIEST water this zone can hand the renderer, which is the conservative
+  // direction. A lift never leaves the zone's own band: changing the zone
+  // changes what the world is.
+  const reach =
+    sightingRangeForWaterType(murkiestWaterTypeForZone(zone)) * BOUNDARY_SIGHT_MULTIPLIER;
+  if (waterMetres > reach && seafloorMetres - waterMetres > reach) {
+    const liftCeiling = Math.min(reach, band.maximum);
+    if (boundaryRoll >= SEAMOUNT_RISE_PROBABILITY && liftCeiling > band.minimum) {
+      waterMetres = roundToHundredths(band.minimum + boundaryAmountRoll * (liftCeiling - band.minimum));
+      seafloorMetres = roundToHundredths(waterMetres + clearance);
+    } else {
+      seafloorMetres = roundToHundredths(
+        waterMetres + MINIMUM_RISE_CLEARANCE_METRES + boundaryAmountRoll * RISE_CLEARANCE_RANGE_METRES
+      );
+    }
+  }
+
+  // A negative depth is a viewer ABOVE the water, by that many metres — not a
+  // mode and not a fourth zone. Depth is this family's axis and the axis
+  // continues through zero; the renderer branches on the sign because air is a
+  // different medium, not water with different numbers.
+  //
+  // Decided by the mood rather than rolled, so the sea-surface view is something
+  // a person can ASK for. The whole altitude roll spreads the height, where
+  // before it had to encode both the decision and the height in one draw and so
+  // correlated them: a world that only just qualified was always the lowest one.
+  let viewerMetres = waterMetres;
+  if (moodProfile.aboveWater) {
+    viewerMetres = roundToHundredths(
+      -(MINIMUM_BREACH_ALTITUDE_METRES + altitudeRoll * BREACH_ALTITUDE_RANGE_METRES)
+    );
+  }
+
+  const config: OceanDepthConfig = {
+    metres: viewerMetres,
+    seafloorMetres,
+    zone: oceanZoneForDepth(viewerMetres)
+  };
   if (transitionRoll < ZONE_TRANSITION_PROBABILITY) {
     config.blendTowardZone = adjacentZone(config.zone ?? zone, transitionDirectionRoll);
     config.blendAmount = roundToHundredths(MINIMUM_ZONE_BLEND_AMOUNT + blendAmountRoll * ZONE_BLEND_AMOUNT_RANGE);
@@ -491,18 +682,47 @@ function buildPreviewDepthConfig(seed: string, moodProfile: OceanMoodProfile): O
 // Draws nothing. Water is entirely a consequence of depth — that is the whole
 // point of the family — and this is the half of the preview that IS byte-equal
 // to the backend.
-function buildPreviewWaterConfig(metres: number): OceanWaterConfig {
+function buildPreviewWaterConfig(
+  seed: string,
+  metres: number,
+  zone: string,
+  moodProfile: OceanMoodProfile
+): OceanWaterConfig {
+  const nextRandomValue = randomFromSeed(seed + SEA_STATE_SEED_SUFFIX);
+  const windRoll = nextRandomValue();
+  const waterTypeRoll = nextRandomValue();
+
+  const candidates = WATER_TYPES_BY_ZONE[zone] ?? WATER_TYPES_BY_ZONE[OCEAN_ZONE_TWILIGHT_REACH];
+  const jerlovWaterType = candidates[Math.min(candidates.length - 1, Math.floor(waterTypeRoll * candidates.length))];
+  const windSpeedMetresPerSecond = roundToHundredths(
+    clampNumber(
+      (MINIMUM_WIND_SPEED_METRES_PER_SECOND + windRoll * WIND_SPEED_RANGE_METRES_PER_SECOND) *
+        moodProfile.currentMultiplier,
+      MINIMUM_WIND_SPEED_METRES_PER_SECOND,
+      MINIMUM_WIND_SPEED_METRES_PER_SECOND + WIND_SPEED_RANGE_METRES_PER_SECOND
+    )
+  );
+
   const response = depthAt(metres);
+  // How far you can see is the SHORTER of two limits, and they are different
+  // quantities: how clear the water is, and how much light is left to see by.
+  // A trench is gin-clear and unlit; a harbour is brilliantly lit and opaque.
+  const visibilityMetres = roundToHundredths(
+    Math.min(response.visibilityMetres, sightingRangeForWaterType(jerlovWaterType))
+  );
   return {
     fogColor: response.fogColor,
     fogDensity: response.fogDensity,
-    visibilityMetres: response.visibilityMetres,
-    tintStrength: response.tintStrength
+    visibilityMetres,
+    tintStrength: response.tintStrength,
+    jerlovWaterType,
+    windSpeedMetresPerSecond
   };
 }
 
-// Draw order: surface elevation, exposure jitter, bloom. Colours, god rays and
-// caustics come from the depth curve and are drawn from no stream at all.
+// Draw order: surface elevation, exposure jitter, bloom, sun azimuth. Colours,
+// god rays and caustics come from the depth curve and are drawn from no stream
+// at all.
 function buildPreviewLightingConfig(
   seed: string,
   metres: number,
@@ -512,14 +732,23 @@ function buildPreviewLightingConfig(
   const surfaceElevationRoll = nextRandomValue();
   const exposureRoll = nextRandomValue();
   const bloomRoll = nextRandomValue();
+  // Last in the stream, so adding a bearing moved no world's elevation, exposure
+  // or bloom. The full circle: the renderer places the camera opposite the
+  // bearing and therefore composes toward the sun whatever the bearing is.
+  const azimuthRoll = nextRandomValue();
   const response = depthAt(metres);
+  // Which band the roll lands in depends on the medium the viewer is in.
+  const above = metres < 0;
+  const elevationFloor = above ? MINIMUM_BREACHED_SURFACE_ELEVATION : MINIMUM_SURFACE_ELEVATION;
+  const elevationRange = above ? BREACHED_SURFACE_ELEVATION_RANGE : SURFACE_ELEVATION_RANGE;
 
   return {
     lighting: {
       surfaceLightColor: response.surfaceLightColor,
       surfaceElevationRadians: roundToHundredths(
-        MINIMUM_SURFACE_ELEVATION + surfaceElevationRoll * SURFACE_ELEVATION_RANGE
+        elevationFloor + surfaceElevationRoll * elevationRange
       ),
+      surfaceAzimuthRadians: roundToHundredths(azimuthRoll * FULL_CIRCLE_RADIANS),
       godRayStrength: response.godRayStrength,
       causticStrength: response.causticStrength,
       ambientColor: response.ambientColor,
@@ -752,7 +981,7 @@ function buildPreviewBioluminescenceConfig(
 function buildPreviewLandmarkConfigs(
   seed: string,
   landmarkNames: string[],
-  basinRadius: number,
+  cameraDistance: number,
   primaryColor: string,
   secondaryColor: string
 ): OceanLandmarkConfig[] {
@@ -792,7 +1021,7 @@ function buildPreviewLandmarkConfigs(
       kind,
       angleRadians: roundToHundredths(baseAngle + (angleJitterRoll - 0.5) * 2 * LANDMARK_ANGLE_JITTER_RADIANS),
       radiusFromCenter: roundToHundredths(
-        basinRadius * (LANDMARK_RADIUS_FRACTION_BASE + radiusRoll * LANDMARK_RADIUS_FRACTION_RANGE)
+        cameraDistance + LANDMARK_CAMERA_STANDOFF_METRES + radiusRoll * LANDMARK_RING_DEPTH_METRES
       ),
       heightAboveFloor: roundToHundredths(heightRoll * LANDMARK_HEIGHT_RANGE),
       accentColor,
@@ -855,7 +1084,7 @@ export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneCon
   const metres = depth.metres ?? DEPTH_BAND_BY_ZONE[OCEAN_ZONE_SUNLIT_SHALLOWS].minimum;
   const zone = depth.zone ?? OCEAN_ZONE_SUNLIT_SHALLOWS;
 
-  const water = buildPreviewWaterConfig(metres);
+  const water = buildPreviewWaterConfig(seed, metres, zone, moodProfile);
   const { lighting, bloomIntensity } = buildPreviewLightingConfig(seed, metres, moodProfile);
   const { seafloor, cameraDistance } = buildPreviewSeafloorConfig(seed);
   const current = buildPreviewCurrentConfig(seed, zone, moodProfile);
@@ -865,7 +1094,7 @@ export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneCon
   const landmarks = buildPreviewLandmarkConfigs(
     seed,
     landmarkNames,
-    seafloor.basinRadius ?? MINIMUM_BASIN_RADIUS,
+    cameraDistance,
     primaryColor,
     secondaryColor
   );

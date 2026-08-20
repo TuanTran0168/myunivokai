@@ -11,8 +11,14 @@ import (
 // Renderers are keyed by (sceneType, schemaVersion); any byte-level change to
 // what this builder emits for an existing seed is a breaking change and must
 // bump the schema version.
+//
+// 1.2 makes two: `lighting.surfaceAzimuthRadians` is new, and the mood now pins
+// the depth zone instead of weighting it, which moves the depth of every seed.
+// No reader is kept for 1.1 because this family has not shipped and nothing has
+// ever been stored at that version — a compatibility shim for zero rows is a
+// liability, not caution. The version still moves so the renderer key does.
 const (
-	oceanSchemaVersion = "1.0"
+	oceanSchemaVersion = "1.2"
 	oceanSceneType     = "ocean"
 )
 
@@ -30,6 +36,7 @@ const (
 	faunaSeedSuffix           = "-ocean-fauna"
 	bioluminescenceSeedSuffix = "-ocean-biolum"
 	landmarksSeedSuffix       = "-ocean-landmarks"
+	seaStateSeedSuffix        = "-ocean-sea-state"
 )
 
 // Frontend-side scatter stream labels. The backend never draws from these; it
@@ -81,14 +88,14 @@ func (b *OceanConfigBuilder) Build(input BuildOceanConfigInput) models.OceanScen
 	// results are STORED below; nothing recomputes this at render time.
 	depthResponse := DepthAt(depth.Metres)
 
-	water := buildWaterConfig(depthResponse)
-	lighting, bloomIntensity := buildLightingConfig(input, depthResponse, moodProfile)
+	water := buildWaterConfig(input, depth, depthResponse, moodProfile)
+	lighting, bloomIntensity := buildLightingConfig(input, depth, depthResponse, moodProfile)
 	seafloor, cameraDistance := buildSeafloorConfig(input)
 	current := buildCurrentConfig(input, depth, moodProfile)
 	flora := buildFloraConfig(input, depth, moodProfile)
 	fauna := buildFaunaConfig(input, depth, water, moodProfile)
 	bioluminescence := buildBioluminescenceConfig(input, depth, moodProfile)
-	landmarks := buildLandmarkConfigs(input, seafloor.BasinRadius, primary, secondary)
+	landmarks := buildLandmarkConfigs(input, cameraDistance, primary, secondary)
 
 	return models.OceanSceneConfig{
 		SchemaVersion: oceanSchemaVersion,
@@ -125,25 +132,85 @@ func (b *OceanConfigBuilder) Build(input BuildOceanConfigInput) models.OceanScen
 	}
 }
 
-// Draw order: zone roll, transition roll, transition direction, blend amount,
-// depth-within-band. The transition draws happen even for non-transition
-// worlds so the depth pick never shifts.
+// Draw order: transition roll, transition direction, blend amount,
+// depth-within-band, floor clearance, altitude, boundary, boundary amount. The
+// transition draws happen even for non-transition worlds so the depth pick never
+// shifts, and the altitude draw happens even for worlds under the water.
 func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile) models.DepthConfig {
 	rng := seed.NewPRNG(input.Seed + depthSeedSuffix)
-	zoneRoll := rng.Float64()
 	transitionRoll := rng.Float64()
 	transitionDirectionRoll := rng.Float64()
 	blendAmountRoll := rng.Float64()
 	depthWithinBandRoll := rng.Float64()
+	// Appended AFTER every existing draw, which is the only place a new field
+	// may be added: taking a roll earlier would move the depth of every world
+	// that already exists.
+	floorClearanceRoll := rng.Float64()
+	altitudeRoll := rng.Float64()
+	boundaryRoll := rng.Float64()
+	boundaryAmountRoll := rng.Float64()
 
-	zone := zoneForRoll(zoneRoll, moodProfile.ZoneWeights)
+	// Not drawn. The mood IS the zone — see oceanMoodProfiles for why the roll
+	// this used to take was removed rather than kept and ignored. Removing it
+	// shifts every later draw by one and therefore moves the depth of every
+	// ocean world, which is why the golden fixtures move with this commit.
+	zone := moodProfile.Zone
 	band := depthBandByZone[zone]
 	metres := round(band.Minimum + depthWithinBandRoll*(band.Maximum-band.Minimum))
+
+	// The seabed is drawn from the clearance below the viewer, not from an
+	// absolute depth, so it can never come out above the viewer's own depth.
+	clearanceBand := floorClearanceBandByZone[zone]
+	clearance := clearanceBand.Minimum + floorClearanceRoll*(clearanceBand.Maximum-clearanceBand.Minimum)
+
+	// The seabed is fixed before the viewer can surface, so a world that breaks
+	// the waterline still has a real floor under it rather than one computed
+	// from a negative depth.
+	seafloorMetres := round(metres + clearance)
+
+	// ---- ABOVE THE WATERLINE --------------------------------------------
+	// A negative depth means the viewer is ABOVE the water, by that many metres.
+	// It is not a mode and not a fourth zone: depth is this family's axis, and
+	// the axis simply continues through zero. The renderer already branches on
+	// the sign — air is a different medium, not water with different numbers.
+	//
+	// Decided by the mood rather than rolled, so the sea-surface view is
+	// something a person can ASK for. The whole altitude roll now spreads the
+	// height, where before it had to encode the decision and the height in one
+	// draw and therefore correlated them: a world that only just qualified for
+	// the surface was always the lowest one over it.
+	if moodProfile.AboveWater {
+		metres = round(-(minimumBreachAltitudeMetres + altitudeRoll*breachAltitudeRangeMetres))
+	}
+
+	// ---- THE BOUNDARY RULE ----------------------------------------------
+	// Applied BEFORE the surface breach, because a breached world is above the
+	// water and can see the surface by definition.
+	//
+	// The reach here uses the clearest water any zone can be made of, which is
+	// the conservative direction: a world guaranteed visible in Jerlov I might
+	// still be marginal in III, so the bands below are set well inside it.
+	reach := SightingRangeForWaterType(MurkiestWaterTypeForZone(zone)) * boundarySightMultiplier
+	if metres > reach && seafloorMetres-metres > reach {
+		// The shallow end of this world's OWN band, if the surface is reachable
+		// from there. Never out of the band: a lift that changes the zone
+		// changes what the world IS.
+		liftCeiling := math.Min(reach, band.Maximum)
+		if boundaryRoll >= seamountRiseProbability && liftCeiling > band.Minimum {
+			metres = round(band.Minimum + boundaryAmountRoll*(liftCeiling-band.Minimum))
+			seafloorMetres = round(metres + clearance)
+		} else {
+			// A seamount under an open-water world. The viewer's depth — this
+			// family's whole axis — is untouched.
+			seafloorMetres = round(metres + minimumRiseClearanceMetres + boundaryAmountRoll*riseClearanceRangeMetres)
+		}
+	}
 
 	config := models.DepthConfig{
 		Metres: metres,
 		// Derived, never drawn: the zone label and the metres cannot disagree.
-		Zone: ZoneForDepth(metres),
+		Zone:           ZoneForDepth(metres),
+		SeafloorMetres: seafloorMetres,
 	}
 	if transitionRoll < zoneTransitionProbability {
 		config.BlendTowardZone = adjacentZone(config.Zone, transitionDirectionRoll)
@@ -152,33 +219,72 @@ func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile)
 	return config
 }
 
-// buildWaterConfig draws nothing. Water is entirely a consequence of depth —
-// that is the whole point of the family — and giving it a PRNG stream would
-// let two worlds at the same depth disagree about the colour of the sea.
-func buildWaterConfig(depthResponse DepthResponse) models.WaterConfig {
+// buildWaterConfig draws exactly one value, and it is deliberately not a
+// colour. Everything that decides how the water LOOKS is a consequence of
+// depth — that is the whole point of the family, and giving it a colour stream
+// would let two worlds at the same depth disagree about the colour of the sea.
+//
+// The sea state is not a property of depth. Wind is weather: two worlds at the
+// same depth can legitimately have a mirror and a whitecapped chop, and before
+// this the renderer manufactured one by hashing the seed, which put a physical
+// property of the world outside the world's record. It draws from its OWN
+// stream so that adding it moved nothing that already existed.
+func buildWaterConfig(input BuildOceanConfigInput, depth models.DepthConfig, depthResponse DepthResponse, moodProfile oceanMoodProfile) models.WaterConfig {
+	rng := seed.NewPRNG(input.Seed + seaStateSeedSuffix)
+	windRoll := rng.Float64()
+	waterTypeRoll := rng.Float64()
+
+	// How far you can see is the SHORTER of two limits, and they are different
+	// quantities: how clear the water is, and how much light is left to see by.
+	// A trench is gin-clear and unlit; a harbour is brilliantly lit and opaque.
+	// Storing only the light-limited one is what made the first version of this
+	// call an abyssal world "coastal, turbid".
+	waterType := WaterTypeForZone(depth.Zone, waterTypeRoll)
+	visibility := math.Min(depthResponse.VisibilityMetres, SightingRangeForWaterType(waterType))
+
 	return models.WaterConfig{
 		FogColor:         depthResponse.FogColor,
 		FogDensity:       depthResponse.FogDensity,
-		VisibilityMetres: depthResponse.VisibilityMetres,
+		VisibilityMetres: round(visibility),
 		TintStrength:     depthResponse.TintStrength,
+		JerlovWaterType:  waterType,
+		// An energetic world gets a rougher sea and a reflective one a calmer
+		// sea, on the same multiplier the currents already use.
+		WindSpeedMetresPerSecond: WindSpeedForRoll(windRoll, moodProfile.CurrentMultiplier),
 	}
 }
 
-// Draw order: surface elevation, exposure jitter, bloom. Colours, god rays and
-// caustics come from the depth curve and are drawn from no stream at all.
-// Returns the lighting section plus the bloom intensity (which lives under
-// postFX in the envelope).
-func buildLightingConfig(input BuildOceanConfigInput, depthResponse DepthResponse, moodProfile oceanMoodProfile) (models.OceanLightingConfig, float64) {
+// Draw order: surface elevation, exposure jitter, bloom, sun azimuth. Colours,
+// god rays and caustics come from the depth curve and are drawn from no stream
+// at all. Returns the lighting section plus the bloom intensity (which lives
+// under postFX in the envelope).
+func buildLightingConfig(input BuildOceanConfigInput, depth models.DepthConfig, depthResponse DepthResponse, moodProfile oceanMoodProfile) (models.OceanLightingConfig, float64) {
 	rng := seed.NewPRNG(input.Seed + lightingSeedSuffix)
 	surfaceElevationRoll := rng.Float64()
 	exposureRoll := rng.Float64()
 	bloomRoll := rng.Float64()
+	// Last in the stream, so adding a bearing moved no world's elevation,
+	// exposure or bloom. The full circle, with no preferred direction: the
+	// renderer places the camera opposite the bearing and therefore composes
+	// toward the sun whatever the bearing is, so constraining it would only
+	// remove variety without buying any composition.
+	azimuthRoll := rng.Float64()
 
 	bloomIntensity := round(clampFloat((baseBloomIntensity+bloomRoll*bloomIntensityRange)*moodProfile.BloomMultiplier, minimumBloomIntensity, maximumBloomIntensity))
 
+	// Which band the roll lands in depends on the medium the viewer is in. A
+	// negative depth is above the waterline, where a low sun is the best light
+	// available; under the water the same angle delivers almost nothing, because
+	// it reflects off the surface instead of entering it.
+	elevationFloor, elevationRange := minimumSurfaceElevation, surfaceElevationRange
+	if depth.Metres < 0 {
+		elevationFloor, elevationRange = minimumBreachedSurfaceElevation, breachedSurfaceElevationRange
+	}
+
 	return models.OceanLightingConfig{
 		SurfaceLightColor:       depthResponse.SurfaceLightColor,
-		SurfaceElevationRadians: round(minimumSurfaceElevation + surfaceElevationRoll*surfaceElevationRange),
+		SurfaceElevationRadians: round(elevationFloor + surfaceElevationRoll*elevationRange),
+		SurfaceAzimuthRadians:   round(azimuthRoll * 2 * math.Pi),
 		GodRayStrength:          depthResponse.GodRayStrength,
 		CausticStrength:         depthResponse.CausticStrength,
 		AmbientColor:            depthResponse.AmbientColor,
@@ -403,7 +509,7 @@ func buildBioluminescenceConfig(input BuildOceanConfigInput, depth models.DepthC
 // above the floor. The first landmark is always the kelp cathedral; accent
 // colours cycle secondary/accent/primary exactly like universe planets and
 // forest landmarks, so the palette reads the same across all three portraits.
-func buildLandmarkConfigs(input BuildOceanConfigInput, basinRadius float64, primary, secondary string) []models.LandmarkSceneConfig {
+func buildLandmarkConfigs(input BuildOceanConfigInput, cameraDistance float64, primary, secondary string) []models.LandmarkSceneConfig {
 	rng := seed.NewPRNG(input.Seed + landmarksSeedSuffix)
 	landmarkCount := len(input.DNA.Landmarks)
 	landmarks := make([]models.LandmarkSceneConfig, 0, landmarkCount)
@@ -438,7 +544,7 @@ func buildLandmarkConfigs(input BuildOceanConfigInput, basinRadius float64, prim
 			Meaning:          dnaLandmark.Meaning,
 			Kind:             kind,
 			AngleRadians:     round(baseAngle + (angleJitterRoll-0.5)*2*landmarkAngleJitterRadians),
-			RadiusFromCenter: round(basinRadius * (landmarkRadiusFractionBase + radiusRoll*landmarkRadiusFractionRange)),
+			RadiusFromCenter: round(cameraDistance + landmarkCameraStandoffMetres + radiusRoll*landmarkRingDepthMetres),
 			HeightAboveFloor: round(landmarkHeightBase + heightRoll*landmarkHeightRange),
 			AccentColor:      accentColor,
 			Energy:           dnaLandmark.Energy,

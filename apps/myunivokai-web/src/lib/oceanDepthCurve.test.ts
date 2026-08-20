@@ -32,7 +32,18 @@ import {
  * landed exactly on a rounding boundary. If this suite ever fails on a digit
  * nobody edited, that — and not a mistake — is what to look for.
  */
-const GOLDEN_FIXTURE_PATHS = ["reflective", "focused", "dreamy", "energetic"].map((name) =>
+// The two surface fixtures matter as much as the four below the waterline: the
+// negative half of the depth axis was covered by no fixture in either language,
+// which is how an above-water view stayed unreachable while both builders agreed
+// perfectly about everything they were being asked about.
+const GOLDEN_FIXTURE_PATHS = [
+  "reflective",
+  "focused",
+  "dreamy",
+  "energetic",
+  "surface-golden-hour",
+  "surface-daylight"
+].map((name) =>
   fileURLToPath(
     new URL(`../../../../services/ocean-service/internal/services/testdata/ocean-golden-${name}.json`, import.meta.url)
   )
@@ -62,16 +73,28 @@ describe("ocean depth curve", () => {
     const fixtures = readGoldenFixtures();
     // A glob or a path that silently matched nothing would make this suite
     // report success while checking no world at all.
-    expect(fixtures.length).toBe(4);
+    expect(fixtures.length).toBe(6);
     for (const { name, fixture } of fixtures) {
       const response = depthAt(fixture.depth.metres);
-      expect({ name, ...fixture.water }).toEqual({
+      // The colour, the fog and the tint are pure consequences of depth and
+      // must reproduce exactly. The water type and the wind are NOT — they are
+      // clarity and weather, drawn by the builder from their own stream — so
+      // they are asserted separately below rather than reproduced here.
+      expect({
+        name,
+        fogColor: fixture.water.fogColor,
+        fogDensity: fixture.water.fogDensity,
+        tintStrength: fixture.water.tintStrength
+      }).toEqual({
         name,
         fogColor: response.fogColor,
         fogDensity: response.fogDensity,
-        visibilityMetres: response.visibilityMetres,
         tintStrength: response.tintStrength
       });
+      // Visibility is the SHORTER of the two limits: how much light is left,
+      // and how clear the water is. Storing a number past either would put the
+      // fog and the water type in disagreement, and the renderer reads both.
+      expect(fixture.water.visibilityMetres).toBeLessThanOrEqual(response.visibilityMetres + 0.01);
     }
   });
 

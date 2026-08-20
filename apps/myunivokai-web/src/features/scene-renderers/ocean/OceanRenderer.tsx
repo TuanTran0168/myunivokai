@@ -1,178 +1,267 @@
 "use client";
 
-import { useMemo } from "react";
-import { useThree } from "@react-three/fiber";
-import { BackSide } from "three";
+import { useEffect, useMemo, useRef } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import type { Group, PerspectiveCamera } from "three";
 import type { SceneRendererProps } from "@/features/scene-renderers/types";
 import { pointsOfInterestFromScene } from "@/lib/scene";
-import { OceanFauna } from "./OceanFauna";
-import { OceanFlora } from "./OceanFlora";
 import { OceanLandmarks } from "./OceanLandmarks";
-import { OceanLightShafts } from "./OceanLightShafts";
-import { OceanParticles } from "./OceanParticles";
-import { OceanSeafloor } from "./OceanSeafloor";
-import { basinRadiusFromSeafloor, createSeafloorHeightSampler } from "./oceanMath";
+import { createCausticsUniforms } from "./oceanCaustics";
+import { createSeafloorHeightSampler, type SeafloorHeightSampler } from "./oceanMath";
+import { createOceanRig, type OceanRig } from "./oceanRig";
+import {
+  DEFAULT_WATER_TYPE,
+  JERLOV_WATER_TYPES,
+  sightingRangeMetres,
+  waterAttenuation,
+  type JerlovWaterType,
+} from "./oceanOptics";
 
 // The ocean scene family renderer (sceneType "ocean", ocean-service).
 //
-// Everything visual reads from the OceanSceneConfig sections, and every scatter
-// decision comes from the placement seeds embedded in the config, so the same
-// seed renders the same sea forever.
+// The whole medium — sky, surface, water column, light, floor and animals — is
+// built by `createOceanRig`, imperatively, in one place. It is not a stack of
+// components because every one of those layers has to agree with the others
+// about the same wave, the same water and the same sun, and threading that
+// through eight components is precisely how they drifted apart before.
 //
-// The thing worth knowing before reading further: NOTHING IN THIS RENDERER ASKS
-// WHICH DEPTH ZONE IT IS IN. A reef and an abyssal trench are the same code
-// path with different numbers, because the backend's depth curve already turned
-// depth into fog, light, god rays and caustics — and drove the last two to
-// exactly zero below the sunlight floor. That is the whole design.
+// What is left in React is what React is for: the landmark meshes, because they
+// are interactive product surface rather than medium.
+//
+// NOTHING HERE ASKS WHICH DEPTH ZONE IT IS IN. A reef and an abyssal trench are
+// the same code path with different numbers.
 
 const MOBILE_VIEWPORT_WIDTH_PIXELS = 820;
-
-// The key light stands in for daylight refracting through the surface. Its
-// COLOUR comes from the depth curve; only the intensity is a renderer choice.
-const KEY_LIGHT_DISTANCE = 55;
-const KEY_LIGHT_BASE_INTENSITY = 2.2;
-const AMBIENT_LIGHT_INTENSITY = 0.75;
-// Underwater, the brightest thing is above you and the darkest is the floor.
-// A hemisphere light is the cheapest way to say that, and it is what stops the
-// seabed reading as a lit studio floor.
-const HEMISPHERE_LIGHT_INTENSITY = 0.55;
-const HEMISPHERE_GROUND_COLOR = "#050B12";
-
-const SHADOW_MAP_SIZE = 2048;
-const SHADOW_CAMERA_MARGIN = 10;
-const SHADOW_BIAS = -0.0005;
-const SHADOW_NORMAL_BIAS = 0.02;
-
-// The water body itself: an inward-facing sphere that closes the world off.
-// There is no sky dome here and no HDRI — a thousand metres down there is
-// nothing above but more water, and the fog reaches its limit long before this
-// does. It exists so the scene has a colour where geometry runs out, rather
-// than the canvas clear colour showing through as a hard edge.
-const WATER_VOLUME_RADIUS_MULTIPLIER = 2.4;
+const BOUNDARY_SIGHT_MULTIPLIER = 1.5;
 
 /**
- * Renders an OceanSceneConfig: a seeded seafloor basin, instanced flora swayed
- * by the current, schools that move as bodies, drifting bioluminescent life, a
- * giant that passes at fog distance, and one clickable landmark per Ocean DNA
- * landmark.
+ * Which Jerlov water type a stored `visibilityMetres` implies.
+ *
+ * The config still carries the backend's derived numbers, and the backend does
+ * not know about Jerlov yet. Rather than ignore what it sent or invent a second
+ * source of truth, the stored sighting range is matched to the closest real
+ * water type — so a world configured for 40 m of visibility renders as the water
+ * that actually has 40 m of visibility, with the colour, the depth curve and the
+ * caustic coherence that go with it.
+ *
+ * When ocean-service starts carrying `jerlovWaterType` this function becomes a
+ * one-line fallback for old configs.
  */
+export function waterTypeForVisibility(visibilityMetres: number | undefined): JerlovWaterType {
+  if (visibilityMetres === undefined) return DEFAULT_WATER_TYPE;
+  let best: JerlovWaterType = DEFAULT_WATER_TYPE;
+  let bestGap = Number.POSITIVE_INFINITY;
+  for (const entry of JERLOV_WATER_TYPES) {
+    const gap = Math.abs(sightingRangeMetres(waterAttenuation(entry.type)) - visibilityMetres);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = entry.type;
+    }
+  }
+  return best;
+}
+
+/** Whether a stored string names a water type this renderer knows. */
+export function isJerlovWaterType(value: string | undefined): value is JerlovWaterType {
+  return value !== undefined && JERLOV_WATER_TYPES.some((entry) => entry.type === value);
+}
+
+/**
+ * Wind speed implied by a stored surface elevation and depth.
+ *
+ * Same reasoning: until the service carries `windSpeedMetresPerSecond`, a
+ * plausible sea state has to come from somewhere, and a fixed one would make
+ * every world's surface identical. Derived from the world's own seed so it is
+ * stable and varied rather than arbitrary.
+ */
+export function windSpeedFromSeed(seed: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const unit = ((hash >>> 0) % 1000) / 1000;
+  // Beaufort 3 to 6: the band that is neither a mirror nor a storm.
+  return 5 + unit * 8;
+}
+
 export function OceanRenderer({
   scene,
   seed,
   selectedPlanetKey,
   hoveredPlanetKey,
   onHoverPlanet,
-  onSelectPlanet
+  onSelectPlanet,
 }: SceneRendererProps) {
-  // scene.depth is deliberately not read here. Every visual consequence of it
-  // is already baked into water and lighting by the backend's depth curve, and
-  // reading the metres again in the renderer is how the two would drift apart.
   const water = scene.water;
   const lighting = scene.lighting;
   const seafloor = scene.seafloor;
-  const current = scene.current;
 
+  const renderer = useThree((state) => state.gl);
+  const threeScene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
   const viewportWidth = useThree((state) => state.size.width);
   const isMobile = viewportWidth > 0 && viewportWidth < MOBILE_VIEWPORT_WIDTH_PIXELS;
 
-  const heightSampler = useMemo(() => createSeafloorHeightSampler(seafloor), [seafloor]);
-  const basinRadius = basinRadiusFromSeafloor(seafloor);
+  // Landmarks stand on the RIG's floor, so they sample it through the rig. The
+  // fallback keeps them placeable during the first frame, before the rig exists.
+  const fallbackSampler = useMemo(() => createSeafloorHeightSampler(seafloor), [seafloor]);
+  const heightSampler = useMemo<SeafloorHeightSampler>(
+    () => (x, z) => (rigRef.current ? rigRef.current.heightAt(x, z) : fallbackSampler(x, z)),
+    [fallbackSampler],
+  );
   const pointsOfInterest = useMemo(() => pointsOfInterestFromScene(scene), [scene]);
-
-  const fogColor = water?.fogColor ?? "#0A3B4E";
-  const fogDensity = water?.fogDensity ?? 0.04;
-  const surfaceLightColor = lighting?.surfaceLightColor ?? "#8FD8E8";
-  const ambientColor = lighting?.ambientColor ?? "#0A404A";
-  const exposure = lighting?.exposure ?? 1;
-  const elevationRadians = lighting?.surfaceElevationRadians ?? 0.9;
-
-  // The key light comes from the direction the surface light enters at. Above
-  // the sunlight floor that is a real sun; below it, the depth curve has
-  // already reduced its colour to the dim blue legibility floor, so the same
-  // rig produces a lit reef and an all-but-unlit trench with no branch.
-  const keyLightPosition = useMemo<[number, number, number]>(() => {
-    const horizontal = Math.cos(elevationRadians) * KEY_LIGHT_DISTANCE;
-    return [horizontal * 0.6, Math.sin(elevationRadians) * KEY_LIGHT_DISTANCE, horizontal * 0.8];
-  }, [elevationRadians]);
-
-  const shadowCameraExtent = basinRadius + SHADOW_CAMERA_MARGIN;
   const worldSeed = seed || String(scene.seed ?? "ocean");
 
+  const rigRef = useRef<OceanRig | null>(null);
+
+  // The SAME number UniverseCanvas frames the shot with, so the seabed and the
+  // camera cannot disagree about where the viewer is standing.
+  const cameraDistanceMetres = scene.camera?.distance ?? 20;
+  const viewerMetres = scene.depth?.metres ?? 20;
+  const seafloorMetres = scene.depth?.seafloorMetres ?? viewerMetres + 10;
+  const floorClearanceMetres = Math.max(0, seafloorMetres - viewerMetres);
+
+  // The service carries both of these from schemaVersion 1.1. The inferences
+  // below are the fallback for worlds stored before that, and only for those —
+  // a stored value always wins, because two clients guessing independently is
+  // how one world ends up being two different seas.
+  const waterType = isJerlovWaterType(water?.jerlovWaterType)
+    ? water.jerlovWaterType
+    : waterTypeForVisibility(water?.visibilityMetres);
+  const windSpeedMps = water?.windSpeedMetresPerSecond ?? windSpeedFromSeed(worldSeed);
+  const sightLimit =
+    sightingRangeMetres(waterAttenuation(waterType)) * BOUNDARY_SIGHT_MULTIPLIER;
+  // A landmark is a thing that STANDS ON THE SEABED, so it exists only when the
+  // seabed does. Two situations used to draw them anyway, and both were visible
+  // as furniture hanging in open water:
+  //
+  //   - midwater worlds, where the floor is kilometres down and not drawn, put
+  //     a rock spire and a whale fall in the blue with a contact shadow under
+  //     them and nothing beneath that;
+  //   - above-water worlds, where the offset fell through to zero, put them in
+  //     the SKY above the horizon.
+  //
+  // There is no honest y for a seabed object in either case. The right answer is
+  // that a world with no floor has no floor objects — the water, the light and
+  // the animals are the scene, which is exactly what the prototype's own
+  // midwater views are made of.
+  const isAboveWater = viewerMetres < 0;
+  const isSeafloorInSight = !isAboveWater && floorClearanceMetres <= sightLimit;
+  const landmarksStandOnSomething = isSeafloorInSight;
+
+  const groupRef = useRef<Group>(null);
+
+  // Landmarks keep their own caustics clock, driven from the same frame loop so
+  // the pattern on a coral head stays in step with the pattern on the sand.
+  const landmarkCaustics = useMemo(
+    () =>
+      createCausticsUniforms(
+        lighting?.causticStrength ?? 0,
+        viewerMetres + floorClearanceMetres,
+        lighting?.surfaceLightColor ?? "#8FD8E8",
+      ),
+    [
+      lighting?.causticStrength,
+      lighting?.surfaceLightColor,
+      viewerMetres,
+      floorClearanceMetres,
+    ],
+  );
+
+  useEffect(() => {
+    const parent = groupRef.current;
+    if (!parent) return undefined;
+    const rig = createOceanRig({
+      renderer,
+      scene: threeScene,
+      seed: worldSeed,
+      viewerDepthMetres: viewerMetres,
+      seafloorDepthMetres: seafloorMetres,
+      waterType,
+      windSpeedMps,
+      sunElevationDegrees:
+        ((lighting?.surfaceElevationRadians ?? 0.9) * 180) / Math.PI,
+      // Undefined on worlds stored before schemaVersion 1.2, where the rig's own
+      // default takes over. Passed through rather than defaulted here so the sun
+      // and the camera cannot disagree: UniverseCanvas reads the same field to
+      // decide where to stand.
+      sunAzimuthRadians: lighting?.surfaceAzimuthRadians,
+      godRayStrength: lighting?.godRayStrength,
+      cameraDistanceMetres,
+      quality: isMobile ? "low" : "high",
+    });
+    parent.add(rig.group);
+    rigRef.current = rig;
+
+    // The medium decides how far the view has to reach, and only the medium
+    // knows: in air the sea grid runs to 5.6 km and the sky sits beyond it,
+    // where r3f's default far plane of 1000 clips both. Saved and restored
+    // rather than set, because this camera is SHARED with every other family
+    // and an ocean world must not leave a 12 km frustum behind it.
+    const perspective = camera as PerspectiveCamera;
+    const restoreFar = perspective.far;
+    const restoreNear = perspective.near;
+    if (perspective.isPerspectiveCamera && rig.state.farPlaneMetres > restoreFar) {
+      perspective.far = rig.state.farPlaneMetres;
+      // Pushed out with it: 0.1 against a 12 km far plane spends the whole
+      // depth buffer on the first few metres and the sea z-fights with itself.
+      perspective.near = Math.max(restoreNear, 0.5);
+      perspective.updateProjectionMatrix();
+    }
+
+    return () => {
+      parent.remove(rig.group);
+      rig.dispose();
+      rigRef.current = null;
+      if (perspective.isPerspectiveCamera) {
+        perspective.far = restoreFar;
+        perspective.near = restoreNear;
+        perspective.updateProjectionMatrix();
+      }
+    };
+  }, [
+    camera,
+    renderer,
+    threeScene,
+    worldSeed,
+    viewerMetres,
+    seafloorMetres,
+    waterType,
+    windSpeedMps,
+    lighting?.surfaceElevationRadians,
+    lighting?.surfaceAzimuthRadians,
+    lighting?.godRayStrength,
+    cameraDistanceMetres,
+    isMobile,
+  ]);
+
+  useFrame((state) => {
+    const rig = rigRef.current;
+    if (!rig) return;
+    const elapsed = state.clock.getElapsedTime();
+    rig.update(elapsed, camera);
+    landmarkCaustics.uCausticTime.value = elapsed;
+  });
+
   return (
-    <group>
-      <fogExp2 attach="fog" args={[fogColor, fogDensity]} />
-
-      <hemisphereLight args={[surfaceLightColor, HEMISPHERE_GROUND_COLOR, HEMISPHERE_LIGHT_INTENSITY * exposure]} />
-      {/* Ambient runs high for an outdoor scene on purpose: light underwater
-          arrives from every direction at once after a few metres of scattering,
-          which is exactly what an ambient term models. */}
-      <ambientLight color={ambientColor} intensity={AMBIENT_LIGHT_INTENSITY * exposure} />
-      <directionalLight
-        position={keyLightPosition}
-        color={surfaceLightColor}
-        intensity={KEY_LIGHT_BASE_INTENSITY * exposure}
-        castShadow
-        shadow-mapSize-width={SHADOW_MAP_SIZE}
-        shadow-mapSize-height={SHADOW_MAP_SIZE}
-        shadow-camera-left={-shadowCameraExtent}
-        shadow-camera-right={shadowCameraExtent}
-        shadow-camera-top={shadowCameraExtent}
-        shadow-camera-bottom={-shadowCameraExtent}
-        shadow-camera-near={1}
-        shadow-camera-far={KEY_LIGHT_DISTANCE * 2.5}
-        shadow-bias={SHADOW_BIAS}
-        shadow-normalBias={SHADOW_NORMAL_BIAS}
-      />
-
-      {/* The closing water volume. Rendered from the inside, unlit and
-          fog-coloured, so the world ends in water rather than in an edge. */}
-      <mesh>
-        <sphereGeometry args={[basinRadius * WATER_VOLUME_RADIUS_MULTIPLIER, 24, 16]} />
-        <meshBasicMaterial color={fogColor} side={BackSide} fog={false} />
-      </mesh>
-
-      <OceanSeafloor seafloor={seafloor} water={water} heightSampler={heightSampler} isMobile={isMobile} />
-      <OceanFlora
-        flora={scene.flora}
-        current={current}
-        water={water}
-        basinRadius={basinRadius}
-        heightSampler={heightSampler}
-        isMobile={isMobile}
-      />
-      <OceanLightShafts
-        lighting={lighting}
-        water={water}
-        seafloor={seafloor}
-        heightSampler={heightSampler}
-        seed={worldSeed}
-      />
-      <OceanParticles
-        bioluminescence={scene.bioluminescence}
-        current={current}
-        water={water}
-        basinRadius={basinRadius}
-        isMobile={isMobile}
-        worldSeed={worldSeed}
-      />
-      <OceanFauna
-        fauna={scene.fauna}
-        water={water}
-        basinRadius={basinRadius}
-        heightSampler={heightSampler}
-        worldSeed={worldSeed}
-      />
-      <OceanLandmarks
-        landmarks={scene.landmarks}
-        pointsOfInterest={pointsOfInterest}
-        water={water}
-        heightSampler={heightSampler}
-        selectedPlanetKey={selectedPlanetKey}
-        hoveredPlanetKey={hoveredPlanetKey}
-        onHoverPlanet={onHoverPlanet}
-        onSelectPlanet={onSelectPlanet}
-        worldSeed={worldSeed}
-      />
+    <group ref={groupRef}>
+      {/* Landmarks ride the same floor offset as everything else standing on the
+          seabed. When the floor is out of sight there is no floor to stand on. */}
+      <group position={[0, -floorClearanceMetres, 0]} visible={landmarksStandOnSomething}>
+        <OceanLandmarks
+          landmarks={scene.landmarks}
+          pointsOfInterest={pointsOfInterest}
+          water={water}
+          causticsUniforms={landmarkCaustics}
+          heightSampler={heightSampler}
+          selectedPlanetKey={selectedPlanetKey}
+          hoveredPlanetKey={hoveredPlanetKey}
+          onHoverPlanet={onHoverPlanet}
+          onSelectPlanet={onSelectPlanet}
+          worldSeed={worldSeed}
+        />
+      </group>
     </group>
   );
 }

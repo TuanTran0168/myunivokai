@@ -69,43 +69,56 @@ func TestBuildOceanConfigDeterministic(t *testing.T) {
 	}
 }
 
-// Each mood must bias toward its leaning zone without ever hard-locking it —
-// the same rule the forest applies to seasons.
-func TestDepthZoneBiasFollowsMood(t *testing.T) {
+// THE DEPTH CONTROL MUST SELECT A DEPTH.
+//
+// This test asserted the opposite for most of the family's life. It required
+// every mood to lean toward a zone "without ever hard-locking it", by analogy
+// with the way the forest treats seasons, and it failed a mood that produced
+// only one zone. The analogy was wrong: the forest's four seasons are a
+// character the world HAS, while these four options are labelled DEPTH & MOOD
+// and named after depths, so they are a coordinate the person CHOOSES. A
+// leaning coordinate is a broken control — picking "The Abyss" and receiving a
+// view of the water surface happened 5% of the time and was reported as a bug
+// the first time it was seen.
+//
+// So the assertion is inverted, and it is now the stronger of the two: each
+// mood produces exactly one zone, for every seed, and the four of them lay out
+// the whole axis in order with nothing missing and nothing doubled up.
+func TestEachMoodPinsExactlyOneDepth(t *testing.T) {
 	builder := NewOceanConfigBuilder()
-	leaningZonesByMood := map[string]string{
-		"focused":    ZoneTwilightReach,
-		"dreamy":     ZoneTwilightReach,
-		"energetic":  ZoneSunlitShallows,
-		"reflective": ZoneAbyss,
+	expected := map[string]struct {
+		zone       string
+		aboveWater bool
+	}{
+		"focused":    {ZoneSunlitShallows, true},
+		"energetic":  {ZoneSunlitShallows, false},
+		"dreamy":     {ZoneTwilightReach, false},
+		"reflective": {ZoneAbyss, false},
 	}
-	for mood, leaningZone := range leaningZonesByMood {
-		counts := map[string]int{}
+	for mood, want := range expected {
 		for sample := 0; sample < 240; sample++ {
 			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-ZONE-%s-%d", mood, sample), mood, 4))
-			counts[config.Depth.Zone]++
-		}
-		if counts[leaningZone] <= counts[ZoneSunlitShallows]+counts[ZoneTwilightReach]+counts[ZoneAbyss]-counts[leaningZone] {
-			// The leaning zone need not be a majority of all worlds, only the
-			// most common one. Anything stricter would be asserting the weight
-			// vector rather than the behaviour it exists for.
-			if !isMostCommon(counts, leaningZone) {
-				t.Fatalf("mood %q produced %v, which does not lean toward %q", mood, counts, leaningZone)
+			if config.Depth.Zone != want.zone {
+				t.Fatalf("mood %q produced zone %q at %.2f m, want %q every time",
+					mood, config.Depth.Zone, config.Depth.Metres, want.zone)
+			}
+			if above := config.Depth.Metres < 0; above != want.aboveWater {
+				t.Fatalf("mood %q put the viewer at %.2f m; aboveWater = %v, want %v",
+					mood, config.Depth.Metres, above, want.aboveWater)
 			}
 		}
-		if len(counts) < 2 {
-			t.Fatalf("mood %q hard-locked its zone: %v", mood, counts)
+	}
+	// And the four together must still cover the axis, or pinning has quietly
+	// deleted a zone from the family.
+	covered := map[string]bool{}
+	for mood := range expected {
+		covered[builder.Build(buildTestInput("OCN-ZONE-COVER", mood, 4)).Depth.Zone] = true
+	}
+	for _, zone := range zoneKindsInOrder {
+		if !covered[zone] {
+			t.Fatalf("no mood reaches %q, so that zone is unreachable from the create form", zone)
 		}
 	}
-}
-
-func isMostCommon(counts map[string]int, expected string) bool {
-	for zone, count := range counts {
-		if zone != expected && count > counts[expected] {
-			return false
-		}
-	}
-	return true
 }
 
 // The zone label and the depth in metres are two views of one value. A world
@@ -119,27 +132,60 @@ func TestZoneAlwaysAgreesWithMetres(t *testing.T) {
 			if config.Depth.Zone != ZoneForDepth(config.Depth.Metres) {
 				t.Fatalf("depth %.2f m is labelled %q, want %q", config.Depth.Metres, config.Depth.Zone, ZoneForDepth(config.Depth.Metres))
 			}
-			if config.Depth.Metres < 0 || config.Depth.Metres > MaximumDepthMetres {
+			// A NEGATIVE depth is a viewer above the waterline, and it is a real
+			// value rather than a bug — but only within a person's eye height,
+			// and only from the shallows. An unbounded negative depth would put
+			// the camera in orbit and still label the world a reef.
+			if config.Depth.Metres < 0 {
+				if config.Depth.Zone != ZoneSunlitShallows {
+					t.Fatalf("a %.2f m altitude is labelled %q; only the shallows may break the surface", config.Depth.Metres, config.Depth.Zone)
+				}
+				altitude := -config.Depth.Metres
+				if altitude < minimumBreachAltitudeMetres || altitude > minimumBreachAltitudeMetres+breachAltitudeRangeMetres {
+					t.Fatalf("altitude %.2f m is outside the breach band", altitude)
+				}
+				// There must still be a real seabed under a surfaced world.
+				if config.Depth.SeafloorMetres <= 0 {
+					t.Fatalf("surfaced world has seafloor at %.2f m", config.Depth.SeafloorMetres)
+				}
+				continue
+			}
+			if config.Depth.Metres > MaximumDepthMetres {
 				t.Fatalf("depth %.2f m is outside the real range", config.Depth.Metres)
 			}
 		}
 	}
 }
 
-// Water is a pure consequence of depth. Two worlds at the same depth must get
-// the same sea, or the depth curve is not the single source of it.
+// Everything about the water EXCEPT the sea state is a pure consequence of
+// depth. Two worlds at the same depth must get the same colour, the same fog,
+// the same visibility and the same water type, or the depth curve is not the
+// single source of them.
+//
+// The sea state is excluded on purpose and it is the one thing here that is
+// weather rather than optics: two worlds at the same depth can legitimately sit
+// under a mirror and under a whitecapped chop. TestWindSpeedIsWeather covers it
+// separately, so neither property is asserted by accident.
 func TestWaterIsDerivedOnlyFromDepth(t *testing.T) {
 	builder := NewOceanConfigBuilder()
 	byDepth := map[float64]models.WaterConfig{}
 	for sample := 0; sample < 400; sample++ {
 		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-WATER-%d", sample), "dreamy", 4))
+		optics := config.Water
+		// Both of the drawn values are excluded here and asserted separately:
+		// the wind by TestWindSpeedIsWeather, the water type by
+		// TestOpenWaterIsNeverCoastal. Visibility now depends on the water type,
+		// so it travels with them.
+		optics.WindSpeedMetresPerSecond = 0
+		optics.JerlovWaterType = ""
+		optics.VisibilityMetres = 0
 		if existing, found := byDepth[config.Depth.Metres]; found {
-			if existing != config.Water {
-				t.Fatalf("two worlds at %.2f m disagree about the water: %#v vs %#v", config.Depth.Metres, existing, config.Water)
+			if existing != optics {
+				t.Fatalf("two worlds at %.2f m disagree about the water: %#v vs %#v", config.Depth.Metres, existing, optics)
 			}
 			continue
 		}
-		byDepth[config.Depth.Metres] = config.Water
+		byDepth[config.Depth.Metres] = optics
 		expected := DepthAt(config.Depth.Metres)
 		if config.Water.FogColor != expected.FogColor || config.Water.FogDensity != expected.FogDensity {
 			t.Fatalf("stored water at %.2f m does not match the curve: %#v", config.Depth.Metres, config.Water)
@@ -153,8 +199,16 @@ func TestTheAbyssHasNoSurfaceLightEffects(t *testing.T) {
 	builder := NewOceanConfigBuilder()
 	sawAbyss := false
 	sawShallows := false
+	// Two moods, because one mood is now one depth: "reflective" is the only
+	// route to the abyss and "energetic" the only route to a lit reef. Sampling
+	// a single mood is what this test used to do, and it worked only because the
+	// zone was a lottery.
 	for sample := 0; sample < 400; sample++ {
-		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-LIGHT-%d", sample), "reflective", 4))
+		mood := "reflective"
+		if sample%2 == 0 {
+			mood = "energetic"
+		}
+		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-LIGHT-%d", sample), mood, 4))
 		if config.Depth.Zone == ZoneAbyss {
 			sawAbyss = true
 			if config.Lighting.GodRayStrength != 0 || config.Lighting.CausticStrength != 0 {
@@ -301,8 +355,18 @@ func TestLandmarksAreHeroFirstAndDeduped(t *testing.T) {
 			t.Fatalf("landmark %d repeated kind %q while unused kinds remained", index, landmark.Kind)
 		}
 		seen[landmark.Kind] = true
-		if landmark.RadiusFromCenter <= 0 || landmark.RadiusFromCenter > config.Seafloor.BasinRadius {
-			t.Fatalf("landmark %d sits at radius %.2f outside the basin (%.2f)", index, landmark.RadiusFromCenter, config.Seafloor.BasinRadius)
+		// The invariant is CLEARANCE FROM THE CAMERA, not containment in the
+		// basin. It used to be the latter, and the latter is what allowed the bug:
+		// the basin is 26-38 m and the camera orbits at 16-24 m, so "inside the
+		// basin" was satisfied by a landmark standing exactly where the viewer
+		// does. The basin is a scatter bound for small dressing — rocks, tufts,
+		// reef clusters — not a wall, and the seabed itself is drawn 680 m across.
+		if landmark.RadiusFromCenter < config.Camera.Distance+landmarkCameraStandoffMetres {
+			t.Fatalf("landmark %d sits at radius %.2f, inside the camera's orbit at %.2f",
+				index, landmark.RadiusFromCenter, config.Camera.Distance)
+		}
+		if landmark.RadiusFromCenter > config.Camera.Distance+landmarkCameraStandoffMetres+landmarkRingDepthMetres {
+			t.Fatalf("landmark %d sits at radius %.2f, past the ring", index, landmark.RadiusFromCenter)
 		}
 		if landmark.AngleRadians < -landmarkAngleJitterRadians || landmark.AngleRadians > 2*math.Pi+landmarkAngleJitterRadians {
 			t.Fatalf("landmark %d angle %.2f is outside one turn", index, landmark.AngleRadians)
@@ -325,5 +389,155 @@ func TestNoMachineReadableIdentifierIsNamedAbyss(t *testing.T) {
 	}
 	if !strings.Contains(config.Seafloor.PlacementSeed, "-ocean-") {
 		t.Fatalf("placement seed %q is not namespaced to this family", config.Seafloor.PlacementSeed)
+	}
+}
+
+// The sea state is weather, and weather does not follow depth.
+//
+// Two assertions, and the second is the one that matters: the wind must VARY
+// between worlds at the same depth (otherwise it is just another depth lookup
+// wearing a different name) and it must stay inside the band the wave spectrum
+// was built for. A wind of zero gives a mirror with no wave field in it; a wind
+// past the band turns every world into a storm nobody asked for.
+func TestWindSpeedIsWeather(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	byDepth := map[float64][]float64{}
+	varied := false
+	for sample := 0; sample < 400; sample++ {
+		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-WIND-%d", sample), "dreamy", 4))
+		wind := config.Water.WindSpeedMetresPerSecond
+		if wind < minimumWindSpeedMetresPerSecond || wind > minimumWindSpeedMetresPerSecond+windSpeedRangeMetresPerSecond {
+			t.Fatalf("wind %.2f m/s is outside the Beaufort 3-6 band", wind)
+		}
+		for _, seen := range byDepth[config.Depth.Metres] {
+			if seen != wind {
+				varied = true
+			}
+		}
+		byDepth[config.Depth.Metres] = append(byDepth[config.Depth.Metres], wind)
+	}
+	if !varied {
+		t.Fatal("every world at a given depth got the same wind; the sea state is following depth rather than weather")
+	}
+}
+
+// Open water is open water.
+//
+// The turbidity that makes coastal water coastal is river outflow and
+// resuspended sediment, and neither reaches the middle of an ocean. A twilight
+// or abyssal world labelled with a coastal type would render the deep sea
+// estuary-green — which is exactly what the first version of this did, because
+// it inferred clarity from how much LIGHT was left rather than from where the
+// world is.
+func TestOpenWaterIsNeverCoastal(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	for sample := 0; sample < 400; sample++ {
+		for _, mood := range []string{"focused", "dreamy", "energetic", "reflective"} {
+			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-TYPE-%d", sample), mood, 4))
+			allowed := waterTypesByZone[config.Depth.Zone]
+			found := false
+			for _, candidate := range allowed {
+				if candidate == config.Water.JerlovWaterType {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("a %s world is in water type %q, which is not one of %v", config.Depth.Zone, config.Water.JerlovWaterType, allowed)
+			}
+		}
+	}
+}
+
+// Visibility can never claim to reach further than the water itself allows.
+// Storing a number the water cannot support would put the fog and the water
+// type in disagreement, and the renderer reads both.
+func TestVisibilityNeverExceedsTheWater(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	for sample := 0; sample < 300; sample++ {
+		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-VIS-%d", sample), "dreamy", 4))
+		limit := SightingRangeForWaterType(config.Water.JerlovWaterType)
+		if config.Water.VisibilityMetres > limit+0.01 {
+			t.Fatalf("%s water stores %.2f m of visibility but can only carry %.2f m", config.Water.JerlovWaterType, config.Water.VisibilityMetres, limit)
+		}
+	}
+}
+
+// Open ocean is blue and coastal water is green, and the reason is that clear
+// water sees further. If the clearest water in this family were not also the
+// water with the longest sighting range, the whole classification would be
+// backwards.
+func TestClearerWaterSeesFurther(t *testing.T) {
+	for index := 1; index < len(jerlovWaterTypes); index++ {
+		clearer := sightingRangeMetres(jerlovWaterTypes[index-1])
+		murkier := sightingRangeMetres(jerlovWaterTypes[index])
+		if murkier >= clearer {
+			t.Fatalf("%s sees %.1f m and the clearer %s only %.1f m", jerlovWaterTypes[index].Name, murkier, jerlovWaterTypes[index-1].Name, clearer)
+		}
+	}
+}
+
+// Every ocean world must be able to see the surface or the floor.
+//
+// Water with neither is not a place, it is a colour: nothing to read scale or
+// direction from, nothing for the light to land on, nothing for an animal to be
+// near. This used to be violated by every twilight world, deliberately, and it
+// rendered as a flat blue rectangle.
+func TestEveryWorldCanSeeABoundary(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	for sample := 0; sample < 400; sample++ {
+		for _, mood := range []string{"focused", "dreamy", "energetic", "reflective"} {
+			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-BOUND-%d", sample), mood, 4))
+			if config.Depth.Metres < 0 {
+				// Above the waterline the surface is underfoot.
+				continue
+			}
+			// The renderer decides with the water the world actually got, so
+			// this asserts against that rather than against the band the
+			// builder reasoned with.
+			reach := SightingRangeForWaterType(config.Water.JerlovWaterType) * boundarySightMultiplier
+			surfaceVisible := config.Depth.Metres <= reach
+			floorVisible := config.Depth.SeafloorMetres-config.Depth.Metres <= reach
+			if !surfaceVisible && !floorVisible {
+				t.Fatalf("a world at %.2f m with the floor at %.2f m in %s water (%.1f m of reach) can see neither boundary",
+					config.Depth.Metres, config.Depth.SeafloorMetres, config.Water.JerlovWaterType, reach)
+			}
+		}
+	}
+}
+
+// The rule must not quietly collapse the family onto one depth. If satisfying
+// it turned every world into a reef, the fix would have cost more than the bug.
+func TestTheBoundaryRuleKeepsTheDepthRange(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	deepest := 0.0
+	for sample := 0; sample < 400; sample++ {
+		config := builder.Build(buildTestInput(fmt.Sprintf("OCN-BOUND-%d", sample), "reflective", 4))
+		if config.Depth.Metres > deepest {
+			deepest = config.Depth.Metres
+		}
+	}
+	if deepest < 1000 {
+		t.Fatalf("the deepest world in 400 samples is %.2f m; the boundary rule has flattened the family", deepest)
+	}
+}
+
+// The boundary rule must never change what zone a world is in. Its first
+// version lifted twilight viewers to nine metres, which reclassified them as
+// shallows — destroying the mood's depth lean, and then letting them draw
+// coastal water too murky to reach the surface they had been moved to see.
+func TestTheBoundaryRuleNeverChangesTheZone(t *testing.T) {
+	builder := NewOceanConfigBuilder()
+	for sample := 0; sample < 400; sample++ {
+		for _, mood := range []string{"focused", "dreamy", "energetic", "reflective"} {
+			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-BAND-%d", sample), mood, 4))
+			if config.Depth.Metres < 0 {
+				continue
+			}
+			band := depthBandByZone[config.Depth.Zone]
+			if config.Depth.Metres < band.Minimum-0.01 || config.Depth.Metres > band.Maximum+0.01 {
+				t.Fatalf("a %s world sits at %.2f m, outside its own band %.0f-%.0f m",
+					config.Depth.Zone, config.Depth.Metres, band.Minimum, band.Maximum)
+			}
+		}
 	}
 }

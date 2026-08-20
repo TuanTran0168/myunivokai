@@ -30,7 +30,20 @@ export default defineConfig({
     // that two runs on the same machine differ only by the code between them,
     // and a GPU that schedules work differently under load breaks exactly that.
     launchOptions: {
-      args: ["--use-gl=angle", "--use-angle=swiftshader", "--disable-lcd-text", "--force-device-scale-factor=1"]
+      // --enable-unsafe-swiftshader is REQUIRED, not optional. Chrome deprecated
+      // the automatic software-WebGL fallback: without this flag it warns
+      // "Automatic fallback to software WebGL has been deprecated" and hands
+      // back a context that renders NOTHING. Every shot then comes out pure
+      // black, for every family, and the suite keeps passing — the failure is
+      // invisible because these tests assert nothing. Verified by sampling
+      // pixels: rgb(0,0,0) across the whole canvas before the flag.
+      args: [
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--disable-lcd-text",
+        "--force-device-scale-factor=1"
+      ]
     }
   },
   projects: [

@@ -151,8 +151,22 @@ const (
 	// response follows.
 	brightnessCompression = 0.30
 
-	minimumVisibilityMetres = 12.0
-	visibilityMetresRange   = 26.0
+	// Horizontal visibility, which FogDensity is 1/visibility of — so at this
+	// distance an object is 63% obscured, and legibility runs out somewhere
+	// past it rather than at it.
+	//
+	// These numbers were far too small until the fog was actually connected.
+	// The family shipped with scene.fog === null, so nothing ever rendered
+	// them; the moment fog worked, a 38 m ceiling over a basin 36 m across put
+	// the middle of every reef at 46% haze and turned clear tropical water into
+	// soup. Clear oceanic water has a horizontal visual range of roughly 30-80
+	// m, and a reef on a good day is at the top of that — the water is supposed
+	// to be the thing you CAN see through.
+	//
+	// The floor stays low: the deep sea is not merely dark, it is turbid with
+	// marine snow, and its short sight line is doing real work.
+	minimumVisibilityMetres = 14.0
+	visibilityMetresRange   = 76.0
 
 	minimumTintStrength = 0.15
 	maximumTintStrength = 0.95

@@ -1,0 +1,143 @@
+# Ocean asset catalog (ocean-1) — sources and licenses
+
+Everything here is **CC0**, so none of it legally requires credit. It is credited
+anyway, because the rule this repository follows is that an asset whose origin
+nobody recorded is an asset nobody can replace.
+
+## Why this folder exists at all
+
+The first ocean-1 catalogue had no assets. Every model key resolved to geometry
+assembled from three.js primitives in the browser, on the argument that no
+agent-downloadable CC0 anglerfish or giant squid exists and that a frozen species
+list must not name a species the renderer cannot draw.
+
+The reasoning was sound and the conclusion was wrong, for a reason the search
+missed: **Quaternius publishes CC0 marine models with real skeletal swim
+animations, and Poly Pizza hosts them already converted to GLB.** That is the
+same route the nature-1 catalogue took. `notes/fe/3d-development-limitations.md`
+§3 rates primitive assembly "Thấp–TB — không đủ đẹp" and rates a CC0 GLB kit
+"TB–Cao"; the ocean shipped the first and looked it.
+
+Animation is the part that could not have been faked. A stiff fish on a circular
+rail reads as a prop no matter how good its silhouette is, and these carry
+authored `Swimming_Normal` / `Swimming_Fast` / `Swim` clips.
+
+## Models — [Quaternius](https://quaternius.com), CC0, via [Poly Pizza](https://poly.pizza)
+
+Downloaded from Poly Pizza's public CDN (`static.poly.pizza/<uuid>.glb`), which
+needs no API key. Contents unmodified.
+
+| File | Model | Animation clips | Source |
+| --- | --- | --- | --- |
+| fauna-butterfly-fish.glb | Butterfly Fish | Swimming_Normal/Fast/Impulse, Attack, Death, Out_Of_Water | <https://poly.pizza/m/s2MkBeSzGy> |
+| fauna-lionfish.glb | Lionfish | same six | <https://poly.pizza/m/czsz9Baw86> |
+| fauna-black-lionfish.glb | Black Lion Fish | same six | <https://poly.pizza/m/4k2s68UrSg> |
+| fauna-piranha.glb | Piranha | same six | <https://poly.pizza/m/F7bCnF1BFf> |
+| fauna-turbot.glb | Turbot | same six | <https://poly.pizza/m/E8NjhhdvSU> |
+| fauna-blobfish.glb | Blobfish | same six | <https://poly.pizza/m/7Jh8vsARfN> |
+| fauna-swordfish.glb | Swordfish | same six | <https://poly.pizza/m/7hMOlBjln0> |
+| fauna-manta-ray.glb | Manta ray | Swim | <https://poly.pizza/m/yzD8b7ZHZm> |
+| fauna-shark.glb | Shark | Swim | <https://poly.pizza/m/AyHTK3zUSG> |
+| fauna-goblin-shark.glb | Goblin Shark | six-clip Fish_Armature set | <https://poly.pizza/m/JQrBevTzgD> |
+| fauna-dolphin.glb | Dolphin | Swim | <https://poly.pizza/m/3LzFgI3GLO> |
+| fauna-whale.glb | Whale | Swim | <https://poly.pizza/m/JGFwp6xWgk> |
+
+59–209 KB each, 1.6 MB for all twelve — against the forest's 33 GLB. The ocean
+still has no HDRI: there is no sky a thousand metres down.
+
+**Only the swim clips are used.** Attack/Death/Out_Of_Water are authored for a
+fishing game and have no meaning in a portrait scene; a fish that plays `Death`
+because a clip index shifted is the failure mode worth naming here.
+
+## Not used: PBR textures — [Poly Haven](https://polyhaven.com), CC0
+
+Six 1k tiling maps were fetched and then **removed without ever being loaded**,
+and the reason is worth recording because it is the same lesson as the Sketchfab
+entry below.
+
+| Asset | Was for |
+| --- | --- |
+| `coast_sand_rocks_02` | seabed albedo / normal / roughness |
+| `aerial_rocks_02` | rock albedo / normal / roughness |
+
+Both are fetchable again from Poly Haven's public API by those asset IDs — it
+needs no key, only a user-agent and referer header — so nothing is lost by their
+absence.
+
+They were downloaded to fix a striping artifact on the seabed, on the assumption
+that a photographic albedo would break up a pattern the procedural one could not.
+It would not have: the stripe was a sum of plane waves laid on a lattice, and what
+fixed it was giving the noise a DOMAIN WARP and integer wave numbers so the field
+tiles exactly. The prototype these frames are measured against loads zero image
+textures for the same reason.
+
+So the seabed's sand and normal maps are generated at runtime from one height
+field, at 512², costing no download and no licence to track. Four point nine
+megabytes of unreferenced JPEG is not a neutral thing to leave in a repository:
+git history is permanent, and an asset nobody loads is an asset the next person
+has to work out whether they may delete.
+
+## Not used: Sketchfab
+
+Sketchfab's download endpoint returns **401 without an OAuth token**, for CC0
+models as much as for any other, and `isDownloadable` on a public model page does
+not change that. It is therefore owner-manual, never agent-automatable. See
+`notes/references/threejs-assets.md`. **Never commit a Sketchfab token.**
+
+## Superseded: "still procedural"
+
+Flora (kelp, seagrass, the corals, anemone, tubeworm, glass sponge, sea pen),
+landmarks and the three abyssal-visitor species remain browser-built geometry in
+`src/features/scene-renderers/ocean/oceanModels.ts`. Flora does not need
+skeletal animation — it sways from the current, which is a vertex-shader job —
+and the abyssal species have no CC0 source found so far. Swapping any of them to
+a GLB later changes no stored config and re-renders every existing world.
+
+## Reused from `public/assets/nature/` — Quaternius, CC0
+
+The section above ("Still procedural") was **wrong about the premise**, and this
+records the correction. It concluded that no CC0 coral, kelp or seagrass could be
+found and shipped browser-built cylinders and cones instead. An asset audit of
+the repository found sixteen usable CC0 GLBs **already committed** for the forest
+family. Nothing had to be downloaded; the ocean's budget in
+`ocean-service-plan.md` §8 (≤ 16 GLB, ≤ 3 MB) is untouched, and a visitor who has
+loaded one forest world already has these cached.
+
+Mapped in `src/features/scene-renderers/ocean/oceanDressingModels.ts` **by
+silhouette**, which is the only property of a shape that survives thirty metres
+of seawater:
+
+| Ocean key / landmark kind | Nature GLB | Why the silhouette works |
+| --- | --- | --- |
+| `flora-kelp-giant` | grass-tall-1.glb | a bundle of long blades streaming up |
+| `flora-seagrass` | grass-1.glb | the same, at ankle height |
+| `flora-coral-staghorn` | tree-dead-1.glb | bare, rigid, repeatedly forking |
+| `flora-coral-brain` | rock-mossy-2.glb | a boulder with a folded surface |
+| `flora-coral-soft` | fern-1.glb | feathered fronds from a short stalk |
+| `flora-anemone` | flower-group-1.glb | a cluster of soft coloured blooms |
+| `flora-tubeworm` | flower-single-1.glb | one stalk carrying one head |
+| `flora-glass-sponge` | mushroom-1.glb | a stalk carrying a cup |
+| `flora-sea-pen` | bush-flowers-1.glb | a plume on the sediment |
+| seabed rocks (3 size classes) | rock-mossy-1/2/3.glb | boulders, cobbles, gravel |
+| `kelpCathedral` | tree-dead-2.glb | tall bare columns branching into a canopy |
+| `sunkenRelic` | landmark-lantern-shrine.glb | the one landmark that must read as MADE |
+| `hydrothermalVent` | rock-mossy-3.glb | a chimney, plus its procedural plume |
+| `coralGarden` | bush-1.glb | a dense low mound |
+| `abyssalTrench` | rock-mossy-1.glb | an outcrop at hero scale |
+| `whaleFall` | landmark-fallen-log.glb | a long pale form on the sediment |
+
+**`landmark-heart-tree.glb` was tried for `kelpCathedral` and rejected.** Its
+canopy is a literal heart, so at landmark scale it read as one enormous coloured
+petal filling a quarter of the frame. A silhouette that already says something
+specific cannot be repurposed, however well it is tinted.
+
+Every part is re-materialised for seawater in `dressForSeawater`: non-foliage
+materials are **cloned** before tinting (drei caches GLTFs by URL, so mutating one
+would reach across and change the forest), tinted toward the water by the depth
+curve's own `tintStrength`, and given the seabed's caustics.
+
+## Now genuinely procedural
+
+Jellyfish and other drifters, bioluminescent plankton, marine snow, the water
+surface, the god-ray volume and the caustics. The three abyssal-visitor species
+still have no CC0 source and keep their built geometry.
