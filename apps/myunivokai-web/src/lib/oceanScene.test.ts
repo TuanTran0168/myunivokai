@@ -59,6 +59,41 @@ describe("the ocean preview builder", () => {
     expect(buildPreviewOceanSceneConfig(previewInput())).toEqual(buildPreviewOceanSceneConfig(previewInput()));
   });
 
+  // The create page's untouched-default identity — nickname "Neo", mood
+  // "focused" — hashes to ONE fixed seed forever, and that seed's own
+  // aboveWaterRoll happens to land underwater (depth +27.15m) rather than on
+  // the surface. showCalmSurfaceDefault exists so the landing page can show
+  // the calm surface anyway, without touching what a REAL nickname/mood
+  // combination rolls once someone actually customizes the form.
+  describe("showCalmSurfaceDefault", () => {
+    const untouchedDefaultInput = previewInput({
+      nickname: "Neo",
+      interests: ["Technology", "Design", "AI"],
+      traits: ["curious", "builder", "focused"],
+      mood: "focused",
+      preferredWorldStyle: "cosmic-galaxy",
+      favoriteColors: ["#8B5CF6", "#06B6D4"]
+    });
+
+    it("rolls underwater for the untouched-default identity when left off", () => {
+      const scene = buildPreviewOceanSceneConfig(untouchedDefaultInput);
+      expect(scene.depth?.metres).toBeGreaterThanOrEqual(0);
+    });
+
+    it("forces the calm surface for that same identity when turned on", () => {
+      const scene = buildPreviewOceanSceneConfig(untouchedDefaultInput, { showCalmSurfaceDefault: true });
+      expect(scene.depth?.metres).toBeLessThan(0);
+      expect(scene.depth?.zone).toBe(OCEAN_ZONE_SUNLIT_SHALLOWS);
+    });
+
+    it("never changes the result once real input exists", () => {
+      const customised = previewInput({ nickname: "Mai", mood: "focused" });
+      expect(buildPreviewOceanSceneConfig(customised, { showCalmSurfaceDefault: false })).toEqual(
+        buildPreviewOceanSceneConfig(customised)
+      );
+    });
+  });
+
   it("stamps the contract keys the renderer registry resolves on", () => {
     const scene = buildPreviewOceanSceneConfig(previewInput());
     expect(scene.sceneType).toBe("ocean");

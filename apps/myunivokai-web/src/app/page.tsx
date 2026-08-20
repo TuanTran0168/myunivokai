@@ -217,10 +217,26 @@ export default function HomePage() {
     };
   }, [challenge, favoriteColors, goal, interests, mood, nickname, preferredWorldStyle, role, traits]);
 
+  // Captured once, from the very first render, so it is exactly the payload
+  // every field's own initial state produces — the "nobody has typed anything
+  // yet" snapshot, independent of what those defaults happen to be.
+  const initialPayloadReference = useRef(payload);
+
   // Built from the same sanitized payload that is submitted (not the raw form
   // state) so the preview's planet count and names match the generated world,
   // and debounced so typing does not rebuild the canvas on every keystroke.
   const debouncedPayload = useDebouncedValue(payload, PREVIEW_REBUILD_DEBOUNCE_MILLISECONDS);
+  // True only until the visitor changes ANY field from its starting value.
+  // Ocean's live preview uses this to show its calm sunlit-surface default
+  // instead of whatever the fixed placeholder seed happens to roll — see
+  // buildPreviewDepthConfig's comment. Universe and forest need no such
+  // override: every state their own fixed seed can land on already reads as
+  // "a nice solar system" / "a nice forest," which is exactly the property
+  // ocean's underwater states don't all share.
+  const isPreviewUncustomized = useMemo(
+    () => JSON.stringify(debouncedPayload) === JSON.stringify(initialPayloadReference.current),
+    [debouncedPayload]
+  );
   const previewScene = useMemo(() => {
     const previewInput = {
       nickname: debouncedPayload.nickname,
@@ -236,10 +252,10 @@ export default function HomePage() {
       return buildPreviewForestSceneConfig(previewInput);
     }
     if (worldFamily === "ocean") {
-      return buildPreviewOceanSceneConfig(previewInput);
+      return buildPreviewOceanSceneConfig(previewInput, { showCalmSurfaceDefault: isPreviewUncustomized });
     }
     return buildPreviewSceneConfig(previewInput);
-  }, [debouncedPayload, worldFamily]);
+  }, [debouncedPayload, isPreviewUncustomized, worldFamily]);
 
   // The preview mounts the selected family immediately, so that chunk is already
   // in flight. Warm the others as well: this is the one page whose whole job is

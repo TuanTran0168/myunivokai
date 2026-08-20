@@ -687,7 +687,23 @@ function currentKindForRoll(roll: number, entries: WeightedCurrentKind[]): strin
 // Draw order: zone roll, transition roll, transition direction, blend amount,
 // depth-within-band. The transition draws happen even for non-transition worlds
 // so the depth pick never shifts.
-function buildPreviewDepthConfig(seed: string, mood: string, moodProfile: OceanMoodProfile): OceanDepthConfig {
+//
+// forceSurfaced is a PREVIEW-ONLY override (see buildPreviewOceanSceneConfig):
+// every roll is still drawn in its usual order so nothing downstream shifts,
+// only the final above-water decision is overridden. It exists because the
+// landing page's live preview, before anyone has typed anything, hashes to one
+// FIXED seed forever — and for "Glass Shallows" that seed's own
+// aboveWaterRoll happens to land in the 30% that stays underwater, so every
+// first-time visitor got the same underwater frame by construction, never the
+// calm surface the family's default mood is supposed to show off. The actual
+// generated world (once real input exists) never sets this and keeps the
+// ordinary weighted roll.
+function buildPreviewDepthConfig(
+  seed: string,
+  mood: string,
+  moodProfile: OceanMoodProfile,
+  forceSurfaced = false
+): OceanDepthConfig {
   const nextRandomValue = randomFromSeed(seed + DEPTH_SEED_SUFFIX);
   // Drawn first because every later roll here needs to know which zone's band
   // it is rolling within. See driftZone for the clamp that keeps this from
@@ -750,7 +766,7 @@ function buildPreviewDepthConfig(seed: string, mood: string, moodProfile: OceanM
   // aboveWaterProbability. The whole altitude roll spreads the height
   // independently of whether the surface roll succeeded.
   let viewerMetres = waterMetres;
-  if (aboveWaterRoll < moodProfile.aboveWaterProbability) {
+  if (forceSurfaced || aboveWaterRoll < moodProfile.aboveWaterProbability) {
     viewerMetres = roundToHundredths(
       -(MINIMUM_BREACH_ALTITUDE_METRES + altitudeRoll * BREACH_ALTITUDE_RANGE_METRES)
     );
@@ -1180,7 +1196,19 @@ function buildPreviewAssetsConfig(
  * buildPreviewForestSceneConfig: a full OceanSceneConfig built locally from the
  * form inputs, rendered by the SAME OceanRenderer the real world uses.
  */
-export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneConfig {
+export type PreviewOceanSceneOptions = {
+  /**
+   * Show the calm sunlit surface regardless of the depth roll. Set only while
+   * the form is still at its untouched defaults — see the call site in
+   * page.tsx and buildPreviewDepthConfig's own comment on why this exists.
+   */
+  showCalmSurfaceDefault?: boolean;
+};
+
+export function buildPreviewOceanSceneConfig(
+  input: PreviewSceneInput,
+  options: PreviewOceanSceneOptions = {}
+): SceneConfig {
   const seed = previewSeedFromInputs(input);
   const moodProfile = oceanProfileForMood(input.mood);
 
@@ -1191,7 +1219,7 @@ export function buildPreviewOceanSceneConfig(input: PreviewSceneInput): SceneCon
   // like universe planets and forest landmarks — reuse the shared mirror.
   const landmarkNames = previewPlanetNames(input.interests, input.traits);
 
-  const depth = buildPreviewDepthConfig(seed, input.mood, moodProfile);
+  const depth = buildPreviewDepthConfig(seed, input.mood, moodProfile, options.showCalmSurfaceDefault);
   const metres = depth.metres ?? DEPTH_BAND_BY_ZONE[OCEAN_ZONE_SUNLIT_SHALLOWS].minimum;
   const zone = depth.zone ?? OCEAN_ZONE_SUNLIT_SHALLOWS;
 
