@@ -44,7 +44,7 @@ var zoneKindsInOrder = []string{ZoneSunlitShallows, ZoneTwilightReach, ZoneAbyss
 // a `surfaceBreachProbability` of one in three, rolled for every shallow world,
 // which meant the sea-surface view was a lottery nobody could enter on purpose
 // and the abyss could win it by accident. It is now a property of the mood the
-// person picked — "Still Water" is above the water, every seed, and no other
+// person picked — "Glass Shallows" is above the water, every seed, and no other
 // mood ever is. See oceanMoodProfiles.
 //
 // What is left here is the altitude, which is still drawn, because how high
@@ -76,7 +76,7 @@ var zoneKindsInOrder = []string{ZoneSunlitShallows, ZoneTwilightReach, ZoneAbyss
 // are composed at (12 m and 22 m), and where sea and sky each get half the frame.
 //
 // The water below an above-water world is still drawn from the shallows band, so
-// "Still Water" is a shallow sea seen from the air — turquoise over sand, with
+// "Glass Shallows" is a shallow sea seen from the air — turquoise over sand, with
 // the bottom legible through it — rather than mid-ocean grey. That is the more
 // beautiful of the two and it is also the honest one: a 24 m altitude cannot see
 // a 3 km seabed, but it can absolutely see a 20 m one.
@@ -330,15 +330,15 @@ const assetCatalogVersion = "ocean-1"
 //
 // AboveWaterProbability got the same correction one step later, for the
 // identical reason: it used to be a plain bool, absolutely pinned, so
-// "Still Water" broke the surface every single seed. That was deliberate —
+// "Glass Shallows" broke the surface every single seed. That was deliberate —
 // it is the create form's default mood and therefore the first view of the
-// whole family — but pinning it 100% made every "Still Water" generation the
+// whole family — but pinning it 100% made every "Glass Shallows" generation the
 // same photograph, exactly the complaint the zone pin drew the first time.
 // It is now a weighted roll like the zone is, MOST of the time a surface (so
 // the default first view still usually is one) and otherwise the calm shallow
-// sea it sits above — never the rougher "Reef Surge" reading, because the two
+// sea it sits above — never the rougher "Reef Crest" reading, because the two
 // keep their own current/fauna multipliers below. No other mood's probability
-// moved: only "Still Water" was asked for this, so only it has it.
+// moved: only "Glass Shallows" was asked for this, so only it has it.
 type oceanMoodProfile struct {
 	// Zone is the home the mood leans toward — see oceanZoneDriftWeightsByMood
 	// for how far a given generation may drift from it.
@@ -346,7 +346,7 @@ type oceanMoodProfile struct {
 	// AboveWaterProbability is how often this mood lifts the viewer out of the
 	// water entirely: depth goes negative and the world is the sea seen from
 	// the air. Rolled once per generation against aboveWaterRoll in
-	// buildDepthConfig. 0 for every mood but "Still Water": a mood that has
+	// buildDepthConfig. 0 for every mood but "Glass Shallows": a mood that has
 	// never been asked to surface should never surface, full stop, not "rarely".
 	// Not a fourth zone either way — the zone below is still the one named above.
 	AboveWaterProbability float64
@@ -371,15 +371,15 @@ var neutralOceanProfile = oceanMoodProfile{
 // and a negative half, which is what makes the table square without inventing
 // anything: three depths under the water and one above it.
 //
-//	focused    Still Water  MOSTLY the sea from the air, sometimes the calm
-//	                        shallow water beneath it. Still water is a
-//	                        description of a SURFACE — there is no visible
-//	                        stillness at 142 m — and its low current multiplier
-//	                        already gave it the calmest wind of the four, above
-//	                        or below.
-//	energetic  Reef Surge   the shallows, floor in frame, most fauna, surge.
-//	dreamy     Drifting     the twilight reach: midwater, no floor, drifting.
-//	reflective The Abyss    on the bottom, kilometres down, one light.
+//	focused    Glass Shallows       MOSTLY the sea from the air, sometimes the
+//	                                calm shallow water beneath it — this mood
+//	                                already had the calmest wind of the four,
+//	                                above or below.
+//	energetic  Reef Crest           the shallows, floor in frame, most fauna,
+//	                                surge.
+//	dreamy     Mesophotic Current   the twilight reach: midwater, no floor,
+//	                                drifting.
+//	reflective The Abyss            on the bottom, kilometres down, one light.
 //
 // Read down the Zone column and it is the depth axis in order, which is the
 // property the form's own labels promise and the old weights could not keep.
@@ -414,13 +414,13 @@ type oceanZoneDriftWeights struct {
 //
 // Read as: each mood's HOME zone (see oceanMoodProfiles) carries the
 // plurality, drift reaches one zone over, and the zone that would recreate
-// the original bug — Reef Surge into the abyss, The Abyss into the shallows —
+// the original bug — Reef Crest into the abyss, The Abyss into the shallows —
 // carries exactly 0.
 var oceanZoneDriftWeightsByMood = map[string]oceanZoneDriftWeights{
-	// energetic (Reef Surge): shallow is home; drifts down into the twilight
+	// energetic (Reef Crest): shallow is home; drifts down into the twilight
 	// reach sometimes; never all the way to the abyss.
 	"energetic": {Shallow: 0.75, Twilight: 0.25, Abyss: 0.00},
-	// dreamy (Drifting): twilight is home, and being the middle of the axis it
+	// dreamy (Mesophotic Current): twilight is home, and being the middle of the axis it
 	// is the one mood that may drift either way — weighted toward the
 	// shallower neighbour, per the family bias.
 	"dreamy": {Shallow: 0.30, Twilight: 0.55, Abyss: 0.15},
@@ -436,7 +436,7 @@ var neutralZoneDriftWeights = oceanZoneDriftWeights{Shallow: 0.30, Twilight: 0.5
 
 // driftZone turns a mood's home zone into the zone one particular seed
 // actually lands in. A mood that can ever surface is exempt from zone drift
-// entirely: "Still Water" is a calm shallow sea whether it is showing that sea
+// entirely: "Glass Shallows" is a calm shallow sea whether it is showing that sea
 // from above the water or from just under it, so its zone stays pinned to its
 // home rather than roaming through the twilight reach and the abyss too —
 // only whether it surfaces is a roll (see AboveWaterProbability); which

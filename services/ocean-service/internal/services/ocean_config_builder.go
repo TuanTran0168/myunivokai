@@ -12,7 +12,7 @@ import (
 // what this builder emits for an existing seed is a breaking change and must
 // bump the schema version.
 //
-// 1.4 makes one more: "Still Water"'s surface view is a weighted roll
+// 1.4 makes one more: "Glass Shallows"'s surface view is a weighted roll
 // (AboveWaterProbability) rather than an absolute pin, for the identical
 // reason 1.3 gave the zone back its weighted home — a pin makes every
 // generation of one mood the same photograph. The other three moods'
@@ -185,7 +185,7 @@ func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile)
 	// the sign — air is a different medium, not water with different numbers.
 	//
 	// Weighted by the mood rather than pinned, so the sea-surface view is
-	// something a person can ask for AND, for "Still Water" specifically,
+	// something a person can ask for AND, for "Glass Shallows" specifically,
 	// something that varies rather than repeating identically every seed —
 	// see AboveWaterProbability. The whole altitude roll spreads the height
 	// independently of whether the surface roll succeeded, so a world that

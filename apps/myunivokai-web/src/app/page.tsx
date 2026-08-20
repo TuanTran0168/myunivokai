@@ -47,15 +47,22 @@ const natureMoodOptions = [
   { label: "Summer Meadow", value: "energetic", swatch: "#4ADE80" },
   { label: "Amber Autumn", value: "reflective", swatch: "#F59E0B" }
 ];
-// Each ocean label names the depth that mood IS. Unlike the forest's seasons,
-// which bias a world's character, these four pin a coordinate on the family's
-// one axis — so the label is a promise: "The Abyss" is on the bottom every time
-// and "Still Water" is above the surface every time. See OCEAN_MOOD_PROFILES in
-// lib/oceanScene.ts and oceanMoodProfiles in ocean_scene_profile.go.
+// Each ocean label names the depth that mood IS — a coordinate on the
+// family's one axis, not a character bias the way the forest's seasons are.
+// Named from the real oceanography, not invented: epipelagic ("Sunlight
+// Zone") down to "Glass Shallows"/"Reef Crest", the mesophotic edge of it to
+// "Mesophotic Current", and the bathypelagic ("Midnight Zone") to "The
+// Abyss" — kept colloquial rather than renamed to "Midnight", because that is
+// how documentaries and aquariums actually talk about it. Three of the four
+// still pin their zone every seed; "Glass Shallows" is a weighted MOSTLY
+// rather than an absolute promise — see AboveWaterProbability in
+// ocean_scene_profile.go for why turning that pin into a lean was deliberate.
+// See OCEAN_MOOD_PROFILES in lib/oceanScene.ts and oceanMoodProfiles in
+// ocean_scene_profile.go.
 const oceanMoodOptions = [
-  { label: "Still Water", value: "focused", swatch: "#5EEAD4" },
-  { label: "Drifting", value: "dreamy", swatch: "#A78BFA" },
-  { label: "Reef Surge", value: "energetic", swatch: "#F2B24C" },
+  { label: "Glass Shallows", value: "focused", swatch: "#5EEAD4" },
+  { label: "Mesophotic Current", value: "dreamy", swatch: "#A78BFA" },
+  { label: "Reef Crest", value: "energetic", swatch: "#F2B24C" },
   { label: "The Abyss", value: "reflective", swatch: "#1E3A5F" }
 ];
 

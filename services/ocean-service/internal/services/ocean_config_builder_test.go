@@ -89,7 +89,7 @@ func TestBuildOceanConfigDeterministic(t *testing.T) {
 // away — except in the one direction that recreated the original bug, which
 // must never happen at all, not just rarely.
 //
-// "Still Water"'s own AboveWaterProbability roll (1.4) is checked separately
+// "Glass Shallows"'s own AboveWaterProbability roll (1.4) is checked separately
 // in ocean_surface_view_test.go — that mood's zone is asserted here to stay
 // pinned to the sunlit shallows in EVERY sample regardless of whether that
 // sample surfaces, because driftZone exempts any mood with a nonzero surface
@@ -105,11 +105,11 @@ func TestEachMoodDriftsWithinItsClamp(t *testing.T) {
 	}
 	expected := map[string]expectation{
 		"focused": {mustNeverSurface: false, homeZone: ZoneSunlitShallows},
-		// Reef Surge may drift down into the twilight reach, but reaching the
+		// Reef Crest may drift down into the twilight reach, but reaching the
 		// abyss in one step is exactly the bug the 1.2 pin fixed: a diver who
 		// asked for a reef must never be shown the trench.
 		"energetic": {mustNeverSurface: true, forbiddenZone: ZoneAbyss, homeZone: ZoneSunlitShallows},
-		// Drifting is the middle of the axis, so it is the one mood allowed to
+		// Mesophotic Current is the middle of the axis, so it is the one mood allowed to
 		// reach either neighbour.
 		"dreamy": {mustNeverSurface: true, homeZone: ZoneTwilightReach},
 		// The Abyss may drift up into the twilight reach, but reaching the

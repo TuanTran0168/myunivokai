@@ -27,10 +27,10 @@ const FIXTURE_DIR = fileURLToPath(new URL("./fixtures/", import.meta.url));
 // fixture name -> golden name. The mood in the comment is the create-form option
 // the golden case is built with, which is now also the depth it lands at.
 const SOURCES = [
-  ["ocean-surface", "surface-golden-hour"], // focused    Still Water, low sun
-  ["ocean-daylight", "surface-daylight"], // focused    Still Water, high sun
-  ["ocean-shallow", "energetic"], // energetic  Reef Surge
-  ["ocean-twilight", "dreamy"], // dreamy     Drifting
+  ["ocean-surface", "surface-golden-hour"], // focused    Glass Shallows, low sun
+  ["ocean-daylight", "surface-daylight"], // focused    Glass Shallows, high sun
+  ["ocean-shallow", "energetic"], // energetic  Reef Crest
+  ["ocean-twilight", "dreamy"], // dreamy     Mesophotic Current
   ["ocean-abyss", "reflective"], // reflective The Abyss
 ];
 

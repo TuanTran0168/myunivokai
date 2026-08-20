@@ -29,8 +29,14 @@ for (const mood of OCEAN_MOODS) {
     await page.getByRole("button", { name: "Ocean", exact: false }).first().click();
 
     // The mood buttons are relabelled per family, so find the one whose index
-    // matches — the ocean labels are Still Water / Drifting / Reef Surge / The Abyss.
-    const label = { still: "Still Water", drifting: "Drifting", surge: "Reef Surge", abyss: "The Abyss" }[mood];
+    // matches — the ocean labels are Glass Shallows / Mesophotic Current / Reef
+    // Crest / The Abyss.
+    const label = {
+      still: "Glass Shallows",
+      drifting: "Mesophotic Current",
+      surge: "Reef Crest",
+      abyss: "The Abyss",
+    }[mood];
     await page.getByRole("button", { name: label, exact: false }).first().click();
 
     await expect(page.locator("canvas")).toBeVisible({ timeout: 60_000 });

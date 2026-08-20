@@ -110,13 +110,13 @@ func TestTheSurfaceViewIsChosenAndNotRolled(t *testing.T) {
 	//      surface view unreachable on purpose (one in twenty, from a control
 	//      that did not mention it) and reachable by accident (the abyss drew
 	//      it 5% of the time) — wrong for a control someone selects.
-	//   2. An absolute pin ("picking Still Water gets the surface every seed")
+	//   2. An absolute pin ("picking Glass Shallows gets the surface every seed")
 	//      fixed both halves of that, and then produced ITS OWN defect: every
-	//      generation of Still Water was the same photograph, exactly the
+	//      generation of Glass Shallows was the same photograph, exactly the
 	//      complaint that made the zone pin (1.2) get a weighted home back
-	//      in 1.3. Still Water was pinned for longer because it is also the
+	//      in 1.3. Glass Shallows was pinned for longer because it is also the
 	//      create form's default mood, but the complaint applies to it too.
-	//   3. So Still Water is weighted again (AboveWaterProbability), same as
+	//   3. So Glass Shallows is weighted again (AboveWaterProbability), same as
 	//      the zone: MOSTLY the surface, so picking it still usually means
 	//      what its name promises, but not identically every time.
 	//

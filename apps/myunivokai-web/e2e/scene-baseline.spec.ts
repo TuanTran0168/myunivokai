@@ -33,15 +33,16 @@ const FIXTURES = {
  *
  * They are now exactly the create form's four DEPTH & MOOD options, one shot per
  * option, with the above-water option sampled twice. That correspondence is the
- * point: each mood pins one depth, so this set is a picture of every sea a
- * visitor can actually ask for, and a preset that stops working stops working
- * here first.
+ * point: each mood names a home depth (a weighted lean for "Glass Shallows",
+ * a pin for the other three — see AboveWaterProbability), so this set is a
+ * picture of every sea a visitor can actually ask for, and a preset that
+ * stops working stops working here first.
  *
- *   ocean-surface   Still Water  24.0 m UP,   sun  4.6 deg   golden hour
- *   ocean-daylight  Still Water  17.8 m UP,   sun 37.2 deg   midday sea
- *   ocean-shallow   Reef Surge   14.0 m down, floor at 23 m  lit reef
- *   ocean-twilight  Drifting     58.1 m down, floor at 2 km  midwater
- *   ocean-abyss     The Abyss    1144 m down, floor at 1150  on the bottom
+ *   ocean-surface   Glass Shallows      24.0 m UP,   sun  4.6 deg   golden hour
+ *   ocean-daylight  Glass Shallows      17.8 m UP,   sun 37.2 deg   midday sea
+ *   ocean-shallow   Reef Crest          14.0 m down, floor at 23 m  lit reef
+ *   ocean-twilight  Mesophotic Current  58.1 m down, floor at 2 km  midwater
+ *   ocean-abyss     The Abyss           1144 m down, floor at 1150  on the bottom
  *
  * Depth is this family's whole axis, and the failure it is prone to is one no
  * single image can show: two worlds hundreds of metres apart that render

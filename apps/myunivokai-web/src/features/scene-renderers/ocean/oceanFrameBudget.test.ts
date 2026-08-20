@@ -83,7 +83,7 @@ const PRESETS = [
   // above-water option that brackets its sun band.
   {
     shot: "ocean-surface",
-    label: "Still Water, golden hour",
+    label: "Glass Shallows, golden hour",
     luma: 0.411,
     // Above water is desaturated by nature: haze, grey sea, pale sky. The floor
     // is here only to catch a frame that has lost colour altogether.
@@ -91,13 +91,13 @@ const PRESETS = [
   },
   {
     shot: "ocean-daylight",
-    label: "Still Water, midday",
+    label: "Glass Shallows, midday",
     luma: 0.621,
     minimumSaturation: 0.05,
   },
   {
     shot: "ocean-shallow",
-    label: "Reef Surge",
+    label: "Reef Crest",
     luma: 0.57,
     // Underwater, so the water must still have a hue. This is the bound that the
     // grey-water bug (saturation 0.02) would have failed.
@@ -105,7 +105,7 @@ const PRESETS = [
   },
   {
     shot: "ocean-twilight",
-    label: "Drifting",
+    label: "Mesophotic Current",
     luma: 0.453,
     minimumSaturation: 0.3,
   },
