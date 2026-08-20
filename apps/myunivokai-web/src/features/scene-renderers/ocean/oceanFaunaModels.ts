@@ -58,11 +58,13 @@ export const GIANT_MODEL_BINDINGS: Record<string, FaunaModelBinding> = {
 
 /** The abyssal-visitor lottery species, whose order is frozen in contracts. */
 export const ABYSS_VISITOR_MODEL_BINDINGS: Record<string, FaunaModelBinding> = {
-  // No CC0 anglerfish or gulper eel was found, so these stay on the closest
-  // available deep-sea silhouettes rather than on a reef fish. The giant squid
-  // has no binding at all and keeps its procedural geometry — a squid drawn as
-  // a shark would be worse than a squid drawn from primitives.
-  anglerfish: { file: "fauna-goblin-shark.glb", bodyLengthMetres: 0.6 },
+  // Quaternius via Poly Pizza, same pack and rig as the twelve above (same
+  // Fish_Armature|Swimming_* / Attack / Death / Out_Of_Water clip set) — found
+  // after the fact, not at the time "no CC0 anglerfish was found" was written.
+  // No CC0 gulper eel exists yet, so that one stays on the goblin shark's
+  // silhouette. The giant squid has no binding at all and keeps its procedural
+  // geometry — a squid drawn as a shark would be worse than one from primitives.
+  anglerfish: { file: "fauna-anglerfish.glb", bodyLengthMetres: 0.6 },
   "gulper-eel": { file: "fauna-goblin-shark.glb", bodyLengthMetres: 0.8 }
 };
 

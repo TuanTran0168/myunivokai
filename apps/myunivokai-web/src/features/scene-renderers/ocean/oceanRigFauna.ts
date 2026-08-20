@@ -437,6 +437,13 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     key: "anglerfish",
     color: "#161C22",
     body: "anglerfish",
+    // Quaternius via Poly Pizza — the same pack the other twelve GLBs came
+    // from, found on a later pass than the one that shipped the procedural
+    // body. It keeps the illicium and its glowing esca (see the `anglerfish`
+    // body factory's own comment on why that detail is the point) and adds
+    // the bulbous eyes and teeth a 13-segment procedural silhouette cannot.
+    // The procedural body is still what renders before this loads.
+    file: "fauna-anglerfish.glb",
     label: "anglerfish",
     swim: { onset: 0.5, amplitude: 0.05, waves: 0.6, beat: 0.7 },
     bodyAxis: "long",

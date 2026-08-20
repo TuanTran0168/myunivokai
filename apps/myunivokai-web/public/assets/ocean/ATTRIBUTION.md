@@ -41,9 +41,16 @@ needs no API key. Contents unmodified.
 | fauna-goblin-shark.glb | Goblin Shark | six-clip Fish_Armature set | <https://poly.pizza/m/JQrBevTzgD> |
 | fauna-dolphin.glb | Dolphin | Swim | <https://poly.pizza/m/3LzFgI3GLO> |
 | fauna-whale.glb | Whale | Swim | <https://poly.pizza/m/JGFwp6xWgk> |
+| fauna-anglerfish.glb | Anglerfish | same six | <https://poly.pizza/m/MRjSlwCjHM> |
 
-59–209 KB each, 1.6 MB for all twelve — against the forest's 33 GLB. The ocean
-still has no HDRI: there is no sky a thousand metres down.
+59–209 KB each, 1.8 MB for all thirteen — against the forest's 33 GLB. The
+ocean still has no HDRI: there is no sky a thousand metres down.
+
+**The anglerfish replaces a goblin-shark stand-in**, not a gap. The line
+below used to read "no CC0 anglerfish or gulper eel was found", which was
+true of the search that wrote it — this is the same Quaternius pack, found on
+a later pass. `gulper-eel` still has no match and keeps the goblin shark's
+silhouette.
 
 **Only the swim clips are used.** Attack/Death/Out_Of_Water are authored for a
 fishing game and have no meaning in a portrait scene; a fish that plays `Death`
