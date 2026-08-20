@@ -37,7 +37,7 @@ import { clampNumber, depthAt, roundToHundredths, roundToThousandths } from "./o
 // logic rather than a duplicated table.
 
 // Mirrors oceanSchemaVersion in ocean_config_builder.go.
-export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.3";
+export const OCEAN_PREVIEW_SCHEMA_VERSION = "1.4";
 
 // Depth zones, in canonical order from the surface down. Both boundaries are
 // physical constants of the depth curve rather than round numbers: the sunlit
@@ -153,12 +153,21 @@ const OCEAN_ASSET_CATALOG_VERSION = "ocean-1";
 // same mood came out at the same depth. So zone is a weighted home again — see
 // OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD — built so it cannot reproduce the original
 // bug: drift is adjacent-zone-only, the direction that recreated the bug is a
-// hard zero rather than a small number, and aboveWater does not drift at all
-// ("Still Water" surfaces every seed — it is also this family's default mood,
-// so it is the first view anyone sees of it, and that guarantee is untouched).
+// hard zero rather than a small number.
+//
+// aboveWaterProbability got the same correction one step later, for the
+// identical reason: it used to be a plain boolean, absolutely pinned, so
+// "Still Water" surfaced every single seed. That kept every generation of it
+// the same photograph, exactly the complaint the zone pin drew the first
+// time — it was pinned longer because it is also this family's default mood,
+// so it is the first view most people see, but the complaint applies to it
+// too. It is now a weighted roll like the zone is: MOSTLY the surface, so the
+// default first view still usually is one, and otherwise the calm shallow sea
+// it sits above (never Reef Surge's rougher reading — the two keep their own
+// current/fauna multipliers). No other mood's probability moved.
 type OceanMoodProfile = {
   zone: string;
-  aboveWater: boolean;
+  aboveWaterProbability: number;
   currentMultiplier: number;
   faunaMultiplier: number;
   bloomMultiplier: number;
@@ -168,7 +177,7 @@ type OceanMoodProfile = {
 // unknown mood should get the most ordinary ocean there is, not an edge.
 const NEUTRAL_OCEAN_PROFILE: OceanMoodProfile = {
   zone: OCEAN_ZONE_TWILIGHT_REACH,
-  aboveWater: false,
+  aboveWaterProbability: 0,
   currentMultiplier: 1.0,
   faunaMultiplier: 1.0,
   bloomMultiplier: 1.0
@@ -178,36 +187,38 @@ const NEUTRAL_OCEAN_PROFILE: OceanMoodProfile = {
 // makes the table square without inventing anything: three depths under the
 // water and one above it.
 //
-//   focused    Still Water  the sea from the air — still water describes a
-//                           SURFACE, and this mood already had the calmest wind
+//   focused    Still Water  MOSTLY the sea from the air, sometimes the calm
+//                           shallow water beneath it — still water describes a
+//                           SURFACE, and this mood already had the calmest
+//                           wind of the four, above or below
 //   energetic  Reef Surge   the shallows, floor in frame, most fauna, surge
 //   dreamy     Drifting     the twilight reach: midwater, no floor, drifting
 //   reflective The Abyss    on the bottom, kilometres down, one light
 const OCEAN_MOOD_PROFILES: Record<string, OceanMoodProfile> = {
   focused: {
     zone: OCEAN_ZONE_SUNLIT_SHALLOWS,
-    aboveWater: true,
+    aboveWaterProbability: 0.7,
     currentMultiplier: 0.75,
     faunaMultiplier: 0.8,
     bloomMultiplier: 1.0
   },
   energetic: {
     zone: OCEAN_ZONE_SUNLIT_SHALLOWS,
-    aboveWater: false,
+    aboveWaterProbability: 0,
     currentMultiplier: 1.35,
     faunaMultiplier: 1.35,
     bloomMultiplier: 1.15
   },
   dreamy: {
     zone: OCEAN_ZONE_TWILIGHT_REACH,
-    aboveWater: false,
+    aboveWaterProbability: 0,
     currentMultiplier: 0.85,
     faunaMultiplier: 1.0,
     bloomMultiplier: 1.35
   },
   reflective: {
     zone: OCEAN_ZONE_ABYSS,
-    aboveWater: false,
+    aboveWaterProbability: 0,
     currentMultiplier: 0.7,
     faunaMultiplier: 0.75,
     bloomMultiplier: 0.85
@@ -240,11 +251,13 @@ const OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD: Record<string, OceanZoneDriftWeights> = 
 
 const NEUTRAL_ZONE_DRIFT_WEIGHTS: OceanZoneDriftWeights = { shallow: 0.3, twilight: 0.55, abyss: 0.15 };
 
-// Mirrors driftZone in ocean_config_builder.go. AboveWater moods are exempt
-// entirely — "Still Water" surfaces every seed, a separate, explicit
-// guarantee this drift must not touch.
+// Mirrors driftZone in ocean_config_builder.go. A mood that can ever surface
+// is exempt from zone drift entirely: "Still Water" is a calm shallow sea
+// whether shown from above the water or just under it, so its zone stays
+// pinned to its home rather than roaming through the twilight reach and the
+// abyss too — only whether it surfaces is a roll (aboveWaterProbability).
 function driftZone(mood: string, moodProfile: OceanMoodProfile, roll: number): string {
-  if (moodProfile.aboveWater) {
+  if (moodProfile.aboveWaterProbability > 0) {
     return moodProfile.zone;
   }
   const weights = OCEAN_ZONE_DRIFT_WEIGHTS_BY_MOOD[mood.trim().toLowerCase()] ?? NEUTRAL_ZONE_DRIFT_WEIGHTS;
@@ -678,6 +691,10 @@ function buildPreviewDepthConfig(seed: string, mood: string, moodProfile: OceanM
   // it is rolling within. See driftZone for the clamp that keeps this from
   // reproducing the bug the absolute pin fixed.
   const zoneDriftRoll = nextRandomValue();
+  // Also drawn unconditionally, for every mood, even the three whose
+  // aboveWaterProbability is a flat 0 — same "every draw always happens"
+  // discipline as the rest of this stream.
+  const aboveWaterRoll = nextRandomValue();
   const transitionRoll = nextRandomValue();
   const transitionDirectionRoll = nextRandomValue();
   const blendAmountRoll = nextRandomValue();
@@ -725,12 +742,13 @@ function buildPreviewDepthConfig(seed: string, mood: string, moodProfile: OceanM
   // continues through zero; the renderer branches on the sign because air is a
   // different medium, not water with different numbers.
   //
-  // Decided by the mood rather than rolled, so the sea-surface view is something
-  // a person can ASK for. The whole altitude roll spreads the height, where
-  // before it had to encode both the decision and the height in one draw and so
-  // correlated them: a world that only just qualified was always the lowest one.
+  // Weighted by the mood rather than pinned, so the sea-surface view is
+  // something a person can ask for AND, for "Still Water" specifically,
+  // something that varies rather than repeating identically every seed — see
+  // aboveWaterProbability. The whole altitude roll spreads the height
+  // independently of whether the surface roll succeeded.
   let viewerMetres = waterMetres;
-  if (moodProfile.aboveWater) {
+  if (aboveWaterRoll < moodProfile.aboveWaterProbability) {
     viewerMetres = roundToHundredths(
       -(MINIMUM_BREACH_ALTITUDE_METRES + altitudeRoll * BREACH_ALTITUDE_RANGE_METRES)
     );

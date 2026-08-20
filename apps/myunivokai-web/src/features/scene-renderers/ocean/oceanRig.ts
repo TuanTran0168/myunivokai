@@ -686,6 +686,7 @@ export function createOceanRig(options: OceanRigOptions): OceanRig {
     flora = createFlora({
       seed,
       basinRadius: 300,
+      cameraDistanceMetres,
       floorDepthMetres: seafloorDepthMetres,
       onePercentBlueDepthMetres: onePercentBlueDepthMetres(attenuation),
       heightAt: floorSampler,

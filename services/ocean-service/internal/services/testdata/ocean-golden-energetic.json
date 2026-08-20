@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "sceneType": "ocean",
   "sceneName": "The Lantern Trench",
   "archetype": "Tidekeeper",
@@ -17,26 +17,26 @@
     ]
   },
   "depth": {
-    "metres": 16.69,
-    "seafloorMetres": 26.2,
+    "metres": 18.66,
+    "seafloorMetres": 29.46,
     "zone": "sunlitShallows"
   },
   "water": {
-    "fogColor": "#127586",
-    "fogDensity": 0.018,
+    "fogColor": "#107184",
+    "fogDensity": 0.019,
     "visibilityMetres": 49.89,
-    "tintStrength": 0.47,
+    "tintStrength": 0.48,
     "jerlovWaterType": "IB",
     "windSpeedMetresPerSecond": 9.56
   },
   "lighting": {
-    "surfaceLightColor": "#1E7F7A",
+    "surfaceLightColor": "#1A7B78",
     "surfaceElevationRadians": 0.94,
     "surfaceAzimuthRadians": 0.06,
-    "godRayStrength": 0.49,
-    "causticStrength": 0.4,
-    "ambientColor": "#0A404A",
-    "exposure": 1.2
+    "godRayStrength": 0.46,
+    "causticStrength": 0.37,
+    "ambientColor": "#093E48",
+    "exposure": 1.21
   },
   "seafloor": {
     "placementSeed": "OCN-GOLDEN-SURGE-ocean-seafloor-scatter",

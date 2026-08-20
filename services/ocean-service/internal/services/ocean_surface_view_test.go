@@ -103,33 +103,56 @@ func TestGoldenHourIsReachable(t *testing.T) {
 }
 
 func TestTheSurfaceViewIsChosenAndNotRolled(t *testing.T) {
-	// This replaced a rate band — "above-water worlds must be 4-22% of oceans" —
-	// and the replacement is the point rather than a re-tune. A rate is the right
-	// assertion for something nobody selects, like whether a world gets a giant.
-	// It is the wrong assertion for a control: the surface view is one of four
-	// options on the create form, so the number that matters is not how often it
-	// turns up across all oceans but whether picking it gets it EVERY time and
-	// whether not picking it excludes it every time.
+	// This is now a THIRD position on the same question, and each move answered
+	// a real defect the previous one produced.
 	//
-	// Both halves are load-bearing, and each was a real defect. Under the old
-	// rate the surface view was unreachable on purpose (one in twenty, from a
-	// control that did not mention it) and reachable by accident (the abyss drew
-	// it 5% of the time).
+	//   1. A flat rate ("above-water worlds must be 4-22% of oceans") made the
+	//      surface view unreachable on purpose (one in twenty, from a control
+	//      that did not mention it) and reachable by accident (the abyss drew
+	//      it 5% of the time) — wrong for a control someone selects.
+	//   2. An absolute pin ("picking Still Water gets the surface every seed")
+	//      fixed both halves of that, and then produced ITS OWN defect: every
+	//      generation of Still Water was the same photograph, exactly the
+	//      complaint that made the zone pin (1.2) get a weighted home back
+	//      in 1.3. Still Water was pinned for longer because it is also the
+	//      create form's default mood, but the complaint applies to it too.
+	//   3. So Still Water is weighted again (AboveWaterProbability), same as
+	//      the zone: MOSTLY the surface, so picking it still usually means
+	//      what its name promises, but not identically every time.
+	//
+	// What must stay absolute, and is asserted here with the same force as
+	// before: the other three moods are not just unlikely to surface, they are
+	// NEVER above the water. A mood nobody asked to surface surfacing even
+	// rarely is the original bug's mirror image.
 	builder := NewOceanConfigBuilder()
 	const seedsPerMood = 400
+	stillWaterAbove, stillWaterBelow := 0, 0
 	for _, mood := range surfaceTestMoods {
 		for i := 0; i < seedsPerMood; i++ {
 			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-SURFACE-RATE-%d", i), mood, 4))
 			above := config.Depth.Metres < 0
-			if mood == aboveWaterMood && !above {
-				t.Fatalf("mood %q put the viewer %.2f m UNDER the water; the surface view must be reliable",
-					mood, config.Depth.Metres)
-			}
 			if mood != aboveWaterMood && above {
-				t.Fatalf("mood %q surfaced at %.2f m; only %q is above the water",
+				t.Fatalf("mood %q surfaced at %.2f m; only %q may ever be above the water",
 					mood, config.Depth.Metres, aboveWaterMood)
 			}
+			if mood == aboveWaterMood {
+				if above {
+					stillWaterAbove++
+				} else {
+					stillWaterBelow++
+				}
+			}
 		}
+	}
+	// Both halves are load-bearing: some variety (the 1.4 fix) AND still
+	// mostly the surface (the name on the button, and this family's default
+	// mood, so the first view most people see is still usually one).
+	if stillWaterBelow == 0 {
+		t.Fatal("mood \"focused\" surfaced in every one of 400 seeds — AboveWaterProbability is not adding variety")
+	}
+	if stillWaterAbove <= stillWaterBelow {
+		t.Fatalf("mood \"focused\" surfaced only %d/%d times — the surface should still be the common case",
+			stillWaterAbove, stillWaterAbove+stillWaterBelow)
 	}
 }
 

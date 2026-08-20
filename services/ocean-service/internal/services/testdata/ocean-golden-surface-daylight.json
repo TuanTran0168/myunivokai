@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "sceneType": "ocean",
   "sceneName": "The Lantern Trench",
   "archetype": "Tidekeeper",
@@ -17,8 +17,8 @@
     ]
   },
   "depth": {
-    "metres": -19.76,
-    "seafloorMetres": 26.22,
+    "metres": -9.51,
+    "seafloorMetres": 31.66,
     "zone": "sunlitShallows"
   },
   "water": {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Group, PerspectiveCamera } from "three";
 import type { SceneRendererProps } from "@/features/scene-renderers/types";
+import { useTerrainHeightSampler } from "@/features/scene-renderers/shared/TerrainHeightSampler";
 import { pointsOfInterestFromScene } from "@/lib/scene";
 import { OceanLandmarks } from "./OceanLandmarks";
 import { createCausticsUniforms } from "./oceanCaustics";
@@ -151,6 +152,18 @@ export function OceanRenderer({
   const landmarksStandOnSomething = isSeafloorInSight;
 
   const groupRef = useRef<Group>(null);
+
+  // Published for CameraRig's terrain clamp — see TerrainHeightSampler.ts. The
+  // WORLD-space floor, not heightSampler's local one: heightSampler is read
+  // inside a group already offset by -floorClearanceMetres (below), and
+  // CameraRig has no such parent to inherit that offset from.
+  const terrainHeightSampler = useTerrainHeightSampler();
+  useEffect(() => {
+    terrainHeightSampler.current = (x, z) => -floorClearanceMetres + heightSampler(x, z);
+    return () => {
+      terrainHeightSampler.current = null;
+    };
+  }, [terrainHeightSampler, heightSampler, floorClearanceMetres]);
 
   // Landmarks keep their own caustics clock, driven from the same frame loop so
   // the pattern on a coral head stays in step with the pattern on the sand.

@@ -12,16 +12,18 @@ import (
 // what this builder emits for an existing seed is a breaking change and must
 // bump the schema version.
 //
-// 1.3 makes two: the mood's zone is a weighted home again rather than an
-// absolute pin (see oceanZoneDriftWeightsByMood — clamped so it cannot
-// reproduce the bug the 1.2 pin fixed), and the per-zone colour grade takes a
-// small per-world jitter instead of being a bare table lookup. Both move the
-// depth and grade of every existing seed. No reader is kept for 1.1 or 1.2
-// because this family has not shipped and nothing has ever been stored at
-// either version — a compatibility shim for zero rows is a liability, not
-// caution. The version still moves so the renderer key does.
+// 1.4 makes one more: "Still Water"'s surface view is a weighted roll
+// (AboveWaterProbability) rather than an absolute pin, for the identical
+// reason 1.3 gave the zone back its weighted home — a pin makes every
+// generation of one mood the same photograph. The other three moods'
+// probability is a flat 0 and is unaffected in outcome, but the new
+// aboveWaterRoll draw still shifts the depth stream's later rolls for every
+// mood, so every existing seed's depth moves regardless. No reader is kept
+// for 1.1, 1.2 or 1.3 because this family has not shipped and nothing has
+// ever been stored at any of them — a compatibility shim for zero rows is a
+// liability, not caution. The version still moves so the renderer key does.
 const (
-	oceanSchemaVersion = "1.3"
+	oceanSchemaVersion = "1.4"
 	oceanSceneType     = "ocean"
 )
 
@@ -144,6 +146,11 @@ func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile)
 	// which zone's band it is rolling within. See driftZone for the clamp that
 	// keeps this from reproducing the bug the 1.2 pin fixed.
 	zoneDriftRoll := rng.Float64()
+	// Also drawn unconditionally, for every mood, even the three whose
+	// AboveWaterProbability is a flat 0 — the same "every draw always happens"
+	// discipline as the rest of this stream, so a later change to any one
+	// mood's probability cannot shift what an unrelated mood's seed produces.
+	aboveWaterRoll := rng.Float64()
 	transitionRoll := rng.Float64()
 	transitionDirectionRoll := rng.Float64()
 	blendAmountRoll := rng.Float64()
@@ -177,12 +184,14 @@ func buildDepthConfig(input BuildOceanConfigInput, moodProfile oceanMoodProfile)
 	// the axis simply continues through zero. The renderer already branches on
 	// the sign — air is a different medium, not water with different numbers.
 	//
-	// Decided by the mood rather than rolled, so the sea-surface view is
-	// something a person can ASK for. The whole altitude roll now spreads the
-	// height, where before it had to encode the decision and the height in one
-	// draw and therefore correlated them: a world that only just qualified for
-	// the surface was always the lowest one over it.
-	if moodProfile.AboveWater {
+	// Weighted by the mood rather than pinned, so the sea-surface view is
+	// something a person can ask for AND, for "Still Water" specifically,
+	// something that varies rather than repeating identically every seed —
+	// see AboveWaterProbability. The whole altitude roll spreads the height
+	// independently of whether the surface roll succeeded, so a world that
+	// only just qualified for the surface is not always the lowest one over
+	// it, and a mood whose probability is 0 still burns this roll unused.
+	if aboveWaterRoll < moodProfile.AboveWaterProbability {
 		metres = round(-(minimumBreachAltitudeMetres + altitudeRoll*breachAltitudeRangeMetres))
 	}
 

@@ -22,6 +22,7 @@ import { CameraRig } from "@/features/scene-renderers/shared/CameraRig";
 import { CanvasLoader } from "@/features/scene-renderers/shared/CanvasLoader";
 import { PostEffects } from "@/features/scene-renderers/shared/PostEffects";
 import { PlanetPositionTrackerContext } from "@/features/scene-renderers/shared/PlanetPositionTracker";
+import { TerrainHeightSamplerContext, type TerrainHeightSampler } from "@/features/scene-renderers/shared/TerrainHeightSampler";
 
 // planetIdentityKey is deliberately NOT re-exported here. It is a pure string
 // helper, and re-exporting it made this module — with three.js behind it — a
@@ -105,6 +106,9 @@ export function UniverseCanvas({
   const ambientSoundscape = useAmbientSoundscape(scene, enableAmbientSound);
   const [hoveredPlanet, setHoveredPlanet] = useState<PlanetSceneConfig | null>(null);
   const planetPositionTrackerReference = useRef<Map<string, Vector3>>(new Map());
+  // Only a family with a ground plane the camera can clip through (currently
+  // ocean) ever writes into this; CameraRig's clamp is a no-op while it is null.
+  const terrainHeightSamplerReference = useRef<TerrainHeightSampler>({ current: null });
   // Readiness is DERIVED from the remount key instead of reset in an effect:
   // the same render that swaps the canvas already sees isSceneReady=false,
   // so the veil covers the swap without a single black frame leaking through.
@@ -206,6 +210,7 @@ export function UniverseCanvas({
         >
           <color attach="background" args={[backgroundColor]} />
           <PlanetPositionTrackerContext.Provider value={planetPositionTrackerReference.current}>
+          <TerrainHeightSamplerContext.Provider value={terrainHeightSamplerReference.current}>
             <Suspense fallback={<CanvasLoader />}>
               <SceneRenderer
                 scene={scene ?? {}}
@@ -243,6 +248,7 @@ export function UniverseCanvas({
               keyboardMoveEnabled={enableKeyboardMove}
               restingTarget={oceanCameraFraming?.target}
             />
+          </TerrainHeightSamplerContext.Provider>
           </PlanetPositionTrackerContext.Provider>
         </Canvas>
       </div>

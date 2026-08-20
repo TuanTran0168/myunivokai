@@ -51,14 +51,20 @@ var goldenCases = []struct {
 	// so the entire negative half of this family's own axis was outside the
 	// compatibility contract. A path no fixture exercises is a path that drifts.
 	//
-	//	surface-golden-hour  OCN-GOLDEN-SURFACE-7  -23.96 m   sun  4.6 deg
-	//	surface-daylight     OCN-GOLDEN-SURFACE-4  -17.76 m   sun 37.2 deg
+	//	surface-golden-hour  OCN-GOLDEN-SURFACE-1  -10.07 m   sun  4.6 deg
+	//	surface-daylight     OCN-GOLDEN-SURFACE-4   -9.51 m   sun 37.2 deg
 	//
 	// The two bracket the sun band an above-water world can draw from, because
 	// the low end is a different photograph from the high end and both have to
-	// keep working. Both are "focused", which is the only mood above the water —
-	// they are two more samples of that one preset, not a fifth and sixth option.
-	{Name: "surface-golden-hour", Seed: "OCN-GOLDEN-SURFACE-7", Mood: "focused", LandmarkCount: 4},
+	// keep working. Both are "focused", the only mood that can be above the
+	// water — they are two more samples of that one preset, not a fifth and
+	// sixth option. "-SURFACE-7" was the golden-hour seed through 1.3; since
+	// 1.4 made "focused" a weighted roll rather than an absolute pin, that
+	// particular seed's roll now lands underwater, so "-SURFACE-1" replaces it
+	// as the seed that still surfaces at a similarly low sun. It is a seed
+	// swap, not a band change: nothing about what the golden-hour bracket is
+	// FOR moved, only which fixed string still demonstrates it.
+	{Name: "surface-golden-hour", Seed: "OCN-GOLDEN-SURFACE-1", Mood: "focused", LandmarkCount: 4},
 	{Name: "surface-daylight", Seed: "OCN-GOLDEN-SURFACE-4", Mood: "focused", LandmarkCount: 4},
 }
 

@@ -51,6 +51,22 @@ export function createSwayUniforms(currentStrength: number): SwayUniforms {
   };
 }
 
+// Kelp/sponge radii used to start at 0, unlike the boulders in
+// oceanRigTerrain.ts (BOULDER_CAMERA_STANDOFF_METRES): a bed or a sponge could
+// land at or near the world origin, inside the camera's own orbit radius, and
+// a kelp blade rooted a few metres from the lens fills the frame at point-blank
+// range while its base is too close to read — reported as "a tree growing out
+// of nowhere". Same fix, same standoff distance as the boulders it sits beside.
+const FLORA_CAMERA_STANDOFF_METRES = 6;
+
+/** Uniform-density sample of a radius in [inner, outer), never [0, outer). */
+function radiusBeyond(random: () => number, inner: number, outer: number): number {
+  if (outer <= inner) {
+    return inner;
+  }
+  return Math.sqrt(inner * inner + random() * (outer * outer - inner * inner));
+}
+
 /**
  * The depth at which algae give up, in metres.
  *
@@ -70,6 +86,8 @@ type BladeOptions = {
   heightBase: number;
   heightRange: number;
   radiusOuter: number;
+  /** No bed's own centre may land closer to the origin than this. */
+  radiusInner: number;
   color: string;
   heightAt: (x: number, z: number) => number;
   sway: SwayUniforms;
@@ -87,7 +105,7 @@ type BladeOptions = {
  * a stick.
  */
 function createBladeBed(options: BladeOptions): InstancedMesh {
-  const { count, seedName, heightBase, heightRange, radiusOuter, color, heightAt, sway } = options;
+  const { count, seedName, heightBase, heightRange, radiusOuter, radiusInner, color, heightAt, sway } = options;
 
   const blade = new PlaneGeometry(1, 1, 1, 14);
   blade.translate(0, 0.5, 0);
@@ -144,14 +162,20 @@ function createBladeBed(options: BladeOptions): InstancedMesh {
 
   const mesh = new InstancedMesh(blade, material, count);
   const next = randomFromSeed(seedName);
+  // Bed radius drawn BEFORE the bed's own centre distance, because the centre
+  // must clear the standoff by at least its own radius — a bed whose centre
+  // just barely clears radiusInner but whose r is large still scatters blades
+  // back inside it, which is the same bug at one remove.
   const beds: { x: number; z: number; r: number }[] = [];
+  const effectiveOuter = radiusOuter * 0.86;
   for (let i = 0; i < 16; i += 1) {
     const angle = next() * Math.PI * 2;
-    const radius = Math.sqrt(next()) * radiusOuter * 0.86;
+    const bedRadius = radiusOuter * (0.05 + next() * 0.16);
+    const centreRadius = radiusBeyond(next, radiusInner + bedRadius, effectiveOuter);
     beds.push({
-      x: Math.cos(angle) * radius,
-      z: Math.sin(angle) * radius,
-      r: radiusOuter * (0.05 + next() * 0.16),
+      x: Math.cos(angle) * centreRadius,
+      z: Math.sin(angle) * centreRadius,
+      r: bedRadius,
     });
   }
 
@@ -205,6 +229,7 @@ type SpongeOptions = {
   count: number;
   seedName: string;
   radiusOuter: number;
+  radiusInner: number;
   heightAt: (x: number, z: number) => number;
   caustics: CausticUniforms;
   castShadow: boolean;
@@ -218,7 +243,7 @@ type SpongeOptions = {
  * placeholder read that the straight blade was the first half of.
  */
 function createSpongeField(options: SpongeOptions): InstancedMesh {
-  const { count, seedName, radiusOuter, heightAt, caustics, castShadow } = options;
+  const { count, seedName, radiusOuter, radiusInner, heightAt, caustics, castShadow } = options;
   const geometry = new CylinderGeometry(0.44, 0.4, 1, 14, 4, false);
   geometry.translate(0, 0.5, 0);
   const positions = geometry.getAttribute("position");
@@ -251,7 +276,7 @@ function createSpongeField(options: SpongeOptions): InstancedMesh {
   const scale = new Vector3();
   for (let i = 0; i < count; i += 1) {
     const angle = next() * Math.PI * 2;
-    const radius = Math.sqrt(next()) * radiusOuter;
+    const radius = radiusBeyond(next, radiusInner, radiusOuter);
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     const height = 0.4 + next() * 1.15;
@@ -274,6 +299,8 @@ export type FloraOptions = {
   seed: string;
   /** How far out from the viewer the floor is dressed. */
   basinRadius: number;
+  /** The camera's own orbit radius, so flora never scatters inside it. */
+  cameraDistanceMetres: number;
   /** Depth of the FLOOR, which is what plants live at — not the viewer's. */
   floorDepthMetres: number;
   /** From the optics module, so clear water grows kelp deeper than an estuary. */
@@ -301,6 +328,7 @@ export function createFlora(options: FloraOptions): Flora {
   const {
     seed,
     basinRadius,
+    cameraDistanceMetres,
     floorDepthMetres,
     onePercentBlueDepthMetres,
     heightAt,
@@ -313,6 +341,7 @@ export function createFlora(options: FloraOptions): Flora {
   const sway = createSwayUniforms(currentStrength);
   const present: string[] = [];
   const meshes: InstancedMesh[] = [];
+  const radiusInner = cameraDistanceMetres + FLORA_CAMERA_STANDOFF_METRES;
 
   const algaeLimit = algaeDepthLimitMetres(onePercentBlueDepthMetres);
   // Fades out over the last third rather than switching off at a line: a hard
@@ -330,6 +359,7 @@ export function createFlora(options: FloraOptions): Flora {
           heightBase: 1.9,
           heightRange: 3.2,
           radiusOuter: basinRadius * 0.42,
+          radiusInner,
           color: "#4E9463",
           heightAt,
           sway,
@@ -344,6 +374,7 @@ export function createFlora(options: FloraOptions): Flora {
           heightBase: 0.45,
           heightRange: 1.0,
           radiusOuter: basinRadius * 0.5,
+          radiusInner,
           color: "#63A971",
           heightAt,
           sway,
@@ -360,6 +391,7 @@ export function createFlora(options: FloraOptions): Flora {
     count: spongeCount,
     seedName: `${seed}:sponge-field`,
     radiusOuter: basinRadius * 0.34,
+    radiusInner,
     heightAt,
     caustics,
     castShadow: high,

@@ -17,7 +17,7 @@
       "name": "The Lantern Trench",
       "seed": "OCN-GOLDEN-SURFACE-17",
       "config": {
-        "schemaVersion": "1.3",
+        "schemaVersion": "1.4",
         "sceneType": "ocean",
         "sceneName": "The Lantern Trench",
         "archetype": "Tidekeeper",
@@ -35,48 +35,48 @@
           ]
         },
         "depth": {
-          "metres": -16.56,
-          "seafloorMetres": 25.73,
+          "metres": -10.07,
+          "seafloorMetres": 9.74,
           "zone": "sunlitShallows"
         },
         "water": {
           "fogColor": "#8CDBEB",
           "fogDensity": 0.011,
-          "visibilityMetres": 29.45,
+          "visibilityMetres": 11.85,
           "tintStrength": 0.15,
-          "jerlovWaterType": "III",
-          "windSpeedMetresPerSecond": 5.76
+          "jerlovWaterType": "3C",
+          "windSpeedMetresPerSecond": 6.2
         },
         "lighting": {
           "surfaceLightColor": "#FFF7E6",
           "surfaceElevationRadians": 0.08,
-          "surfaceAzimuthRadians": 5.61,
+          "surfaceAzimuthRadians": 2.21,
           "godRayStrength": 1,
           "causticStrength": 1,
           "ambientColor": "#4D7981",
-          "exposure": 1.04
+          "exposure": 1.07
         },
         "seafloor": {
-          "placementSeed": "OCN-GOLDEN-SURFACE-7-ocean-seafloor-scatter",
-          "basinRadius": 35.24,
-          "ridgeAmplitude": 2.65,
-          "ridgeFrequency": 0.069,
-          "rockCount": 11,
-          "sedimentTuftCountDesktop": 492,
-          "sedimentTuftCountMobile": 172
+          "placementSeed": "OCN-GOLDEN-SURFACE-1-ocean-seafloor-scatter",
+          "basinRadius": 26.1,
+          "ridgeAmplitude": 3.06,
+          "ridgeFrequency": 0.029,
+          "rockCount": 16,
+          "sedimentTuftCountDesktop": 874,
+          "sedimentTuftCountMobile": 305
         },
         "current": {
-          "kind": "surge",
-          "intensity": 0.4,
-          "directionRadians": 4.77,
-          "gustFrequency": 0.28,
-          "marineSnowCountDesktop": 1282,
-          "marineSnowCountMobile": 384
+          "kind": "drift",
+          "intensity": 0.31,
+          "directionRadians": 2.13,
+          "gustFrequency": 0.29,
+          "marineSnowCountDesktop": 1157,
+          "marineSnowCountMobile": 347
         },
         "flora": {
-          "placementSeed": "OCN-GOLDEN-SURFACE-7-ocean-flora-placement",
-          "countDesktop": 124,
-          "countMobile": 49,
+          "placementSeed": "OCN-GOLDEN-SURFACE-1-ocean-flora-placement",
+          "countDesktop": 119,
+          "countMobile": 47,
           "speciesMix": [
             {
               "modelKey": "flora-kelp-giant",
@@ -91,53 +91,53 @@
               "weight": 0.3
             }
           ],
-          "scaleMin": 0.71,
-          "scaleMax": 1.46,
-          "swayStrength": 0.21,
-          "depthTintStrength": 0.54
+          "scaleMin": 0.75,
+          "scaleMax": 1.42,
+          "swayStrength": 0.58,
+          "depthTintStrength": 0.47
         },
         "fauna": {
           "schools": [
             {
-              "modelKey": "fish-reef-school",
-              "count": 24,
-              "pathSeed": "OCN-GOLDEN-SURFACE-7-ocean-school-0",
-              "depthBandMin": 9.17,
-              "depthBandMax": 11.79,
-              "swimSpeed": 0.41,
-              "cohesion": 0.81,
-              "separation": 0.26
+              "modelKey": "fish-silverside",
+              "count": 14,
+              "pathSeed": "OCN-GOLDEN-SURFACE-1-ocean-school-0",
+              "depthBandMin": 8.51,
+              "depthBandMax": 14.93,
+              "swimSpeed": 0.87,
+              "cohesion": 0.8,
+              "separation": 0.49
             },
             {
-              "modelKey": "fish-silverside",
-              "count": 24,
-              "pathSeed": "OCN-GOLDEN-SURFACE-7-ocean-school-1",
-              "depthBandMin": 8.4,
-              "depthBandMax": 12.36,
-              "swimSpeed": 0.57,
-              "cohesion": 0.55,
-              "separation": 0.47
+              "modelKey": "fish-barracuda",
+              "count": 12,
+              "pathSeed": "OCN-GOLDEN-SURFACE-1-ocean-school-1",
+              "depthBandMin": 4.93,
+              "depthBandMax": 9.92,
+              "swimSpeed": 0.79,
+              "cohesion": 0.53,
+              "separation": 0.59
             }
           ],
           "drifters": [
             {
-              "modelKey": "drifter-comb-jelly",
-              "count": 9,
-              "pathSeed": "OCN-GOLDEN-SURFACE-7-ocean-drifter-0",
-              "pulseRate": 0.43,
-              "emissiveColor": "#8FF3D2"
+              "modelKey": "drifter-moon-jelly",
+              "count": 12,
+              "pathSeed": "OCN-GOLDEN-SURFACE-1-ocean-drifter-0",
+              "pulseRate": 0.55,
+              "emissiveColor": "#B6ECFF"
             }
           ],
           "giants": []
         },
         "bioluminescence": {
-          "planktonCount": 172,
-          "bloomIntensity": 0.26,
+          "planktonCount": 142,
+          "bloomIntensity": 0.66,
           "emissiveColors": [
             "#8FF3D2",
             "#B6ECFF"
           ],
-          "flickerSeed": "OCN-GOLDEN-SURFACE-7-ocean-biolum-flicker"
+          "flickerSeed": "OCN-GOLDEN-SURFACE-1-ocean-biolum-flicker"
         },
         "landmarks": [
           {
@@ -145,9 +145,9 @@
             "name": "Landmark 1",
             "meaning": "A meaningful place in the sea.",
             "kind": "kelpCathedral",
-            "angleRadians": -0.01,
-            "radiusFromCenter": 55.05,
-            "heightAboveFloor": 0.1,
+            "angleRadians": -0.08,
+            "radiusFromCenter": 48.27,
+            "heightAboveFloor": 1.03,
             "accentColor": "#06B6D4",
             "energy": 60
           },
@@ -155,10 +155,10 @@
             "key": "landmark-2",
             "name": "Landmark 2",
             "meaning": "A meaningful place in the sea.",
-            "kind": "whaleFall",
-            "angleRadians": 1.35,
-            "radiusFromCenter": 35.63,
-            "heightAboveFloor": 1.21,
+            "kind": "abyssalTrench",
+            "angleRadians": 1.43,
+            "radiusFromCenter": 50.36,
+            "heightAboveFloor": 2.23,
             "accentColor": "#FACC15",
             "energy": 65
           },
@@ -166,10 +166,10 @@
             "key": "landmark-3",
             "name": "Landmark 3",
             "meaning": "A meaningful place in the sea.",
-            "kind": "abyssalTrench",
-            "angleRadians": 3,
-            "radiusFromCenter": 42.37,
-            "heightAboveFloor": 2.25,
+            "kind": "whaleFall",
+            "angleRadians": 3.27,
+            "radiusFromCenter": 32.04,
+            "heightAboveFloor": 5.73,
             "accentColor": "#8B5CF6",
             "energy": 70
           },
@@ -178,24 +178,24 @@
             "name": "Landmark 4",
             "meaning": "A meaningful place in the sea.",
             "kind": "sunkenRelic",
-            "angleRadians": 4.54,
-            "radiusFromCenter": 38.25,
-            "heightAboveFloor": 1.51,
+            "angleRadians": 4.95,
+            "radiusFromCenter": 46.14,
+            "heightAboveFloor": 0.94,
             "accentColor": "#06B6D4",
             "energy": 75
           }
         ],
         "camera": {
-          "distance": 23.72,
+          "distance": 22.65,
           "fov": 55
         },
         "postFX": {
-          "bloomIntensity": 0.34,
+          "bloomIntensity": 0.41,
           "grade": {
-            "hueRadians": 0.03,
-            "saturation": 0.16,
-            "brightness": 0.01,
-            "contrast": 0.03
+            "hueRadians": 0.01,
+            "saturation": 0.15,
+            "brightness": 0.02,
+            "contrast": 0.02
           }
         },
         "hud": {
@@ -209,12 +209,12 @@
             "flora-seagrass",
             "flora-coral-staghorn",
             "rock-basalt",
-            "fish-reef-school",
             "fish-silverside",
-            "drifter-comb-jelly",
+            "fish-barracuda",
+            "drifter-moon-jelly",
             "landmark-kelp-cathedral",
-            "landmark-whale-fall",
             "landmark-abyssal-trench",
+            "landmark-whale-fall",
             "landmark-sunken-relic"
           ]
         }

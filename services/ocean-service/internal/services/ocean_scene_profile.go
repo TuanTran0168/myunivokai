@@ -327,32 +327,43 @@ const assetCatalogVersion = "ocean-1"
 //     unlikely. The Abyss's weight on the shallows is exactly 0, not a small
 //     number — "The Abyss never shows the water surface" is a guarantee this
 //     family makes, not a tendency.
-//   - AboveWater does not drift at all. "Still Water" breaks the surface
-//     every seed, because that is also the create form's default mood and
-//     therefore the first view of the whole family — a separate, explicit
-//     guarantee this drift must not touch. See driftZone.
+//
+// AboveWaterProbability got the same correction one step later, for the
+// identical reason: it used to be a plain bool, absolutely pinned, so
+// "Still Water" broke the surface every single seed. That was deliberate —
+// it is the create form's default mood and therefore the first view of the
+// whole family — but pinning it 100% made every "Still Water" generation the
+// same photograph, exactly the complaint the zone pin drew the first time.
+// It is now a weighted roll like the zone is, MOST of the time a surface (so
+// the default first view still usually is one) and otherwise the calm shallow
+// sea it sits above — never the rougher "Reef Surge" reading, because the two
+// keep their own current/fauna multipliers below. No other mood's probability
+// moved: only "Still Water" was asked for this, so only it has it.
 type oceanMoodProfile struct {
 	// Zone is the home the mood leans toward — see oceanZoneDriftWeightsByMood
 	// for how far a given generation may drift from it.
 	Zone string
-	// AboveWater lifts the viewer out of the water entirely: depth goes
-	// negative and the world is the sea seen from the air. Not a fourth zone —
-	// the zone below is still the one named above.
-	AboveWater        bool
-	CurrentMultiplier float64
-	FaunaMultiplier   float64
-	BloomMultiplier   float64
+	// AboveWaterProbability is how often this mood lifts the viewer out of the
+	// water entirely: depth goes negative and the world is the sea seen from
+	// the air. Rolled once per generation against aboveWaterRoll in
+	// buildDepthConfig. 0 for every mood but "Still Water": a mood that has
+	// never been asked to surface should never surface, full stop, not "rarely".
+	// Not a fourth zone either way — the zone below is still the one named above.
+	AboveWaterProbability float64
+	CurrentMultiplier     float64
+	FaunaMultiplier       float64
+	BloomMultiplier       float64
 }
 
 // The fallback for a mood this family does not know. Twilight because it is the
 // middle of the axis and unambiguously underwater: an unknown mood should get
 // the most ordinary ocean there is, not an edge of the range.
 var neutralOceanProfile = oceanMoodProfile{
-	Zone:              ZoneTwilightReach,
-	AboveWater:        false,
-	CurrentMultiplier: 1.0,
-	FaunaMultiplier:   1.0,
-	BloomMultiplier:   1.0,
+	Zone:                  ZoneTwilightReach,
+	AboveWaterProbability: 0,
+	CurrentMultiplier:     1.0,
+	FaunaMultiplier:       1.0,
+	BloomMultiplier:       1.0,
 }
 
 // Keyed by the atmospheric mood values the create form sends — the same four
@@ -360,10 +371,12 @@ var neutralOceanProfile = oceanMoodProfile{
 // and a negative half, which is what makes the table square without inventing
 // anything: three depths under the water and one above it.
 //
-//	focused    Still Water  the sea from the air. Still water is a description
-//	                        of a SURFACE — there is no visible stillness at
-//	                        142 m — and its low current multiplier already gave
-//	                        it the calmest wind of the four.
+//	focused    Still Water  MOSTLY the sea from the air, sometimes the calm
+//	                        shallow water beneath it. Still water is a
+//	                        description of a SURFACE — there is no visible
+//	                        stillness at 142 m — and its low current multiplier
+//	                        already gave it the calmest wind of the four, above
+//	                        or below.
 //	energetic  Reef Surge   the shallows, floor in frame, most fauna, surge.
 //	dreamy     Drifting     the twilight reach: midwater, no floor, drifting.
 //	reflective The Abyss    on the bottom, kilometres down, one light.
@@ -371,10 +384,10 @@ var neutralOceanProfile = oceanMoodProfile{
 // Read down the Zone column and it is the depth axis in order, which is the
 // property the form's own labels promise and the old weights could not keep.
 var oceanMoodProfiles = map[string]oceanMoodProfile{
-	"focused":    {Zone: ZoneSunlitShallows, AboveWater: true, CurrentMultiplier: 0.75, FaunaMultiplier: 0.80, BloomMultiplier: 1.00},
-	"energetic":  {Zone: ZoneSunlitShallows, AboveWater: false, CurrentMultiplier: 1.35, FaunaMultiplier: 1.35, BloomMultiplier: 1.15},
-	"dreamy":     {Zone: ZoneTwilightReach, AboveWater: false, CurrentMultiplier: 0.85, FaunaMultiplier: 1.00, BloomMultiplier: 1.35},
-	"reflective": {Zone: ZoneAbyss, AboveWater: false, CurrentMultiplier: 0.70, FaunaMultiplier: 0.75, BloomMultiplier: 0.85},
+	"focused":    {Zone: ZoneSunlitShallows, AboveWaterProbability: 0.7, CurrentMultiplier: 0.75, FaunaMultiplier: 0.80, BloomMultiplier: 1.00},
+	"energetic":  {Zone: ZoneSunlitShallows, AboveWaterProbability: 0, CurrentMultiplier: 1.35, FaunaMultiplier: 1.35, BloomMultiplier: 1.15},
+	"dreamy":     {Zone: ZoneTwilightReach, AboveWaterProbability: 0, CurrentMultiplier: 0.85, FaunaMultiplier: 1.00, BloomMultiplier: 1.35},
+	"reflective": {Zone: ZoneAbyss, AboveWaterProbability: 0, CurrentMultiplier: 0.70, FaunaMultiplier: 0.75, BloomMultiplier: 0.85},
 }
 
 func oceanProfileForMood(mood string) oceanMoodProfile {
@@ -422,12 +435,14 @@ var oceanZoneDriftWeightsByMood = map[string]oceanZoneDriftWeights{
 var neutralZoneDriftWeights = oceanZoneDriftWeights{Shallow: 0.30, Twilight: 0.55, Abyss: 0.15}
 
 // driftZone turns a mood's home zone into the zone one particular seed
-// actually lands in. AboveWater moods are exempt entirely: "Still Water"
-// surfaces every seed, which is a separate, explicit, tested guarantee (it is
-// also the create form's default mood, so it is the first view anyone sees of
-// the whole family) and this drift must not put that at risk.
+// actually lands in. A mood that can ever surface is exempt from zone drift
+// entirely: "Still Water" is a calm shallow sea whether it is showing that sea
+// from above the water or from just under it, so its zone stays pinned to its
+// home rather than roaming through the twilight reach and the abyss too —
+// only whether it surfaces is a roll (see AboveWaterProbability); which
+// underwater zone it would show if it did not is not a separate question.
 func driftZone(mood string, moodProfile oceanMoodProfile, roll float64) string {
-	if moodProfile.AboveWater {
+	if moodProfile.AboveWaterProbability > 0 {
 		return moodProfile.Zone
 	}
 	weights, ok := oceanZoneDriftWeightsByMood[strings.ToLower(strings.TrimSpace(mood))]

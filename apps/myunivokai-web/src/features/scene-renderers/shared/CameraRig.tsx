@@ -6,6 +6,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImplementation } from "three-stdlib";
 import { usePlanetPositionTracker } from "./PlanetPositionTracker";
+import { useTerrainHeightSampler } from "./TerrainHeightSampler";
+
+// How far above the sampled terrain the lens must stay. Small enough that
+// approaching the seabed still feels like approaching it, large enough that
+// the near clip plane and the sand stop fighting.
+const MINIMUM_HEIGHT_ABOVE_TERRAIN_METRES = 1.5;
 
 const ORBIT_CONTROLS_MINIMUM_DISTANCE = 2.5;
 const ORBIT_CONTROLS_MAXIMUM_DISTANCE = 26;
@@ -72,6 +78,7 @@ export function CameraRig({
 }: CameraRigProps) {
   const orbitControlsReference = useRef<OrbitControlsImplementation>(null);
   const planetPositionTracker = usePlanetPositionTracker();
+  const terrainHeightSampler = useTerrainHeightSampler();
   const desiredTarget = useMemo(() => new Vector3(), []);
   const camera = useThree((state) => state.camera);
 
@@ -202,6 +209,29 @@ export function CameraRig({
       }
     }
     orbitControls.update();
+
+    // Terrain clamp, last, so it corrects whatever this frame's zoom/orbit/pan
+    // just produced rather than something a later step could still undo. Only
+    // a family with a ground plane (ocean) ever sets the sampler; every other
+    // family's clamp here is a no-op.
+    //
+    // Shifting camera.position AND orbitControls.target by the same delta —
+    // not position alone — is the same technique the WASD block above already
+    // uses to move the rig without changing what it is looking at: OrbitControls
+    // derives position from (target, spherical offset), so translating both by
+    // one vector preserves the offset and therefore the view, while translating
+    // position alone would silently re-pitch the camera toward whatever it had
+    // just been clamped away from.
+    const sampleTerrainHeight = terrainHeightSampler.current;
+    if (sampleTerrainHeight) {
+      const minimumY = sampleTerrainHeight(camera.position.x, camera.position.z) + MINIMUM_HEIGHT_ABOVE_TERRAIN_METRES;
+      if (camera.position.y < minimumY) {
+        const deltaY = minimumY - camera.position.y;
+        camera.position.y += deltaY;
+        orbitControls.target.y += deltaY;
+        orbitControls.update();
+      }
+    }
   });
 
   return (

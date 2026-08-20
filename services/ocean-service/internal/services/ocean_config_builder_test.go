@@ -85,31 +85,37 @@ func TestBuildOceanConfigDeterministic(t *testing.T) {
 // mood produces exactly one zone, for every seed, and the four of them lay out
 // the whole axis in order with nothing missing and nothing doubled up.
 // TestEachMoodDriftsWithinItsClamp is the two-sided contract for the 1.3
-// zone drift: AboveWater is still an absolute pin (unchanged from 1.2, and
-// tested again here because a mood's drift must never leak into it), while
-// the underwater zone is now a weighted home that may drift ONE zone away —
-// except in the one direction that recreated the original bug, which must
-// never happen at all, not just rarely.
+// zone drift: the underwater zone is a weighted home that may drift ONE zone
+// away — except in the one direction that recreated the original bug, which
+// must never happen at all, not just rarely.
+//
+// "Still Water"'s own AboveWaterProbability roll (1.4) is checked separately
+// in ocean_surface_view_test.go — that mood's zone is asserted here to stay
+// pinned to the sunlit shallows in EVERY sample regardless of whether that
+// sample surfaces, because driftZone exempts any mood with a nonzero surface
+// probability from zone drift entirely (see mustNeverSurface below).
 func TestEachMoodDriftsWithinItsClamp(t *testing.T) {
 	builder := NewOceanConfigBuilder()
 	type expectation struct {
-		aboveWater    bool
-		forbiddenZone string // "" if the mood may reach every underwater zone
-		homeZone      string
+		// Only true for moods whose AboveWaterProbability is a flat 0 — a mood
+		// that has never been asked to surface must never surface, full stop.
+		mustNeverSurface bool
+		forbiddenZone    string // "" if the mood may reach every underwater zone
+		homeZone         string
 	}
 	expected := map[string]expectation{
-		"focused": {aboveWater: true, homeZone: ZoneSunlitShallows},
+		"focused": {mustNeverSurface: false, homeZone: ZoneSunlitShallows},
 		// Reef Surge may drift down into the twilight reach, but reaching the
 		// abyss in one step is exactly the bug the 1.2 pin fixed: a diver who
 		// asked for a reef must never be shown the trench.
-		"energetic": {aboveWater: false, forbiddenZone: ZoneAbyss, homeZone: ZoneSunlitShallows},
+		"energetic": {mustNeverSurface: true, forbiddenZone: ZoneAbyss, homeZone: ZoneSunlitShallows},
 		// Drifting is the middle of the axis, so it is the one mood allowed to
 		// reach either neighbour.
-		"dreamy": {aboveWater: false, homeZone: ZoneTwilightReach},
+		"dreamy": {mustNeverSurface: true, homeZone: ZoneTwilightReach},
 		// The Abyss may drift up into the twilight reach, but reaching the
 		// shallows is the specific combination that was reported as a bug:
 		// picking the deepest option and receiving the water surface.
-		"reflective": {aboveWater: false, forbiddenZone: ZoneSunlitShallows, homeZone: ZoneAbyss},
+		"reflective": {mustNeverSurface: true, forbiddenZone: ZoneSunlitShallows, homeZone: ZoneAbyss},
 	}
 	const samplesPerMood = 240
 	covered := map[string]bool{}
@@ -117,9 +123,13 @@ func TestEachMoodDriftsWithinItsClamp(t *testing.T) {
 		zoneCounts := map[string]int{}
 		for sample := 0; sample < samplesPerMood; sample++ {
 			config := builder.Build(buildTestInput(fmt.Sprintf("OCN-ZONE-%s-%d", mood, sample), mood, 4))
-			if above := config.Depth.Metres < 0; above != want.aboveWater {
-				t.Fatalf("mood %q put the viewer at %.2f m; aboveWater = %v, want %v",
-					mood, config.Depth.Metres, above, want.aboveWater)
+			if want.mustNeverSurface && config.Depth.Metres < 0 {
+				t.Fatalf("mood %q put the viewer at %.2f m, above the water; this mood's AboveWaterProbability is 0",
+					mood, config.Depth.Metres)
+			}
+			if mood == "focused" && config.Depth.Zone != want.homeZone {
+				t.Fatalf("mood %q produced zone %q at sample %d; its zone must stay pinned to %q whether or not this sample surfaces",
+					mood, config.Depth.Zone, sample, want.homeZone)
 			}
 			if want.forbiddenZone != "" && config.Depth.Zone == want.forbiddenZone {
 				t.Fatalf("mood %q produced zone %q at sample %d — this exact combination is the bug the 1.2 pin fixed, and the 1.3 drift must never reopen it",

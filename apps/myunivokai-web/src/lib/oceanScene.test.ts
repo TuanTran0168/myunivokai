@@ -62,7 +62,7 @@ describe("the ocean preview builder", () => {
   it("stamps the contract keys the renderer registry resolves on", () => {
     const scene = buildPreviewOceanSceneConfig(previewInput());
     expect(scene.sceneType).toBe("ocean");
-    expect(scene.schemaVersion).toBe("1.3");
+    expect(scene.schemaVersion).toBe("1.4");
     expect(scene.assets?.catalogVersion).toBe("ocean-1");
     // This family has no sky, so it must never claim an environment map.
     expect(scene.assets?.hdriKey).toBeUndefined();
@@ -98,20 +98,25 @@ describe("the ocean preview builder", () => {
   // usually" — and the replacement is the point rather than a re-tune. A rate is
   // the right assertion for something nobody selects. It is the wrong one for a
   // control: these four moods are the create form's DEPTH & MOOD options, and
-  // aboveWater is still an absolute pin (unchanged) while the underwater zone
-  // is a weighted HOME that may drift one zone away — except in the direction
-  // that recreated the original bug, which must never happen at all.
+  // the underwater zone is a weighted HOME that may drift one zone away —
+  // except in the direction that recreated the original bug, which must never
+  // happen at all.
   //
   // "The Abyss" drawing the water surface 5% of the time was the original
   // defect, and the clamp below is what makes that combination impossible
   // rather than merely unlikely: forbiddenZone is a hard wall, not a small
   // number.
+  //
+  // focused's own surface roll (aboveWaterProbability) is checked separately
+  // below — here its zone is asserted to stay pinned to the sunlit shallows in
+  // EVERY sample regardless of whether that sample surfaces, because driftZone
+  // exempts any mood with a nonzero surface probability from zone drift.
   it("keeps every mood inside its clamp, with its home zone as the plurality", () => {
-    const expected: Record<string, { aboveWater: boolean; forbiddenZone?: string; homeZone: string }> = {
-      focused: { aboveWater: true, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
-      energetic: { aboveWater: false, forbiddenZone: OCEAN_ZONE_ABYSS, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
-      dreamy: { aboveWater: false, homeZone: OCEAN_ZONE_TWILIGHT_REACH },
-      reflective: { aboveWater: false, forbiddenZone: OCEAN_ZONE_SUNLIT_SHALLOWS, homeZone: OCEAN_ZONE_ABYSS }
+    const expected: Record<string, { mustNeverSurface: boolean; forbiddenZone?: string; homeZone: string }> = {
+      focused: { mustNeverSurface: false, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
+      energetic: { mustNeverSurface: true, forbiddenZone: OCEAN_ZONE_ABYSS, homeZone: OCEAN_ZONE_SUNLIT_SHALLOWS },
+      dreamy: { mustNeverSurface: true, homeZone: OCEAN_ZONE_TWILIGHT_REACH },
+      reflective: { mustNeverSurface: true, forbiddenZone: OCEAN_ZONE_SUNLIT_SHALLOWS, homeZone: OCEAN_ZONE_ABYSS }
     };
     const samplesPerMood = 80;
     const covered = new Set<string>();
@@ -121,7 +126,12 @@ describe("the ocean preview builder", () => {
         const scene = buildPreviewOceanSceneConfig(previewInput({ mood, nickname: `Mai-${index}` }));
         const metres = scene.depth?.metres ?? 0;
         const zone = scene.depth?.zone ?? "";
-        expect(metres < 0, `mood ${mood} at ${metres}m`).toBe(want.aboveWater);
+        if (want.mustNeverSurface) {
+          expect(metres < 0, `mood ${mood} at ${metres}m`).toBe(false);
+        }
+        if (mood === "focused") {
+          expect(zone, `mood ${mood} produced zone ${zone} at sample ${index}`).toBe(want.homeZone);
+        }
         if (want.forbiddenZone) {
           expect(zone, `mood ${mood} produced the forbidden zone ${want.forbiddenZone} at sample ${index}`).not.toBe(
             want.forbiddenZone
