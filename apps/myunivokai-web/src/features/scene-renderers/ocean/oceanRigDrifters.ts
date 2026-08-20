@@ -399,7 +399,11 @@ function createMoteLayer(spec: MoteLayerSpec, random: Random, quality: "high" | 
         // Living light pulses; a mineral flake does not.
         vFlicker = mix(1.0, 0.45 + 0.55 * sin(uMoteTime * (1.4 + aMoteSeed * 3.0) + aMoteSeed * 12.0),
                        uMoteFlicker);
-        gl_PointSize = uMoteSize * (1.0 + aMoteSeed * 0.6) * (36.0 / max(1.0, viewDistance));
+        // 300, not a smaller "safer" number: this is the demo's own constant,
+        // and undersizing it is why the motes read as barely-there specks
+        // instead of the "single highest-value cheap change" its own comment
+        // calls them. The per-seed jitter is an addition on top, not instead.
+        gl_PointSize = uMoteSize * (1.0 + aMoteSeed * 0.6) * (300.0 / max(1.0, viewDistance));
         gl_Position = projectionMatrix * viewPosition;
       }`,
     fragmentShader: /* glsl */ `
