@@ -90,16 +90,27 @@ describe("createSchool's predator-proximity flee reaction", () => {
     school.dispose();
   });
 
-  it("pushes a prey leader away from a predator anchor placed right on top of it", () => {
+  it("smooths its escape from a predator anchor instead of snapping to it in one frame", () => {
     const species = testSpecies({ fleesPredators: true, leaders: 1, count: 1, pathRadius: 10 });
     const school = createSchool(species, "flee-seed-2", { value: 0 });
     school.update(0, NO_BOUNDS, []);
     const beforeThreat = memberPosition(school.mesh, 0).clone();
-    // A threat sitting exactly where the leader already is: the nearest
-    // distance is ~0, so alarm should saturate near 1 and push it away hard.
+    // A threat sitting exactly where the leader already is: alarm is smoothed
+    // (fast attack, ~4/s), so a single ~16ms frame must NOT teleport it
+    // metres away — that instant-snap response is exactly what a real fish
+    // does not do (see the BA report on swimming behaviour).
     school.update(0.016, NO_BOUNDS, [beforeThreat.clone()]);
-    const afterThreat = memberPosition(school.mesh, 0);
-    expect(beforeThreat.distanceTo(afterThreat)).toBeGreaterThan(2);
+    const afterOneFrame = memberPosition(school.mesh, 0);
+    expect(beforeThreat.distanceTo(afterOneFrame)).toBeLessThan(1);
+    // But sustained proximity — the same stationary threat, held for ~2s —
+    // must still produce a real escape: smoothed is not the same as disabled.
+    let elapsed = 0.016;
+    for (let i = 0; i < 120; i += 1) {
+      elapsed += 0.016;
+      school.update(elapsed, NO_BOUNDS, [beforeThreat.clone()]);
+    }
+    const afterSustained = memberPosition(school.mesh, 0);
+    expect(beforeThreat.distanceTo(afterSustained)).toBeGreaterThan(3);
     school.dispose();
   });
 

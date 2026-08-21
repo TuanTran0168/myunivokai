@@ -928,6 +928,77 @@ export type NormalisedModel = {
 };
 
 /**
+ * Fraction of triangles whose 3 vertex normals are NOT all identical — how
+ * much real authored smoothing a merged, non-indexed geometry carries. 0
+ * means every face is flat-shaded at the source (measured true for the shark
+ * and dolphin GLBs; a mixed model like the butterfly-fish comes back well
+ * above 0 and is left untouched).
+ */
+function smoothFaceFraction(geometry: BufferGeometry): number {
+  const normal = geometry.getAttribute("normal");
+  const triangleCount = Math.floor(normal.count / 3);
+  if (triangleCount === 0) return 1;
+  let smooth = 0;
+  const a = new Vector3();
+  const b = new Vector3();
+  const c = new Vector3();
+  for (let t = 0; t < triangleCount; t += 1) {
+    const i = t * 3;
+    a.set(normal.getX(i), normal.getY(i), normal.getZ(i));
+    b.set(normal.getX(i + 1), normal.getY(i + 1), normal.getZ(i + 1));
+    c.set(normal.getX(i + 2), normal.getY(i + 2), normal.getZ(i + 2));
+    if (a.dot(b) < 0.999999 || b.dot(c) < 0.999999 || a.dot(c) < 0.999999) smooth += 1;
+  }
+  return smooth / triangleCount;
+}
+
+/**
+ * Angle-weighted vertex-normal smoothing for a geometry confirmed flat-shaded
+ * at the source: merges normals across coincident vertex positions, but only
+ * within creaseAngleDeg of each other, so a genuinely hard edge (a fin's
+ * leading edge, a tail fluke) stays hard while a body's tessellated
+ * cross-section stops reading as faceted plates. Only ever invoked on
+ * geometry with ~0% pre-existing smooth faces, so there is no authored
+ * smoothing here to overwrite.
+ */
+function smoothFlatNormals(geometry: BufferGeometry, creaseAngleDeg = 55): void {
+  const position = geometry.getAttribute("position");
+  const normal = geometry.getAttribute("normal");
+  const count = position.count;
+  const creaseCos = Math.cos((creaseAngleDeg * Math.PI) / 180);
+
+  const buckets = new Map<string, number[]>();
+  const quantize = (v: number) => Math.round(v * 100000);
+  for (let i = 0; i < count; i += 1) {
+    const key = `${quantize(position.getX(i))}:${quantize(position.getY(i))}:${quantize(position.getZ(i))}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(i);
+    else buckets.set(key, [i]);
+  }
+
+  const result = new Float32Array(count * 3);
+  const vertexNormal = new Vector3();
+  const otherNormal = new Vector3();
+  for (const indices of buckets.values()) {
+    for (const i of indices) {
+      vertexNormal.set(normal.getX(i), normal.getY(i), normal.getZ(i));
+      const accumulator = vertexNormal.clone();
+      for (const j of indices) {
+        if (j === i) continue;
+        otherNormal.set(normal.getX(j), normal.getY(j), normal.getZ(j));
+        if (vertexNormal.dot(otherNormal) >= creaseCos) accumulator.add(otherNormal);
+      }
+      accumulator.normalize();
+      const o = i * 3;
+      result[o] = accumulator.x;
+      result[o + 1] = accumulator.y;
+      result[o + 2] = accumulator.z;
+    }
+  }
+  geometry.setAttribute("normal", new BufferAttribute(result, 3));
+}
+
+/**
  * Put a loaded model into the frame every species entry was authored against:
  * one unit long, centred, nose at +Z, with `along` running 0 at the nose to 1 at
  * the tail — which is the direction the undulation envelope grows in.
@@ -1014,9 +1085,15 @@ export function normaliseModel(source: BufferGeometry, species: FaunaSpecies): N
     along[i] = Math.min(1, Math.max(0, 0.5 - position.getZ(i)));
   }
   geometry.setAttribute("along", new BufferAttribute(along, 1));
-  // NOT computeVertexNormals: the model's own normals came through the merge
-  // already transformed, and recomputing replaces the artist's smoothing with
-  // hard facets on every fin.
+  // NOT a blanket computeVertexNormals: the model's own normals came through
+  // the merge already transformed, and recomputing would replace real
+  // authored smoothing with hard facets on every fin. But when a model has NO
+  // smoothing to lose in the first place — measured directly below, not
+  // assumed — flat facets are a pure downside, so those (and only those) get
+  // angle-weighted smoothing instead.
+  if (1 - smoothFaceFraction(geometry) > 0.98) {
+    smoothFlatNormals(geometry);
+  }
   geometry.computeBoundingBox();
   const box = geometry.boundingBox;
   const halfHeight = box ? Math.max(1e-3, (box.max.y - box.min.y) * 0.5) : 0.17;
@@ -1123,6 +1200,47 @@ type Member = {
 const FORWARD = new Vector3(0, 0, 1);
 
 /**
+ * Max heading-turn rate, in radians/second. Grounded in two measured points
+ * — bonnethead shark ~150 deg/s at ~1 m, Pacific bluefin tuna ~100-105 deg/s
+ * at several metres (Hoffmann & Porter 2019; Downs et al. 2023) —
+ * extrapolated to the rest of the roster with an inverse-size curve (smaller,
+ * more maneuverable animals turn faster) since no measured figure exists for
+ * this roster's other species. An explicit assumption for every species
+ * except those two, not fabricated data.
+ */
+function turnRateRadPerSecFor(species: FaunaSpecies): number {
+  const degPerSec = Math.min(500, Math.max(25, 150 * Math.pow(1 / Math.max(0.1, species.size), 0.4)));
+  return (degPerSec * Math.PI) / 180;
+}
+
+/**
+ * Rotates unit vector `current` toward unit vector `target` by at most
+ * maxAngle radians, in place — the one and only place any leader's heading
+ * changes, so no behaviour (flee, camera-approach, the ring itself) can ever
+ * snap it instantly.
+ */
+function rotateTowards(current: Vector3, target: Vector3, maxAngle: number): void {
+  const dot = Math.min(1, Math.max(-1, current.dot(target)));
+  const theta = Math.acos(dot);
+  if (theta < 1e-6) return;
+  if (theta <= maxAngle) {
+    current.copy(target);
+    return;
+  }
+  const sinTheta = Math.sin(theta);
+  if (sinTheta < 1e-6) {
+    // Exactly (or almost exactly) opposite — no well-defined slerp axis for a
+    // case that should only ever arise on a leader's very first frame.
+    current.lerp(target, maxAngle / theta).normalize();
+    return;
+  }
+  const t = maxAngle / theta;
+  const a = Math.sin((1 - t) * theta) / sinTheta;
+  const b = Math.sin(t * theta) / sinTheta;
+  current.set(current.x * a + target.x * b, current.y * a + target.y * b, current.z * a + target.z * b).normalize();
+}
+
+/**
  * A school: one InstancedMesh, a handful of leaders on rings, and members that
  * ride in the leader's own frame so the shoal banks together instead of
  * shearing when the leader turns.
@@ -1220,6 +1338,8 @@ export function createSchool(
   mesh.frustumCulled = false;
 
   const next = randomFromSeed(`${seed}:${species.key}`);
+  const maxTurnRate = turnRateRadPerSecFor(species);
+  const fleeRadius = species.fleeRadiusMetres ?? Math.max(16, species.pathRadius * 0.9);
   const phases = new Float32Array(species.count);
   const leaders: Leader[] = [];
   // THE RING IS CLAMPED TO WHAT THE WATER CAN ACTUALLY SHOW.
@@ -1247,20 +1367,30 @@ export function createSchool(
   const vortexAngle = species.vortex ? next() * Math.PI * 2 : 0;
   const vortexRadius = species.vortex ? Math.min(species.pathRadius, ringLimit) * (0.9 + next() * 0.1) : 0;
   for (let i = 0; i < species.leaders; i += 1) {
+    // Same next() call count and order as before this loop was expanded to
+    // seed position/heading up front — the shared seeded stream every member
+    // below also draws from must not shift.
+    const angle = species.vortex ? vortexAngle + (next() - 0.5) * 0.2 : next() * Math.PI * 2;
+    const radius = species.vortex
+      ? vortexRadius * (0.96 + next() * 0.08)
+      : Math.min(species.pathRadius, ringLimit) * (species.tightRing ? 0.9 + next() * 0.25 : 0.35 + next() * 0.75);
+    const speed = (0.05 + next() * 0.05) * (next() > 0.5 ? 1 : -1) * (species.speedScale ?? 1);
+    const height = species.heightBase + next() * species.heightRange;
     leaders.push({
-      angle: species.vortex ? vortexAngle + (next() - 0.5) * 0.2 : next() * Math.PI * 2,
-      radius: species.vortex
-        ? vortexRadius * (0.96 + next() * 0.08)
-        : Math.min(species.pathRadius, ringLimit) *
-          (species.tightRing ? 0.9 + next() * 0.25 : 0.35 + next() * 0.75),
-      speed: (0.05 + next() * 0.05) * (next() > 0.5 ? 1 : -1) * (species.speedScale ?? 1),
-      height: species.heightBase + next() * species.heightRange,
+      angle,
+      radius,
+      speed,
+      height,
       bob: next() * Math.PI * 2,
       breathPhase: next(),
       approachPhase: next(),
       alarm: 0,
-      position: new Vector3(),
-      heading: new Vector3(1, 0, 0),
+      // Seeded on the ring immediately, not at the origin — the first real
+      // update() call derives heading from displacement since the LAST
+      // position, and starting at (0,0,0) would read that first frame as a
+      // huge, meaningless jump outward from the world's centre.
+      position: new Vector3(Math.cos(angle) * radius, height, Math.sin(angle) * radius),
+      heading: new Vector3(-Math.sin(angle) * Math.sign(speed), 0, Math.cos(angle) * Math.sign(speed)).normalize(),
     });
   }
   const members: Member[] = [];
@@ -1297,9 +1427,17 @@ export function createSchool(
   const position = new Vector3();
   const scaleVector = new Vector3();
   const right = new Vector3();
+  const leaderTarget = new Vector3();
+  const leaderDelta = new Vector3();
   let breachHeight = 0;
   let baseOffset = 0;
   let breach = -1.2;
+  // update() receives absolute scene time, not a per-frame delta (it also
+  // drives every sine-based cycle here directly) — this is the one place a
+  // real per-frame dt gets derived from it, clamped so a backgrounded tab or
+  // a first frame with elapsed already nonzero can't hand a leader a single
+  // multi-second leap.
+  let previousElapsed: number | null = null;
 
   return {
     species,
@@ -1332,26 +1470,26 @@ export function createSchool(
       const clearance = Math.max(0.8, species.size * 0.6);
       const ceiling = bounds.surfaceY === null ? Infinity : bounds.surfaceY - clearance;
       const floorY = bounds.floorY === null ? -Infinity : bounds.floorY + clearance;
+      const dt = previousElapsed === null ? 1 / 60 : Math.min(0.1, Math.max(0, elapsed - previousElapsed));
+      previousElapsed = elapsed;
 
       for (const leader of leaders) {
-        // Cruise speed carries LAST frame's alarm as a burst multiplier — a
-        // one-frame lag, invisible at 60fps, that avoids restructuring this
-        // loop around alarm being computed further down in this same pass.
+        // Cruise speed carries LAST frame's (already-smoothed) alarm as a
+        // burst multiplier — a one-frame lag, invisible at 60fps, that avoids
+        // restructuring this loop around alarm being computed further down.
         const speedMultiplier = 1 + leader.alarm * ((species.burstSpeedScale ?? 1) - 1);
-        leader.angle += leader.speed * speedMultiplier * 0.016;
+        leader.angle += leader.speed * speedMultiplier * dt;
         let angle = leader.angle;
         let radius = leader.radius * (1 + Math.sin(leader.angle * 1.7 + leader.bob) * 0.14);
         let height = leader.height + Math.sin(elapsed * 0.24 + leader.bob) * species.heightRange * 0.3;
         height += baseOffset;
         height = Math.min(Math.max(height, floorY), ceiling);
-        let climb = 0;
         if (species.surfacing && bounds.surfaceY !== null) {
           // Dolphins surface every 20-40 s in ordinary activity. A pod rising to
           // breathe and sinking back is the most legible behaviour any animal in
           // this scene can perform.
           const cycle = ((elapsed / 26 + leader.breathPhase) % 1 + 1) % 1;
           const ascent = Math.pow(Math.sin(Math.PI * cycle), 3);
-          climb = ascent;
           height = height * (1 - ascent) + (bounds.surfaceY + breach) * ascent;
           breachHeight = Math.max(0, breach + clearance) * ascent;
         }
@@ -1382,22 +1520,23 @@ export function createSchool(
             height = height * (1 - approach) + cameraPosition.y * approach;
           }
         }
-        leader.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
-        leader.heading
-          .set(-Math.sin(angle) * Math.sign(leader.speed), climb * 0.5, Math.cos(angle) * Math.sign(leader.speed))
-          .normalize();
+        leaderTarget.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
 
         // Predator proximity: a continuous alarm from nearest-threat distance,
         // not a state machine — calm/alert/flee/calm falls out of the distance
         // curve alone. O(threats) per leader, never O(members) or O(schools²).
-        let alarm = 0;
+        // Measured against leaderTarget (this frame's ring position) rather
+        // than leader.position (still last frame's), so a fast-closing threat
+        // is judged by where the leader actually is now.
+        let rawAlarm = 0;
+        let awayX = 0;
+        let awayZ = 0;
+        let awayDist = 0;
         if (species.fleesPredators && threats && threats.length > 0) {
           let nearestDistSq = Infinity;
-          let awayX = 0;
-          let awayZ = 0;
           for (const threat of threats) {
-            const dx = leader.position.x - threat.x;
-            const dz = leader.position.z - threat.z;
+            const dx = leaderTarget.x - threat.x;
+            const dz = leaderTarget.z - threat.z;
             const distSq = dx * dx + dz * dz;
             if (distSq < nearestDistSq) {
               nearestDistSq = distSq;
@@ -1405,19 +1544,39 @@ export function createSchool(
               awayZ = dz;
             }
           }
-          const fleeRadius = species.fleeRadiusMetres ?? Math.max(16, species.pathRadius * 0.9);
-          const dist = Math.sqrt(nearestDistSq);
-          alarm = Math.min(1, Math.max(0, 1 - dist / fleeRadius));
-          if (alarm > 0 && dist > 1e-3) {
-            const push = alarm * fleeRadius * 0.6;
-            leader.position.x += (awayX / dist) * push;
-            leader.position.z += (awayZ / dist) * push;
-            leader.heading.x = leader.heading.x * (1 - alarm) + (awayX / dist) * alarm;
-            leader.heading.z = leader.heading.z * (1 - alarm) + (awayZ / dist) * alarm;
-            leader.heading.normalize();
-          }
+          awayDist = Math.sqrt(nearestDistSq);
+          rawAlarm = Math.min(1, Math.max(0, 1 - awayDist / fleeRadius));
         }
-        leader.alarm = alarm;
+        // Smoothed, not snapped — a startle response is quick to trigger and
+        // slower to stand down (attack ~4/s, release ~1.2/s), the same
+        // fast-in/slow-out asymmetry the swim-speed literature found for
+        // acceleration vs. deceleration (Akanyeti et al. 2018). This one
+        // smoothed value now drives the burst-speed multiplier above, the
+        // escape push below, AND (via the displacement-based heading below)
+        // how fast the body turns to face away — a single source of truth
+        // instead of three things that could each jump independently.
+        const alarmRate = rawAlarm > leader.alarm ? 4 : 1.2;
+        leader.alarm += (rawAlarm - leader.alarm) * Math.min(1, alarmRate * dt);
+        if (leader.alarm > 1e-3 && awayDist > 1e-3) {
+          const push = leader.alarm * fleeRadius * 0.6;
+          leaderTarget.x += (awayX / awayDist) * push;
+          leaderTarget.z += (awayZ / awayDist) * push;
+        }
+
+        // Heading follows the ACTUAL displacement this frame — the ring's
+        // radial wobble, the camera-approach blend and the flee push all show
+        // up here for free, instead of the old pure tangent-of-angle formula
+        // that assumed a constant radius and ignored all three (the root
+        // cause of fish appearing to slide sideways/backward while still
+        // facing their old heading). Turn rate is capped so the body always
+        // finishes turning toward where it's going before position gets
+        // ahead of where the nose points, instead of snapping instantly.
+        leaderDelta.copy(leaderTarget).sub(leader.position);
+        if (leaderDelta.lengthSq() > 1e-10) {
+          leaderDelta.normalize();
+          rotateTowards(leader.heading, leaderDelta, maxTurnRate * dt);
+        }
+        leader.position.copy(leaderTarget);
       }
 
       for (let i = 0; i < members.length; i += 1) {
