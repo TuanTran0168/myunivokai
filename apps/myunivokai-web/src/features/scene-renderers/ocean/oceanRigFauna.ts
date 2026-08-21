@@ -1366,10 +1366,15 @@ export function createSchool(
           const approach = Math.pow(Math.max(0, Math.sin(Math.PI * cycle)), 5);
           if (approach > 0.001) {
             const camAngle = Math.atan2(cameraPosition.z, cameraPosition.x);
-            const camDist = Math.max(
-              species.approachDistanceMetres ?? 6,
-              Math.hypot(cameraPosition.x, cameraPosition.z),
-            );
+            // The target radius is measured from ORIGIN, same as every other
+            // leader position — so "approachDistanceMetres from the camera"
+            // means the camera's own radius minus that gap, not the camera's
+            // radius itself. Using the camera's radius directly (a prior bug
+            // here) put the leader AT the camera's exact position once angle
+            // and height finished converging too, which reads on screen as a
+            // single fin plane filling the frame edge-on.
+            const cameraRadius = Math.hypot(cameraPosition.x, cameraPosition.z);
+            const camDist = Math.max(0, cameraRadius - (species.approachDistanceMetres ?? 6));
             let deltaAngle = camAngle - angle;
             deltaAngle -= Math.PI * 2 * Math.round(deltaAngle / (Math.PI * 2));
             angle += deltaAngle * approach;

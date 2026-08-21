@@ -121,18 +121,29 @@ describe("createSchool's predator-proximity flee reaction", () => {
 });
 
 describe("createSchool's camera-relative approach", () => {
-  it("brings a leader noticeably closer to the camera during its approach window", () => {
+  it("brings a leader within approachDistanceMetres of the camera, not onto it", () => {
     const species = testSpecies({ approachesCamera: true, leaders: 1, count: 1, pathRadius: 60 });
     const school = createSchool(species, "approach-seed", { value: 0 });
-    const farCamera = new Vector3(0, 0, 0);
+    // Away from the origin, like a real orbiting camera — a camera AT the
+    // origin cannot distinguish "distance from camera" from "distance from
+    // origin", which is exactly how a prior version of this formula (target
+    // radius = the camera's own radius from origin, instead of the camera's
+    // radius minus approachDistanceMetres) shipped uncaught: it put the
+    // leader exactly at the camera's position once angle and height finished
+    // converging, reading on screen as a fin plane filling the frame edge-on.
+    const camera = new Vector3(30, 5, 0);
     let closestDistance = Number.POSITIVE_INFINITY;
     // Sweep the whole ~34s cycle; the envelope must dip close at some point.
     for (let elapsed = 0; elapsed < 34; elapsed += 1) {
-      school.update(elapsed, NO_BOUNDS, [], farCamera);
+      school.update(elapsed, NO_BOUNDS, [], camera);
       const position = memberPosition(school.mesh, 0);
-      closestDistance = Math.min(closestDistance, position.length());
+      closestDistance = Math.min(closestDistance, position.distanceTo(camera));
     }
-    expect(closestDistance).toBeLessThan(20);
+    // Approaches to roughly the default 6 m, with headroom for the envelope
+    // never landing exactly on its discrete-sampled peak — and never onto the
+    // camera itself, which is what the prior formula collapsed to.
+    expect(closestDistance).toBeGreaterThan(3);
+    expect(closestDistance).toBeLessThan(12);
     school.dispose();
   });
 
