@@ -153,52 +153,53 @@ flowchart TB
 ## Database Architecture & ERD
 
 Myunivokai strictly enforces the **Database-per-Service** pattern. Each microservice manages its own schema via explicit SQL migrations.
-
-### 1. AI & Generation Engine (`myunivokai_dna`)
-
-Chịu trách nhiệm quản lý prompt đầu vào của người dùng, phân tích AI và tạo ra bản **ProfileDNA** bất biến theo phiên bản (*versioning*).
+Dưới đây là toàn cảnh Database Schema của hệ thống, được quy hoạch phân mảnh theo Vùng (Domain Regions), trải dàn hàng ngang để quan sát toàn bộ kiến trúc.
 
 ```text
-+--------------------------+ 1      N +--------------------------+
-| PROFILES                 |----------| DNA_VERSIONS             |
-+--------------------------+          +--------------------------+
-| * id (PK)                |          | * id (PK)                |
-|   raw_input              |          |   profile_id (FK)        |
-|   created_at             |          |   source_job_id (UK)     |
-|   updated_at             |          |   version_number         |
-+--------------------------+          |   profile_dna            |
-             | 1                      |   created_at             |
-             |                        +--------------------------+
-             |                                     | 1
-             | N (has many)                        |
-+--------------------------+                       |
-| GENERATION_JOBS          |-----------------------+ 0..1 (produces)
-+--------------------------+
-| * job_id (PK)            |
-|   family                 |
-|   profile_id (FK)        |
-|   status                 |
-|   dna_version_id (FK)    |
-|   world_id               |
-|   error_code             |
-|   error_message          |
-|   created_at             |
-|   completed_at           |
-+--------------------------+
-             | 1
-             |
-             | N (tracks)
-+--------------------------+
+=======================================================================================================================================================
+                                                     REGION 1: WORLD GENERATION SERVICES (Family)
+=======================================================================================================================================================
+ [ myunivokai_dna ]                                                               [ myunivokai_{family} ] (universe, nature, ocean)
++--------------------------+ 1      N +--------------------------+               +--------------------------+
+| PROFILES                 |----------| DNA_VERSIONS             |               | WORLDS                   |
++--------------------------+          +--------------------------+               +--------------------------+
+| * id (PK)                |          | * id (PK)                |               | * id (PK)                |          +--------------------------+
+|   raw_input              |          |   profile_id (FK)        |               |   source_job_id (UK)     | 1      N | WORLD_VARIANTS           |
+|   created_at             |          |   source_job_id (UK)     |               |   profile_id             |----------|                          |
+|   updated_at             |          |   version_number         |               |   dna_version_id         |          +--------------------------+
++--------------------------+          |   profile_dna            |               |   nickname               |          | * id (PK)                |
+             | 1                      |   created_at             |               |   role                   |          |   world_id (FK)          |
+             |                        +--------------------------+               |   visual_intent          |          |   variant_no             |
+             |                                     | 1                           |   dna_snapshot           |          |   seed                   |
+             | N (has many)                        |                             |   archetype              |          |   config                 |
++--------------------------+                       |                             |   scene_name             |          |   thumbnail_url          |
+| GENERATION_JOBS          |-----------------------+ 0..1 (produces)             |   quote                  |          |   is_selected            |
++--------------------------+                                                     |   revision               |          |   created_at             |
+| * job_id (PK)            |                                                     |   selected_variant_id(FK)|<-+       +--------------------------+
+|   family                 |                                                     |   created_at             |  |                    |
+|   profile_id (FK)        |                                                     |   updated_at             |  | 0..1               | 1 (selected)
+|   status                 |                                                     +--------------------------+  +--------------------+
+|   dna_version_id (FK)    |                                                                  | 1
+|   world_id               |                                                                  |
+|   error_code             |                                                                  | 0..1 (shares)
+|   error_message          |                                                     +--------------------------+
+|   created_at             |                                                     | WORLD_SHARES             |
+|   completed_at           |                                                     +--------------------------+
++--------------------------+                                                     | * id (PK)                |
+             | 1                                                                 |   world_id (FK)          |
+             |                                                                   |   share_slug (UK)        |
+             | N (tracks)                                                        |   created_at             |
++--------------------------+                                                     +--------------------------+
 | AI_GENERATION_ATTEMPTS   |
-+--------------------------+
-| * id (PK)                |
-|   job_id (FK)            |
-|   provider               |
-|   model                  |
-|   input_hash             |
-|   request_json           |
-|   response_json          |
-|   usage_json             |
++--------------------------+                                                     +--------------------------+          +--------------------------+
+| * id (PK)                |                                                     | INBOX_MESSAGES           |          | OUTBOX_MESSAGES          |
+|   job_id (FK)            |                                                     +--------------------------+          +--------------------------+
+|   provider               |                                                     | * message_id (PK)        |          | * id (PK)                |
+|   model                  |                                                     |   subject                |          |   message_id (UK)        |
+|   input_hash             |                                                     |   job_id                 |          |   subject                |
+|   request_json           |                                                     |   processed_at           |          |   payload                |
+|   response_json          |                                                     +--------------------------+          |   published_at           |
+|   usage_json             |                                                                                           +--------------------------+
 |   latency_ms             |
 |   status                 |
 |   created_at             |
@@ -213,148 +214,59 @@ Chịu trách nhiệm quản lý prompt đầu vào của người dùng, phân 
 |   processed_at           |          |   payload                |
 +--------------------------+          |   published_at           |
                                       +--------------------------+
+
+
+=======================================================================================================================================================
+                                                     REGION 2: PLATFORM & ADMIN SERVICES
+=======================================================================================================================================================
+ [ myunivokai_auth ]                                                                              [ myunivokai_analytics ]   [ myunivokai_telemetry ]
++--------------------------+ 1      N +--------------------------+ N      1 +--------------------------+ +--------------------------+ +--------------------------+
+| ACCOUNTS                 |----------| ACCOUNT_ROLES            |----------| ROLES                    | | JOB_PROJECTIONS          | | HTTP_ROLLUPS             |
++--------------------------+          +--------------------------+          +--------------------------+ +--------------------------+ +--------------------------+
+| * id (PK)                |          | * account_id (PK, FK)    |          | * id (PK)                | | * job_id (PK)            | | * bucket_start (PK)      |
+|   email (UK)             |          | * role_id (PK, FK)       |          |   name (UK)              | |   family                 | | * route_pattern (PK)     |
+|   password_hash          |          +--------------------------+          |   audience               | |   status                 | | * method (PK)            |
+|   kind                   |                                                |   is_system              | |   error_code             | | * status_class (PK)      |
+|   is_super_admin         |          +--------------------------+ 1      N |   created_at             | |   world_id               | |   request_count          |
+|   disabled               |          | PERMISSIONS              |----------+--------------------------+ |   created_at             | |   duration_sum_ms        |
+|   token_version          |          +--------------------------+          | ROLE_PERMISSIONS         | |   completed_at           | |   duration_max_ms        |
+|   failed_attempts        |          | * id (PK)                |          +--------------------------+ |   duration_ms            | |   histogram              |
+|   locked_until           |          |   codename (UK)          |          | * role_id (PK, FK)       | |   projected_at           | +--------------------------+
+|   created_at             |          |   audience               |          | * permission_id (PK, FK) | +--------------------------+ 
++--------------------------+          |   is_system              |          +--------------------------+                              +--------------------------+
+     | 1            | 1               |   created_at             |                                       +--------------------------+ | NATS_ROLLUPS             |
+     |              |                 +--------------------------+                                       | WORLD_PROJECTIONS        | +--------------------------+
+     | N            | N                                                                                  +--------------------------+ | * bucket_start (PK)      |
++--------------------------+          +--------------------------+                                       | * world_id (PK)          | | * service (PK)           |
+| REFRESH_TOKENS           |          | AUDIT_EVENTS             |                                       |   family                 | |   request_count          |
++--------------------------+          +--------------------------+                                       |   profile_id             | |   duration_sum_ms        |
+| * id (PK)                |          | * id (PK)                |                                       |   dna_version_id         | |   error_count            |
+|   account_id (FK)        |          |   actor_id (FK)          |                                       |   source_job_id          | |   histogram              |
+|   family_id              |          |   action                 |                                       |   revision               | +--------------------------+
+|   token_hash (UK)        |          |   target                 |                                       |   nickname               |
+|   used_at                |          |   result                 |                                       |   archetype              | +--------------------------+
+|   revoked_at             |          |   occurred_at            |                                       |   mood                   | | CACHE_ROLLUPS            |
+|   expires_at             |          +--------------------------+                                       |   world_style            | +--------------------------+
++--------------------------+                                                                             |   favorite_colors        | | * bucket_start (PK)      |
+                                                                                                         |   trait_creativity       | | * namespace (PK)         |
+                                                                                                         |   trait_energy           | |   hits                   |
+                                                                                                         |   variant_count          | |   misses                 |
+                                                                                                         |   is_published           | +--------------------------+
+                                                                                                         |   world_created_at       |
+                                                                                                         |   projected_at           | +--------------------------+
+                                                                                                         +--------------------------+ | ERROR_CODE_ROLLUPS       |
+                                                                                                                                      +--------------------------+
+                                                                                                         +--------------------------+ | * bucket_start (PK)      |
+                                                                                                         | INBOX_MESSAGES           | | * error_code (PK)        |
+                                                                                                         +--------------------------+ |   count                  |
+                                                                                                         | * message_id (PK)        | +--------------------------+
+                                                                                                         |   subject                |
+                                                                                                         |   job_id                 |
+                                                                                                         |   processed_at           |
+                                                                                                         +--------------------------+
 ```
-
-### 2. World Families Engine (`myunivokai_universe`, `myunivokai_nature`, `myunivokai_ocean`)
-
-Mỗi world family (`universe`, `nature`, `ocean`) sở hữu một database riêng có cấu trúc bảng chuẩn hóa 1:1:
-
-```text
-+--------------------------+
-| WORLDS                   |
-+--------------------------+
-| * id (PK)                |          +--------------------------+
-|   source_job_id (UK)     | 1      N | WORLD_VARIANTS           |
-|   profile_id             |----------|                          |
-|   dna_version_id         |          +--------------------------+
-|   nickname               |          | * id (PK)                |
-|   role                   |          |   world_id (FK)          |
-|   visual_intent          |          |   variant_no             |
-|   dna_snapshot           |          |   seed                   |
-|   archetype              |          |   config                 |
-|   scene_name             |          |   thumbnail_url          |
-|   quote                  |          |   is_selected            |
-|   revision               |          |   created_at             |
-|   selected_variant_id(FK)|<-+       +--------------------------+
-|   created_at             |  |                    |
-|   updated_at             |  | 0..1               | 1 (selected)
-+--------------------------+  +--------------------+
-             | 1
-             |
-             | 0..1 (shares)
-+--------------------------+
-| WORLD_SHARES             |
-+--------------------------+
-| * id (PK)                |
-|   world_id (FK)          |
-|   share_slug (UK)        |
-|   created_at             |
-+--------------------------+
-
-+--------------------------+          +--------------------------+
-| INBOX_MESSAGES           |          | OUTBOX_MESSAGES          |
-+--------------------------+          +--------------------------+
-| * message_id (PK)        |          | * id (PK)                |
-|   subject                |          |   message_id (UK)        |
-|   job_id                 |          |   subject                |
-|   processed_at           |          |   payload                |
-+--------------------------+          |   published_at           |
-                                      +--------------------------+
-```
-
-### 3. Staff Identity & RBAC (`myunivokai_auth`)
-
-```text
-+--------------------------+ 1      N +--------------------------+ N      1 +--------------------------+
-| ACCOUNTS                 |----------| ACCOUNT_ROLES            |----------| ROLES                    |
-+--------------------------+          +--------------------------+          +--------------------------+
-| * id (PK)                |          | * account_id (PK, FK)    |          | * id (PK)                |
-|   email (UK)             |          | * role_id (PK, FK)       |          |   name (UK)              |
-|   password_hash          |          +--------------------------+          |   audience               |
-|   kind                   |                                                |   is_system              |
-|   is_super_admin         |          +--------------------------+ 1      N |   created_at             |
-|   disabled               |          | PERMISSIONS              |----------+--------------------------+
-|   token_version          |          +--------------------------+          | ROLE_PERMISSIONS         |
-|   failed_attempts        |          | * id (PK)                |          +--------------------------+
-|   locked_until           |          |   codename (UK)          |          | * role_id (PK, FK)       |
-|   created_at             |          |   audience               |          | * permission_id (PK, FK) |
-+--------------------------+          |   is_system              |          +--------------------------+
-     | 1            | 1               |   created_at             |
-     |              |                 +--------------------------+
-     | N            | N
-+--------------------------+          +--------------------------+
-| REFRESH_TOKENS           |          | AUDIT_EVENTS             |
-+--------------------------+          +--------------------------+
-| * id (PK)                |          | * id (PK)                |
-|   account_id (FK)        |          |   actor_id (FK)          |
-|   family_id              |          |   action                 |
-|   token_hash (UK)        |          |   target                 |
-|   used_at                |          |   result                 |
-|   revoked_at             |          |   occurred_at            |
-|   expires_at             |          +--------------------------+
-+--------------------------+
-```
-
-### 4. Admin Read Model (`myunivokai_analytics`) & Telemetry (`myunivokai_telemetry` [Rust])
-
-#### `myunivokai_analytics` (Admin CQRS Read Model)
-
-```text
-+--------------------------+          +--------------------------+
-| JOB_PROJECTIONS          |          | WORLD_PROJECTIONS        |
-+--------------------------+          +--------------------------+
-| * job_id (PK)            |          | * world_id (PK)          |
-|   family                 |          |   family                 |
-|   status                 |          |   profile_id             |
-|   error_code             |          |   dna_version_id         |
-|   world_id               |          |   source_job_id          |
-|   created_at             |          |   revision               |
-|   completed_at           |          |   nickname               |
-|   duration_ms            |          |   archetype              |
-|   projected_at           |          |   mood                   |
-+--------------------------+          |   world_style            |
-                                      |   favorite_colors        |
-+--------------------------+          |   trait_creativity       |
-| INBOX_MESSAGES           |          |   trait_energy           |
-+--------------------------+          |   variant_count          |
-| * message_id (PK)        |          |   is_published           |
-|   subject                |          |   world_created_at       |
-|   job_id                 |          |   projected_at           |
-|   processed_at           |          +--------------------------+
-+--------------------------+
-```
-
-#### `myunivokai_telemetry` (Rust Platform Metrics Accumulator)
-
-Lưu trữ chuỗi thời gian phân tích hiệu năng Gateway và hệ thống (Time-bucketed rollups):
-
-```text
-+--------------------------+          +--------------------------+
-| HTTP_ROLLUPS             |          | NATS_ROLLUPS             |
-+--------------------------+          +--------------------------+
-| * bucket_start (PK)      |          | * bucket_start (PK)      |
-| * route_pattern (PK)     |          | * service (PK)           |
-| * method (PK)            |          |   request_count          |
-| * status_class (PK)      |          |   duration_sum_ms        |
-|   request_count          |          |   error_count            |
-|   duration_sum_ms        |          |   histogram              |
-|   duration_max_ms        |          +--------------------------+
-|   histogram              |
-+--------------------------+          +--------------------------+
-                                      | ERROR_CODE_ROLLUPS       |
-+--------------------------+          +--------------------------+
-| CACHE_ROLLUPS            |          | * bucket_start (PK)      |
-+--------------------------+          | * error_code (PK)        |
-| * bucket_start (PK)      |          |   count                  |
-| * namespace (PK)         |          +--------------------------+
-|   hits                   |
-|   misses                 |
-+--------------------------+
-```
-
 
 ---
-
 ## How a Request Travels
 
 ```mermaid
