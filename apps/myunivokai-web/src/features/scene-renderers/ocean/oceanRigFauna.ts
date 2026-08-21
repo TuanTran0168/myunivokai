@@ -828,6 +828,59 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     speedScale: 0.03,
     tightRing: true,
   },
+  // ---- the cephalopods: a genuinely new body, not a parameter variation ----
+  {
+    key: "giantSquid",
+    color: "#5A5F6A",
+    body: "decapod",
+    label: "giant squid",
+    // Rigid mantle (along 0-0.7), whippy trailing arm crown (0.7-1.0) and two
+    // long feeding tentacles overshooting even that (0.75-1.15) — see
+    // buildCephalopod in oceanRigBodies.ts. onset sits right where the mantle
+    // hands off to the arms, so the mantle itself barely bends.
+    swim: { onset: 0.68, amplitude: 0.12, waves: 0.5, beat: 0.35 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 300,
+    maxDepthMetres: 2000,
+    count: 1,
+    leaders: 1,
+    size: 11,
+    spread: 1,
+    pathRadius: 46,
+    heightBase: -8,
+    heightRange: 12,
+    speedScale: 0.2,
+    tightRing: true,
+  },
+  {
+    key: "vampireSquid",
+    color: "#2A1E3A",
+    body: "octopod",
+    label: "vampire squid",
+    // Blue photophores at the arm tips and the fin bases — real
+    // Vampyroteuthis anatomy, not the myctophid two-row pattern. One dot at
+    // each position is enough: every arm shares the same UV strip (see
+    // buildCephalopod/tentacleGeometry in oceanRigBodies.ts), so a single dot
+    // at the tip's v already repeats across all eight arms on its own.
+    photophores: [{ u: 0.5, v: 0.95, radius: 0.12 }],
+    extraPoints: [{ u: 0.5, v: 0.32, radius: 0.05 }],
+    glowColor: "#4C8CFF",
+    swim: { onset: 0.68, amplitude: 0.1, waves: 0.45, beat: 0.4 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 600,
+    maxDepthMetres: 3000,
+    count: 1,
+    leaders: 1,
+    size: 0.3,
+    spread: 1,
+    pathRadius: 20,
+    heightBase: -7,
+    heightRange: 9,
+    speedScale: 0.25,
+    tightRing: true,
+  },
 ];
 
 type MergedPart = { geometry: BufferGeometry; color: Color };

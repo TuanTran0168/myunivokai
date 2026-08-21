@@ -131,6 +131,40 @@ segmented spine each want their own construction), and the latter three are
 cheap follow-ons once the cephalopod tentacle geometry exists, better done
 once that pass has proven the pattern out than rushed alongside it.
 
+## The cephalopods: giant squid and vampire squid, a genuinely new construction
+
+Octopus and squid models exist on Poly Pizza, but only as CC0
+sushi-ingredient poses from Quaternius's *Modular Sushi Restaurant Kit* — a
+dead squid, not a swimming one — or as CC-BY "Poly by Google" archive pieces,
+which don't fit this family's CC0-only bar. Nothing living, free and
+correctly licensed exists for either species, so both are procedural, and
+both needed something the fish archetypes above never did: a body plan that
+isn't a single tapered tube.
+
+`Fin` (the flat-quad type every other archetype's dorsal/pectoral/tail comes
+from) can only build a membrane in one plane — it cannot place eight arms
+radiating around the Z axis. `tentacleGeometry()` in `oceanRigBodies.ts` is a
+new, small, general-purpose tube builder for exactly that: a ring-loop in the
+same style `bodyGeometry()` already runs, centred on a slowly-drooping local
+axis instead of the shared Z axis. `buildCephalopod()` combines one mantle
+(still an ordinary `bodyGeometry()` call) with a crown of these arms, and
+`decapod` (giant squid: eight arms plus two long feeding tentacles, full 360°
+spread) / `octopod` (vampire squid: eight arms only, spread over a narrower
+arc so their bases crowd together like a webbed cape) are the two thin
+archetypes built on it.
+
+Both are authored **mantle-forward**: the arms are the whippy anatomy, the
+mantle comparatively rigid, which is backwards from where a fish's head sits
+relative to its tail — so the mantle occupies the shader's usual rigid "nose"
+end and the arms trail past the usual "tail" end, which the undulation
+formula already allows since it never clamps how far `along` can run. This
+is also one of the two ways real squid actually swim (mantle-forward
+cruising), not a biological compromise made for the shader's convenience.
+Vampire squid's arm-tip and fin-base photophores don't fit the myctophid
+two-row pattern either, which is the other reason
+`oceanFishSkinTexture.ts`'s `photophores` field needed to widen to an
+explicit dot array rather than staying a boolean.
+
 ## Not used: PBR textures — [Poly Haven](https://polyhaven.com), CC0
 
 Six 1k tiling maps were fetched and then **removed without ever being loaded**,

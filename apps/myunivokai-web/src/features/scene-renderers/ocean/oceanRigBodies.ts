@@ -242,13 +242,241 @@ function wingGeometry(halfSpan: number, chord: number): BufferGeometry {
 }
 
 /**
- * The seven silhouettes fourteen species are drawn from.
+ * Concatenates several procedural bodies (mantle + arms) into one geometry,
+ * with index offsets adjusted — the same job oceanRigFauna.ts's mergeParts
+ * does for loaded GLB sub-meshes, but for the position/normal/along/uv
+ * attribute set bodyGeometry() and tentacleGeometry() produce rather than the
+ * position/normal/color set a GLTF mesh carries.
+ */
+function mergeGeometries(parts: BufferGeometry[]): BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const along: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (const part of parts) {
+    const base = positions.length / 3;
+    const position = part.getAttribute("position");
+    const normal = part.getAttribute("normal");
+    const alongAttribute = part.getAttribute("along");
+    const uv = part.getAttribute("uv");
+    for (let i = 0; i < position.count; i += 1) {
+      positions.push(position.getX(i), position.getY(i), position.getZ(i));
+      normals.push(normal.getX(i), normal.getY(i), normal.getZ(i));
+      along.push(alongAttribute.getX(i));
+      uvs.push(uv.getX(i), uv.getY(i));
+    }
+    const partIndex = part.getIndex();
+    if (partIndex) {
+      for (let i = 0; i < partIndex.count; i += 1) indices.push(base + partIndex.getX(i));
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+  geometry.setAttribute("along", new Float32BufferAttribute(along, 1));
+  geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+type TentacleOptions = {
+  /** Where around the mantle's rim this arm attaches. */
+  baseAngle: number;
+  baseRadius: number;
+  /** How far it trails behind the mantle, in the same units as the mantle's own length. */
+  length: number;
+  baseThickness: number;
+  tipThickness: number;
+  /** How far the ring centre sags outward (away from the Z axis) by the tip, quadratically. */
+  droop: number;
+  /** Where in the shared `along` range this arm's base and tip sit — see buildCephalopod. */
+  along0: number;
+  along1: number;
+  /** A thickness bump in the last ~15% of the length, for the two long feeding tentacles' terminal club. */
+  clubBoost?: number;
+  radialSegments?: number;
+  lengthSegments?: number;
+};
+
+/**
+ * One arm or tentacle: a tube trailing behind the mantle at z = mantleTailZ
+ * and beyond, its ring CENTRE drifting outward from a straight radial line as
+ * it extends (the droop) rather than tracking a true curving centreline —
+ * the same simplification wingGeometry()'s own whip tail already makes, and
+ * for the same reason: at this scene's viewing distance it reads as a
+ * trailing streamer either way, and a true parallel-transported tube is a
+ * much larger amount of code for a difference nobody will see.
+ */
+function tentacleGeometry(mantleTailZ: number, options: TentacleOptions): BufferGeometry {
+  const radialSegments = options.radialSegments ?? 5;
+  const lengthSegments = options.lengthSegments ?? 7;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const along: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const dirX = Math.cos(options.baseAngle);
+  const dirY = Math.sin(options.baseAngle);
+
+  for (let s = 0; s <= lengthSegments; s += 1) {
+    const tLocal = s / lengthSegments;
+    const z = mantleTailZ - tLocal * options.length;
+    const ringRadius = options.baseRadius + options.droop * tLocal * tLocal;
+    const centreX = dirX * ringRadius;
+    const centreY = dirY * ringRadius;
+    let thickness = options.baseThickness + (options.tipThickness - options.baseThickness) * tLocal;
+    if (options.clubBoost) {
+      const clubEnvelope = Math.max(0, (tLocal - 0.85) / 0.15);
+      thickness *= 1 + options.clubBoost * clubEnvelope * clubEnvelope;
+    }
+    const alongValue = options.along0 + tLocal * (options.along1 - options.along0);
+    for (let r = 0; r <= radialSegments; r += 1) {
+      const angle = (r / radialSegments) * Math.PI * 2;
+      const x = centreX + Math.cos(angle) * thickness;
+      const y = centreY + Math.sin(angle) * thickness;
+      positions.push(x, y, z);
+      normals.push(Math.cos(angle), Math.sin(angle), 0.1);
+      along.push(alongValue);
+      // v continues from where the mantle's own v leaves off (see
+      // buildCephalopod); every arm reuses the same strip since they are all
+      // textured alike regardless of which arm they are.
+      uvs.push(r / radialSegments, 0.35 + tLocal * 0.65);
+    }
+  }
+  for (let s = 0; s < lengthSegments; s += 1) {
+    for (let r = 0; r < radialSegments; r += 1) {
+      const a = s * (radialSegments + 1) + r;
+      const b = a + radialSegments + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+  geometry.setAttribute("along", new Float32BufferAttribute(along, 1));
+  geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+type CephalopodOptions = {
+  armCount: number;
+  /** Radians the arms spread across, centred on the +Y axis. 2π for a full crown (giant squid). */
+  armArcRadians: number;
+  /** Vampire squid has none; giant squid's two long feeding tentacles are the family's signature. */
+  longTentacles: boolean;
+};
+
+/**
+ * A mantle (bodyGeometry, same as every fish archetype) plus a crown of
+ * trailing arms (tentacleGeometry, above) — decapod and octopod are both
+ * thin wrappers around this, differing only in arm count/spread and whether
+ * two long tentacles join the crown.
+ *
+ * Authored mantle-forward: the mantle is comparatively RIGID and the arms are
+ * the whippy anatomy, the opposite of where a fish's head sits relative to
+ * its tail. The mantle is therefore built at the shader's rigid end (the
+ * usual t = 0 nose) and the arms extend PAST t = 1 (the usual tail), which
+ * the undulation envelope's own formula already allows since it never clamps
+ * its upper end — the longest, whippiest tentacle tips simply get MORE
+ * motion than the rest of the body, which is the desired trailing-streamer
+ * look. This also happens to be one of the two ways real squid actually
+ * swim (mantle-forward cruising), so it is not a biological compromise.
+ *
+ * The combined mantle+arms geometry is explicitly RENORMALISED to unit
+ * length at the end, the same way normaliseModel() renormalises an adopted
+ * GLB — every other archetype in this file is already unit-length by
+ * construction (bodyGeometry alone never exceeds z = ±0.5), which is what
+ * lets `FaunaSpecies.size` mean "real body length in metres" uniformly. A
+ * cephalopod's arms trail well past that span, so without this step its
+ * `size` would stop meaning the same thing every other species' does.
+ */
+function buildCephalopod(options: CephalopodOptions): BufferGeometry {
+  const mantle = bodyGeometry({
+    lengthSegments: 14,
+    // A base term keeps the neck (t = 0, where the arm crown attaches) from
+    // tapering to zero the way a fish nose does; fusiform gives the true
+    // widest point aft of the neck, tapering to a near-point at the mantle's
+    // posterior tip.
+    profile: (t) => 0.22 * (1 - t * 0.55) + fusiform(0.9, 2.4, 0.4)(t),
+    widthRatio: 0.85,
+    heightRatio: 0.7,
+    fins: [{ plane: "horizontal", root: 0.05, tip: 0.3, z0: -0.42, z1: -0.52, along: 0.92 }],
+  });
+  // Compressed into [0, MANTLE_ALONG_SPAN] so the arm crown, starting at
+  // ARM_ALONG_SPAN below, continues the SAME 0-to-tail progression rather
+  // than the mantle separately claiming the full 0-1 range on its own.
+  const MANTLE_ALONG_SPAN = 0.7;
+  const mantleAlong = mantle.getAttribute("along");
+  for (let i = 0; i < mantleAlong.count; i += 1) mantleAlong.setX(i, mantleAlong.getX(i) * MANTLE_ALONG_SPAN);
+  // v likewise compressed into the first slice of the shared texture strip,
+  // so the arms (below) can start where the mantle's own v leaves off.
+  const mantleUv = mantle.getAttribute("uv");
+  for (let i = 0; i < mantleUv.count; i += 1) mantleUv.setY(i, mantleUv.getY(i) * 0.35);
+
+  const mantleTailZ = -0.5;
+  const mantleRimRadius = 0.09;
+  const parts: BufferGeometry[] = [mantle];
+
+  for (let i = 0; i < options.armCount; i += 1) {
+    const spread = options.armCount > 1 ? i / (options.armCount - 1) - 0.5 : 0;
+    const angle = Math.PI / 2 + spread * options.armArcRadians;
+    parts.push(
+      tentacleGeometry(mantleTailZ, {
+        baseAngle: angle,
+        baseRadius: mantleRimRadius,
+        length: 0.9,
+        baseThickness: 0.035,
+        tipThickness: 0.008,
+        droop: 0.25,
+        along0: MANTLE_ALONG_SPAN,
+        along1: 1.0,
+      }),
+    );
+  }
+
+  if (options.longTentacles) {
+    for (const angle of [Math.PI / 2 - 0.35, Math.PI / 2 + Math.PI + 0.35]) {
+      parts.push(
+        tentacleGeometry(mantleTailZ, {
+          baseAngle: angle,
+          baseRadius: mantleRimRadius,
+          length: 1.4,
+          baseThickness: 0.025,
+          tipThickness: 0.006,
+          droop: 0.18,
+          along0: 0.75,
+          along1: 1.15,
+          clubBoost: 0.6,
+        }),
+      );
+    }
+  }
+
+  const merged = mergeGeometries(parts);
+  merged.computeBoundingBox();
+  const size = new Vector3();
+  merged.boundingBox?.getSize(size);
+  const centre = new Vector3();
+  merged.boundingBox?.getCenter(centre);
+  merged.translate(-centre.x, -centre.y, -centre.z);
+  const span = Math.max(1e-4, size.z);
+  merged.scale(1 / span, 1 / span, 1 / span);
+  return merged;
+}
+
+/**
+ * The silhouettes this rig's whole species roster is drawn from.
  *
  * Sharing is deliberate rather than a saving: a lionfish, a butterflyfish, a
  * turbot and a blobfish are all "a fish" at silhouette scale, and what
  * distinguishes them in frame is size, colour, depth band and how they MOVE —
- * which is the `SwimStyle`, not the mesh. Nine of the fourteen also have a real
- * GLB that replaces the shared shape as soon as it loads.
+ * which is the `SwimStyle`, not the mesh. A handful also have a real GLB that
+ * replaces the shared shape as soon as it loads. `decapod`/`octopod` are the
+ * one pair built from a genuinely different construction — see
+ * buildCephalopod above.
  */
 export type BodyArchetype =
   | "reefFish"
@@ -264,7 +492,9 @@ export type BodyArchetype =
   | "gulperEel"
   | "hatchetfish"
   | "ribbon"
-  | "isopod";
+  | "isopod"
+  | "decapod"
+  | "octopod";
 
 const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // Jacks and herring: the schooling default. The posterior 30-50% undulates.
@@ -467,6 +697,14 @@ const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
       widthRatio: 0.85,
       heightRatio: 0.45,
     }),
+  // Giant squid: the full ten-limbed crown — eight arms spread the whole way
+  // around plus the two long feeding tentacles that are the family's
+  // signature.
+  decapod: () => buildCephalopod({ armCount: 8, armArcRadians: Math.PI * 2, longTentacles: true }),
+  // Vampire squid: eight arms only (no long tentacles — it has none), spread
+  // over a narrower arc so their bases crowd together, approximating the
+  // real animal's webbed "cape".
+  octopod: () => buildCephalopod({ armCount: 8, armArcRadians: (300 * Math.PI) / 180, longTentacles: false }),
 };
 
 const cache = new Map<BodyArchetype, BufferGeometry>();
