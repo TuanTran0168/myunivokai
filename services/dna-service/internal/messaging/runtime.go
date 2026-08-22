@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -83,6 +84,8 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 			contracts.UniverseFailedEventSubject,
 			contracts.NatureCompletedEventSubject,
 			contracts.NatureFailedEventSubject,
+			contracts.OceanCompletedEventSubject,
+			contracts.OceanFailedEventSubject,
 		),
 		nats.ManualAck(),
 		nats.AckWait(runtime.config.ConsumerAckWait),
@@ -222,4 +225,43 @@ func (runtime *Runtime) publishOutboxBatch(ctx context.Context) error {
 
 func DNAGenerateMessageID(jobID string) string {
 	return jobID + dnaGenerateMessageStage
+}
+
+// PublishServiceStarted announces this boot so the read model can show it.
+//
+// A process cannot report its own death - an OOM kill or SIGKILL runs no
+// handler - so it reports the start, and a start nobody scheduled is the
+// evidence that a stop happened. That inference holds on any host, which is
+// why this is a durable event and not part of the gateway's wake mechanism:
+// waking belongs to one hosting tier, restarting belongs to running software.
+//
+// Published to JetStream rather than Core NATS because analytics-service is
+// usually asleep. A Core publish with no subscriber is simply lost, which
+// would leave the record empty for exactly the services that restart most.
+// The Msg-Id is the instance id, so a JetStream redelivery cannot become a
+// second boot.
+//
+// The caller must not treat a failure here as fatal. Announcing a start is
+// not why this process exists, and refusing to run because a telemetry
+// publish failed would turn an observability gap into an outage.
+func (runtime *Runtime) PublishServiceStarted(ctx context.Context, bootDuration time.Duration) error {
+	data := contracts.NewServiceStartedData(contracts.ServiceNameDNA, bootDuration)
+	subject, err := contracts.ServiceStartedEventSubject(data.Service)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(contracts.NewEnvelope(data.InstanceID, data))
+	if err != nil {
+		return err
+	}
+	message := nats.NewMsg(subject)
+	message.Header.Set(nats.MsgIdHdr, data.InstanceID)
+	message.Data = payload
+	publishContext, cancel := context.WithTimeout(ctx, runtime.config.NATSPublishTimeout)
+	defer cancel()
+	if _, err := runtime.jetStream.PublishMsg(message, nats.Context(publishContext)); err != nil {
+		return err
+	}
+	log.Info().Str("instance_id", data.InstanceID).Str("version", data.Version).Int64("boot_ms", data.BootDurationMS).Msg("service start announced")
+	return nil
 }
