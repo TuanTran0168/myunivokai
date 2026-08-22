@@ -215,6 +215,12 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     // An unhurried reef grazer — same baseline every other unset species used
     // to share, now distinguished from the livelier small schoolers below.
     speedScale: 0.8,
+    // Shares this depth band with the reef shark, barracuda and orca — a
+    // grazing school with zero reaction to a predator overhead was the most
+    // visible case of "every fish just orbits" the roster still had.
+    fleesPredators: true,
+    fleeFanOut: 0.4,
+    burstSpeedScale: 1.3,
   },
   {
     key: "lionfish",
@@ -338,6 +344,13 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 11,
     speedScale: 0.55,
     tightRing: true,
+    // The other personality species besides the reef shark — a manta gliding
+    // close past the lens before easing back out is one of the signature
+    // shots of any real manta encounter. Its own cycle length (41s) so it
+    // never syncs with the shark's (34s) or the dolphin's below (29s).
+    approachesCamera: true,
+    approachDistanceMetres: 8,
+    approachCycleSeconds: 41,
   },
   {
     key: "dolphin",
@@ -361,6 +374,12 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     tightRing: true,
     surfacing: true,
     speedScale: 1.1,
+    // Real dolphins are famously curious about anything large moving through
+    // their water — the one behaviour on this list with a documented reason
+    // to target the viewer specifically, not just the origin.
+    approachesCamera: true,
+    approachDistanceMetres: 5,
+    approachCycleSeconds: 29,
   },
   {
     key: "whale",
@@ -491,8 +510,10 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -7,
     heightRange: 6,
     speedScale: 1.25,
+    // A second bait ball, tighter than silversides' — anthias hover in dense
+    // clouds right over reef structure, not a loose ring.
+    vortex: { radius: 3.5, spinHertz: 0.16, taper: 1.3 },
     fleesPredators: true,
-    fleeFanOut: 0.5,
     burstSpeedScale: 1.5,
   },
   {
@@ -517,6 +538,10 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -8,
     heightRange: 22,
     speedScale: 1.2,
+    // Myctophids form the densest scattering layer in the ocean — a fourth
+    // bait ball, the largest radius of the four since this school also rides
+    // the widest pathRadius.
+    vortex: { radius: 7, spinHertz: 0.08, taper: 1.5 },
     fleesPredators: true,
     burstSpeedScale: 1.4,
   },
@@ -623,6 +648,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -6,
     heightRange: 3,
     speedScale: 1.1,
+    fleesPredators: true,
+    fleeFanOut: 0.4,
+    burstSpeedScale: 1.3,
   },
   {
     key: "pufferfish",
@@ -646,6 +674,8 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 4,
     speedScale: 0.15,
     tightRing: true,
+    fleesPredators: true,
+    burstSpeedScale: 1.3,
   },
   {
     key: "viperfish",
@@ -777,6 +807,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -7,
     heightRange: 10,
     speedScale: 1.1,
+    // A third bait ball — real hatchetfish aggregate densely in the twilight
+    // scattering layer rather than spreading around an open ring.
+    vortex: { radius: 5.5, spinHertz: 0.11, taper: 1.4 },
     fleesPredators: true,
   },
   {
@@ -852,6 +885,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightRange: 12,
     speedScale: 0.2,
     tightRing: true,
+    // A real apex predator of the deep, sharing the twilight reach with
+    // viperfish and black dragonfish (both already fleesPredators).
+    predator: true,
   },
   {
     key: "vampireSquid",
@@ -907,6 +943,9 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     heightBase: -6,
     heightRange: 4,
     speedScale: 0.85,
+    fleesPredators: true,
+    fleeFanOut: 0.4,
+    burstSpeedScale: 1.3,
   },
   {
     key: "giantPacificOctopus",
