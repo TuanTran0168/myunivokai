@@ -24,7 +24,7 @@
 # module depends on the sibling `contracts/go` package (and telemetry-service
 # on `contracts/rust`) at a fixed relative path:
 #
-#   docker build -f deploy/single-container/Dockerfile -t myunivokai-single-container .
+#   docker build -f deploy/single-container/Dockerfile -t myunivokai-services-koyeb .
 
 # ---------------------------------------------------------------------------
 # Go services — identical builder recipe, repeated per service exactly as

@@ -102,7 +102,7 @@ tự build/push image thủ công trừ khi muốn kiểm tra trước.
 ```bash
 # Từ thư mục gốc repo — bắt buộc, vì mọi go.mod phụ thuộc contracts/go
 # (và telemetry-service phụ thuộc contracts/rust) ở đường dẫn tương đối cố định.
-docker build -f deploy/single-container/Dockerfile -t myunivokai-single-container .
+docker build -f deploy/single-container/Dockerfile -t myunivokai-services-koyeb .
 
 # Chạy thử với biến môi trường thật (copy từ deploy/single-container/.env.example
 # thành deploy/single-container/.env rồi điền giá trị thật, KHÔNG commit file này).
@@ -114,7 +114,7 @@ docker build -f deploy/single-container/Dockerfile -t myunivokai-single-containe
 docker run --rm -p 8080:8080 \
   --env-file deploy/single-container/.env \
   -e NATS_CREDS_CONTENT="$(cat deploy/single-container/.env.nats-creds)" \
-  myunivokai-single-container
+  myunivokai-services-koyeb
 curl http://localhost:8080/api/v1/healthz
 ```
 

@@ -145,7 +145,7 @@ everything is already running in the same container the whole time it's up).
 # From the repository root — every service's go.mod depends on contracts/go
 # (and telemetry-service on contracts/rust) at this fixed relative path,
 # exactly like render.yaml's own dockerContext: . for every service.
-docker build -f deploy/single-container/Dockerfile -t myunivokai-single-container .
+docker build -f deploy/single-container/Dockerfile -t myunivokai-services-koyeb .
 
 # Local smoke test before pushing to a registry — fill in a real .env first,
 # copied from .env.example. NATS_CREDS_CONTENT is passed separately with -e
@@ -157,7 +157,7 @@ docker build -f deploy/single-container/Dockerfile -t myunivokai-single-containe
 docker run --rm -p 8080:8080 \
   --env-file deploy/single-container/.env \
   -e NATS_CREDS_CONTENT="$(cat deploy/single-container/.env.nats-creds)" \
-  myunivokai-single-container
+  myunivokai-services-koyeb
 ```
 
 On Koyeb: create a Service from this Dockerfile (or from a registry image
