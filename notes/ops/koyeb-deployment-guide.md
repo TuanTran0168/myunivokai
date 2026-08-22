@@ -102,11 +102,19 @@ tự build/push image thủ công trừ khi muốn kiểm tra trước.
 ```bash
 # Từ thư mục gốc repo — bắt buộc, vì mọi go.mod phụ thuộc contracts/go
 # (và telemetry-service phụ thuộc contracts/rust) ở đường dẫn tương đối cố định.
-docker build -f deploy/single-container/Dockerfile -t myunivokai-backend-monolith .
+docker build -f deploy/single-container/Dockerfile -t myunivokai-single-container .
 
 # Chạy thử với biến môi trường thật (copy từ deploy/single-container/.env.example
-# thành deploy/single-container/.env rồi điền giá trị thật, KHÔNG commit file này):
-docker run --rm -p 8080:8080 --env-file deploy/single-container/.env myunivokai-backend-monolith
+# thành deploy/single-container/.env rồi điền giá trị thật, KHÔNG commit file này).
+# NATS_CREDS_CONTENT truyền riêng bằng -e chứ không qua --env-file: định dạng
+# --env-file của Docker là line-based, không giữ được value nhiều dòng, còn
+# biến shell thì được — đặt nguyên nội dung file .creds vào
+# deploy/single-container/.env.nats-creds (cũng bị .gitignore chặn, khớp
+# pattern .env.*) rồi đọc nó khi chạy:
+docker run --rm -p 8080:8080 \
+  --env-file deploy/single-container/.env \
+  -e NATS_CREDS_CONTENT="$(cat deploy/single-container/.env.nats-creds)" \
+  myunivokai-single-container
 curl http://localhost:8080/api/v1/healthz
 ```
 
@@ -150,7 +158,7 @@ lấy giá trị từ đâu (đối chiếu với bước 1):
 | `ADMIN_ROUTES_ENABLED` / `ADMIN_ALLOWED_ORIGIN` / `ADMIN_ACCESS_PUBLIC_KEYS` | Chỉ điền nếu `myunivokai-admin` đã có chỗ chạy riêng — xem mục 0 |
 | `*_DATABASE_URL` / `*_DATABASE_DIRECT_URL` (×7) | Neon (bước 1.1), mỗi service một cặp |
 | `AI_PROVIDER`, `GEMINI_API_KEY`, `OPENAI_API_KEY` | Theo `production-deployment-guide.md` §4.2 Service 2 |
-| `PUBLIC_WEB_URL` | Domain thật của `myunivokai-web` |
+| `UNIVERSE_PUBLIC_WEB_URL` / `NATURE_PUBLIC_WEB_URL` / `OCEAN_PUBLIC_WEB_URL` | Domain thật của `myunivokai-web` + đúng path family (`/universe`, `/nature`, `/ocean`) — code nối thẳng `PUBLIC_WEB_URL + "/share/" + slug`, không tự thêm path, nên thiếu path này link share sẽ sai |
 | `AUTH_ACCESS_PRIVATE_KEY` | Khoá vừa sinh (bước 1.4) |
 | `TELEMETRY_OTLP_ENDPOINT`, `TELEMETRY_DASHBOARD_URL` | Để trống trừ khi dùng `TELEMETRY_SINK=otlp` (mặc định `postgres`) |
 
