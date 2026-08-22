@@ -219,7 +219,7 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
       // Mottling only, never a net brightness shift: the swim shader's own
       // vBelly countershading already carries the dorsal/ventral gradient, and
       // stacking a second one here would double it.
-      let mottle = 0.86 + scaleMottle(u, v) * 0.28;
+      let mottle = 0.8 + scaleMottle(u, v) * 0.4;
       if (options.bands) {
         // Thin dark seams at regular intervals along v — cos^8 stays near 1
         // (no darkening) except right at each seam, where it spikes to 0.
@@ -239,7 +239,7 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
   drawEye(albedoContext, 0.5);
   const map = new CanvasTexture(albedoCanvas);
   // NoColorSpace, not SRGBColorSpace: these bytes are a linear multiplier
-  // (0.86-1.14), authored as one channel replicated three ways, not sRGB
+  // (0.8-1.2), authored as one channel replicated three ways, not sRGB
   // colour data. Tagging it sRGB would run it through gamma decode before the
   // multiply and skew every value toward the low end of the range — the same
   // shape of mistake round 3 of this family's work made with additive

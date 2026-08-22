@@ -774,6 +774,20 @@ export function createOceanRig(options: OceanRigOptions): OceanRig {
       // the water it is sitting in.
       school.material.emissive.copy(school.material.color);
       school.material.emissiveIntensity = 0.34 * (0.35 + brightness) + biolum * 0.8;
+      if (!school.material.emissiveMap) {
+        // Without this, the flat emissive wash above is a uniform colour with
+        // no spatial variation at all, added straight on top of whatever
+        // texture material.map carries. For a species with a real GLB (a much
+        // stronger per-vertex signal) or actual photophore dots (their own
+        // emissiveMap, already set above and left alone by this guard) that
+        // barely matters — but a bare procedural body's ONLY detail is the
+        // ±20% grey mottle bake, and at this emissiveIntensity the uniform
+        // wash swamps it, leaving what reads as a flat paint swatch (this is
+        // why the giant Pacific octopus rendered with zero visible texture).
+        // Mapping the emissive by the SAME grey texture keeps that mottle's
+        // contrast alive in the emissive channel instead of erasing it.
+        school.material.emissiveMap = school.material.map;
+      }
     } else if (species.glowColor === null) {
       // An explicit opt-out (fangtooth): ultra-black deep-sea skin traps
       // light rather than emitting any, and the default teal wash would
