@@ -869,10 +869,16 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     file: "fauna-giant-squid-scan.glb",
     label: "giant squid",
     // Rigid mantle (along 0-0.7), whippy trailing arm crown (0.7-1.0) and two
-    // long feeding tentacles overshooting even that (0.75-1.15) — see
-    // buildCephalopod in oceanRigBodies.ts. onset sits right where the mantle
-    // hands off to the arms, so the mantle itself barely bends.
-    swim: { onset: 0.68, amplitude: 0.12, waves: 0.5, beat: 0.35 },
+    // long feeding tentacles overshooting even that (0.75-1.15) on the
+    // PROCEDURAL decapod archetype (buildCephalopod in oceanRigBodies.ts) —
+    // onset sits right where that mantle hands off to the arms. amplitude is
+    // far above the procedural archetype's 0.12 because the real scan's arms
+    // are a denser, thicker mass at the same along-value band than that
+    // archetype's thin, well-separated tentacle strands (which read a
+    // whip-crack off a small angular swing): measured empirically via an a/b
+    // screenshot diff, 0.12 produced zero visible tentacle motion on the
+    // scan, 0.55 is the smallest value that reads as a clear, natural sway.
+    swim: { onset: 0.68, amplitude: 0.55, waves: 0.5, beat: 0.35 },
     bodyAxis: "long",
     // The real scan's mantle and arm crown measure bulkier-by-radius at the
     // arm end (splayed tentacles read wider than the tapered mantle to the
@@ -962,7 +968,11 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     // photophores (a reef predator with no reason to bioluminesce), and a
     // near-field colour the way lionfish/blobfish already are at this depth.
     nearField: true,
-    swim: { onset: 0.66, amplitude: 0.09, waves: 0.45, beat: 0.5 },
+    // amplitude raised well above the 0.09 the procedural octopod archetype
+    // used — same reason as the giant squid above: the real scan's arms are
+    // a denser mass at the same along-value band than the archetype's thin
+    // separated legs, so the old value produced no visible arm motion at all.
+    swim: { onset: 0.66, amplitude: 0.4, waves: 0.45, beat: 0.5 },
     bodyAxis: "long",
     head: 1,
     minDepthMetres: 0,
