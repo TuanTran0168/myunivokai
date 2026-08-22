@@ -1,8 +1,9 @@
 /**
- * Baked skin textures for the fauna species that have no CC0 GLB: silversides,
- * anthias and the lanternfish (see oceanRigFauna.ts's OCEAN_RIG_SPECIES —
- * every other species adopts a real model and this texture is never applied
- * to it). A flat MeshStandardMaterial colour reads as a toy; this is the same
+ * Baked skin textures for every fauna species that has no CC0 GLB to adopt
+ * (see oceanRigFauna.ts's OCEAN_RIG_SPECIES for the current list — every
+ * species WITH a `file` gets its texture from that model instead and this
+ * bake is never applied to it). A flat MeshStandardMaterial colour reads as
+ * a toy; this is the same
  * "bake a CanvasTexture from seeded noise" technique createSandTextures
  * already uses for the seabed, one step smaller in scope.
  *
@@ -125,6 +126,56 @@ function myctophidDots(seed: string): PhotophoreDot[] {
   return dots;
 }
 
+/**
+ * A minimal eye marking, baked into the albedo map at u = 0 and u = 0.5 —
+ * the two lateral sides of the revolve (u = 0.25/0.75 are dorsal/ventral, see
+ * the file header) — a little behind the very nose tip (v ~ 0.09).
+ *
+ * Every one of the 21 species with no GLB to adopt stays a bare procedural
+ * silhouette forever, and none of oceanRigBodies.ts's archetypes carries an
+ * eye, mouth or gill of its own — bodyGeometry() has no vocabulary for a
+ * facial feature, only a body of revolution. A baked marking is the cheap
+ * substitute: it needs no new geometry and applies uniformly to every
+ * archetype this module covers, including the two built from a different
+ * construction (buildCephalopod's mantle and buildSeahorse's head both
+ * compress their own "head" region to the front of their local v range the
+ * same way an ordinary fish does, so the same fixed v still lands on it).
+ *
+ * This is a MULTIPLIER map (see the file header), so it can only darken
+ * toward the surface's own colour, never brighten past it — an iris this
+ * dark plus a smaller, less-dark glint is what that constraint can still
+ * produce, and is enough to read as an eye rather than a hole in the skin.
+ */
+function drawEye(context: CanvasRenderingContext2D, u: number): void {
+  const centerX = u * MAP_WIDTH;
+  const centerY = 0.09 * MAP_HEIGHT;
+  const irisRadius = MAP_HEIGHT * 0.055;
+  const glintRadius = irisRadius * 0.5;
+  const paintAt = (x: number) => {
+    let gradient = context.createRadialGradient(x, centerY, 0, x, centerY, irisRadius);
+    gradient.addColorStop(0, "#000000");
+    gradient.addColorStop(0.68, "#000000");
+    gradient.addColorStop(1, "#00000000");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(x, centerY, irisRadius, 0, Math.PI * 2);
+    context.fill();
+    const glintX = x - irisRadius * 0.3;
+    const glintY = centerY - irisRadius * 0.3;
+    gradient = context.createRadialGradient(glintX, glintY, 0, glintX, glintY, glintRadius);
+    gradient.addColorStop(0, "#FFFFFF");
+    gradient.addColorStop(1, "#00000000");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(glintX, glintY, glintRadius, 0, Math.PI * 2);
+    context.fill();
+  };
+  paintAt(centerX);
+  // u wraps: a dot near u = 0/1 would otherwise clip at the canvas edge.
+  if (centerX < irisRadius) paintAt(centerX + MAP_WIDTH);
+  else if (centerX > MAP_WIDTH - irisRadius) paintAt(centerX - MAP_WIDTH);
+}
+
 function drawDot(context: CanvasRenderingContext2D, dot: PhotophoreDot): void {
   const centerX = dot.u * MAP_WIDTH;
   const centerY = dot.v * MAP_HEIGHT;
@@ -184,6 +235,8 @@ export function createFishSkinBake(options: FishSkinOptions): FishSkinBake {
     }
   }
   albedoContext.putImageData(albedoImage, 0, 0);
+  drawEye(albedoContext, 0);
+  drawEye(albedoContext, 0.5);
   const map = new CanvasTexture(albedoCanvas);
   // NoColorSpace, not SRGBColorSpace: these bytes are a linear multiplier
   // (0.86-1.14), authored as one channel replicated three ways, not sRGB

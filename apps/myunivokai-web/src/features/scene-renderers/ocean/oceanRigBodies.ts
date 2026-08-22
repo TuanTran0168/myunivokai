@@ -568,8 +568,14 @@ export type BodyArchetype =
 
 const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // Jacks and herring: the schooling default. The posterior 30-50% undulates.
+  // radialSegments raised from the bodyGeometry default of 10: this is the
+  // archetype every forever-procedural near-field reef schooler (silversides,
+  // anthias, clownfish, pufferfish, angelfish) is seen through at close range,
+  // where a 10-sided cross-section reads as a visibly faceted decagon rather
+  // than a smooth-bodied fish.
   reefFish: () =>
     bodyGeometry({
+      radialSegments: 16,
       profile: fusiform(0.62, 1.25, 0.3),
       widthRatio: 0.34,
       heightRatio: 1.25,
@@ -581,9 +587,14 @@ const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // Thunniform: rigid forebody, all the work at the peduncle. Pointed snout,
   // tall first dorsal, and a heterocercal tail whose upper lobe is longer —
   // that asymmetry is the shark tell.
+  // radialSegments raised from the bodyGeometry default of 10: the one
+  // species with FaunaSpecies.approachesCamera (the shark) scripts a close
+  // pass in front of the lens, and a coarse cross-section that is invisible
+  // at cruising distance turns visibly polygonal exactly during that pass.
   shark: () =>
     bodyGeometry({
       lengthSegments: 19,
+      radialSegments: 16,
       profile: fusiform(0.5, 1.55, 0.17),
       widthRatio: 0.66,
       heightRatio: 1,
