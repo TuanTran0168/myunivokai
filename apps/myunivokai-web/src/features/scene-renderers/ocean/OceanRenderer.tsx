@@ -34,6 +34,7 @@ import {
 
 const MOBILE_VIEWPORT_WIDTH_PIXELS = 820;
 const BOUNDARY_SIGHT_MULTIPLIER = 1.5;
+const REBUILD_SETTLE_GRACE_MILLISECONDS = 800;
 
 /**
  * Which Jerlov water type a stored `visibilityMetres` implies.
@@ -115,6 +116,17 @@ export function OceanRenderer({
   const worldSeed = seed || String(scene.seed ?? "ocean");
 
   const rigRef = useRef<OceanRig | null>(null);
+  // null until the rig-rebuild effect below has run once, then the
+  // performance.now() timestamp of its most recent run. Guards the
+  // cross-fade so it only engages for a REBUILD well after mount — the live
+  // create-world preview swapping depth/lighting/species while already on
+  // screen, or a viewport resize crossing the mobile quality threshold —
+  // never for the ordinary settle-and-fire-again this effect's own
+  // dependencies (camera/renderer/scene from useThree, none of which
+  // actually change) do once in the first few hundred ms of every mount.
+  // REBUILD_SETTLE_GRACE_MILLISECONDS is comfortably above that gap and
+  // comfortably below any realistic user-triggered rebuild.
+  const lastRigBuildAtRef = useRef<number | null>(null);
 
   // The SAME number UniverseCanvas frames the shot with, so the seabed and the
   // camera cannot disagree about where the viewer is standing.
@@ -185,6 +197,25 @@ export function OceanRenderer({
   useEffect(() => {
     const parent = groupRef.current;
     if (!parent) return undefined;
+
+    // Every dependency below can change while this component stays mounted
+    // — most commonly the create-world page's debounced live preview, where
+    // one form edit swaps depth/lighting/species wholesale. The rebuild
+    // itself is correct and fast; what read as broken was the jump cut, one
+    // frame the old sea and the next an entirely different one. Fading the
+    // shared canvas out before tearing the old rig down and back in once the
+    // new one exists turns that cut into a transition without any of the
+    // rig's own materials or shaders having to know it happens.
+    const canvasStyle = renderer.domElement.style;
+    const now = performance.now();
+    const previousBuildAt = lastRigBuildAtRef.current;
+    const isRebuild = previousBuildAt !== null && now - previousBuildAt > REBUILD_SETTLE_GRACE_MILLISECONDS;
+    lastRigBuildAtRef.current = now;
+    if (isRebuild) {
+      canvasStyle.transition = "opacity 220ms ease";
+      canvasStyle.opacity = "0";
+    }
+
     const rig = createOceanRig({
       renderer,
       scene: threeScene,
@@ -223,7 +254,27 @@ export function OceanRenderer({
       perspective.updateProjectionMatrix();
     }
 
+    // Two rAFs, not one: the first fires before the browser has necessarily
+    // presented a frame with the new rig in it, the second is guaranteed to
+    // land after one has. Revealing on the first would risk fading back in
+    // on the very frame being hidden.
+    let revealFrame1 = 0;
+    let revealFrame2 = 0;
+    if (isRebuild) {
+      revealFrame1 = requestAnimationFrame(() => {
+        revealFrame2 = requestAnimationFrame(() => {
+          canvasStyle.opacity = "1";
+        });
+      });
+    }
+
     return () => {
+      cancelAnimationFrame(revealFrame1);
+      cancelAnimationFrame(revealFrame2);
+      // Unconditional, not just the isRebuild branch: this also covers a true
+      // unmount mid-fade (navigating away while the canvas sits at opacity 0),
+      // so the next family to use this SHARED canvas never inherits it hidden.
+      canvasStyle.opacity = "1";
       parent.remove(rig.group);
       rig.dispose();
       rigRef.current = null;

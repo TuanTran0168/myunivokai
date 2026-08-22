@@ -1567,6 +1567,18 @@ export function createSchool(
   // a first frame with elapsed already nonzero can't hand a leader a single
   // multi-second leap.
   let previousElapsed: number | null = null;
+  // The GLB swap used to be `mesh.geometry = model.geometry` in one
+  // synchronous assignment — every instance of a species changed shape in
+  // the same frame the async fetch resolved, a visible snap. adopt() now
+  // only stashes the model; update() (which already has `elapsed`) fades the
+  // whole InstancedMesh to invisible, swaps the geometry while nothing is
+  // shown, then fades back in — a fade-through rather than a real
+  // cross-dissolve, but it costs nothing else in the rig: no other material
+  // anywhere has to know this happens.
+  let pendingAdoptModel: NormalisedModel | null = null;
+  let adoptFadeStartElapsed: number | null = null;
+  let adoptFadeSwapped = false;
+  const ADOPT_FADE_HALF_SECONDS = 0.22;
 
   return {
     species,
@@ -1580,16 +1592,7 @@ export function createSchool(
     },
     predatorAnchors: species.predator ? leaders.map((leader) => leader.position) : undefined,
     adopt: (model) => {
-      model.geometry.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
-      bellyUniform.value = model.bellyScale;
-      if (species.swim.span) spanUniform.value = species.swim.span;
-      // The palette is in the geometry now, so a tint would multiply it twice.
-      material.vertexColors = true;
-      material.color.setRGB(1, 1, 1);
-      material.needsUpdate = true;
-      const previous = mesh.geometry;
-      mesh.geometry = model.geometry;
-      previous.dispose();
+      pendingAdoptModel = model;
     },
     update: (elapsed, bounds, threats, cameraPosition) => {
       // An animal lives BETWEEN the boundaries. The two numbers that decide what
@@ -1601,6 +1604,43 @@ export function createSchool(
       const floorY = bounds.floorY === null ? -Infinity : bounds.floorY + clearance;
       const dt = previousElapsed === null ? 1 / 60 : Math.min(0.1, Math.max(0, elapsed - previousElapsed));
       previousElapsed = elapsed;
+
+      if (pendingAdoptModel && adoptFadeStartElapsed === null) {
+        adoptFadeStartElapsed = elapsed;
+        material.transparent = true;
+      }
+      if (adoptFadeStartElapsed !== null) {
+        const fadeElapsed = elapsed - adoptFadeStartElapsed;
+        if (!adoptFadeSwapped && fadeElapsed >= ADOPT_FADE_HALF_SECONDS) {
+          const model = pendingAdoptModel;
+          if (model) {
+            model.geometry.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
+            bellyUniform.value = model.bellyScale;
+            if (species.swim.span) spanUniform.value = species.swim.span;
+            // The palette is in the geometry now, so a tint would multiply it twice.
+            material.vertexColors = true;
+            material.color.setRGB(1, 1, 1);
+            material.needsUpdate = true;
+            const previous = mesh.geometry;
+            mesh.geometry = model.geometry;
+            previous.dispose();
+          }
+          adoptFadeSwapped = true;
+        }
+        const fadeTotal = ADOPT_FADE_HALF_SECONDS * 2;
+        if (fadeElapsed >= fadeTotal) {
+          material.opacity = 1;
+          material.transparent = false;
+          pendingAdoptModel = null;
+          adoptFadeStartElapsed = null;
+          adoptFadeSwapped = false;
+        } else {
+          material.opacity =
+            fadeElapsed < ADOPT_FADE_HALF_SECONDS
+              ? 1 - fadeElapsed / ADOPT_FADE_HALF_SECONDS
+              : (fadeElapsed - ADOPT_FADE_HALF_SECONDS) / ADOPT_FADE_HALF_SECONDS;
+        }
+      }
 
       for (const leader of leaders) {
         // Cruise speed carries LAST frame's (already-smoothed) alarm as a
