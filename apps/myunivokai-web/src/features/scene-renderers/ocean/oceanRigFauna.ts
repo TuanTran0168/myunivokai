@@ -881,6 +881,135 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     speedScale: 0.25,
     tightRing: true,
   },
+  // ---- three the plan had deferred, now cheap enough to add ----------------
+  // The plan's own reasoning for deferring these: angelfish was "redundant
+  // with clownfish/butterflyfish this pass" (still true — added anyway since
+  // it costs nothing beyond a new entry on the SAME reefFish archetype); the
+  // two extra octopuses were "cheap follow-ons once octopod exists" (it now
+  // does, from vampireSquid above) rather than needing new geometry.
+  {
+    key: "angelfish",
+    color: "#F5D94E",
+    nearField: true,
+    body: "reefFish",
+    label: "angelfish",
+    swim: { onset: 0.72, amplitude: 0.05, waves: 0.85, beat: 2.6 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 40,
+    needsSeafloor: true,
+    count: 20,
+    leaders: 5,
+    size: 0.28,
+    spread: 1.6,
+    pathRadius: 12,
+    heightBase: -6,
+    heightRange: 4,
+    speedScale: 0.85,
+  },
+  {
+    key: "giantPacificOctopus",
+    color: "#B85C3C",
+    body: "octopod",
+    label: "giant Pacific octopus",
+    // Reef-dwelling and solitary, unlike the abyssal vampire squid this
+    // archetype was built for — reddish-brown instead of deep violet, no
+    // photophores (a reef predator with no reason to bioluminesce), and a
+    // near-field colour the way lionfish/blobfish already are at this depth.
+    nearField: true,
+    swim: { onset: 0.66, amplitude: 0.09, waves: 0.45, beat: 0.5 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 80,
+    needsSeafloor: true,
+    count: 2,
+    leaders: 2,
+    size: 3.5,
+    spread: 1,
+    pathRadius: 12,
+    heightBase: -1.5,
+    heightRange: 1.5,
+    speedScale: 0.12,
+    tightRing: true,
+  },
+  {
+    key: "dumboOctopus",
+    color: "#D8A6C4",
+    body: "octopod",
+    label: "dumbo octopus",
+    // The deepest-living octopus known (Grimpoteuthis, filmed below 4000 m) —
+    // pale pink, tiny, and drifts more than it swims.
+    swim: { onset: 0.7, amplitude: 0.05, waves: 0.4, beat: 0.3 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 1000,
+    maxDepthMetres: 7000,
+    count: 3,
+    leaders: 3,
+    size: 0.25,
+    spread: 1,
+    pathRadius: 18,
+    heightBase: -6,
+    heightRange: 8,
+    speedScale: 0.08,
+    tightRing: true,
+  },
+  {
+    key: "seaTurtle",
+    color: "#4C7A4A",
+    body: "turtle",
+    label: "sea turtle",
+    // Front-flipper "flying" propulsion, not lateral body undulation at all —
+    // real turtles barely bend the shell. The mobuliform path already built
+    // for the manta's dorsoventral flap reused verbatim: span picks out the
+    // flippers (large |x|) and leaves the near-zero-x shell almost still,
+    // an approximation (no cited beat frequency — assumption, not sourced)
+    // rather than a new locomotion mode.
+    swim: { onset: 0, amplitude: 0.14, waves: 0.3, beat: 0.45, mobuliform: true, span: 0.58 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 60,
+    needsSurface: true,
+    count: 3,
+    leaders: 3,
+    size: 1.1,
+    spread: 1,
+    pathRadius: 24,
+    heightBase: -5,
+    heightRange: 6,
+    speedScale: 0.35,
+    tightRing: true,
+    surfacing: true,
+  },
+  {
+    key: "seahorse",
+    color: "#C9973E",
+    nearField: true,
+    body: "seahorse",
+    label: "seahorse",
+    needsSeafloor: true,
+    // Onset sits right at the head/trunk seam (see buildSeahorse's
+    // HEAD_ALONG_SPAN) so the head — and the dorsal fin riding just behind it
+    // — stays nearly still, the way a real seahorse holds its head steady
+    // while the trunk and tail do the sculling and curling.
+    swim: { onset: 0.28, amplitude: 0.08, waves: 0.55, beat: 0.45 },
+    bodyAxis: "long",
+    head: 1,
+    minDepthMetres: 0,
+    maxDepthMetres: 20,
+    count: 6,
+    leaders: 6,
+    size: 0.15,
+    spread: 1,
+    pathRadius: 9,
+    heightBase: -5,
+    heightRange: 3,
+    speedScale: 0.08,
+    tightRing: true,
+  },
 ];
 
 type MergedPart = { geometry: BufferGeometry; color: Color };

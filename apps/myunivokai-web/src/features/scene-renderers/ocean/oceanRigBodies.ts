@@ -468,6 +468,74 @@ function buildCephalopod(options: CephalopodOptions): BufferGeometry {
 }
 
 /**
+ * A seahorse: a small horse-like head/neck (bodyGeometry, same construction
+ * as every fish archetype) plus one curving trunk-and-tail tube built from
+ * the SAME tentacleGeometry() helper the cephalopod arms use — the plan that
+ * deferred this species called a seahorse's bent, curling body "a body plan
+ * that doesn't fit a Z-axis revolve at all", which is true of the WHOLE
+ * animal but not of either half separately: the head is an ordinary small
+ * revolve, and the trunk is exactly the curving-axis tube already built for
+ * cephalopod arms, just carrying the whole animal instead of trailing behind
+ * a mantle.
+ *
+ * The head occupies along [0, HEAD_ALONG_SPAN] (the same compression
+ * buildCephalopod's mantle uses); the trunk continues from there to 1.15 —
+ * PAST the usual tail end, since a real seahorse's tail is the most actively
+ * curling part of the animal (it anchors with it) and the shared undulation
+ * formula already gives values beyond 1 MORE motion with no new uniform,
+ * which is the desired "tail curls more than the body" read for free.
+ */
+function buildSeahorse(): BufferGeometry {
+  const HEAD_ALONG_SPAN = 0.22;
+  const head = bodyGeometry({
+    lengthSegments: 8,
+    radialSegments: 8,
+    // A brow bump forward of centre (the horse-head silhouette), tapering to
+    // a thin tubular snout at t = 0 and to the neck's attach width at t = 1.
+    profile: (t) => fusiform(0.7, 1.6, 0.34)(t) + 0.05,
+    widthRatio: 0.6,
+    heightRatio: 0.85,
+    fins: [
+      // The single dorsal fin real seahorses use to scull, at the neck/trunk
+      // seam where the head hands off to the curving body below.
+      { plane: "vertical", root: 0.02, tip: 0.24, tip2: 0.16, z0: -0.02, z1: -0.18, z2: -0.3, z3: -0.14, along: 1 },
+    ],
+  });
+  const headAlong = head.getAttribute("along");
+  for (let i = 0; i < headAlong.count; i += 1) headAlong.setX(i, headAlong.getX(i) * HEAD_ALONG_SPAN);
+  const headUv = head.getAttribute("uv");
+  for (let i = 0; i < headUv.count; i += 1) headUv.setY(i, headUv.getY(i) * 0.3);
+
+  const trunk = tentacleGeometry(-0.5, {
+    baseAngle: Math.PI / 2,
+    baseRadius: 0.02,
+    length: 1.55,
+    baseThickness: 0.09,
+    tipThickness: 0.012,
+    // A real seahorse curls its tail into a tight spiral; a single quadratic
+    // droop (the same simplification the cephalopod arms and the ray's whip
+    // tail already make) reads as a strong forward curl at this silhouette
+    // scale without a true parallel-transported spline.
+    droop: 0.75,
+    along0: HEAD_ALONG_SPAN,
+    along1: 1.15,
+    radialSegments: 7,
+    lengthSegments: 16,
+  });
+
+  const merged = mergeGeometries([head, trunk]);
+  merged.computeBoundingBox();
+  const size = new Vector3();
+  merged.boundingBox?.getSize(size);
+  const centre = new Vector3();
+  merged.boundingBox?.getCenter(centre);
+  merged.translate(-centre.x, -centre.y, -centre.z);
+  const span = Math.max(1e-4, size.z);
+  merged.scale(1 / span, 1 / span, 1 / span);
+  return merged;
+}
+
+/**
  * The silhouettes this rig's whole species roster is drawn from.
  *
  * Sharing is deliberate rather than a saving: a lionfish, a butterflyfish, a
@@ -494,7 +562,9 @@ export type BodyArchetype =
   | "ribbon"
   | "isopod"
   | "decapod"
-  | "octopod";
+  | "octopod"
+  | "turtle"
+  | "seahorse";
 
 const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // Jacks and herring: the schooling default. The posterior 30-50% undulates.
@@ -682,21 +752,39 @@ const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
       fins: maneFins,
     });
   },
-  // A deliberately cheap stand-in for the giant isopod: a real segmented,
-  // flattened carapace is not a body of revolution at all, and building one
-  // properly is a much larger job than one rare, non-schooling creature
-  // justifies here. A SYMMETRIC profile — equal shoulder/taper, unlike every
-  // fish archetype above which pinches to a point only at the tail — gives a
-  // body blunt at both ends instead of tapering to a fish-like tail, flattened
-  // top-to-bottom (heightRatio 0.45) rather than side-to-side. No fins: an
-  // isopod has none large enough to read at this scale.
-  isopod: () =>
-    bodyGeometry({
-      lengthSegments: 9,
-      profile: fusiform(1.0, 1.0, 0.55),
+  // The giant isopod's real segmented, flattened carapace IS a body of
+  // revolution after all, once the radius is allowed to step rather than
+  // flow smoothly along t: seven overlapping tergite plates, each a slight
+  // outward flare followed by a step back in, the same way real pill-bug
+  // plates overlap shingle-fashion toward the tail. This replaced an earlier,
+  // purely-textured version (a smooth body with painted-on dark seams —
+  // see FaunaSpecies.bands, kept as a secondary cue) after the BA report
+  // flagged that a "deliberately cheap stand-in" was worth actually fixing.
+  // A SYMMETRIC base profile — equal shoulder/taper, unlike every fish
+  // archetype above which pinches to a point only at the tail — still gives
+  // a body blunt at both ends instead of tapering to a fish-like tail,
+  // flattened top-to-bottom (heightRatio 0.45) rather than side-to-side. No
+  // fins: an isopod has none large enough to read at this scale.
+  isopod: () => {
+    const plates = 7;
+    const base = fusiform(1.0, 1.0, 0.55);
+    return bodyGeometry({
+      lengthSegments: plates * 3,
+      radialSegments: 12,
+      profile: (t) => {
+        // Each plate spans 1/plates of the body; within a plate the radius
+        // flares slightly outward then steps back in just before the next
+        // plate's leading edge overlaps it — a triangular ramp, not a smooth
+        // sine, so the boundary reads as a discrete step at this scale
+        // rather than a ripple.
+        const withinPlate = (t * plates) % 1;
+        const flare = 1 + 0.09 * (withinPlate < 0.7 ? withinPlate / 0.7 : 1 - (withinPlate - 0.7) / 0.3);
+        return base(t) * flare;
+      },
       widthRatio: 0.85,
       heightRatio: 0.45,
-    }),
+    });
+  },
   // Giant squid: the full ten-limbed crown — eight arms spread the whole way
   // around plus the two long feeding tentacles that are the family's
   // signature.
@@ -705,6 +793,34 @@ const BUILDERS: Record<BodyArchetype, () => BufferGeometry> = {
   // over a narrower arc so their bases crowd together, approximating the
   // real animal's webbed "cape".
   octopod: () => buildCephalopod({ armCount: 8, armArcRadians: (300 * Math.PI) / 180, longTentacles: false }),
+  // A sea turtle: unlike the cephalopods and the seahorse below, the shell IS
+  // an ordinary body of revolution — wide, low (heightRatio 0.32) and
+  // symmetric-ish rather than fish-tapered — so no new construction was
+  // actually needed, just a different profile/fin arrangement, the same way
+  // every Bucket A/B species this rig already carries is one. The four
+  // flippers reuse the existing horizontal-fin quad (already a paired,
+  // symmetric shape from a single quad — see bodyGeometry's `quad` helper):
+  // large front flippers near the head, smaller rear flippers near the tail.
+  turtle: () =>
+    bodyGeometry({
+      lengthSegments: 16,
+      radialSegments: 12,
+      // A small forward head/neck bump (constant term) riding a wide, flat
+      // shell dome that peaks just past the head — real carapace proportions.
+      profile: (t) => 0.14 * Math.exp(-t * 7) + fusiform(0.55, 1.35, 0.62)(t),
+      widthRatio: 0.92,
+      heightRatio: 0.32,
+      fins: [
+        { plane: "horizontal", root: 0.05, tip: 0.62, z0: 0.2, z1: 0.02, along: 0.26 },
+        { plane: "horizontal", root: 0.04, tip: 0.32, z0: -0.18, z1: -0.3, along: 0.74 },
+      ],
+    }),
+  // A seahorse: see buildSeahorse above for why the curling body plan a plan
+  // once deferred as "not fitting a Z-axis revolve" splits cleanly into a
+  // small ordinary revolve (the head) and the existing curving-tube
+  // construction (the trunk and prehensile tail) already built for
+  // cephalopod arms.
+  seahorse: () => buildSeahorse(),
 };
 
 const cache = new Map<BodyArchetype, BufferGeometry>();
