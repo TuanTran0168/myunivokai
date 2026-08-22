@@ -215,14 +215,22 @@ const OCEAN_MOOD_PROFILES: Record<string, OceanMoodProfile> = {
     zone: OCEAN_ZONE_TWILIGHT_REACH,
     aboveWaterProbability: 0,
     currentMultiplier: 0.85,
-    faunaMultiplier: 1.0,
-    bloomMultiplier: 1.35
+    // Lowest of the four, not the highest: the twilight reach has no sun and
+    // no single deliberate light the way the abyss does, so there is no
+    // legitimate highlight for bloom to bracket — it was previously the
+    // highest multiplier in this table (1.35), which bracketed ordinary
+    // specular glints (wave-surface Snell's-window glints, god-ray hot spots)
+    // into a full-screen sunburst at a depth that is supposed to read as dim.
+    bloomMultiplier: 0.55,
+    faunaMultiplier: 1.0
   },
   reflective: {
     zone: OCEAN_ZONE_ABYSS,
     aboveWaterProbability: 0,
     currentMultiplier: 0.7,
     faunaMultiplier: 0.75,
+    // Higher than dreamy on purpose: "one light" is the whole point of this
+    // mood, and bloom is what makes that one light read as a light.
     bloomMultiplier: 0.85
   }
 };
