@@ -193,12 +193,62 @@ megabytes of unreferenced JPEG is not a neutral thing to leave in a repository:
 git history is permanent, and an asset nobody loads is an asset the next person
 has to work out whether they may delete.
 
-## Not used: Sketchfab
+## Models — [ffish.asia / floraZia.com](https://sketchfab.com/ffishAsia-and-floraZia), CC0, via Sketchfab
+
+Real photogrammetry scans of actual specimens, not toy geometry — the giant
+squid entry below replaces the procedural `decapod` body described above with
+an authored scan; the vampire squid keeps its procedural build. Both use the
+same asset (`fauna-giant-squid-scan.glb` is a real *Todarodes pacificus*,
+Japanese flying squid, scan reused at the existing 11 m "giant squid" scale —
+no CC0 *Architeuthis dux* scan exists anywhere searched, and a real squid body
+at the right silhouette and scale reads truer than a correctly-labelled
+procedural tube).
+
+| File | Model | License (per-model API check) | Source |
+| --- | --- | --- | --- |
+| fauna-giant-pacific-octopus.glb | Giant Pacific Octopus (scan) | CC0, "Credit is not mandatory. Commercial use is allowed." | sketchfab.com/3d-models/ffishAsia (octopus) |
+| fauna-giant-squid-scan.glb | Japanese Flying Squid (scan) | CC0, same terms | sketchfab.com/3d-models/ffishAsia (squid) |
+
+**Why Sketchfab worked this time.** The account's own `isDownloadable: true`
+CC0 models still 401 without a signed-in session or API token — that finding
+below stands. With a user-supplied personal API token (never committed,
+sourced from a git-ignored `.env.local.secret`), `/v3/models/{uid}/download`
+returns presigned, time-limited download URLs. The token is a one-time
+manual-auth step, not something this repo or its tooling stores or requires
+again; nothing about the resulting `.glb` files depends on it.
+
+**Why these needed a custom bake, not just download-and-drop.** Every prior
+GLB adoption in this family carries flat per-part toon colors, not real
+textures — `loadSpeciesGeometry`/`normaliseModel` in `oceanRigFauna.ts`
+historically discarded any `COLOR_0`/UV data on adopted models for exactly
+that reason. A raw photogrammetry scan is the opposite: no vertex colors at
+all, one or more large photographic base-color textures instead. Rather than
+throw the photographic detail away to fit the old flat-color convention, the
+pipeline was widened to prefer genuine per-vertex `COLOR_0` when a part has
+it and fall back to the old flat-material-color behavior when it doesn't —
+strictly additive, so all thirteen existing toon GLBs are pixel-identical to
+before.
+
+Processing, in order, via `@gltf-transform/cli`/`core` (`npx --yes
+@gltf-transform/cli`, no install needed) plus a small one-off script that
+samples each primitive's base-color texture at every vertex's UV and bakes it
+to `COLOR_0`: bake vertex color → `weld` → `simplify --ratio` (meshoptimizer
+decimation, raw scans arrive at 400K–2.3M triangles) → strip every
+`TEXCOORD_0` attribute and material/texture/image now that only
+`POSITION`/`NORMAL`/`COLOR_0` are ever read → `prune`+`dedup`. Final sizes:
+3.5 MB (octopus, ~31K triangles) and 3.6 MB (squid, ~26K triangles) — far
+above the 59–209 KB toon GLBs above, proportionate to carrying real per-vertex
+photographic detail instead of one flat color per part, and small enough to
+serve from the same public static path as everything else here.
+
+## Not used, but automatable if a future asset needs it: Sketchfab without a token
 
 Sketchfab's download endpoint returns **401 without an OAuth token**, for CC0
-models as much as for any other, and `isDownloadable` on a public model page does
-not change that. It is therefore owner-manual, never agent-automatable. See
-`notes/references/threejs-assets.md`. **Never commit a Sketchfab token.**
+models as much as for any other, and `isDownloadable` on a public model page
+does not change that on its own. It is owner-manual by default; a
+user-supplied personal API token (see above) lifts the block for that
+person's own automation, but the token itself must never be committed. See
+`notes/references/threejs-assets.md`.
 
 ## Superseded: "still procedural"
 

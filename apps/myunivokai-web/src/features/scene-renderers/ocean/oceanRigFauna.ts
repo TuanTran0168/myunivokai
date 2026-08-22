@@ -866,6 +866,7 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     key: "giantSquid",
     color: "#5A5F6A",
     body: "decapod",
+    file: "fauna-giant-squid-scan.glb",
     label: "giant squid",
     // Rigid mantle (along 0-0.7), whippy trailing arm crown (0.7-1.0) and two
     // long feeding tentacles overshooting even that (0.75-1.15) — see
@@ -873,7 +874,10 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     // hands off to the arms, so the mantle itself barely bends.
     swim: { onset: 0.68, amplitude: 0.12, waves: 0.5, beat: 0.35 },
     bodyAxis: "long",
-    head: 1,
+    // The real scan's mantle and arm crown measure bulkier-by-radius at the
+    // arm end (splayed tentacles read wider than the tapered mantle to the
+    // eye/bulk heuristic in normaliseModel) — -1 flips it so the mantle leads.
+    head: -1,
     minDepthMetres: 300,
     maxDepthMetres: 2000,
     count: 1,
@@ -951,6 +955,7 @@ export const OCEAN_RIG_SPECIES: readonly FaunaSpecies[] = [
     key: "giantPacificOctopus",
     color: "#B85C3C",
     body: "octopod",
+    file: "fauna-giant-pacific-octopus.glb",
     label: "giant Pacific octopus",
     // Reef-dwelling and solitary, unlike the abyssal vampire squid this
     // archetype was built for — reddish-brown instead of deep violet, no
@@ -1063,6 +1068,10 @@ function mergeParts(parts: MergedPart[]): BufferGeometry {
   for (const part of parts) {
     const p = part.geometry.getAttribute("position");
     const n = part.geometry.getAttribute("normal");
+    // A part with its own baked COLOR_0 (a photogrammetry scan) carries real
+    // per-vertex detail; a part with none (every hand-modelled toon GLB) falls
+    // back to its flat material color, exactly as before.
+    const c = part.geometry.getAttribute("color");
     for (let i = 0; i < p.count; i += 1) {
       const o = (cursor + i) * 3;
       position[o] = p.getX(i);
@@ -1073,9 +1082,15 @@ function mergeParts(parts: MergedPart[]): BufferGeometry {
         normal[o + 1] = n.getY(i);
         normal[o + 2] = n.getZ(i);
       }
-      color[o] = part.color.r;
-      color[o + 1] = part.color.g;
-      color[o + 2] = part.color.b;
+      if (c) {
+        color[o] = c.getX(i);
+        color[o + 1] = c.getY(i);
+        color[o + 2] = c.getZ(i);
+      } else {
+        color[o] = part.color.r;
+        color[o + 1] = part.color.g;
+        color[o + 2] = part.color.b;
+      }
     }
     cursor += p.count;
   }
@@ -1292,7 +1307,7 @@ export async function loadSpeciesGeometry(species: FaunaSpecies): Promise<Normal
     if (!mesh.isMesh) return;
     const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
     geometry.applyMatrix4(mesh.matrixWorld);
-    for (const name of ["uv", "uv1", "uv2", "tangent", "skinIndex", "skinWeight", "color"]) {
+    for (const name of ["uv", "uv1", "uv2", "tangent", "skinIndex", "skinWeight"]) {
       if (geometry.getAttribute(name)) geometry.deleteAttribute(name);
     }
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
