@@ -125,6 +125,7 @@ const (
 	ServiceDNA       = "dna"
 	ServiceUniverse  = "universe"
 	ServiceNature    = "nature"
+	ServiceOcean     = "ocean"
 	ServiceAuth      = "auth"
 	ServiceAnalytics = "analytics"
 	ServiceTelemetry = "telemetry"
@@ -134,7 +135,7 @@ const (
 // meets them in configuration. The gateway itself is deliberately absent: it
 // is the one component that receives inbound HTTP in normal operation, so a
 // browser request already wakes it and nothing needs to ask.
-var Services = []string{ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics, ServiceTelemetry}
+var Services = []string{ServiceDNA, ServiceUniverse, ServiceNature, ServiceOcean, ServiceAuth, ServiceAnalytics, ServiceTelemetry}
 
 // Platform is one hosting provider's answer to "start this sleeping
 // instance". Adapters stay deliberately dumb — no retry, no deduplication, no
@@ -177,7 +178,7 @@ func ServiceForSubject(subject string) string {
 	}
 	service, _, _ := strings.Cut(remainder, ".")
 	switch service {
-	case ServiceDNA, ServiceUniverse, ServiceNature, ServiceAuth, ServiceAnalytics, ServiceTelemetry:
+	case ServiceDNA, ServiceUniverse, ServiceNature, ServiceOcean, ServiceAuth, ServiceAnalytics, ServiceTelemetry:
 		return service
 	default:
 		return ""

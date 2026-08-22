@@ -262,6 +262,7 @@ func TestEveryServiceSubjectWakesItsOwnResponder(t *testing.T) {
 		"dna":       {contracts.DNAJobGetQuerySubject, wake.ServiceDNA},
 		"universe":  {contracts.UniverseWorldPublishSubject, wake.ServiceUniverse},
 		"nature":    {contracts.NatureVariantCreateSubject, wake.ServiceNature},
+		"ocean":     {contracts.OceanVariantCreateSubject, wake.ServiceOcean},
 		"auth":      {contracts.AuthAccountListQuerySubject, wake.ServiceAuth},
 		"analytics": {contracts.AnalyticsOverviewGetQuerySubject, wake.ServiceAnalytics},
 	}
@@ -302,6 +303,7 @@ func TestCreateWorldWakesTheWholeGenerationPathBeforePublishing(t *testing.T) {
 	}{
 		"universe": {"/api/universe/worlds", []string{wake.ServiceDNA, wake.ServiceUniverse, wake.ServiceAnalytics}},
 		"nature":   {"/api/nature/worlds", []string{wake.ServiceDNA, wake.ServiceNature, wake.ServiceAnalytics}},
+		"ocean":    {"/api/ocean/worlds", []string{wake.ServiceDNA, wake.ServiceOcean, wake.ServiceAnalytics}},
 	}
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {

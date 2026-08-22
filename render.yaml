@@ -119,6 +119,8 @@ services:
         sync: false
       - key: NATURE_SERVICE_URL
         sync: false
+      - key: OCEAN_SERVICE_URL
+        sync: false
       - key: AUTH_SERVICE_URL
         sync: false
       - key: ANALYTICS_SERVICE_URL
@@ -460,6 +462,53 @@ services:
     name: myunivokai-nature
     runtime: docker
     dockerfilePath: ./services/nature-service/Dockerfile.prod
+    dockerContext: .
+    plan: free
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: NATS_URL
+        sync: false
+      - key: NATS_USERNAME
+        sync: false
+      - key: NATS_PASSWORD
+        sync: false
+      - key: NATS_CONNECT_TIMEOUT
+        value: 5s
+      - key: NATS_RECONNECT_WAIT
+        value: 2s
+      - key: NATS_PUBLISH_TIMEOUT
+        value: 5s
+      - key: NATS_ACK_WAIT
+        value: 2m
+      - key: NATS_MAX_DELIVER
+        value: "5"
+      - key: NATS_FETCH_BATCH_SIZE
+        value: "1"
+      - key: NATS_FETCH_MAX_WAIT
+        value: 1s
+      - key: NATS_RETRY_DELAY
+        value: 2s
+      - key: NATS_QUERY_TIMEOUT
+        value: 2500ms
+      - key: OUTBOX_POLL_INTERVAL
+        value: 500ms
+      - key: OUTBOX_BATCH_SIZE
+        value: "50"
+      - key: PUBLIC_WEB_URL
+        sync: false
+
+  - type: web
+    name: myunivokai-ocean
+    runtime: docker
+    dockerfilePath: ./services/ocean-service/Dockerfile.prod
     dockerContext: .
     plan: free
     autoDeployTrigger: checksPass

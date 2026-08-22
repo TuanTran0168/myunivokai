@@ -70,6 +70,7 @@ var serviceWakeURLKeys = map[string]string{
 	"dna":       "DNA_SERVICE_URL",
 	"universe":  "UNIVERSE_SERVICE_URL",
 	"nature":    "NATURE_SERVICE_URL",
+	"ocean":     "OCEAN_SERVICE_URL",
 	"auth":      "AUTH_SERVICE_URL",
 	"analytics": "ANALYTICS_SERVICE_URL",
 	"telemetry": "TELEMETRY_SERVICE_URL",

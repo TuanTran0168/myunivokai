@@ -84,6 +84,8 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 			contracts.UniverseFailedEventSubject,
 			contracts.NatureCompletedEventSubject,
 			contracts.NatureFailedEventSubject,
+			contracts.OceanCompletedEventSubject,
+			contracts.OceanFailedEventSubject,
 		),
 		nats.ManualAck(),
 		nats.AckWait(runtime.config.ConsumerAckWait),

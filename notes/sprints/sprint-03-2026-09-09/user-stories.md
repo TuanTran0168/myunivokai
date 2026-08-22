@@ -1,7 +1,7 @@
 # Sprint 03 user stories — City vertical slice
 
 > **Document status:** Planned
-> **Sprint starts:** 2026-08-19
+> **Sprint starts:** 2026-09-09 (moved from 2026-08-19; see the sprint README)
 > **Last source review:** 2026-07-22
 
 - `S3-CITY-CONTRACT-001`: map canonical ProfileDNA to versioned deterministic

@@ -24,7 +24,7 @@ import { randomFromSeed } from "./scene";
  * rendered forests actually used, so it is the stream that has to be replayed.
  */
 
-export type RarityFamily = "universe" | "nature";
+export type RarityFamily = "universe" | "nature" | "ocean";
 
 export type RaritySpecies = {
   key: string;
@@ -55,6 +55,15 @@ export type RarityFeature = {
 const FOREST_WILDLIFE_STREAM_PREFIX = "-forest-terrain-scatter";
 export const FOREST_SPECIAL_BIRD_STREAM_SUFFIX = "-forest-special-bird";
 export const FOREST_SPECIAL_ANIMAL_STREAM_SUFFIX = "-forest-special-animal";
+
+// The ocean lotteries hang off the VARIANT seed itself, with no prefix chain:
+// OceanRenderer receives it as SceneRendererProps.seed, so the accident that
+// forced the forest pair to start halfway down a placement seed does not repeat
+// here. Exported so the renderer and the catalogue share one literal each.
+export const OCEAN_BIOLUMINESCENT_BLOOM_STREAM_SUFFIX = "-ocean-rare-bioluminescent-bloom";
+export const OCEAN_SUNKEN_RELIC_STREAM_SUFFIX = "-ocean-rare-sunken-relic";
+export const OCEAN_WHALE_PASSAGE_STREAM_SUFFIX = "-ocean-rare-whale-passage";
+export const OCEAN_ABYSS_VISITOR_STREAM_SUFFIX = "-ocean-rare-abyss-visitor";
 
 export const RARITY_CATALOGUE: readonly RarityFeature[] = [
   {
@@ -104,6 +113,54 @@ export const RARITY_CATALOGUE: readonly RarityFeature[] = [
       { key: "golden-fox", label: "Golden Fox" },
       { key: "spirit-wolf", label: "Spirit Wolf" },
       { key: "verdant-stag", label: "Verdant Stag" }
+    ]
+  },
+  // The ocean suffixes are clean, unlike the forest pair above: OceanRenderer
+  // receives the variant seed directly as SceneRendererProps.seed and does not
+  // have to start from the middle of a placement-seed chain.
+  {
+    key: "ocean-bioluminescent-bloom",
+    label: "Bioluminescent Bloom",
+    family: "ocean",
+    probability: 0.35,
+    seedSuffix: OCEAN_BIOLUMINESCENT_BLOOM_STREAM_SUFFIX
+  },
+  {
+    key: "ocean-sunken-relic",
+    label: "Sunken Relic",
+    family: "ocean",
+    probability: 0.2,
+    seedSuffix: OCEAN_SUNKEN_RELIC_STREAM_SUFFIX
+  },
+  {
+    key: "ocean-whale-passage",
+    label: "Whale Passage",
+    family: "ocean",
+    probability: 0.12,
+    seedSuffix: OCEAN_WHALE_PASSAGE_STREAM_SUFFIX,
+    species: [
+      { key: "humpback", label: "Humpback" },
+      { key: "blue-whale", label: "Blue Whale" },
+      { key: "manta-parade", label: "Manta Parade" }
+    ]
+  },
+  {
+    // This list was the one decision the ocean plan deliberately deferred:
+    // species are selected by floor(roll * species.length), so the ORDER is
+    // frozen the moment the first world ships, and shipping a species the
+    // renderer cannot draw is the one mistake here that cannot be undone
+    // cheaply. It is settled against what the procedural ocean-1 catalogue
+    // actually builds — all three are geometry, not a download that may never
+    // arrive.
+    key: "ocean-abyss-visitor",
+    label: "Abyssal Visitor",
+    family: "ocean",
+    probability: 0.05,
+    seedSuffix: OCEAN_ABYSS_VISITOR_STREAM_SUFFIX,
+    species: [
+      { key: "anglerfish", label: "Anglerfish" },
+      { key: "giant-squid", label: "Giant Squid" },
+      { key: "gulper-eel", label: "Gulper Eel" }
     ]
   }
 ];

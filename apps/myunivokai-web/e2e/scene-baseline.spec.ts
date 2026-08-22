@@ -1,6 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 import universeWorld from "./fixtures/universe-world.json";
 import natureWorld from "./fixtures/nature-world.json";
+import oceanShallowWorld from "./fixtures/ocean-shallow-world.json";
+import oceanTwilightWorld from "./fixtures/ocean-twilight-world.json";
+import oceanAbyssWorld from "./fixtures/ocean-abyss-world.json";
+import oceanSurfaceWorld from "./fixtures/ocean-surface-world.json";
+import oceanDaylightWorld from "./fixtures/ocean-daylight-world.json";
 
 /**
  * The scenes are served from fixtures, never from a running gateway, and the
@@ -22,6 +27,40 @@ const FIXTURES = {
   nature: { world: natureWorld, path: "**/api/nature/**" }
 } as const;
 
+/**
+ * The ocean family gets FIVE shots, not one, and they are the only fixtures here
+ * chosen to differ from each other rather than to be representative.
+ *
+ * They are now exactly the create form's four DEPTH & MOOD options, one shot per
+ * option, with the above-water option sampled twice. That correspondence is the
+ * point: each mood names a home depth (a weighted lean for "Glass Shallows",
+ * a pin for the other three — see AboveWaterProbability), so this set is a
+ * picture of every sea a visitor can actually ask for, and a preset that
+ * stops working stops working here first.
+ *
+ *   ocean-surface   Glass Shallows      24.0 m UP,   sun  4.6 deg   golden hour
+ *   ocean-daylight  Glass Shallows      17.8 m UP,   sun 37.2 deg   midday sea
+ *   ocean-shallow   Reef Crest          14.0 m down, floor at 23 m  lit reef
+ *   ocean-twilight  Mesophotic Current  58.1 m down, floor at 2 km  midwater
+ *   ocean-abyss     The Abyss           1144 m down, floor at 1150  on the bottom
+ *
+ * Depth is this family's whole axis, and the failure it is prone to is one no
+ * single image can show: two worlds hundreds of metres apart that render
+ * indistinguishably. If two of these images look alike, the family has lost the
+ * thing it was built for.
+ *
+ * All five are spliced from ocean-service's own golden configs by
+ * e2e/refresh-ocean-fixtures.mjs — never hand-written, because a hand-tuned
+ * fixture measures a look nobody can generate.
+ */
+const OCEAN_DEPTHS = [
+  { name: "ocean-surface", world: oceanSurfaceWorld },
+  { name: "ocean-daylight", world: oceanDaylightWorld },
+  { name: "ocean-shallow", world: oceanShallowWorld },
+  { name: "ocean-twilight", world: oceanTwilightWorld },
+  { name: "ocean-abyss", world: oceanAbyssWorld }
+] as const;
+
 const UNIVERSE_WORLD_ID = universeWorld.world.id;
 const NATURE_WORLD_ID = natureWorld.world.id;
 
@@ -39,7 +78,12 @@ const NATURE_WORLD_ID = natureWorld.world.id;
  */
 const SCENE_RENDER_MILLISECONDS = 6_000;
 
-async function serveWorldFixtures(page: Page) {
+async function serveWorldFixtures(page: Page, oceanWorld?: unknown) {
+  if (oceanWorld) {
+    await page.route("**/api/ocean/**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(oceanWorld) });
+    });
+  }
   for (const { world, path } of Object.values(FIXTURES)) {
     await page.route(path, async (route) => {
       // Mutations are never exercised by these shots; answering them with the
@@ -106,6 +150,14 @@ test.describe("scene baseline", () => {
   // Not a scene, but the entry point every visitor meets first, and the one
   // page whose layout is pure App Router. If async params or the React 19 hop
   // break routing, this is where it shows up without any WebGL in the way.
+  for (const { name, world } of OCEAN_DEPTHS) {
+    test(`${name} world page`, async ({ page }) => {
+      await serveWorldFixtures(page, world);
+      await page.goto(`/worlds/${world.world.id}?family=ocean`);
+      await photographScene(page, name);
+    });
+  }
+
   test("landing page", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main")).toBeVisible();

@@ -319,9 +319,13 @@ Tasks:
 
 ## EPIC-S3-CITY-001 — Add City on the stable platform
 
-Status: Planned after Sprint 2 gates
+Status: Planned after Sprint 2 gates. **Moved from 2026-08-19 to 2026-09-09 on
+2026-08-15**, when the owner brought Ocean forward. Nothing about the scope
+below changed; only the date did. Its open asset-budget question — CyArk's
+UNESCO scans are CC BY-NC 4.0 and Ancient Egypt sits behind Synty's paywall —
+is still open and still gates the multi-civilisation ambition.
 Priority: P1
-Sprint: [Sprint 3 — starts 2026-08-19](../sprints/sprint-03-2026-08-19/README.md)
+Sprint: [Sprint 3 — starts 2026-09-09](../sprints/sprint-03-2026-09-09/README.md)
 
 As a returning visitor,
 I want the same DNA rendered as a high-fidelity personal city,
@@ -352,6 +356,63 @@ Tasks:
 - [ ] Add `city-service`, database, subjects, inbox/outbox and queries.
 - [ ] Add deterministic high-fidelity renderer and complete public flow.
 - [ ] Extend Compose/deployment/monitoring and pass production smoke.
+
+## EPIC-S6-OCEAN-001 — Add Ocean as the third family
+
+Status: Implemented; deployed verification outstanding
+Priority: P1
+Sprint: [Sprint 6 — starts 2026-08-19](../sprints/sprint-06-2026-08-19/README.md)
+Design: [ocean-service-plan.md](../vision/ocean-service-plan.md)
+
+As a returning visitor,
+I want the same DNA rendered as a personal sea at a real depth,
+so that Myunivokai offers a portrait medium whose whole character comes from
+one axis the other families do not have.
+
+Scenario: Add a bounded context without changing existing consumers
+
+Given the versioned canonical DNA and subject conventions
+When Ocean is introduced
+Then `myunivokai-ocean` owns `myunivokai_ocean`, Ocean commands/queries/events
+and its deterministic builder
+And DNA dispatch adds Ocean without modifying Universe/Nature behaviour
+And the gateway selects Ocean through its subject registry, registered above the
+unsupported-family catch-all
+And the frontend lazy-loads `sceneType: ocean` as its own chunk.
+
+Scenario: Depth is measured physics, not a table of three presets
+
+Given the measured light-attenuation anchors (45% at 1 m, 16% at 10 m, 5% at
+40 m, 1% at 100 m, nothing at 1000 m)
+When a world is built at any depth
+Then water colour, fog, visibility, god rays and caustics are DERIVED from that
+depth and then STORED, so re-tuning the curve never changes an existing world
+And god rays and caustics reach exactly zero at the sunlight floor without any
+depth test anywhere in the builder or the renderer
+And a single-exponential fit is rejected by a test, because it misses the 10 m
+measurement by three orders of magnitude while looking entirely plausible.
+
+Scenario: The preview does not lie about the world it promises
+
+Given the create form renders a live WebGL preview before anything is generated
+When the preview builder and the Go builder are compared
+Then everything the depth curve decides is byte-identical across the two
+languages, pinned by the Go builder's own golden fixtures
+And the seeded halves stay only plausible, exactly as the forest preview does.
+
+Tasks:
+
+- [x] `WorldFamilyOcean`, five subject switches, scene schema and fixtures.
+- [x] `ocean-service` with revision, inbox/outbox and the snapshot drift guard.
+- [x] The depth curve, its eight tests, and four goldens across three zones.
+- [x] Gateway route and handler, wake target, local Compose, CI job.
+- [x] Procedural renderer, preview builder, share route, product flow, audio.
+- [x] Four rarity entries in Go and TypeScript against the shared fixture.
+- [x] `render.yaml` block on the free tier (owner-approved 2026-08-15).
+- [ ] Deployed smoke across the full lifecycle, recorded with commit and time.
+- [ ] Confirm an ocean world reaches `myunivokai_analytics` in production.
+- [ ] Owner-approved screenshots at all three depth zones as the regression
+      baseline.
 
 ## EPIC-S4-AUTH-001 — Staff identity and the internal admin app
 

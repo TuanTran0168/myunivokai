@@ -137,6 +137,7 @@ func TestRarityRollsForStaysInsideItsFamily(t *testing.T) {
 	}{
 		{WorldFamilyUniverse, 3},
 		{WorldFamilyNature, 2},
+		{WorldFamilyOcean, 4},
 	} {
 		rolls := RarityRollsFor(testCase.family, "WLD-ABC1234567")
 		if len(rolls) != testCase.expected {
